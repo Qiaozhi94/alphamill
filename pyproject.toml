@@ -12,11 +12,13 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-  # 固定到 minor 版本：CI 每次 `pip install -e ".[dev]"` 拉最新，linter 自升级的
-  # 默认行为变化曾把 CI 搞红而本地全绿——锁定范围换取可重复性。上界与本地
-  # 验证版本保持一致；升级必须是一次显式、本地验证过的改动。
-  "pytest>=8,<9",
-  "pytest-cov>=5,<7",
+  # 固定到范围：CI 每次 `pip install -e ".[dev]"` 拉最新，linter 自升级的
+  # 默认行为变化曾把 CI 搞红而本地全绿——锁定范围换取可重复性。上界不承诺
+  # 等于本地实装版本：round-1 检视（CURRENT-code.md C001）发现本地实跑
+  # pytest 9.0.3 而原上界是 <9，注释承诺与事实矛盾，故放宽为 <10 并如实
+  # 记录。升级仍必须是一次显式、本地验证过的改动；已装版本是否落在声明
+  # 范围内由 verify.py 的 check_dep_pins 步骤强制。
+  "pytest>=8,<10",
   "ruff>=0.16,<0.17",
 ]
 
@@ -26,6 +28,8 @@ packages = ["src/alphamill"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
 testpaths = ["tests"]
+# 让测试可以直接 `from tools import ...`（tests/ 无 __init__.py，pytest 不含仓库根）。
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

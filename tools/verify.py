@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """本地统一验证入口（公开验证唯一入口）。
 
-按固定顺序运行：规格生命周期校验 → pytest → ruff check → ruff format check。
-任一步失败即返回非零。
+按固定顺序运行：规格生命周期校验 → 文档相对链接检查 → dev 依赖 pin 范围检查
+→ pytest → ruff check → ruff format check。任一步失败即记录，全部跑完后汇总
+返回非零（不短路）。
 
 各底层命令仍可单独用于定位，但 README、SOP 与 CLAUDE 不再各自维护完整命令清单，
 统一指向本入口。
@@ -33,6 +34,8 @@ def _run(cmd: list[str], label: str) -> bool:
 def main() -> int:
     steps = [
         ([sys.executable, "tools/validate_spec_lifecycle.py"], "规格生命周期校验"),
+        ([sys.executable, "tools/check_doc_links.py"], "文档相对链接检查"),
+        ([sys.executable, "tools/check_dep_pins.py"], "dev 依赖版本在 pin 范围内"),
         ([sys.executable, "-m", "pytest", "-q"], "pytest"),
         (["ruff", "check", "."], "ruff check"),
         (["ruff", "format", "--check", "."], "ruff format check"),
@@ -44,7 +47,7 @@ def main() -> int:
     if failed:
         print(f"\nverify.py 失败步骤：{failed}")
         return 1
-    print("\nverify.py 全部通过：生命周期 / pytest / ruff")
+    print("\nverify.py 全部通过：生命周期 / 文档链接 / 依赖 pin / pytest / ruff")
     return 0
 
 
