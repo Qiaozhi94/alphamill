@@ -6,7 +6,7 @@ related_features: []
 topics: [migration, infra]
 doc_kind: design
 created: 2026-09-06
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # F001：quant-crypto 资产清算迁移 - 设计
@@ -22,18 +22,18 @@ updated: 2026-09-06
 
 ## 1. 技术概要与影响面
 
-三步走：① 数据卷按 pg_dump/restore 迁移（首选可校验方案）并逐表对账；② 代码目录按 docs/05 清单物理搬迁并并入主仓 pyproject 依赖；③ Kronos 上游化（clone pin + HF 权重 + 薄壳改造路径）后全链路 verify。
+三步走：① 数据卷按 pg_dump/restore 迁移（首选可校验方案）并逐表对账；② 代码目录按 migration-plan.md §一 清单物理搬迁并并入主仓 pyproject 依赖；③ Kronos 上游化（clone pin + HF 权重 + 薄壳改造路径）后全链路 verify。
 
 - 前端：不适用（无 UI 变更，Grafana 仅改数据源）
-- 后端 / API：kronos_service/ 迁入；API 契约不变
+- 后端 / API：src/alphamill/kronos_service/ 迁入；API 契约不变
 - 存储 / Migration：TimescaleDB 数据卷迁移 + 行数/校验和对账（本 feature 核心）
 - Runtime / Agent Adapter：无
 - Event / Evidence：迁移对账结果写入 `reports/`（manifest 风格 JSON）
-- 文档 / 配置：docs/05 清单项勾选；deployment/verify.ps1 扩展
+- 文档 / 配置：migration-plan.md 清单项勾选；deployment/verify.ps1 扩展
 
 ## 2. 架构与模块边界
 
-迁移后模块边界与 docs/02 §三目录设计一致：`data_bridge/collector/`（采集）与 `data_bridge/`（导出，F002 实现）分离；`kronos_service/` 只做 DB→推理→信号，不含业务策略；`freqtrade_bridge/risk/` 只被策略模板 import；`deployment/` 是唯一编排入口。依赖方向单向：deployment → services → data。旧仓迁移后仅作为只读历史参照，任何运行时路径不得指向旧仓。
+迁移后模块边界与 `docs/alphamill-architecture.md` 目录设计一致（目录约定已拍板：Python 包一律 `src/alphamill/<module>/`，非 Python 资产留在仓根）：`src/alphamill/data_bridge/collector/`（采集）与 `src/alphamill/data_bridge/`（导出，F002 实现）分离；`src/alphamill/kronos_service/` 只做 DB→推理→信号，不含业务策略；`src/alphamill/freqtrade_bridge/risk/` 只被策略模板 import；`monitoring/`、`deployment/` 为非 Python 资产留在仓根，`deployment/` 是唯一编排入口。依赖方向单向：deployment → services → data。旧仓迁移后仅作为只读历史参照，任何运行时路径不得指向旧仓。
 
 ## 3. 数据模型与 Migration
 
@@ -46,6 +46,8 @@ updated: 2026-09-06
 ### API / CLI / Adapter Contract
 
 Kronos HTTP API 契约不变：`GET /health`、`POST /predict/{symbol}`、`POST /predict_batch`。Freqtrade 容器经 `host.docker.internal` 访问薄壳。verify 脚本契约：单命令、退出码 0/非 0。
+
+符号映射契约前置：本 feature 对 pair 命名原样直迁、不改名；M1 数据桥须按集成文档 §2.2「M1 出口标准」产出 vibe_bridge 符号映射初版（湖内 pair ↔ Vibe-Trading symbol ↔ Freqtrade pair + UTC 对齐约定），避免 M3 接入时返工。
 
 ### Event / Trace Contract
 

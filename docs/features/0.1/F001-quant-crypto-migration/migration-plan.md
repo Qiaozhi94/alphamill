@@ -1,6 +1,6 @@
 # AlphaMill — quant-crypto 清算迁移方案
 
-> 版本：v0.1 | 日期：2026-09-06 | 决策：quant-crypto 仓库**归档废弃**，资产一次性清算迁入本仓
+> 版本：v0.1 | 日期：2026-09-07 | 决策：quant-crypto 仓库**归档废弃**，资产一次性清算迁入本仓
 > 红线：代码可以弃，**数据必须迁**（631 万行 OHLCV + 衍生品特征 + 质量标记 = 数周采集成本，不可重购）
 
 ---
@@ -10,10 +10,10 @@
 | # | 资产 | 来源（quant-crypto） | 去处（AlphaMill） | 改造点 |
 |---|---|---|---|---|
 | 1 | **TimescaleDB 数据卷** | docker volume（6.3M 行 1m OHLCV、衍生品表、质量标记、连续聚合） | 随 docker-compose 迁入，数据不重建 | pg_dump/restore 或 volume 直迁，行数对账 |
-| 2 | 数据采集器 | `data-collector/`（ccxt_ingestor、db_writer、historical_backfill、symbol_manager、derivatives_market_backfill） | `data_bridge/collector/` | 并入主仓依赖管理；保留 REST 轮询模式 |
-| 3 | Kronos 服务薄壳 | `kronos-signal/`（server/generator/db_adapter/kronos_real） | `kronos_service/` | db_adapter 改读迁移后 DB；上游 Kronos 代码改为 clone+pin（见第三节） |
-| 4 | 风控三件套 | `risk/`（circuit_breaker、correlation_guard、drawdown_guard） | `freqtrade_bridge/risk/` | 随策略模板挂载进 Freqtrade |
-| 5 | 评测器/门禁脚本 | `scripts/kronos_rankic_eval.py`、`kronos_ic_decay_eval.py`、`independent_cross_backtest.py`、`validate_*_holdout.py` | `factor_factory/bench/` + `validation/` | 泛化改造（M1 主体工作，见 PRD） |
+| 2 | 数据采集器 | `data-collector/`（ccxt_ingestor、db_writer、historical_backfill、symbol_manager、derivatives_market_backfill） | `src/alphamill/data_bridge/collector/` | 并入主仓依赖管理；保留 REST 轮询模式 |
+| 3 | Kronos 服务薄壳 | `kronos-signal/`（server/generator/db_adapter/kronos_real） | `src/alphamill/kronos_service/` | db_adapter 改读迁移后 DB；上游 Kronos 代码改为 clone+pin（见第三节） |
+| 4 | 风控三件套 | `risk/`（circuit_breaker、correlation_guard、drawdown_guard） | `src/alphamill/freqtrade_bridge/risk/` | 随策略模板挂载进 Freqtrade |
+| 5 | 评测器/门禁脚本 | `scripts/kronos_rankic_eval.py`、`kronos_ic_decay_eval.py`、`independent_cross_backtest.py`、`validate_*_holdout.py` | `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/` | 泛化改造（M1 主体工作，见 PRD） |
 | 6 | 监控配置 | `grafana/`、`prometheus/` | `monitoring/` | 数据源指向迁移后 DB |
 | 7 | 部署编排 | `docker-compose.yml`、`.env` 模板、`scripts/verify.ps1` | `deployment/` | 端口/网络按主仓调整；verify 扩展为全链路 |
 | 8 | 宇宙发现 | `scripts/discover_okx_swap_universe.py`、`download_okx_swap_1h.ps1` | `scripts/` | 无改造 |
@@ -34,7 +34,7 @@
 ① 模型代码：fresh clone shiyu-coder/Kronos → 第三方目录（如 vendor/Kronos），pin commit，零改动
             （待遇与 Freqtrade 相同：各自上游仓，我们不维护 fork）
 ② 模型权重：HuggingFace 下载 NeoQuasar/Kronos-base + Kronos-Tokenizer-base → models/（不进 git）
-③ 服务薄壳：quant-crypto 的 kronos-signal/ FastAPI 包装迁入本仓 kronos_service/
+③ 服务薄壳：quant-crypto 的 kronos-signal/ FastAPI 包装迁入本仓 src/alphamill/kronos_service/
             ——这层本来就是自研胶水，负责：DB 读数 → Kronos 推理 → 信号输出/缓存
 ```
 
@@ -62,3 +62,9 @@
 1. **M0（新增，~2-3 天）**：数据卷迁移 + 采集器/薄壳/风控/监控代码搬迁 + verify 全绿
 2. M1 起：所有开发只在 AlphaMill 主仓进行；旧仓只读
 3. Kronos 上游化（clone+pin+权重下载）放在 M0 内完成，避免迁移期间推理断供
+
+## 七、备份与灾备（单盘故障 ≠ 项目清零）
+
+- 每日定时向局域网 UGREEN NAS 同步三类资产：TimescaleDB 逻辑 dump（`deployment/backups/db/<date>.dump`）、Parquet 湖分区（`lake/`，F002 起生效）+ manifest（`lake/_manifests/`）、对账与报告（`reports/`）；
+- 同步脚本随 `deployment/` 迁入；NAS 不可达时本地保留 7 天滚动副本，恢复后自动补同步；
+- 恢复演练：M0 验收时从 NAS 副本完整恢复一次 DB 到临时容器并通过行数对账，此后每季度抽验一次。

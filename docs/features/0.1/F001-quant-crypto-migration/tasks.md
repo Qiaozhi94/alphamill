@@ -6,7 +6,7 @@ related_features: []
 topics: [migration, infra]
 doc_kind: tasks
 created: 2026-09-06
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # F001：quant-crypto 资产清算迁移 - 任务
@@ -36,12 +36,13 @@ updated: 2026-09-06
 
 ### Phase 2：代码与服务搬迁
 
-- [ ] T005 [P] (`FR-002`): 采集器四模块迁入 `data_bridge/collector/` 并并入 pyproject 依赖 — verify: `python -c "import"` 冒烟
+- [ ] T005 [P] (`FR-002`): 采集器四模块迁入 `src/alphamill/data_bridge/collector/` 并并入 pyproject 依赖 — verify: `python -c "import"` 冒烟
 - [ ] T006 [P] (`FR-003`): 上游 Kronos fresh clone + pin commit + HF 权重下载（或旧仓 models/ 复制） — verify: 权重文件存在 + commit hash 记录于 VENDORED 说明
-- [ ] T007 (`FR-003`, `AC-002`): kronos-signal 薄壳迁入 `kronos_service/` 并指向新 DB 与上游代码路径 — verify: `tests/integration/test_f001_kronos_smoke.py`
-- [ ] T008 [P] (`FR-004`): 风控三件套迁入 `freqtrade_bridge/risk/` — verify: 策略 import 冒烟
+- [ ] T007 (`FR-003`, `AC-002`): kronos-signal 薄壳迁入 `src/alphamill/kronos_service/` 并指向新 DB 与上游代码路径 — verify: `tests/integration/test_f001_kronos_smoke.py`
+- [ ] T008 [P] (`FR-004`): 风控三件套迁入 `src/alphamill/freqtrade_bridge/risk/` — verify: 策略 import 冒烟
 - [ ] T009 [P] (`FR-005`): Grafana/Prometheus 配置迁入 `monitoring/` 且数据源指向新 DB — verify: 容器启动无配置错误
 - [ ] T010 [P] (`FR-006`): docker-compose/.env 模板/verify 脚本迁入 `deployment/`（.env 人工搬运密钥，不进 git） — verify: `docker compose config` 无报错
+- [ ] T018 [P] (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七） — verify: 手动触发一次同步，NAS 端产物齐全
 
 ### Phase 3：全链路验证
 
@@ -54,7 +55,7 @@ updated: 2026-09-06
 - [ ] T014 (`AC-001`, `AC-002`, `AC-003`, `AC-004`): 本地运行全部集成测试 — verify: `python -m pytest tests/integration -q`
 - [ ] T015 (`NFR-002`): 确认全部脚本在 PowerShell 7 下无路径/编码错误 — verify: T013 附带输出无乱码
 - [ ] T016 (`AC-005`): 运行项目统一质量门 — verify: `python tools/verify.py`
-- [ ] T017: 回写 spec 验收证据、BACKLOG 状态与 docs/05 清单勾选 — verify: `python tools/validate_spec_lifecycle.py`
+- [ ] T017: 回写 spec 验收证据、BACKLOG 状态与 migration-plan.md 清单勾选 — verify: `python tools/validate_spec_lifecycle.py`
 
 ## 4. 依赖与并行关系
 
@@ -62,6 +63,7 @@ updated: 2026-09-06
 - `T003 -> T004`：对账依赖 restore 完成。
 - `T005 -> T011`、`T006 -> T007 -> T012`：冒烟依赖搬迁完成。
 - `T005/T006/T008/T009/T010 [P]`：互相可并行（不同目录、无共享状态），但均依赖 T002。
+- `T010 -> T018`：NAS 备份同步随部署编排就绪后配置。
 - `T013 -> T014 -> T017`：验收链顺序执行。
 
 ## 5. 明确后移

@@ -1,6 +1,6 @@
 # AlphaMill — 集成设计
 
-> 版本：v0.1 | 日期：2026-09-06 | 配套：[alphamill-architecture.md](./alphamill-architecture.md)
+> 版本：v0.1 | 日期：2026-09-07 | 配套：[alphamill-architecture.md](./alphamill-architecture.md)
 > ⚠️ 本文档为集成操作细节；外部依赖管理策略已提炼至 [ADR-0002](decisions/0002-external-dependency-policy.md)。
 > 本文回答：AlphaMill 的三个外部系统（数据湖 / Vibe-Trading / Freqtrade）各自怎么接、接口长什么样、出问题怎么隔离。
 
@@ -24,6 +24,12 @@
 | manifest | 每次导出写 `lake/_manifests/<dataset>/<data_version>.json`（schema 见架构文档 4.4） |
 | 一致性 | 导出后行数/校验和与 TimescaleDB 对账；不一致则该 data_version 标记 `invalid`，消费端拒绝读取 |
 | 质量继承 | `ohlcv_quality_flags` 未解决标记 > 0 的分区在 manifest 里标注，评测台可选跳过 |
+
+**数据修订政策（point-in-time）**：
+
+- 周日全量校验发现 TimescaleDB 历史数据被修订（回补/更正）时，`data_version` 必须递增：修订内容落成新快照，旧快照不可变、原样保留；
+- 新版本 manifest 相对旧版本登记修订分区清单（差异记录），可审计"哪些数据变了"；
+- 在途实验不自动作废：实验 manifest 固定的 data_version 与湖内最新版本比对发现漂移时，仅打 `data_version_drift` 标记——建议在任何 gate 判定（留出/dry-run 决策）前用新版本重跑，但不强制。
 
 ### 1.3 宇宙扩容（FR1.3）
 
@@ -61,7 +67,15 @@ Vibe-Trading 的 `local` loader 通过 `local:` 前缀符号读取本地文件�
 }
 ```
 
-`vibe_bridge/local_loader_config/` 维护：alphamill pair 命名 ↔ local loader 符号 的映射表、数据根路径、可用区间检查。
+`src/alphamill/vibe_bridge/local_loader_config/` 维护：alphamill pair 命名 ↔ local loader 符号 的映射表、数据根路径、可用区间检查。
+
+**M1 出口标准（契约前置）**：M1 冻结 Parquet 分区与 pair 命名时，必须同时产出符号映射初版表（`src/alphamill/vibe_bridge/symbol_map.csv`）并锁定 UTC 对齐约定，不允许推迟到 M3 接入时再发明：
+
+| alphamill pair（湖内） | Vibe-Trading symbol | Freqtrade pair | 时间戳约定 |
+|---|---|---|---|
+| `BTC-USDT` | `BTC-USDT`（能直映则同名） | `BTC/USDT:USDT` | 全链路 UTC，K 线按交易所原始 UTC 边界切分 |
+
+契约三条：① 三方命名只经此映射表互译，禁止散落硬编码；② 无法直映的 pair 必须在初版中显式登记翻译规则，不留空；③ 映射表进 git，命名变更走评审，保证历史实验可复现。
 
 ### 2.3 第二意见回测流程（FR4.2）
 
@@ -80,7 +94,7 @@ Vibe-Trading 的 `local` loader 通过 `local:` 前缀符号读取本地文件�
 ### 2.4 Agent 复盘工作流（FR4.3）
 
 - 输入物：失败实验的 manifest（alphamill 侧）+ Vibe-Trading run_card（若该候选跑过②）+ 因子注册表条目。
-- 工作流（`vibe_bridge/postmortem/`）：收集材料 → `vibe-trading run -p "<复盘 prompt>"` → 归因报告落 `reports/postmortem/` → 提取新假设进入生成器队列（人工审阅后生效）。
+- 工作流（`src/alphamill/vibe_bridge/postmortem/`）：收集材料 → `vibe-trading run -p "<复盘 prompt>"` → 归因报告落 `reports/postmortem/` → 提取新假设进入生成器队列（人工审阅后生效）。
 - 论文→因子：上传论文 PDF，参照其 SDM 技能的五阶段（INGEST→EXTRACT→IMPLEMENT→EVALUATE→MONITOR），产出的因子定义走 AST 纯度门后入库。
 
 ### 2.5 明确隔离
@@ -98,7 +112,7 @@ Vibe-Trading 的 `local` loader 通过 `local:` 前缀符号读取本地文件�
 ### 3.1 信号缓存 → 策略（继承 kronos_cache 模式）
 
 ```python
-# freqtrade_bridge/strategy_template.py.j2 渲染产物骨架
+# src/alphamill/freqtrade_bridge/strategy_template.py.j2 渲染产物骨架
 class {{ strategy_class }}(IStrategy):
     timeframe = "{{ timeframe }}"          # 1h / 4h
     can_short = True
@@ -142,11 +156,11 @@ class {{ strategy_class }}(IStrategy):
 
 ## 四、验证门禁迁移设计
 
-quant-crypto 的门禁脚本参数化迁移到 `validation/`：
+quant-crypto 的门禁脚本参数化迁移到 `src/alphamill/validation/`：
 
 | 迁移件 | 改造点 |
 |---|---|
-| 选择期脚本 | 窗口/阈值外置配置（`validation/config.yaml`），规则先于数据确定并 git 提交 |
+| 选择期脚本 | 窗口/阈值外置配置（`src/alphamill/validation/config.yaml`），规则先于数据确定并 git 提交 |
 | 最终 90 天留出 | 新增 **≥30 trades 判定门槛**：样本不足输出 `UNDERPOWERED`（不判 PASS 也不判 FAIL，触发扩宇宙/延长窗口） |
 | 独立重放器 | 接口化为 `no_lookahead_audit(factor_def)`，进入因子工厂流水线而非一次性脚本 |
 | 成本敏感性 | 三档（taker/maker/零成本）为标准输出列，成本后 Sharpe 为排序主键 |
@@ -162,10 +176,10 @@ quant-crypto 的门禁脚本参数化迁移到 `validation/`：
 
 | 引入项 | 方式 | 理由 | 版本策略 |
 |---|---|---|---|
-| **AlphaGen** | **vendor** 进 `factor_factory/generators/alphagen_vendor/` | 动大手术（换数据层、numpy/torch 现代化、gymnasium 化）+ 上游核心冻结（无 rebase 负担）+ 只用子集 | 记录 vendor 时的上游 commit hash 于 `VENDORED.md`；不考虑跟随上游 |
+| **AlphaGen** | **vendor** 进 `src/alphamill/factor_factory/generators/alphagen_vendor/` | 动大手术（换数据层、numpy/torch 现代化、gymnasium 化）+ 上游核心冻结（无 rebase 负担）+ 只用子集 | 记录 vendor 时的上游 commit hash 于 `VENDORED.md`；不考虑跟随上游 |
 | **Freqtrade** | 原样依赖（官方 docker 镜像 + `user_data/` 插件层） | 插件架构零改码即可用（quant-crypto 已验证）；上游月更，fork = rebase 跑步机 | pin 镜像 tag（如 2026.8），里程碑边界升级 |
 | **Vibe-Trading** | 原样依赖（pip pin + 本机 CLI/服务） | 只碰 4 个外部面（loader/回测工具/quantlib/agent），全在配置层 | pin 小版本；只在里程碑边界升级（保证实验结果可比） |
-| Kronos | 独立服务（上游 clone + pin commit，权重 HuggingFace 下载） | 模型代码上游化；服务薄壳为本仓 `kronos_service/` | pin 上游 commit；见 docs/05 |
+| Kronos | 独立服务（上游 clone + pin commit，权重 HuggingFace 下载） | 模型代码上游化；服务薄壳为本仓 `src/alphamill/kronos_service/` | pin 上游 commit；见 docs/alphamill-architecture.md §七 |
 
 ### vendor 卫生规则（AlphaGen 专用）
 

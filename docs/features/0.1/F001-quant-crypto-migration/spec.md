@@ -8,7 +8,7 @@ related_features: []
 topics: [migration, infra]
 doc_kind: spec
 created: 2026-09-06
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # F001：quant-crypto 资产清算迁移
@@ -20,7 +20,7 @@ updated: 2026-09-06
 - **PRD 来源**：`docs/alphamill-prd.md` §1.3 决策 2（清算迁移）与里程碑 M0
 - **架构来源**：`docs/alphamill-architecture.md` §五（资产清算迁移表）、§七（部署拓扑）
 - **系统设计 / Research / Contract 来源**：`docs/features/0.1/F001-quant-crypto-migration/migration-plan.md`（迁移清单与验收）
-- **上游决策**：`docs/decisions/`（暂无；仓库归档决策记录于 docs/05）
+- **上游决策**：`docs/decisions/`（暂无；仓库归档处置记录于同目录 migration-plan.md §二）
 - **功能类型**：backend / workflow
 - **规格模式**：full
 - **变更类型**：ADDED
@@ -74,7 +74,7 @@ quant-crypto 决定归档废弃，但其中 631 万行 OHLCV 数据、采集器�
 
 ### 范围内
 
-- docs/05 §一 迁移清单 1-9 项：数据卷、采集器、Kronos 薄壳、风控三件套、监控、部署编排、宇宙发现脚本、Freqtrade user_data。
+- migration-plan.md §一 迁移总览 1-9 项：数据卷、采集器、Kronos 薄壳、风控三件套、监控、部署编排、宇宙发现脚本、Freqtrade user_data。
 - Kronos 上游化三步（上游 clone + pin commit、HF 权重下载、薄壳迁入 `kronos_service/`）。
 - 迁移验收脚本（deployment/verify.ps1 扩展为全链路）。
 
@@ -169,7 +169,7 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 - **SC-001**：主仓内单机全链路可运行且 verify 全绿（US-001）。
 - **SC-002**：旧仓完成 tag 归档，主仓 grep 无旧仓运行路径硬依赖（US-002）。
-- **SC-003**：docs/05 迁移清单 9 项全部标记完成。
+- **SC-003**：migration-plan.md §一 迁移总览清单 9 项全部标记完成。
 
 ### 验收清单
 
@@ -203,4 +203,4 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 ## 8. 待确认问题
 
-- [x] Q-001: TimescaleDB 迁移后保留还是转纯 Parquet？ — 决策：阶段 A 保留（docs/05 §四），阶段 B 另立 feature 评估
+- [x] Q-001: TimescaleDB 迁移后保留还是转纯 Parquet？ — 决策：阶段 A 保留（migration-plan.md §四），阶段 B 另立 feature 评估
