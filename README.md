@@ -12,7 +12,7 @@
 
 ## 背景
 
-上一代项目 `D:\Projects\quant-crypto` 用 5 周建成完整基础设施（631 万行 OHLCV 数据湖、Kronos 信号 RankIC>0.05、Freqtrade dry-run、风控三件套），但 5 周只测了 3 个信号族，所有候选死在最终 90 天留出门（`blocked_no_paper_candidate`）。根因不是基建，是**假设吞吐量低**（~5 个/周 vs 需要 100+/周）。AlphaMill 的答案：程序化因子挖掘 + 统一评测台 + Vibe-Trading 复盘层。
+上一代项目 quant-crypto 用 5 周建成完整基础设施（631 万行 OHLCV 数据湖、Kronos 信号 RankIC>0.05、Freqtrade dry-run、风控三件套），但 5 周只测了 3 个信号族，所有候选死在最终 90 天留出门（`blocked_no_paper_candidate`）。根因不是基建，是**假设吞吐量低**（~5 个/周 vs 需要 100+/周）。AlphaMill 的答案：程序化因子挖掘 + 统一评测台 + Vibe-Trading 复盘层。
 
 ## 文档索引
 
@@ -51,7 +51,7 @@ Freqtrade（执行） ← 信号缓存 ← 验证门禁 ← 因子工厂（评�
 |---|---|---|
 | [Vibe-Trading](https://github.com/HKUDS/Vibe-Trading)（HKUDS, MIT, v0.1.14） | 研究/回测/复盘上层 | 只接 4 个面：local loader、回测/验证工具、quantlib、agent 复盘；**不接**其实盘栈与数据源 |
 | [Freqtrade](https://github.com/freqtrade/freqtrade)（GPL-3.0, 2026.8） | 交易执行 | 沿用 quant-crypto 的 dry-run 部署与策略模式（随迁移并入） |
-| quant-crypto 资产（清算迁入） | 数据湖/风控/监控 | TimescaleDB 数据卷、风控三件套、Grafana/Prometheus 配置随迁移并入本仓（见 docs/05） |
+| quant-crypto 资产（清算迁入） | 数据湖/风控/监控 | TimescaleDB 数据卷、风控三件套、Grafana/Prometheus 配置随迁移并入本仓（迁移表见 docs/alphamill-architecture.md） |
 | **AlphaGen**（vendor 接入） | FR2 核心：因子挖掘主引擎 | vendor + 现代依赖栈策略见 [ADR-0001](docs/decisions/0001-factor-mining-engine.md) 与 [选型调研](docs/alphamill-research-factor-mining.md) |
 
 ## 快速开始（设计阶段之后）
@@ -67,5 +67,5 @@ python validation/holdout_gate.py --factor <factor_id> --window 90d
 
 ## 相关项目
 
-- `D:\Projects\quant-crypto` — 上一代系统（**已归档**：资产清算迁移至本仓，方案见 [F001 migration-plan](docs/features/0.1/F001-quant-crypto-migration/migration-plan.md)）
-- `D:\Projects\tradingview-quant-research` — TradingView 定位调研（可视化/Alert 层的参考依据）
+- `../quant-crypto`（本机路径，已归档）— 上一代系统：资产清算迁移至本仓，方案见 [F001 migration-plan](docs/features/0.1/F001-quant-crypto-migration/migration-plan.md)
+- `../tradingview-quant-research`（本机路径）— TradingView 定位调研（可视化/Alert 层的参考依据）

@@ -2,7 +2,7 @@
 topics: [features, spec-driven-development, docs]
 doc_kind: guide
 created: 2026-09-06
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # Feature Specs Guide
@@ -181,6 +181,5 @@ draft → ready-for-development → in-progress → review → done
 
 - `docs/alphamill-prd.md`：产品真相源。Feature spec 必须服从 PRD。
 - `docs/alphamill-architecture.md`：全局架构设计。Feature design 不应绕过其中的
-  runtime / storage / safety 边界。
-  关系，稳定后应回写到这里。
+  runtime / storage / safety 边界。design 与架构边界的关系，稳定后应回写到这里。
 - `BACKLOG.md`：active feature 索引，只记录状态和入口链接。

@@ -2,7 +2,7 @@
 topics: [sop, workflow]
 doc_kind: note
 created: 2026-09-06
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # 开发流程（AlphaMill）
@@ -19,8 +19,11 @@ updated: 2026-09-06
 | # | 原则 | 短摘要 | 规范正文唯一拥有者 |
 |---|---|---|---|
 | 1 | 可追溯规格优先 | 功能必须先有已评审规格；实现/测试/实验/结论必须引用需求编号；未写入规格的行为不视为承诺 | 本文 + `docs/features/README.md` |
-| 2 | <按项目定义> | <短摘要> | `docs/alphamill-prd.md` / `-architecture.md` |
-| 3 | <按项目定义> | <短摘要> | `docs/decisions/` |
+| 2 | 留出门不降级 | 任何候选必须通过最终 90 天留出（≥30 笔）才能进 paper；吞吐提升只来自假设数量，不来自放宽门禁 | `docs/decisions/0003-validation-gate-non-degradation.md` |
+| 3 | 无前视一等公民 | 因子定义过 AST 纯度门 + 独立逐 K 线重放审计 + 信号缓存时间戳对齐检查（三层防线） | `docs/alphamill-integration.md` |
+| 4 | 数据红线（只读湖快照） | 研究/回测只读 Parquet 湖不可变快照（data_version），不直读 TimescaleDB 修订态 | `docs/alphamill-architecture.md` |
+| 5 | 实盘红线（留出前置） | 无候选通过最终留出前，不触碰实盘下单路径 | `docs/alphamill-prd.md` |
+| 6 | 实验可复现 | 每个实验写 manifest（数据版本 + 代码版本 + 参数 + 结果），任一历史结果可从 manifest 从零复现 | `docs/alphamill-architecture.md`（manifest 契约） |
 
 > 新建项目时：从 PRD/架构中提炼 3-7 条真正不可违反的原则填表，其余原则不要堆砌；
 > 每加一条必须同时指定唯一拥有者文档。
@@ -49,6 +52,9 @@ updated: 2026-09-06
 ## 3. 验证与复核流程
 
 - 唯一公开验证入口：`python tools/verify.py`，按固定顺序运行门禁与测试，失败即非零。
+  注意区分同名不同物的两个入口：`python tools/verify.py` 是代码质量门禁（唯一公开
+  验证入口）；`deployment/verify.ps1` 是规划中的全链路验收脚本（目录尚未创建，随
+  F001 迁移落地），二者不是同一件事。
 - 复核（review）检查：规格完整性、测试证据、复现信息、研究边界；机器门只证明引用与
   结构自洽，语义覆盖由人工复核判断。
 - **检视文档生命周期**：`docs/reviews/CURRENT-doc.md` / `CURRENT-code.md` 只能由检视
@@ -74,4 +80,6 @@ updated: 2026-09-06
 ## Code Quality
 
 - File limits: 200 行建议拆分 / 350 行硬上限。
-- 分层与命名约定：node 见 `docs/decisions/` 目录结构 ADR；python 按 `src/<pkg>/` 子包。
+- 分层与命名约定：node 见 `docs/decisions/` 目录结构 ADR；python 采用单一布局
+  `src/alphamill/<module>/`（子包：data_bridge、factor_factory、validation、
+  kronos_service 等）；非 Python 资产（docker-compose、deployment/、docs/）留仓库根。

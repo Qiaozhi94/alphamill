@@ -8,7 +8,7 @@
 - `docs/alphamill-architecture.md`：分层架构与接口契约（架构真相源），随实现迭代。
 - `docs/alphamill-research-factor-mining.md`：因子挖掘/ML 选型调研证据（决策已提炼至 ADR-0001）。
 - `docs/alphamill-integration.md`：数据桥 / Vibe-Trading / Freqtrade 集成操作细节（依赖策略见 ADR-0002）。
-- `docs/decisions/`：ADR——0001 挖掘引擎选型 / 0002 依赖管理策略 / 0003 验证门禁不降级。
+- `docs/decisions/`：ADR——0001 挖掘引擎选型 / 0002 依赖管理策略 / 0003 验证门禁不降级 / 0004 组合构建（因子→策略映射）。
 - `docs/features/0.1/F001-quant-crypto-migration/migration-plan.md`：quant-crypto 资产清算迁移操作手册（F001 附属）。
 - `docs/README.md`：文档所有权地图（唯一入口，两次点击可达任何权威文档）。
 - `docs/SOP.md`：开发流程与质量门约定。
@@ -27,7 +27,7 @@
 - 核心依赖：pandas/polars（因子计算）、DuckDB（湖上 SQL 取数）、pyarrow（Parquet 湖）、
   ccxt（采集）、Freqtrade（执行，docker 镜像 2026.8，零源码改动）、
   vibe-trading-ai（研究上层，pip pin，零源码改动）、AlphaGen 核心 vendor（RL 挖掘主引擎）、
-  Kronos（上游 clone + pin；GPU 推理薄壳为本仓 `kronos_service/`）
+  Kronos（上游 clone + pin；GPU 推理薄壳为本仓 `src/alphamill/kronos_service/`）
 - 数据栈：TimescaleDB（联机运营库，自 quant-crypto 迁入）→ data_bridge → Parquet 湖（不可变快照）
 - 测试/质量：pytest + ruff（check + format），唯一入口 `python tools/verify.py`
 - 平台：Windows 11 单机 + RTX 4060 Laptop GPU；docker-compose 自 quant-crypto 迁入

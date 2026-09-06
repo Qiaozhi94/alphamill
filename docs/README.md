@@ -2,7 +2,7 @@
 topics: [docs, index, ownership]
 doc_kind: guide
 created: 2026-09-06
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # AlphaMill 文档地图
@@ -21,6 +21,7 @@ updated: 2026-09-06
 | 因子挖掘主引擎选型（含降级阶梯） | `decisions/0001-factor-mining-engine.md` | 选型决策（证据：`alphamill-research-factor-mining.md`） |
 | 外部依赖管理策略（vendor/fork/原样） | `decisions/0002-external-dependency-policy.md` | 依赖策略（操作细节：`alphamill-integration.md`） |
 | 验证门禁不降级 | `decisions/0003-validation-gate-non-degradation.md` | quant-crypto 教训制度化 |
+| 组合构建（因子→策略映射） | `decisions/0004-portfolio-construction.md` | 协同池组合的部署路径与权重/换手/敞口规则 |
 | quant-crypto 资产清算迁移 | `features/0.1/F001-quant-crypto-migration/migration-plan.md` | 迁移清单与验收（F001 附属） |
 | 跨 Feature 长期决策 | `decisions/` | ADR 决策记录 |
 | Feature 行为与状态 | `features/<version>/Fxxx-*/spec.md` | 状态唯一真相源 |
@@ -39,7 +40,6 @@ updated: 2026-09-06
 - **ADR（决策记录）**：→ [`decisions/`](decisions/)
 - **开发流程 SOP**：→ [`SOP.md`](SOP.md)
 - **Feature 规格指南与状态门禁规则**：→ [`features/README.md`](features/README.md)
-- **检视复盘**：→ [`reviews/RETROSPECTIVE.md`](reviews/RETROSPECTIVE.md)
 - **检视复盘**：→ [`reviews/RETROSPECTIVE.md`](reviews/RETROSPECTIVE.md)
 
 ## 所有权规则（机器可校验）
