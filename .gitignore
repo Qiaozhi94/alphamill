@@ -1,0 +1,42 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.idea/
+.vscode/
+.DS_Store
+
+# 本机 AI 工具本地授权配置：含本机用户名路径与本地授权，不可移植
+.claude/settings.local.json
+
+# 编辑器本地历史
+.history/
+
+# 本机代理运行续接状态
+.sisyphus/
+
+# 仿真/实验产生的数据与输出
+data/raw/
+data/processed/
+results/
+artifacts/
+*.parquet
+*.feather
+
+# 本地-only 文档（保留在磁盘，不纳入 git）
+docs/research/
+docs/reviews/*
+# ...例外：curated 摘要入库
+!docs/reviews/RETROSPECTIVE.md
+!docs/reviews/CURRENT-doc.md
+!docs/reviews/CURRENT-code.md
+
+!.gitkeep

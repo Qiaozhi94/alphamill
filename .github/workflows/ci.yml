@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一分支的新提交取消仍在跑的旧任务，避免排队浪费。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 供应链加固：本工作流只读仓库，不需要写权限。
+permissions:
+  contents: read
+
+jobs:
+  # 真源与规格生命周期校验放在最前，且【不安装任何依赖】——它只用标准库。
+  # 机器真源自相矛盾、或规格生命周期不合法时，后面的 lint 与测试都没有意义，
+  # 因此这一步失败即中止。
+  spec-lifecycle:
+    name: 规格生命周期校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: 校验规格生命周期（frontmatter/状态/章节/gate）
+        run: python tools/validate_spec_lifecycle.py
+
+  lint:
+    name: ruff
+    needs: spec-lifecycle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    name: pytest (${{ matrix.python-version }})
+    needs: spec-lifecycle
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 下限锁 requires-python；上限跟随，用于尽早发现新版本行为差异。
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
