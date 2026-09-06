@@ -3,7 +3,7 @@
 - 日期：2026-09-06
 - 状态：Accepted
 - 决策人：Georg
-- 背景：`D:\Projects\quant-crypto` Phase 4 决策报告（2026-06-17，`blocked_no_paper_candidate`）与
+- 背景：quant-crypto 仓库 Phase 4 决策报告（2026-06-17，`blocked_no_paper_candidate`）与
   PRD G2 / FR3
 - 修订：2026-09-07（检视 D005/D006/D008 补强：留出预算 / 功效论证 / 复盘防护；下列"决策"节
   判据本体一字未动，补强只收紧、不放松）

@@ -70,7 +70,7 @@
 - 存活轮数：29 条全部首轮关闭（N1 于 round-2 出现当轮关闭）。
 - CI 终局门禁：无 git remote，客观不可执行（协议允许例外，如实记录）；配置 remote 后首推即补验。
 
-## 残余观察项（不阻塞，随手清）
+## 残余观察项处置（2026-09-07 检视人闭环清理）
 
-- N2（low）：ADR-0003 第 6 行残留 `D:\Projects\quant-crypto` 机器路径（D024 同类、原 finding 范围外）。
-- FIX-log 计数笔误：test_check_dep_pins 实为 9 tests（FIX-log 写 8），无实质影响。
+- N2：ADR-0003 第 6 行机器路径已改为仓库名引用（见本轮清理提交）。
+- FIX-log 计数笔误：FIX-log 已按闭环协议删除（local-only 过程稿，内容已沉淀于本文件与 CURRENT 终态）；勘误记录留存：test_check_dep_pins 实为 9 tests。
