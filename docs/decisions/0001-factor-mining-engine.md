@@ -1,6 +1,7 @@
 # ADR-0001：因子挖掘主引擎选型 —— AlphaGen vendor + 冒烟闸门 + 降级阶梯
 
 - 日期：2026-09-06
+- 修订：2026-09-07（检视 D012 补强：L1/L2 降级切换判据预成文；决策本体未动）
 - 状态：Accepted
 - 决策人：Georg
 - 证据全文：[`docs/alphamill-research-factor-mining.md`](../alphamill-research-factor-mining.md)
@@ -29,6 +30,24 @@ PRD G1 要求因子假设吞吐量 ≥100 候选/周（quant-crypto 实测 ~5/�
 3. **降级阶梯**：L1 = AlphaGen 表达式求值器 + 自写搜索（绕开 sb3/RL，保留 GPU 批量评估）；
    L2 = 纯 gplearn（1h/4h 重采样 + 自建算子 + 滚动 fitness）。
 4. **对照基线**：AlphaGen 仓库自带的 gplearn/ 与 dso/ 直接利用，不单独引入 gplearn 项目。
+
+## 降级切换判据（2026-09-07 补强 · D012）
+
+冒烟闸门 time-box 已定（2 个工作日），但"何时降级"此前未成文——单人 time-box 最容易
+自我豁免。以下判据预写为**二元可测项**：到期未达标即切换，不允许"再给一天"；切换动作
+与触发原因记入当日 experiment manifest。降级不自动回切，回切须重开一轮冒烟 time-box。
+
+**切到 L1（AlphaGen 表达式求值器 + 自写搜索，绕开 sb3/RL）**——满足任一条即触发：
+
+- [ ] 第 2 个工作日结束时仍未跑通 1 个 PPO epoch（time-box 用尽）；
+- [ ] 第 1 个工作日结束时，sb3/gymnasium 现代栈仍未跑通最小训练循环（依赖阻塞，判定
+  vendor+RL 路线风险不可控，直接止损）；
+- [ ] 第 2 个工作日结束时，feather→tensor 适配器未产出首个可做 RankIC 对齐的因子。
+
+**从 L1 切到 L2（纯 gplearn）**——满足任一条即触发：
+
+- [ ] L1 连续 2 周每周进评测台候选 <50（周配额取 M2 出口标准的量化线：单次挖掘 ≥50）；
+- [ ] L1 连续 2 周零候选通过无前视审计（产出质量归零，吞吐量无意义）。
 
 ## 后果
 
