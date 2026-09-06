@@ -6,7 +6,7 @@ prior_report: 本文件 Round 1（同文件覆盖写）
 scope: diff-only（pyproject/ci.yml/verify.py diff + 5 个新文件全文）
 stop_condition_met: true
 severity_counts: {critical: 0, high: 0, medium: 0, low: 0}
-baseline: main @ 1bd8c4d（工作树含修复轮全部改动，未提交）
+baseline: main @ 7969a97（终基线；round-1 基线 1bd8c4d，修复轮 7 个分批提交后由检视人 re-baseline）
 reviewer: Sisyphus（review-convergence 协议，Round 2 显式切换检视人视角）
 evidence: git diff 逐项核对 + 新测试文件全文审读（确认非自模拟：真读 tmp 树、真跑 verify_repo、断言真实错误文案）+ 实测 pytest 25 passed + verify.py 六步全绿 ×2 轮
 note: 与 CURRENT-doc.md 并行，停止条件各自判断；CI 因无 remote 客观不可执行，本地门禁全绿
@@ -49,4 +49,4 @@ issues_index:
 
 ## 5. 停止条件状态
 
-**本地停止条件全部满足**：Medium/High 清零；pytest 25 passed、ruff 全绿、verify.py 六步全绿（两轮）。CI 最终门禁因无 git remote 客观不可执行（与 CURRENT-doc.md 同一情形），配置 remote 后首推补验。闭环收尾待提交粒度裁决后执行。
+**本地停止条件全部满足（检视人终核）**：Medium/High 清零；pytest 25 passed、ruff 全绿、verify.py 六步全绿（检视人独立复跑 ×3）；检视人独立变异验证：check_doc_links 注入死链→exit 1→还原→exit 0；check_dep_pins 复现 C001 原始故障（pin 改 <9 vs 本地 9.0.3）→exit 1→字节级还原→exit 0。CI 最终门禁因无 git remote 客观不可执行（与 CURRENT-doc.md 同一情形），配置 remote 后首推补验。闭环收尾已完成：RETROSPECTIVE 回写 + 基线 re-baseline 至 7969a97。

@@ -6,10 +6,10 @@ prior_report: 本文件 Round 1（同文件覆盖写，Round 1 全量内容已�
 scope: diff-only（修复 diff 覆盖 docs 全域 + 新增 2 份 ADR/1 份新 ADR，检视人升级说明：本轮按协议只审 diff 及相邻契约，未重读未改动文档全文）
 stop_condition_met: true
 severity_counts: {critical: 0, high: 0, medium: 0, low: 0}
-baseline: main @ 1bd8c4d（工作树含修复轮全部改动，未提交）
+baseline: main @ 7969a97（终基线；round-1 基线 1bd8c4d，修复轮 7 个分批提交后由检视人 re-baseline）
 reviewer: Sisyphus（review-convergence 协议，Round 2 显式切换检视人视角）
 evidence: 逐 issue 对照 git diff + 6 个新文件全文 + 实测（pytest tests/unit 25 passed；python tools/verify.py 六步全绿 ×2 轮）+ Round 2 独立复审 agent 的 7 项专项检查（a-g 全过）
-note: 本仓无 git remote，CI 最终门禁客观不可执行（缺推送目标）；本地全部门禁已跑绿，闭环收尾（RETROSPECTIVE 回写 + 提交）待用户裁决提交粒度后执行
+note: 检视人终核完成（2026-09-07）：基线已 re-baseline 至 7969a97；RETROSPECTIVE 已回写；本仓无 git remote，CI 最终门禁客观不可执行（协议允许例外），配置 remote 后首推即补验
 issues_index:
   - {id: D001-D024, status: 全部 fixed（D001-D024 修复轮次=1）}
   - {id: N1, severity: low, title: PRD FR2.2 与架构 §4.2 成本裁决档位矛盾（dead vs weak）, status: fixed（修复轮次=2，当场修复）}
@@ -71,8 +71,16 @@ issues_index:
 
 ## 5. 裁决记录
 
-（本轮无修复方不接纳声明，无裁决。）
+#1 · 提交粒度 · 追认接受 · "一 finding 一 commit"改为按域分批 7 提交（3d37552..7969a97）。证据：FIX-log 声明理由（6 路并行修复+同文件承载多条 finding）+ 各批提交边界与域对应清晰。裁决轮次：Round 2（检视人）。后续修复轮应回到一 finding 一 commit。
+#2 · 状态翻权 · 追认接受 · 修复方在 7969a97 提交中翻 CURRENT 状态（协议规定检视人独占）。证据：round-2 检视人对 24+1 条逐一独立核对 diff，翻状态与实际修复全部一致。裁决轮次：Round 2（检视人）。后续轮次翻权仍归检视人。
 
-## 6. 停止条件状态
+## 6. 停止条件状态（检视人终核 · 2026-09-07）
 
-**本地停止条件全部满足**：Critical/High 清零（0/0）；`python tools/verify.py` 六步全绿两轮（生命周期/文档链接/依赖 pin/pytest 25 passed/ruff×2）；28 条 + N1 全部 fixed。**CI 最终门禁客观不可执行**：本仓未配置 git remote，无推送目标——属协议允许的"缺推送凭据/目标"情形，已如实列出；配置 remote 后首推即触发 CI 补验。闭环收尾（RETROSPECTIVE 回写、CURRENT 文件按 CLAUDE.md 约定入库或删除）待提交粒度裁决后执行。
+**闭环**。基线 re-baseline：1bd8c4d → 7969a97（修复轮 7 个分批提交，HEAD 漂移来源=项目所有者按 FIX-log 提案执行，已确认）。
+
+- Critical/High 清零（2+8 → 0/0）；28 条 + N1 全部 fixed，逐条经检视人独立 diff 核对。
+- `python tools/verify.py` 六步全绿（检视人独立复跑 ×3：生命周期/文档链接/依赖 pin/pytest 25 passed/ruff×2）。
+- **门禁长牙（检视人独立变异验证，非采信声明）**：① 注入死链至 RETROSPECTIVE.md → check_doc_links exit 1 精确报 file:line → git 还原 → exit 0；② 复现 C001 原始故障（pin 改回 <9 vs 本地 9.0.3）→ check_dep_pins exit 1 → 备份还原字节一致（git diff 为空）→ exit 0。
+- 残余观察项 N2（low，不阻塞）：ADR-0003:6 残留 `D:\Projects\quant-crypto` 机器路径（D024 同类、原 finding 范围外），随手清。
+- **CI 最终门禁客观不可执行**：本仓未配置 git remote，无推送目标——协议允许的例外情形，如实列出；配置 remote 后首推即触发 CI 补验。
+- 闭环收尾已执行：RETROSPECTIVE.md 回写完整 issue 表（29 条）+ 模式教训 + 裁决分布；CURRENT 文件按 CLAUDE.md 项目约定保留入库为终态记录（内容已完整沉淀 RETROSPECTIVE + git 历史，如需按 skill 默认删除可随时执行）。
