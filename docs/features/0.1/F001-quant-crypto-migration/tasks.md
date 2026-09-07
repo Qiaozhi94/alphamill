@@ -24,7 +24,7 @@ updated: 2026-09-07
 
 ## 1. 前置条件
 
-- [ ] T001 (`NFR-001`): 定位旧仓并建立只读基线——旧仓不在本机文件系统可见范围（2026-09-07 实测：/root/projects、/mnt/c、/mnt/d 均无），先确认旧仓副本位置（备份盘/NAS/git remote）并钉死访问路径；然后本地全量备份 + 记录当前 commit — verify: 旧仓路径成文于本任务备注 + 备份文件存在 + 旧仓 `git rev-parse HEAD` 记录
+- [ ] T001 (`NFR-001`): 旧仓副本已钉死：`/root/projects/quant-crypto`（origin `git@github.com:Qiaozhi94/quant-crypto.git`，2026-09-07 克隆，HEAD `d94f94f`；代码资产 data-collector/kronos-signal/risk/grafana/prometheus/scripts/freqtrade/user_data/docker-compose.yml 均在位）——建立只读基线：本地全量备份 + 复核当前 commit；注意旧仓 docker 数据卷不在 git 内，pg_dump 准备仍指向旧仓宿主机（T004） — verify: 备份文件存在 + 旧仓 `git rev-parse HEAD` 记录（基线 `d94f94f`）
 - [ ] T002 (`FR-001`): 确认 WSL2 内 docker-ce、PowerShell 7（apt 安装）、Python 3.11+ 就绪且旧仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running
 - [ ] T003 (`FR-003`): GPU 直通检查——WSL2 内 `nvidia-smi` 应可见 RTX 4060（Windows 宿主装 NVIDIA 驱动并启用 WSL GPU 直通）；确认不可行时记录 CPU 推理回退决策（AC-002 冒烟不阻塞） — verify: nvidia-smi 输出存档，或 CPU 回退决策写入本任务备注
 

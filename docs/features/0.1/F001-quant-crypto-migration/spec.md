@@ -189,7 +189,7 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 ### 依赖
 
-- 上游：quant-crypto 仓库（只读源；本机不可见，实际位置由 tasks T001 定位钉死）；HuggingFace 网络（权重）；docker-ce（WSL2）。
+- 上游：quant-crypto 仓库（只读源；已克隆至 `/root/projects/quant-crypto`，HEAD `d94f94f`，见 tasks T001）；HuggingFace 网络（权重）；docker-ce（WSL2）。
 - 下游消费者：F002（数据桥）、F003（AlphaGen vendor）、所有后续 feature 的运行基座。
 - 外部 / 环境依赖：RTX 4060 GPU（WSL2 直通；未就绪时 AC-002 冒烟允许 CPU 推理回退）、docker-compose、PowerShell 7（apt 安装于 WSL2）。
 

@@ -18,7 +18,7 @@ updated: 2026-09-07
 - **行为契约**：`spec.md`（FR-001..006 / NFR-001..002）
 - **PRD / Architecture / System Design**：`docs/alphamill-prd.md` M0；`docs/alphamill-architecture.md` §五、§七；`migration-plan.md` 全文（本目录）
 - **ADR / 上游 Contract**：Kronos HTTP API 契约以旧仓 `kronos-signal/server.py` 现行为准（不新增不修改）
-- **执行环境（2026-09-07 实测钉死）**：Windows 11 宿主 + WSL2（Ubuntu 26.04，内核 6.18.33.2-microsoft-standard-WSL2）；docker-ce 29.1.3 + compose v2.40.3（非 Docker Desktop）；PowerShell 7 经 apt 安装于 WSL2（旧仓 verify.ps1 资产沿用，AC-005 语义不变）；GPU：RTX 4060 需 Windows 宿主驱动 + WSL 直通（当前 `nvidia-smi` 不可见，tasks T003 前置检查），未就绪时 AC-002 冒烟允许 CPU 推理回退；旧仓不在本机文件系统可见范围（/root/projects、/mnt/c、/mnt/d ≤4 层实测无），实际位置由 tasks T001 定位钉死
+- **执行环境（2026-09-07 实测钉死）**：Windows 11 宿主 + WSL2（Ubuntu 26.04，内核 6.18.33.2-microsoft-standard-WSL2）；docker-ce 29.1.3 + compose v2.40.3（非 Docker Desktop）；PowerShell 7 经 apt 安装于 WSL2（旧仓 verify.ps1 资产沿用，AC-005 语义不变）；GPU：RTX 4060 需 Windows 宿主驱动 + WSL 直通（当前 `nvidia-smi` 不可见，tasks T003 前置检查），未就绪时 AC-002 冒烟允许 CPU 推理回退；旧仓已克隆钉死：`/root/projects/quant-crypto`（origin `git@github.com:Qiaozhi94/quant-crypto.git`，HEAD `d94f94f`；docker 数据卷不在 git 内，pg_dump 仍指向旧仓宿主机，见 T004）
 - **实现约束**：旧仓只读（NFR-001）；迁移期间不得中断旧仓服务直至对账通过
 
 ## 1. 技术概要与影响面
