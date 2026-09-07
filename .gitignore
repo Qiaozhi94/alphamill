@@ -39,7 +39,5 @@ docs/research/
 docs/reviews/*
 # ...例外：curated 摘要入库
 !docs/reviews/RETROSPECTIVE.md
-!docs/reviews/CURRENT-doc.md
-!docs/reviews/CURRENT-code.md
 
 !.gitkeep
