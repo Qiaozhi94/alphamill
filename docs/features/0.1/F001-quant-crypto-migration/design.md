@@ -18,7 +18,7 @@ updated: 2026-09-07
 - **行为契约**：`spec.md`（FR-001..006 / NFR-001..002）
 - **PRD / Architecture / System Design**：`docs/alphamill-prd.md` M0；`docs/alphamill-architecture.md` §五、§七；`migration-plan.md` 全文（本目录）
 - **ADR / 上游 Contract**：Kronos HTTP API 契约以旧仓 `kronos-signal/server.py` 现行为准（不新增不修改）
-- **执行环境（2026-09-07 实测钉死）**：Windows 11 宿主 + WSL2（Ubuntu 26.04，内核 6.18.33.2-microsoft-standard-WSL2）；docker-ce 29.1.3 + compose v2.40.3（非 Docker Desktop）；PowerShell 7 经 apt 安装于 WSL2（旧仓 verify.ps1 资产沿用，AC-005 语义不变）；GPU：RTX 4060 需 Windows 宿主驱动 + WSL 直通（当前 `nvidia-smi` 不可见，tasks T003 前置检查），未就绪时 AC-002 冒烟允许 CPU 推理回退；旧仓已克隆钉死：`/root/projects/quant-crypto`（origin `git@github.com:Qiaozhi94/quant-crypto.git`，HEAD `d94f94f`；docker 数据卷不在 git 内，pg_dump 仍指向旧仓宿主机，见 T004）
+- **执行环境（2026-09-07 实测钉死）**：Windows 11 宿主 + WSL2（Ubuntu 26.04，内核 6.18.33.2-microsoft-standard-WSL2）；docker-ce 29.1.3 + compose v2.40.3（非 Docker Desktop）；PowerShell 7 经 apt 安装于 WSL2（旧仓 verify.ps1 资产沿用，AC-005 语义不变）；GPU：RTX 4060 需 Windows 宿主驱动 + WSL 直通（当前 `nvidia-smi` 不可见，tasks T003 前置检查），未就绪时 AC-002 冒烟允许 CPU 推理回退；旧仓双现场钉死（2026-09-07 实证）：①代码副本 `/root/projects/quant-crypto`（origin `git@github.com:Qiaozhi94/quant-crypto.git`，HEAD `d94f94f`，在本开发机 qiaozhi-gp）；②运行现场＝数据源 **qiaozhi-lt**（用户另一台 Windows 工作机，Tailscale `100.98.228.125`；本开发机实为 qiaozhi-gp，勿混淆）之 `D:\Projects\quant-crypto`——含 `.env` 凭据与 Docker 命名卷 `quant-crypto_timescale_data`（容器 `quant-timescaledb`，归档停用态；实测临时启动后 ohlcv_1m **6,504,359 行**、11 张公有表、5 个连续聚合，查毕已停回）。数据迁移经 SSH 流式 pg_dump（`docker exec` + SSH 重定向）：实测 Tailscale 直连 5432 被 Windows 防火墙拦截而 SSH 22 通，故不依赖开放 5432，见 T004
 - **实现约束**：旧仓只读（NFR-001）；迁移期间不得中断旧仓服务直至对账通过
 
 ## 1. 技术概要与影响面
@@ -38,7 +38,7 @@ updated: 2026-09-07
 
 ## 3. 数据模型与 Migration
 
-- 方案：`pg_dump -Fc` 全库导出 → 新容器 `pg_restore`；表级 `SELECT COUNT(*)` + `SUM(hashtext(rostertuple))` 式校验和对账。**对账口径（唯一权威定义，spec FR-001 / AC-001 与 design §8 引用此处）**：逐表覆盖 ohlcv_1m、衍生品三表、quality_flags、signals_log、trades_log，及全部连续聚合（caggs）——不遗漏任何迁入表。
+- 方案：`pg_dump -Fc` 全库导出 → 新容器 `pg_restore`；表级 `SELECT COUNT(*)` + `SUM(hashtext(rostertuple))` 式校验和对账。**对账口径（唯一权威定义，spec FR-001 / AC-001 与 design §8 引用此处）**：逐表覆盖旧库实测全部 11 张公有表（2026-09-07 qiaozhi-lt 容器内 `pg_tables` 实查）：ohlcv_1m（6,504,359 行）、ohlcv_quality_flags、衍生品三表（derivatives_funding_rates / derivatives_mark_index_basis / derivatives_open_interest）、signals_log、trades_log、dryrun_open_positions、dryrun_runtime_snapshots、backfill_progress、derivatives_backfill_progress，及 5 个连续聚合（ohlcv_5m / 15m / 1h / 4h / 1d）——不遗漏任何迁入表（执行时以 `pg_tables` 实查清单为准，新增表自动纳入）。
 - 回滚/前向兼容：restore 失败可重试（幂等，先 DROP 新库再 restore）；对账不一致即中止迁移并保留旧仓服务（NFR-001）。
 - 历史数据：原样迁移，不做任何清洗/改写（口径改造属后续 feature）。
 

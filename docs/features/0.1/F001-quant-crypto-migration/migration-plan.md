@@ -9,7 +9,7 @@
 
 | # | 资产 | 来源（quant-crypto） | 去处（AlphaMill） | 改造点 |
 |---|---|---|---|---|
-| 1 | **TimescaleDB 数据卷** | docker volume（6.3M 行 1m OHLCV、衍生品表、质量标记、连续聚合） | 随 docker-compose 迁入，数据不重建 | pg_dump/restore 或 volume 直迁，行数对账 |
+| 1 | **TimescaleDB 数据卷** | qiaozhi-lt（Tailscale `100.98.228.125`）`D:\Projects\quant-crypto` 的 Docker 卷 `quant-crypto_timescale_data`（实测 ohlcv_1m 6,504,359 行、11 表、5 连续聚合；凭据在同目录 `.env`） | 随 docker-compose 迁入，数据不重建 | SSH 流式 pg_dump/restore（路径实证见 tasks T004，无需开 5432 防火墙），行数对账 |
 | 2 | 数据采集器 | `data-collector/`（ccxt_ingestor、db_writer、historical_backfill、symbol_manager、derivatives_market_backfill） | `src/alphamill/data_bridge/collector/` | 并入主仓依赖管理；保留 REST 轮询模式 |
 | 3 | Kronos 服务薄壳 | `kronos-signal/`（server/generator/db_adapter/kronos_real） | `src/alphamill/kronos_service/` | db_adapter 改读迁移后 DB；上游 Kronos 代码改为 clone+pin（见第三节） |
 | 4 | 风控三件套 | `risk/`（circuit_breaker、correlation_guard、drawdown_guard） | `src/alphamill/freqtrade_bridge/risk/` | 随策略模板挂载进 Freqtrade |

@@ -18,13 +18,14 @@ updated: 2026-09-07
 - 行为与验收真相源：`spec.md`。
 - 技术方案与边界：`design.md`。
 - 每项任务只描述一个可验证动作，并引用合法的 US/需求/AC ID。
+- SC-xxx（spec §6 成功标准 ID）在本文件中视为合法任务引用锚：迁移清单覆盖类任务（T012/T013/T014）无对应 FR（其泛化改造属 F002/M1），以 SC-003 为验收锚——此为对「US/需求/AC ID」枚举的显式扩展（循环 4 round-3 记录，R3-02）。
 - 完成且验证后立即把 `[ ]` 改为 `[x]`，不得最后统一补勾。
 - `[P]` 只用于修改不同文件、没有显式前置依赖且不会争用同一状态的任务。
 - 实现中若任务顺序或契约失效，先修订三件套，再继续编码。
 
 ## 1. 前置条件
 
-- [ ] T001 (`NFR-001`): 旧仓副本已钉死：`/root/projects/quant-crypto`（origin `git@github.com:Qiaozhi94/quant-crypto.git`，2026-09-07 克隆，HEAD `d94f94f`；代码资产 data-collector/kronos-signal/risk/grafana/prometheus/scripts/freqtrade/user_data/docker-compose.yml 均在位）——建立只读基线：本地全量备份 + 复核当前 commit；注意旧仓 docker 数据卷不在 git 内，pg_dump 准备仍指向旧仓宿主机（T004） — verify: 备份文件存在 + 旧仓 `git rev-parse HEAD` 记录（基线 `d94f94f`）
+- [ ] T001 (`NFR-001`): 旧仓双现场钉死与只读基线——①代码副本：`/root/projects/quant-crypto`（HEAD `d94f94f`，静态搬迁取用）；②运行现场＝数据源：qiaozhi-lt（Tailscale `100.98.228.125`，SSH `Georg@` 密钥 `~/.ssh/gp-to-lt`）`D:\Projects\quant-crypto`（含 `.env` 凭据与 Docker 卷 `quant-crypto_timescale_data`；实测 ohlcv_1m 6,504,359 行 / 11 表 / 5 连续聚合）——建立只读基线：本地全量备份 + 复核当前 commit — verify: 备份文件存在 + 旧仓 `git rev-parse HEAD` 记录（基线 `d94f94f`）
 - [ ] T002 (`FR-001`): 确认 WSL2 内 docker-ce、PowerShell 7（apt 安装）、Python 3.11+ 就绪且旧仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running
 - [ ] T003 (`FR-003`): GPU 直通检查——WSL2 内 `nvidia-smi` 应可见 RTX 4060（Windows 宿主装 NVIDIA 驱动并启用 WSL GPU 直通）；确认不可行时记录 CPU 推理回退决策（AC-002 冒烟不阻塞） — verify: nvidia-smi 输出存档，或 CPU 回退决策写入本任务备注
 
@@ -32,7 +33,7 @@ updated: 2026-09-07
 
 ### Phase 1：数据资产迁移
 
-- [ ] T004 (`FR-001`): pg_dump 全库导出旧仓并 restore 进主仓编排的 TimescaleDB — verify: restore 命令退出码 0
+- [ ] T004 (`FR-001`): 数据迁移（路径实证）：SSH qiaozhi-lt → `docker start quant-timescaledb`（等 healthy）→ `docker exec quant-timescaledb pg_dump -U quant -d quant -Fc` 经 SSH 流式重定向落地本仓 dump 文件 → `pg_restore` 进主仓编排的 TimescaleDB → `docker stop quant-timescaledb`（恢复 qiaozhi-lt 归档态；pg_dump 走容器本地 socket 免密，全程无需开放 5432 防火墙） — verify: restore 命令退出码 0
 - [ ] T005 (`FR-001`, `AC-001`): 逐表执行行数 + 校验和对账并产出 `reports/f001-reconciliation-<date>.json` — verify: `tests/integration/test_f001_row_reconciliation.py`
 
 ### Phase 2：代码与服务搬迁
