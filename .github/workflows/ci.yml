@@ -26,8 +26,8 @@ jobs:
         # 下限锁 requires-python；上限跟随，用于尽早发现新版本行为差异。
         python-version: ["3.11", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
