@@ -60,7 +60,7 @@ updated: 2026-09-07
 
 - [ ] T019 (`AC-001`, `AC-002`, `AC-003`, `AC-004`): 本地运行全部集成测试 — verify: `python -m pytest tests/integration -q`
 - [ ] T020 (`NFR-002`): 确认全部脚本在 PowerShell 7 下无路径/编码错误 — verify: T018 附带输出无乱码
-- [ ] T021 (`AC-005`): 运行项目统一质量门 — verify: `python tools/verify.py`
+- [ ] T021 (`AC-005`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 - [ ] T022: 回写 spec 验收证据、BACKLOG 状态与 migration-plan.md 清单勾选 — verify: `python tools/validate_spec_lifecycle.py`
 
 ## 4. 依赖与并行关系

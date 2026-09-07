@@ -30,7 +30,7 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
   vibe-trading-ai（可选第二实现/Agent，pip pin，零源码改动）、AlphaGen 核心 vendor（RL 挖掘主引擎）、
   Kronos（上游 clone + pin；GPU 推理薄壳为本仓 `src/alphamill/kronos_service/`）
 - 数据栈：TimescaleDB（联机运营库，自 quant-crypto 迁入）→ data_bridge → Parquet 湖（不可变快照）
-- 测试/质量：pytest + ruff（check + format），唯一入口 `python tools/verify.py`
+- 测试/质量：pytest + ruff（check + format），唯一入口 `python3 tools/verify.py`
 - 平台：Windows 11 宿主 + WSL2（Ubuntu 26.04，docker-ce，非 Docker Desktop）；GPU 经 WSL 直通（未就绪时 Kronos 冒烟 CPU 回退，见 F001 design §0 执行环境）；docker-compose 自 quant-crypto 迁入
 
 ## 开发约定
@@ -38,7 +38,7 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 - 开发流程见 `docs/SOP.md`。
 - Feature 记录见 `BACKLOG.md` 和 `docs/features/`；新建 feature 从
   `docs/features/TEMPLATE/` 复制三件套，状态规则见 `docs/features/README.md`。
-- 质量门禁：统一入口 `python tools/verify.py`（串联文档门禁与测试；技术栈落地后扩展 lint/
+- 质量门禁：统一入口 `python3 tools/verify.py`（串联文档门禁与测试；技术栈落地后扩展 lint/
   typecheck/build）。Feature 状态变更前必须运行它。
 - 数据红线：研究/回测只读 Parquet 湖（data_version 快照），不直读 TimescaleDB 修订态；信号缓存时间戳对齐是硬门禁。
 - AI 权限红线：Agent 只提出候选和复盘建议，不裁决门禁、不改变生产状态、不触发真实下单。

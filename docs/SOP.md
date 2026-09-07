@@ -31,7 +31,7 @@ updated: 2026-09-07
 
 ## 1. 开发纪律
 
-- **提交前本地全绿**：`python tools/verify.py`（唯一公开入口）运行门禁与测试，失败即返回非零。
+- **提交前本地全绿**：`python3 tools/verify.py`（唯一公开入口）运行门禁与测试，失败即返回非零。
 - **推送后确认 CI**：`git push` 后用 `gh run watch <run-id> --exit-status` 确认当前
   HEAD 的全部必需 CI job 全绿，推完不算结束。
 - **每次修复补回归测试**：同一提交内为修复的行为补正反两面的仓库内测试；已知但暂不
@@ -52,8 +52,8 @@ updated: 2026-09-07
 
 ## 3. 验证与复核流程
 
-- 唯一公开验证入口：`python tools/verify.py`，按固定顺序运行门禁与测试，失败即非零。
-  注意区分同名不同物的两个入口：`python tools/verify.py` 是代码质量门禁（唯一公开
+- 唯一公开验证入口：`python3 tools/verify.py`，按固定顺序运行门禁与测试，失败即非零。
+  注意区分同名不同物的两个入口：`python3 tools/verify.py` 是代码质量门禁（唯一公开
   验证入口）；`deployment/verify.ps1` 是规划中的全链路验收脚本（目录尚未创建，随
   F001 迁移落地），二者不是同一件事。
 - 复核（review）检查：规格完整性、测试证据、复现信息、研究边界；机器门只证明引用与
@@ -75,7 +75,7 @@ updated: 2026-09-07
 |------|------|
 | 1 | 建分支/worktree 做隔离开发 |
 | 2 | 严格按 `tasks.md` 里的顺序逐项实现，每完成一项立即勾掉；`[P]` 任务可并行；顺序过时先改 `tasks.md` 再继续 |
-| 3 | 自检：对照 spec / acceptance criteria 过一遍，跑 `python tools/verify.py` |
+| 3 | 自检：对照 spec / acceptance criteria 过一遍，跑 `python3 tools/verify.py` |
 | 4 | （可选）让 AI agent 扮演 reviewer 角色审一遍 diff，输出 findings |
 | 5 | 合并 + 清理分支 |
 

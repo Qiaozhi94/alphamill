@@ -51,4 +51,4 @@ updated: 2026-09-07
 - `releases/` 与 `RETROSPECTIVE.md` 仅作历史记录与复盘，不得充当当前产品、状态或
   实现的权威入口。
 
-以上规则由 `python tools/verify.py`（含 `validate_spec_lifecycle.py`）强制执行。
+以上规则由 `python3 tools/verify.py`（含 `validate_spec_lifecycle.py`）强制执行。

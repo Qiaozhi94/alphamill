@@ -9,7 +9,7 @@
 统一指向本入口。
 
 用法：
-    python tools/verify.py
+    python3 tools/verify.py
 退出码 0 表示全部通过；非 0 时打印失败步骤。
 """
 
@@ -38,8 +38,8 @@ def main() -> int:
         ([sys.executable, "tools/check_dep_pins.py"], "dev 依赖版本在 pin 范围内"),
         ([sys.executable, "tools/check_secrets.py"], "密钥模式扫描"),
         ([sys.executable, "-m", "pytest", "-q"], "pytest"),
-        (["ruff", "check", "."], "ruff check"),
-        (["ruff", "format", "--check", "."], "ruff format check"),
+        ([sys.executable, "-m", "ruff", "check", "."], "ruff check"),
+        ([sys.executable, "-m", "ruff", "format", "--check", "."], "ruff format check"),
     ]
     failed = []
     for cmd, label in steps:
