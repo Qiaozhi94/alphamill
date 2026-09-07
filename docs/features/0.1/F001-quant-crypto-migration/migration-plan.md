@@ -17,7 +17,7 @@
 | 6 | 监控配置 | `grafana/`、`prometheus/` | `monitoring/` | 数据源指向迁移后 DB |
 | 7 | 部署编排 | `docker-compose.yml`、`.env` 模板、`scripts/verify.ps1` | `deployment/` | 端口/网络按主仓调整；verify 扩展为全链路 |
 | 8 | 宇宙发现 | `scripts/discover_okx_swap_universe.py`、`download_okx_swap_1h.ps1` | `scripts/` | 无改造 |
-| 9 | Freqtrade user_data | `freqtrade/user_data/`（策略、config、kronos_cache、feather 行情） | `freqtrade/user_data/` | kronos_cache 作为首批信号缓存样本 |
+| 9 | Freqtrade user_data | `freqtrade/user_data/`（策略、config、kronos_cache、feather 行情） | `freqtrade/user_data/` | 入库仅策略与 config；kronos_cache / feather 行情为本地数据资产不进 git（主仓 .gitignore 已覆盖 *.feather/*.parquet）；缓存样本留存本地，作为首批信号缓存样本供 F002 信号缓存对齐校验用 |
 
 ## 二、留下不搬（归档处置）
 
