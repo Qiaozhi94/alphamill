@@ -1,6 +1,7 @@
 # AlphaMill — 系统架构设计
 
-> 版本：v0.4 | 日期：2026-09-07 | 配套：[alphamill-prd.md](./alphamill-prd.md)
+> 版本：v0.5 | 日期：2026-09-07 | 配套：[alphamill-prd.md](./alphamill-prd.md)
+> v0.5 变更：§4.2 增组合/池构建的留出前数据边界硬约束（D027）；report.json 增 trade_log_summary 重定价缓存与 cost_model_version（D029）。
 > v0.4 变更：目录设计统一为 src-layout（`src/alphamill/<module>/`）；§4.1 增 AlphaGen 适配契约；§4.2 评测台增成本硬过滤与资金费率成本项；§4.3 信号缓存增版本键/陈旧度/审计覆盖三规则；§2.2 生命周期增部署前再验证；§七 增单卡 GPU 时段调度。
 > v0.3 变更：三层骨架内各层细化到模块级；新增「存储三件套分工」（TimescaleDB / Parquet / DuckDB）。
 > v0.2 变更：按标准分层重画（数据最下、生产/验证/执行居中、研究复盘与监控最上），明确闭环主循环。
@@ -300,12 +301,21 @@ FactorDef 的 `compute` 是 pandas 单 pair 契约；主引擎 AlphaGen 是表�
     "funding_drag": {"settlement_hours": 8, "annualized_drag": },
     "long_short_net":     # 成本后 long_short 收益
   },
+  "cost_model_version": "cm-v1",   # 产出本报告所用成本参数集的版本（进 manifest，与 data_version 并列，FR6.1）
+  "trade_log_summary": {           # 每候选毛交易日志的等效摘要（pivot 重定价缓存，检视 D029）
+    "n_trades": ,
+    "gross_return_per_trade": {"p50": , "mean": },
+    "turnover": ,                  # 周期换手率
+    "holding_period_hours": {"p50": , "p90": }
+  },
   "cost_verdict": "cost_ok | cost_negative",
   "verdict": "promising | weak | dead"
 }
 ```
 
 成本裁决规则：`cost_verdict = "cost_negative"` 时，无论 `rank_ic` 多高，`verdict` 一律**直接判 `dead`**（与 PRD FR2.2 硬过滤口径一致）——涵盖两种情形：taker 费 + 滑点成本后收益 ≤0（FR2.2 硬过滤枚举），或资金费率拖累吞掉 IC 收益（FR2.5 持有成本口径）。IC 正但成本负的候选不允许以 `promising` 或 `weak` 身份流入门禁。成本参数来源与校准（dry-run 实测成交）归 FR3.4。
+
+**重定价缓存义务（trade_log_summary）**：评测台不得只存 pass/fail——成本模型变更（如转 maker-only、资金费率参数更新）时，凭每候选毛交易摘要（逐笔毛收益 / 换手 / 持仓期分布）可把全量候选重定价降为小时级，否则 = 全量重跑评测（周级）。`cost_model_version` 与 `data_version` 并列进 experiment manifest（FR6.1）：重定价 = 同一 trade_log 摘要 × 新成本参数，重算而不重跑。
 
 组合与池的数据边界（硬约束，与 ADR-0004 联动）：**协同池构建与 Top-K 选择只允许使用留出窗之前的数据**——池成员增删、池权重拟合、Top-K 入选判定若触碰留出窗内任何数据，组合即获得单因子从未有的事内优势，≥30 笔门槛形同虚设。逆波动率权重的估计窗**显式限定于留出前**；实现上若与门禁窗分离，须在 manifest 中声明估计窗位置（进 FR6.1 台账）。
 
