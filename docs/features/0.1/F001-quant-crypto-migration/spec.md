@@ -74,7 +74,7 @@ quant-crypto 决定归档废弃，但其中 631 万行 OHLCV 数据、采集器�
 
 ### 范围内
 
-- migration-plan.md §一 迁移总览 1-9 项：数据卷、采集器、Kronos 薄壳、风控三件套、监控、部署编排、宇宙发现脚本、Freqtrade user_data。
+- migration-plan.md §一 迁移总览 1-9 项：数据卷、采集器、Kronos 薄壳、风控三件套、评测器/门禁脚本（原样物理迁移；泛化改造属 F002/M1）、监控、部署编排、宇宙发现脚本、Freqtrade user_data。
 - Kronos 上游化三步（上游 clone + pin commit、HF 权重下载、薄壳迁入 `kronos_service/`）。
 - 迁移验收脚本（deployment/verify.ps1 扩展为全链路）。
 
