@@ -6,7 +6,7 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 ## 当前结构
 
 - `docs/alphamill-prd.md`：正式 PRD（产品真相源），产品判断以此为准。
-- `docs/alphamill-architecture.md`：分层架构与接口契约（架构真相源），随实现迭代。
+- `docs/alphamill-architecture.md`：四平面架构与接口契约（架构真相源），随实现迭代。
 - `docs/alphamill-research-factor-mining.md`：因子挖掘/ML 选型调研证据（决策已提炼至 ADR-0001）。
 - `docs/alphamill-integration.md`：数据桥 / Vibe-Trading / Freqtrade 集成操作细节（依赖策略见 ADR-0002）。
 - `docs/decisions/`：ADR——0001 挖掘引擎选型 / 0002 依赖管理策略 / 0003 验证门禁不降级 / 0004 组合构建（因子→策略映射）。

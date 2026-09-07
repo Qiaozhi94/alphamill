@@ -39,7 +39,7 @@ AlphaMill 将数据治理、假设生成、因子评测、严格验证、组合�
 | 文档 | 内容 |
 |---|---|
 | [PRD](docs/alphamill-prd.md) | 产品定位、指标体系、FR1-FR7 与 M0-M4 路线 |
-| [系统架构](docs/alphamill-architecture.md) | 分层架构、生命周期、接口契约与部署拓扑 |
+| [系统架构](docs/alphamill-architecture.md) | 四平面架构、生命周期、接口契约与部署拓扑 |
 | [集成设计](docs/alphamill-integration.md) | 数据桥、外部工具、Freqtrade 与无前视对齐 |
 | [因子挖掘调研](docs/alphamill-research-factor-mining.md) | 生成器和评测技术选型证据 |
 | [ADR](docs/decisions/) | 因子引擎、依赖、验证门禁和组合构建决策 |
