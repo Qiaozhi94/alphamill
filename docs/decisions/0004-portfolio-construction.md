@@ -4,7 +4,7 @@
 - 状态：Accepted
 - 决策人：Georg
 - 修订：2026-09-07（检视 D027 补强：池构建 / Top-K / 逆波动率估计窗的留出前数据边界；决策本体未动）
-- 背景：检视报告 D001（[`docs/reviews/CURRENT-doc.md`](../reviews/CURRENT-doc.md)）；集成文档 §四 的
+- 背景：检视报告 D001（[`docs/reviews/RETROSPECTIVE.md`](../reviews/RETROSPECTIVE.md) 循环 1 · D001）；集成文档 §四 的
   Top1-only 部署政策；PRD FR2.1 / FR5
 
 ## 背景
