@@ -101,7 +101,7 @@ quant-crypto 决定归档废弃，但其中 631 万行 OHLCV 数据、采集器�
 #### Scenario: 行数对账
 
 - GIVEN 旧仓 DB 与新仓 DB 同时可读
-- WHEN 对 ohlcv_1m、衍生品表、质量标记表逐表执行行数与聚合校验和比对
+- WHEN 按 design §3 对账口径对全部迁入表（ohlcv_1m、衍生品三表、quality_flags、signals_log、trades_log 及连续聚合）逐表执行行数与校验和比对
 - THEN 差异为 0，且 quality_flags 未解决标记数一致
 
 ### Requirement: 采集器迁入并持续运行（`FR-002`）
@@ -173,7 +173,7 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `NFR-001`): 三表行数与校验和对账差异为 0，旧仓零改动 — tests: `tests/integration/test_f001_row_reconciliation.py`
+- [ ] **AC-001** (`FR-001`, `NFR-001`): 全部迁入表（口径见 design §3，含 signals_log/trades_log 与连续聚合）行数与校验和对账差异为 0，旧仓零改动 — tests: `tests/integration/test_f001_row_reconciliation.py`
 - [ ] **AC-002** (`FR-003`): Kronos /health 200 且 /predict 返回 source=kronos — tests: `tests/integration/test_f001_kronos_smoke.py`
 - [ ] **AC-003** (`FR-002`): 采集器单交易对冒烟通过且重复执行幂等 — tests: `tests/integration/test_f001_collector_smoke.py`
 - [ ] **AC-004** (`FR-004`, `FR-005`): dry-run 风控钩子生效且监控面板非空 — tests: `tests/integration/test_f001_dryrun_monitoring.py`

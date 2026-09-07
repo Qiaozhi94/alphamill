@@ -38,7 +38,7 @@ updated: 2026-09-07
 
 ## 3. 数据模型与 Migration
 
-- 方案：`pg_dump -Fc` 全库导出 → 新容器 `pg_restore`；表级 `SELECT COUNT(*)` + `SUM(hashtext(rostertuple))` 式校验和对账（逐表：ohlcv_1m、衍生品三表、quality_flags、signals_log、trades_log）。
+- 方案：`pg_dump -Fc` 全库导出 → 新容器 `pg_restore`；表级 `SELECT COUNT(*)` + `SUM(hashtext(rostertuple))` 式校验和对账。**对账口径（唯一权威定义，spec FR-001 / AC-001 与 design §8 引用此处）**：逐表覆盖 ohlcv_1m、衍生品三表、quality_flags、signals_log、trades_log，及全部连续聚合（caggs）——不遗漏任何迁入表。
 - 回滚/前向兼容：restore 失败可重试（幂等，先 DROP 新库再 restore）；对账不一致即中止迁移并保留旧仓服务（NFR-001）。
 - 历史数据：原样迁移，不做任何清洗/改写（口径改造属后续 feature）。
 
@@ -75,7 +75,7 @@ Kronos HTTP API 契约不变：`GET /health`、`POST /predict/{symbol}`、`POST 
 
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
-| `AC-001` | integration | `tests/integration/test_f001_row_reconciliation.py` | 三表 count/hash 与旧仓基准一致 |
+| `AC-001` | integration | `tests/integration/test_f001_row_reconciliation.py` | design §3 口径全表（含 signals_log/trades_log 与连续聚合）count/hash 与旧仓基准一致 |
 | `AC-002` | integration | `tests/integration/test_f001_kronos_smoke.py` | /health 200；/predict source=kronos |
 | `AC-003` | integration | `tests/integration/test_f001_collector_smoke.py` | 单对采集写入且二次执行行数不变 |
 | `AC-004` | integration | `tests/integration/test_f001_dryrun_monitoring.py` | 风控钩子日志存在；Grafana API 返回非空序列 |
