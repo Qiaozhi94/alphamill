@@ -45,30 +45,32 @@ updated: 2026-09-07
 - [ ] T011 [P] (`FR-006`): docker-compose/.env 模板/verify 脚本迁入 `deployment/`（.env 人工搬运密钥，不进 git） — verify: `docker compose config` 无报错
 - [ ] T012 [P] (`SC-003`): 评测器/门禁脚本原样物理迁移（kronos_rankic_eval、kronos_ic_decay_eval、independent_cross_backtest、validate_*_holdout → `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/`；泛化改造属 F002/M1，不在本 feature） — verify: 迁入文件逐一 `python -c "import"` 冒烟通过
 - [ ] T013 [P] (`SC-003`): 宇宙发现脚本迁入 `scripts/`（discover_okx_swap_universe.py、download_okx_swap_1h.ps1，无改造） — verify: 文件存在且 `python scripts/discover_okx_swap_universe.py --help` 退出码 0
-- [ ] T014 [P] (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七） — verify: 手动触发一次同步，NAS 端产物齐全
+- [ ] T014 [P] (`SC-003`): Freqtrade user_data 策略与 config 迁入 `freqtrade/user_data/`（kronos_cache / feather 行情按 migration-plan.md item 9 git 边界留本地，不进 git） — verify: 策略与 config 文件存在且策略 python 文件 import 冒烟通过
+- [ ] T015 [P] (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七） — verify: 手动触发一次同步，NAS 端产物齐全
 
 ### Phase 3：全链路验证
 
-- [ ] T015 (`FR-002`, `AC-003`): 采集器单交易对冒烟 + 幂等复跑 — verify: `tests/integration/test_f001_collector_smoke.py`
-- [ ] T016 (`FR-004`, `AC-004`): Freqtrade dry-run 启动并确认风控钩子与监控面板 — verify: `tests/integration/test_f001_dryrun_monitoring.py`
-- [ ] T017 (`FR-006`, `AC-005`): 扩展并运行 deployment/verify.ps1 全链路检查 — verify: `deployment/verify.ps1` 退出码 0
+- [ ] T016 (`FR-002`, `AC-003`): 采集器单交易对冒烟 + 幂等复跑 — verify: `tests/integration/test_f001_collector_smoke.py`
+- [ ] T017 (`FR-004`, `AC-004`): Freqtrade dry-run 启动并确认风控钩子与监控面板 — verify: `tests/integration/test_f001_dryrun_monitoring.py`
+- [ ] T018 (`FR-006`, `AC-005`): 扩展并运行 deployment/verify.ps1 全链路检查 — verify: `deployment/verify.ps1` 退出码 0
 
 ## 3. 验证与验收任务
 
-- [ ] T018 (`AC-001`, `AC-002`, `AC-003`, `AC-004`): 本地运行全部集成测试 — verify: `python -m pytest tests/integration -q`
-- [ ] T019 (`NFR-002`): 确认全部脚本在 PowerShell 7 下无路径/编码错误 — verify: T017 附带输出无乱码
-- [ ] T020 (`AC-005`): 运行项目统一质量门 — verify: `python tools/verify.py`
-- [ ] T021: 回写 spec 验收证据、BACKLOG 状态与 migration-plan.md 清单勾选 — verify: `python tools/validate_spec_lifecycle.py`
+- [ ] T019 (`AC-001`, `AC-002`, `AC-003`, `AC-004`): 本地运行全部集成测试 — verify: `python -m pytest tests/integration -q`
+- [ ] T020 (`NFR-002`): 确认全部脚本在 PowerShell 7 下无路径/编码错误 — verify: T018 附带输出无乱码
+- [ ] T021 (`AC-005`): 运行项目统一质量门 — verify: `python tools/verify.py`
+- [ ] T022: 回写 spec 验收证据、BACKLOG 状态与 migration-plan.md 清单勾选 — verify: `python tools/validate_spec_lifecycle.py`
 
 ## 4. 依赖与并行关系
 
 - `T001 -> T004`：备份基线先行。
 - `T004 -> T005`：对账依赖 restore 完成。
-- `T006 -> T015`、`T007 -> T008 -> T016`：冒烟依赖搬迁完成。
+- `T006 -> T016`、`T007 -> T008 -> T017`：冒烟依赖搬迁完成。
 - `T003 -> T008`：GPU 直通结论先行于薄壳联调（决定推理后端）。
-- `T006/T007/T009/T010/T011/T012/T013 [P]`：互相可并行（不同目录、无共享状态），但均依赖 T002。
-- `T011 -> T014`：NAS 备份同步随部署编排就绪后配置。
-- `T017 -> T018 -> T021`：验收链顺序执行。
+- `T006/T007/T009/T010/T011/T012/T013/T014 [P]`：互相可并行（不同目录、无共享状态），但均依赖 T002。
+- `T011 -> T015`：NAS 备份同步随部署编排就绪后配置。
+- `T014 -> T017`：dry-run 冒烟依赖 user_data 策略就位。
+- `T018 -> T019 -> T022`：验收链顺序执行。
 
 ## 5. 明确后移
 
