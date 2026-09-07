@@ -120,7 +120,7 @@ Kronos 模型代码应当来自上游仓库 fresh clone（pin commit，零改动
 
 #### Scenario: 推理冒烟
 
-- GIVEN 权重就位且 GPU 可用
+- GIVEN 权重就位且推理后端可用（GPU 直通优先；GPU 未就绪时 CPU 回退，见 tasks T003）
 - WHEN 请求 GET /health 与 POST /predict/BTC-USDT
 - THEN /health 返回 200 且 /predict 返回 source=kronos 的信号
 
@@ -157,7 +157,7 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 ### 非功能需求
 
 - **NFR-001**：迁移期间旧仓必须保持只读（除 git tag 外零改动）；对账完成前不得归档。
-- **NFR-002**：Windows 路径与 UTF-8 编码兼容——所有迁移脚本在 Windows 11 PowerShell 下可运行，中文内容无乱码。
+- **NFR-002**：跨环境路径与 UTF-8 编码兼容——所有迁移脚本在执行环境（WSL2 Ubuntu + PowerShell 7）下可运行，与 Windows 宿主交换文件时无路径/编码错误，中文内容无乱码。
 
 ## 5. 生命周期与不变量
 
@@ -189,9 +189,9 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 ### 依赖
 
-- 上游：quant-crypto 仓库（只读源）；HuggingFace 网络（权重）；Docker Desktop。
+- 上游：quant-crypto 仓库（只读源；本机不可见，实际位置由 tasks T001 定位钉死）；HuggingFace 网络（权重）；docker-ce（WSL2）。
 - 下游消费者：F002（数据桥）、F003（AlphaGen vendor）、所有后续 feature 的运行基座。
-- 外部 / 环境依赖：RTX 4060 GPU、docker-compose、PowerShell 7。
+- 外部 / 环境依赖：RTX 4060 GPU（WSL2 直通；未就绪时 AC-002 冒烟允许 CPU 推理回退）、docker-compose、PowerShell 7（apt 安装于 WSL2）。
 
 ### 决策与风险
 

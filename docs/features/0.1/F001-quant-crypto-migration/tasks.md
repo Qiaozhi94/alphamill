@@ -24,49 +24,51 @@ updated: 2026-09-07
 
 ## 1. 前置条件
 
-- [ ] T001 (`NFR-001`): 旧仓建立只读基线（本地全量备份 + 记录当前 commit） — verify: 备份文件存在 + 旧仓 `git rev-parse HEAD` 记录
-- [ ] T002 (`FR-001`): 确认 Docker Desktop、PowerShell 7、Python 3.11 就绪且旧仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running
+- [ ] T001 (`NFR-001`): 定位旧仓并建立只读基线——旧仓不在本机文件系统可见范围（2026-09-07 实测：/root/projects、/mnt/c、/mnt/d 均无），先确认旧仓副本位置（备份盘/NAS/git remote）并钉死访问路径；然后本地全量备份 + 记录当前 commit — verify: 旧仓路径成文于本任务备注 + 备份文件存在 + 旧仓 `git rev-parse HEAD` 记录
+- [ ] T002 (`FR-001`): 确认 WSL2 内 docker-ce、PowerShell 7（apt 安装）、Python 3.11+ 就绪且旧仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running
+- [ ] T003 (`FR-003`): GPU 直通检查——WSL2 内 `nvidia-smi` 应可见 RTX 4060（Windows 宿主装 NVIDIA 驱动并启用 WSL GPU 直通）；确认不可行时记录 CPU 推理回退决策（AC-002 冒烟不阻塞） — verify: nvidia-smi 输出存档，或 CPU 回退决策写入本任务备注
 
 ## 2. 实现任务
 
 ### Phase 1：数据资产迁移
 
-- [ ] T003 (`FR-001`): pg_dump 全库导出旧仓并 restore 进主仓编排的 TimescaleDB — verify: restore 命令退出码 0
-- [ ] T004 (`FR-001`, `AC-001`): 逐表执行行数 + 校验和对账并产出 `reports/f001-reconciliation-<date>.json` — verify: `tests/integration/test_f001_row_reconciliation.py`
+- [ ] T004 (`FR-001`): pg_dump 全库导出旧仓并 restore 进主仓编排的 TimescaleDB — verify: restore 命令退出码 0
+- [ ] T005 (`FR-001`, `AC-001`): 逐表执行行数 + 校验和对账并产出 `reports/f001-reconciliation-<date>.json` — verify: `tests/integration/test_f001_row_reconciliation.py`
 
 ### Phase 2：代码与服务搬迁
 
-- [ ] T005 [P] (`FR-002`): 采集器四模块迁入 `src/alphamill/data_bridge/collector/` 并并入 pyproject 依赖 — verify: `python -c "import"` 冒烟
-- [ ] T006 [P] (`FR-003`): 上游 Kronos fresh clone + pin commit + HF 权重下载（或旧仓 models/ 复制） — verify: 权重文件存在 + commit hash 记录于 VENDORED 说明
-- [ ] T007 (`FR-003`, `AC-002`): kronos-signal 薄壳迁入 `src/alphamill/kronos_service/` 并指向新 DB 与上游代码路径 — verify: `tests/integration/test_f001_kronos_smoke.py`
-- [ ] T008 [P] (`FR-004`): 风控三件套迁入 `src/alphamill/freqtrade_bridge/risk/` — verify: 策略 import 冒烟
-- [ ] T009 [P] (`FR-005`): Grafana/Prometheus 配置迁入 `monitoring/` 且数据源指向新 DB — verify: 容器启动无配置错误
-- [ ] T010 [P] (`FR-006`): docker-compose/.env 模板/verify 脚本迁入 `deployment/`（.env 人工搬运密钥，不进 git） — verify: `docker compose config` 无报错
-- [ ] T011 [P] (`SC-003`): 评测器/门禁脚本原样物理迁移（kronos_rankic_eval、kronos_ic_decay_eval、independent_cross_backtest、validate_*_holdout → `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/`；泛化改造属 F002/M1，不在本 feature） — verify: 迁入文件逐一 `python -c "import"` 冒烟通过
-- [ ] T012 [P] (`SC-003`): 宇宙发现脚本迁入 `scripts/`（discover_okx_swap_universe.py、download_okx_swap_1h.ps1，无改造） — verify: 文件存在且 `python scripts/discover_okx_swap_universe.py --help` 退出码 0
-- [ ] T013 [P] (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七） — verify: 手动触发一次同步，NAS 端产物齐全
+- [ ] T006 [P] (`FR-002`): 采集器四模块迁入 `src/alphamill/data_bridge/collector/` 并并入 pyproject 依赖 — verify: `python -c "import"` 冒烟
+- [ ] T007 [P] (`FR-003`): 上游 Kronos fresh clone + pin commit + HF 权重下载（或旧仓 models/ 复制） — verify: 权重文件存在 + commit hash 记录于 VENDORED 说明
+- [ ] T008 (`FR-003`, `AC-002`): kronos-signal 薄壳迁入 `src/alphamill/kronos_service/` 并指向新 DB 与上游代码路径 — verify: `tests/integration/test_f001_kronos_smoke.py`
+- [ ] T009 [P] (`FR-004`): 风控三件套迁入 `src/alphamill/freqtrade_bridge/risk/` — verify: 策略 import 冒烟
+- [ ] T010 [P] (`FR-005`): Grafana/Prometheus 配置迁入 `monitoring/` 且数据源指向新 DB — verify: 容器启动无配置错误
+- [ ] T011 [P] (`FR-006`): docker-compose/.env 模板/verify 脚本迁入 `deployment/`（.env 人工搬运密钥，不进 git） — verify: `docker compose config` 无报错
+- [ ] T012 [P] (`SC-003`): 评测器/门禁脚本原样物理迁移（kronos_rankic_eval、kronos_ic_decay_eval、independent_cross_backtest、validate_*_holdout → `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/`；泛化改造属 F002/M1，不在本 feature） — verify: 迁入文件逐一 `python -c "import"` 冒烟通过
+- [ ] T013 [P] (`SC-003`): 宇宙发现脚本迁入 `scripts/`（discover_okx_swap_universe.py、download_okx_swap_1h.ps1，无改造） — verify: 文件存在且 `python scripts/discover_okx_swap_universe.py --help` 退出码 0
+- [ ] T014 [P] (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七） — verify: 手动触发一次同步，NAS 端产物齐全
 
 ### Phase 3：全链路验证
 
-- [ ] T014 (`FR-002`, `AC-003`): 采集器单交易对冒烟 + 幂等复跑 — verify: `tests/integration/test_f001_collector_smoke.py`
-- [ ] T015 (`FR-004`, `AC-004`): Freqtrade dry-run 启动并确认风控钩子与监控面板 — verify: `tests/integration/test_f001_dryrun_monitoring.py`
-- [ ] T016 (`FR-006`, `AC-005`): 扩展并运行 deployment/verify.ps1 全链路检查 — verify: `deployment/verify.ps1` 退出码 0
+- [ ] T015 (`FR-002`, `AC-003`): 采集器单交易对冒烟 + 幂等复跑 — verify: `tests/integration/test_f001_collector_smoke.py`
+- [ ] T016 (`FR-004`, `AC-004`): Freqtrade dry-run 启动并确认风控钩子与监控面板 — verify: `tests/integration/test_f001_dryrun_monitoring.py`
+- [ ] T017 (`FR-006`, `AC-005`): 扩展并运行 deployment/verify.ps1 全链路检查 — verify: `deployment/verify.ps1` 退出码 0
 
 ## 3. 验证与验收任务
 
-- [ ] T017 (`AC-001`, `AC-002`, `AC-003`, `AC-004`): 本地运行全部集成测试 — verify: `python -m pytest tests/integration -q`
-- [ ] T018 (`NFR-002`): 确认全部脚本在 PowerShell 7 下无路径/编码错误 — verify: T016 附带输出无乱码
-- [ ] T019 (`AC-005`): 运行项目统一质量门 — verify: `python tools/verify.py`
-- [ ] T020: 回写 spec 验收证据、BACKLOG 状态与 migration-plan.md 清单勾选 — verify: `python tools/validate_spec_lifecycle.py`
+- [ ] T018 (`AC-001`, `AC-002`, `AC-003`, `AC-004`): 本地运行全部集成测试 — verify: `python -m pytest tests/integration -q`
+- [ ] T019 (`NFR-002`): 确认全部脚本在 PowerShell 7 下无路径/编码错误 — verify: T017 附带输出无乱码
+- [ ] T020 (`AC-005`): 运行项目统一质量门 — verify: `python tools/verify.py`
+- [ ] T021: 回写 spec 验收证据、BACKLOG 状态与 migration-plan.md 清单勾选 — verify: `python tools/validate_spec_lifecycle.py`
 
 ## 4. 依赖与并行关系
 
-- `T001 -> T003`：备份基线先行。
-- `T003 -> T004`：对账依赖 restore 完成。
-- `T005 -> T014`、`T006 -> T007 -> T015`：冒烟依赖搬迁完成。
-- `T005/T006/T008/T009/T010/T011/T012 [P]`：互相可并行（不同目录、无共享状态），但均依赖 T002。
-- `T010 -> T013`：NAS 备份同步随部署编排就绪后配置。
-- `T016 -> T017 -> T020`：验收链顺序执行。
+- `T001 -> T004`：备份基线先行。
+- `T004 -> T005`：对账依赖 restore 完成。
+- `T006 -> T015`、`T007 -> T008 -> T016`：冒烟依赖搬迁完成。
+- `T003 -> T008`：GPU 直通结论先行于薄壳联调（决定推理后端）。
+- `T006/T007/T009/T010/T011/T012/T013 [P]`：互相可并行（不同目录、无共享状态），但均依赖 T002。
+- `T011 -> T014`：NAS 备份同步随部署编排就绪后配置。
+- `T017 -> T018 -> T021`：验收链顺序执行。
 
 ## 5. 明确后移
 

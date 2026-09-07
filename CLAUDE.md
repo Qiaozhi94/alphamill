@@ -30,7 +30,7 @@
   Kronos（上游 clone + pin；GPU 推理薄壳为本仓 `src/alphamill/kronos_service/`）
 - 数据栈：TimescaleDB（联机运营库，自 quant-crypto 迁入）→ data_bridge → Parquet 湖（不可变快照）
 - 测试/质量：pytest + ruff（check + format），唯一入口 `python tools/verify.py`
-- 平台：Windows 11 单机 + RTX 4060 Laptop GPU；docker-compose 自 quant-crypto 迁入
+- 平台：Windows 11 宿主 + WSL2（Ubuntu 26.04，docker-ce，非 Docker Desktop）；GPU 经 WSL 直通（未就绪时 Kronos 冒烟 CPU 回退，见 F001 design §0 执行环境）；docker-compose 自 quant-crypto 迁入
 
 ## 开发约定
 
