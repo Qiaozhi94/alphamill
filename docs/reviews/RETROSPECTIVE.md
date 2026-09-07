@@ -74,7 +74,7 @@
 
 ## 循环 4：F001 设计文档开发前检视（full-scan）
 
-- report_type: doc-review | round: 1（full-scan）→ 2（diff-only 复核，含 R2-01 发现与当轮修复）→ 3（封顶复核，仅 R2-01 修复 diff）| 状态: 闭环
+- report_type: doc-review | round: 1（full-scan）→ 2（diff-only 复核，含 R2-01 发现与当轮修复）→ 3（封顶复核，仅 R2-01 修复 diff）| 状态: 重开（round-3 审计发现 R3-01：T004 数据源不可达未定义，六路探测全否；闭环判定过早，见 CURRENT-doc.md）
 - 日期：2026-09-07 | 基线：9a95cee（报告入库于 a7e93cd）→ 终基线 56c5724（修复轮 6 个提交）
 - 检视人：Sisyphus；修复方：同会话显式切换视角执行（状态翻转权归检视人）
 - 范围：F001 三件套 + migration-plan.md 全文；交叉契约 PRD M0/非目标、架构 §五/§七、SOP、features/README；开发环境实测取证
