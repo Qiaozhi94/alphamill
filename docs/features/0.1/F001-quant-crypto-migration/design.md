@@ -48,7 +48,8 @@ updated: 2026-09-07
 
 Kronos HTTP API 契约不变：`GET /health`、`POST /predict/{symbol}`、`POST /predict_batch`。Freqtrade 容器经 `host.docker.internal` 访问薄壳。verify 脚本契约：单命令、退出码 0/非 0。
 
-符号映射契约前置：本 feature 对 pair 命名原样直迁、不改名；M1 数据桥须按集成文档 §2.2「M1 出口标准」产出 vibe_bridge 符号映射初版（湖内 pair ↔ Vibe-Trading symbol ↔ Freqtrade pair + UTC 对齐约定），避免 M3 接入时返工。
+符号映射契约前置：本 feature 对 pair 命名原样直迁、不改名；M1 数据桥须按集成文档 §2.2
+产出 `data_bridge/symbol_map.csv`（湖内 pair ↔ Freqtrade pair，按需附 Vibe symbol）并锁定 UTC。
 
 ### Event / Trace Contract
 

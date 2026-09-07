@@ -10,10 +10,10 @@
 
 | 槽位（映射 PRD） | 选型 | 一句话理由 |
 |---|---|---|
-| **生成器·主引擎**（FR2.1） | **AlphaGen**（`ICT-FinD-Lab/alphagen`）✅ 已锁定 | RL 批量产因子最匹配"100+/周"目标；张量核心与 qlib 数据层解耦，feather→tensor 适配器是被验证过的模式（纯个人私有使用，LICENSE 风险降级，见第五节） |
-| **生成器·对照基线**（FR2.1） | **AlphaGen 仓库自带 gplearn/dso**（不单独引入） | 直接对接 AlphaGen；GP 对照白捡，算子适配在需要时再做 |
-| **候选种子**（FR2.1） | **py-alpha-lib**（GTJA191）+ WQ101 参考 | 现成公式库做冷启动候选宇宙 |
-| **评测台**（FR2.2/2.4） | **自研泛化**（kronos_rankic_eval）+ **purgedcv**（CV 层）+ alphalens-reloaded（可选） | 已有资产泛化成本最低；purged CV 补多重检验防线 |
+| **生成器·主引擎**（FR2.2） | **AlphaGen**（`ICT-FinD-Lab/alphagen`）✅ 已锁定 | RL 批量探索与协同池适合因子工厂；产量须与有效独立性、成本和门禁漏斗共同衡量 |
+| **生成器·对照基线**（FR2.2） | **AlphaGen 仓库自带 gplearn/dso**（不单独引入） | 直接对接 AlphaGen；保留独立搜索范式作为对照 |
+| **候选种子**（FR2.2） | **py-alpha-lib**（GTJA191）+ WQ101 参考 | 现成公式库做冷启动候选宇宙 |
+| **评测台**（FR3.1/3.3） | **自研泛化**（kronos_rankic_eval）+ **purgedcv**（CV 层）+ alphalens-reloaded（可选） | 已有资产泛化成本最低；purged CV 补多重检验防线 |
 | **快速候选回测** | **vectorbt OSS v1.1.0** | 向量化 sweep 秒级跑完 12~50 对；留出门前置粗筛 |
 | **信号研究 ML**（可选深水区） | **Qlib v0.9.7**（dump_bin 路径） | RollingGen 滚动重训与本项目 walk-forward 协议 1:1 对应；但表达式引擎必须转 bin 格式 |
 | **执行侧 ML** | **FreqAI 保持现状** | 逐对时序自适应模型——执行侧够用，**不要**拿它做横截面因子研究 |
@@ -158,11 +158,11 @@ freqtrade v2026.8（2026-08-31），模型清单（[`freqai/prediction_models/`]
 
 | PRD 需求 | 落地 | 成本 |
 |---|---|---|
-| FR2.1 生成器·主 | AlphaGen **vendor**（丢 requirements，现代栈 + gymnasium 化）+ feather→tensor 适配器 | 冒烟 1-2 天 + 适配器 ~1 周 |
-| FR2.1 生成器·基线 | gplearn + 自定义 RankIC 适应度 + 滚动窗口（重采样 1h/4h） | 1 周 |
-| FR2.1 种子 | py-alpha-lib（GTJA191）→ AST 纯度门 → 评测台 | 2 天 |
-| FR2.2 评测台 | kronos_rankic_eval 泛化（M1，已在路线图） | 2-3 天 |
-| FR2.4 多重检验 | purgedcv（CPCV + PSR/DSR）+ 白噪声对照 | 2 天 |
+| FR2.2 生成器·主 | AlphaGen **vendor**（丢 requirements，现代栈 + gymnasium 化）+ feather→tensor 适配器 | 冒烟 1-2 天 + 适配器 ~1 周 |
+| FR2.2 生成器·基线 | gplearn + 自定义成本感知 fitness + 滚动窗口（重采样 1h/4h） | 1 周 |
+| FR2.2 候选种子 | py-alpha-lib（GTJA191）→ AST 纯度门 → 评测台 | 2 天 |
+| FR3.1 评测台 | kronos_rankic_eval 泛化（M1，已在路线图） | 2-3 天 |
+| FR3.3 多重检验 | purgedcv（CPCV + PSR/DSR）+ 白噪声对照 | 2 天 |
 | 快速粗筛 | vectorbt OSS sweep | 1-3 天 |
 | 可选深水区 | Qlib dump_bin spike → RollingGen 滚动重训 | 3-5 天 spike |
 | 观察 | RD-Agent(Q) / FactorMiner / alpha-foundry | — |

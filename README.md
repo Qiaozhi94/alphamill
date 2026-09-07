@@ -1,71 +1,58 @@
 # AlphaMill（淘沙）
 
-> 加密量化研究系统 v2 — 以**因子假设吞吐量**为核心指标：程序化批量挖掘 → 统一评测 → 严格留出门 → Freqtrade 执行，Vibe-Trading 作为研究/回测/复盘上层建筑。
->
-> 版本：v0.1 | 日期：2026-09-06 | 状态：设计阶段（未开工）
+> 以 AI 因子工厂为核心的加密量化研究与交易管线。
 
----
+AlphaMill 将数据治理、假设生成、因子评测、严格验证、组合构建、交易执行和绩效复盘连接为
+可复现的闭环，目标是持续发现并运营成本后有效的 Alpha。候选吞吐量是探索能力指标，不是
+项目目的；有效独立性、证据可信度、组合边际贡献和线上表现共同决定研究产出是否有价值。
 
-## 项目定位（一句话）
+## 核心闭环
 
-不重造轮子：**quant-crypto 一次性清算迁移**（数据湖/风控/监控资产并入本仓，原仓库归档），接入 **Vibe-Trading**（研究回测复盘上层）与 **Freqtrade**（交易执行基建），补齐唯一致命缺口——**因子自动挖掘模块**。
+```text
+数据快照 → AI 因子工厂 → 证据评测与验证 → 组合与策略 → Freqtrade 执行
+    ▲                                                      │
+    └──────── 新假设 ← AI/人工复盘 ← 监控、归因与生命周期 ──┘
+```
 
-## 背景
+- **AI 负责探索**：生成假设和因子、分析失败、提出下一轮实验。
+- **规则负责证据**：成本、多重检验、留出预算、最终确认和无前视审计均由确定性代码裁决。
+- **组合负责转化**：单因子和协同池 meta-factor 只有对现有组合产生正边际贡献才构成可信产出。
+- **执行负责反馈**：Freqtrade 承担 dry-run/paper/live 路径，成交和风险事件回流至同一证据链。
 
-上一代项目 quant-crypto 用 5 周建成完整基础设施（631 万行 OHLCV 数据湖、Kronos 信号 RankIC>0.05、Freqtrade dry-run、风控三件套），但 5 周只测了 3 个信号族，所有候选死在最终 90 天留出门（`blocked_no_paper_candidate`）。根因不是基建，是**假设吞吐量低**（~5 个/周 vs 需要 100+/周）。AlphaMill 的答案：程序化因子挖掘 + 统一评测台 + Vibe-Trading 复盘层。
+## 成功标准
 
-## 文档索引
+北极星是滚动周期内新增的 **可信 Alpha**：候选须有效独立、成本后为正、通过最终确认与无前视
+审计、达到可信样本量，部署前仍有效，并对现有组合有正边际贡献。
+
+每周 ≥100 个名义候选仍是 AI 因子工厂的产能目标，但必须与有效独立数、完整漏斗、来源多样性、
+研究周期和线上偏差一起报告，不能单独作为成功判据。
+
+## 系统边界
+
+- 自研核心：数据/实验谱系、假设与因子协议、统一评测、验证门禁、组合决策和反馈闭环。
+- 复用基础设施：TimescaleDB、Parquet/DuckDB、Freqtrade、Prometheus/Grafana。
+- 可替换能力：AlphaGen 等生成器、第二意见回测、Vibe-Trading 或其他 Agent 提供者。
+- 安全红线：Agent 无门禁裁决权和生产写权限；v0.1 止于 paper，live 需独立审批。
+
+## 文档入口
 
 | 文档 | 内容 |
 |---|---|
-| [docs/alphamill-prd.md](docs/alphamill-prd.md) | 背景诊断、目标（G1-G6 量化验收）、功能需求 FR1-FR6、非功能需求、里程碑 M0-M4、风险 |
-| [docs/alphamill-architecture.md](docs/alphamill-architecture.md) | 存储三件套分工（TimescaleDB/Parquet/DuckDB）、三层模块级架构图（ASCII+Mermaid）、因子生命周期数据流、目录设计、4 个接口契约、quant-crypto 资产清算迁移表 |
-| [docs/alphamill-research-factor-mining.md](docs/alphamill-research-factor-mining.md) | 选型调研证据：因子挖掘引擎（AlphaGen/gplearn）、ML 框架（Qlib/FreqAI）、验证库、vectorbt、LLM agent |
-| [docs/alphamill-integration.md](docs/alphamill-integration.md) | 集成操作细节：数据桥、Vibe-Trading 四面接入、Freqtrade 策略模板与无前视对齐、门禁迁移、失败隔离 |
-| [docs/decisions/0001-factor-mining-engine.md](docs/decisions/0001-factor-mining-engine.md) | ADR：AlphaGen vendor 主引擎 + 冒烟闸门 + L1/L2 降级阶梯 |
-| [docs/decisions/0002-external-dependency-policy.md](docs/decisions/0002-external-dependency-policy.md) | ADR：外部依赖三分法（vendor/fork/原样）+ 卫生规则 |
-| [docs/decisions/0003-validation-gate-non-degradation.md](docs/decisions/0003-validation-gate-non-degradation.md) | ADR：验证门禁不降级（90 天留出 + ≥30 笔 + 无前视三层） |
-| [docs/features/0.1/F001-quant-crypto-migration/](docs/features/0.1/F001-quant-crypto-migration/spec.md) | F001 三件套 + migration-plan：quant-crypto 归档清算迁移 |
+| [PRD](docs/alphamill-prd.md) | 产品定位、指标体系、FR1-FR7 与 M0-M4 路线 |
+| [系统架构](docs/alphamill-architecture.md) | 分层架构、生命周期、接口契约与部署拓扑 |
+| [集成设计](docs/alphamill-integration.md) | 数据桥、外部工具、Freqtrade 与无前视对齐 |
+| [因子挖掘调研](docs/alphamill-research-factor-mining.md) | 生成器和评测技术选型证据 |
+| [ADR](docs/decisions/) | 因子引擎、依赖、验证门禁和组合构建决策 |
+| [开发流程](docs/SOP.md) | 规格、实现、验证和复核纪律 |
+| [当前 Feature](BACKLOG.md) | 非 done Feature 索引 |
 
-## 架构总览
+## 当前路线
 
-```text
-Vibe-Trading（研究/复盘上层）
-        ▲ manifest/报告        ▲ Parquet
-Freqtrade（执行） ← 信号缓存 ← 验证门禁 ← 因子工厂（评测台+生成器+注册表） ← 数据桥 ← TimescaleDB 湖（迁入）
-```
+1. **M0 自包含运行基线**：清算迁入 quant-crypto 数据与运行资产。
+2. **M1 可信数据与证据底座**：不可变快照、统一评测、门禁和 manifest。
+3. **M2 AI 因子工厂**：多生成器、自动分诊、独立性和漏斗度量。
+4. **M3 策略到 paper 闭环**：组合、版本化信号、部署前复核和 Freqtrade。
+5. **M4 运营与学习闭环**：监控、归因、生命周期动作和反馈实验。
 
-详细图见 [docs/alphamill-architecture.md](docs/alphamill-architecture.md)。
-
-## 核心原则（继承自 quant-crypto 的教训）
-
-1. **留出门不降级**：任何候选必须通过最终 90 天留出（≥30 笔交易）才能进 paper——上一代的 `blocked_no_paper_candidate` 是系统在正确工作。
-2. **无前视是一等公民**：AST 纯度门 + 独立逐 K 线重放审计 + 信号缓存时间戳对齐检查。
-3. **吞吐量优先**：先量产候选（≥100/周），人只审评测台分诊后的存活者。
-4. **可复现**：每个实验有 manifest（数据版本 + 代码版本 + 参数 + 结果）。
-5. **实盘前置条件不变**：没有留出通过的候选，就不碰真金白银。
-
-## 外部依赖
-
-| 组件 | 角色 | 说明 |
-|---|---|---|
-| [Vibe-Trading](https://github.com/HKUDS/Vibe-Trading)（HKUDS, MIT, v0.1.14） | 研究/回测/复盘上层 | 只接 4 个面：local loader、回测/验证工具、quantlib、agent 复盘；**不接**其实盘栈与数据源 |
-| [Freqtrade](https://github.com/freqtrade/freqtrade)（GPL-3.0, 2026.8） | 交易执行 | 沿用 quant-crypto 的 dry-run 部署与策略模式（随迁移并入） |
-| quant-crypto 资产（清算迁入） | 数据湖/风控/监控 | TimescaleDB 数据卷、风控三件套、Grafana/Prometheus 配置随迁移并入本仓（迁移表见 docs/alphamill-architecture.md） |
-| **AlphaGen**（vendor 接入） | FR2 核心：因子挖掘主引擎 | vendor + 现代依赖栈策略见 [ADR-0001](docs/decisions/0001-factor-mining-engine.md) 与 [选型调研](docs/alphamill-research-factor-mining.md) |
-
-## 快速开始（设计阶段之后）
-
-```bash
-# M1 后可用
-python data_bridge/export_ohlcv.py            # TimescaleDB → Parquet + manifest
-python factor_factory/bench/run_bench.py --factor <factor_id>
-python validation/holdout_gate.py --factor <factor_id> --window 90d
-```
-
-（命令为设计目标，实现后以实际为准。）
-
-## 相关项目
-
-- `../quant-crypto`（本机路径，已归档）— 上一代系统：资产清算迁移至本仓，方案见 [F001 migration-plan](docs/features/0.1/F001-quant-crypto-migration/migration-plan.md)
-- `../tradingview-quant-research`（本机路径）— TradingView 定位调研（可视化/Alert 层的参考依据）
+当前处于设计/迁移阶段；命令入口以各 Feature 实现后的文档为准。项目文档唯一地图见
+[docs/README.md](docs/README.md)。

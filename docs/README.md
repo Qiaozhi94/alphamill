@@ -15,9 +15,9 @@ updated: 2026-09-07
 
 | 信息 | 唯一拥有者 | 说明 |
 |---|---|---|
-| 产品目标、范围和路线 | `alphamill-prd.md` | 产品真相源（G1-G6 / FR1-6 / 里程碑 M0-M4） |
-| 全局模块、进程与运行时边界 | `alphamill-architecture.md` | 分层架构（模块级）+ 存储三件套分工 + 闭环主循环 |
-| 字段、表、数据契约（FactorDef / 评测台 / 信号缓存 / manifest） | `alphamill-architecture.md` §四 | 接口契约真源 |
+| 产品目标、范围和路线 | `alphamill-prd.md` | 产品真相源（指标体系 / G1-G7 / FR1-FR7 / 里程碑 M0-M4） |
+| 全局模块、进程与运行时边界 | `alphamill-architecture.md` | AI 控制面 + 证据面 + 交易面 + 数据面 + 闭环主循环 |
+| 字段、表、数据契约（HypothesisDef / FactorDef / PortfolioDef / 评测台 / 信号缓存 / manifest） | `alphamill-architecture.md` §四 | 接口契约真源 |
 | 因子挖掘主引擎选型（含降级阶梯） | `decisions/0001-factor-mining-engine.md` | 选型决策（证据：`alphamill-research-factor-mining.md`） |
 | 外部依赖管理策略（vendor/fork/原样） | `decisions/0002-external-dependency-policy.md` | 依赖策略（操作细节：`alphamill-integration.md`） |
 | 验证门禁不降级 | `decisions/0003-validation-gate-non-degradation.md` | quant-crypto 教训制度化 |

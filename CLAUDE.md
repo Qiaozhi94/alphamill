@@ -1,6 +1,7 @@
 # AlphaMill
 
-以因子假设吞吐量为核心的加密量化研究系统：程序化挖掘 → 统一评测 → 严格留出门 → Freqtrade 执行（中文别名：淘沙）
+AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，贯通数据治理 → 假设与因子 →
+证据评测 → 组合与策略 → Freqtrade 执行 → 监控归因与复盘（中文别名：淘沙）。
 
 ## 当前结构
 
@@ -26,7 +27,7 @@
 - 语言/运行时：Python 3.11+（研究/采集/门禁/服务薄壳）
 - 核心依赖：pandas/polars（因子计算）、DuckDB（湖上 SQL 取数）、pyarrow（Parquet 湖）、
   ccxt（采集）、Freqtrade（执行，docker 镜像 2026.8，零源码改动）、
-  vibe-trading-ai（研究上层，pip pin，零源码改动）、AlphaGen 核心 vendor（RL 挖掘主引擎）、
+  vibe-trading-ai（可选第二实现/Agent，pip pin，零源码改动）、AlphaGen 核心 vendor（RL 挖掘主引擎）、
   Kronos（上游 clone + pin；GPU 推理薄壳为本仓 `src/alphamill/kronos_service/`）
 - 数据栈：TimescaleDB（联机运营库，自 quant-crypto 迁入）→ data_bridge → Parquet 湖（不可变快照）
 - 测试/质量：pytest + ruff（check + format），唯一入口 `python tools/verify.py`
@@ -40,7 +41,8 @@
 - 质量门禁：统一入口 `python tools/verify.py`（串联文档门禁与测试；技术栈落地后扩展 lint/
   typecheck/build）。Feature 状态变更前必须运行它。
 - 数据红线：研究/回测只读 Parquet 湖（data_version 快照），不直读 TimescaleDB 修订态；信号缓存时间戳对齐是硬门禁。
-- 实盘红线：无候选通过最终 90 天留出（≥30 笔）前，不触碰实盘下单路径。
+- AI 权限红线：Agent 只提出候选和复盘建议，不裁决门禁、不改变生产状态、不触发真实下单。
+- 实盘红线：无候选通过最终确认并满足可信样本量前，不触碰实盘下单路径。
 
 ## 当前活跃 Feature
 

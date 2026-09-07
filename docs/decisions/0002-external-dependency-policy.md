@@ -7,7 +7,7 @@
 
 ## 背景
 
-AlphaMill 引入四个开源项目：AlphaGen（挖掘引擎）、Freqtrade（执行）、Vibe-Trading（研究上层）、
+AlphaMill 引入四个开源项目：AlphaGen（挖掘引擎）、Freqtrade（执行）、Vibe-Trading（可选第二实现/Agent）、
 Kronos（时序基础模型）。需要统一"改谁、不改谁、怎么跟上游"的规则。
 
 判断原则：**改动深度决定集成距离**。fork 仅适用于"要上游全部功能 + 必须改核心 + 上游不收 PR"
@@ -19,7 +19,7 @@ Kronos（时序基础模型）。需要统一"改谁、不改谁、怎么跟上�
 |---|---|---|
 | AlphaGen | **vendor** 进主仓 | 动大手术（换数据层/现代化）+ 上游冻结 + 只用子集 |
 | Freqtrade | 原样依赖（官方 docker 镜像 + `user_data/` 插件层） | 零源码改动；pin 镜像 tag；上游 bug 走 issue + monkey-patch 过渡 |
-| Vibe-Trading | 原样依赖（pip pin + 本机 CLI/服务） | 只碰 4 个配置层接入面；pin 小版本，里程碑边界才升级 |
+| Vibe-Trading | 可选原样依赖（pip pin + 本机 CLI/服务） | 只碰只读配置层接入面；1 周 time-box，可弃置，不阻塞主链路 |
 | Kronos 模型代码 | 原样依赖（上游 fresh clone + pin commit） | 零改动；权重走 HuggingFace；服务薄壳为本仓 `kronos_service/` |
 
 **永不 fork。**

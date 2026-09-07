@@ -2,7 +2,7 @@
 
 > 版本：v0.1 | 日期：2026-09-07 | 配套：[alphamill-architecture.md](./alphamill-architecture.md)
 > ⚠️ 本文档为集成操作细节；外部依赖管理策略已提炼至 [ADR-0002](decisions/0002-external-dependency-policy.md)。
-> 本文回答：AlphaMill 的三个外部系统（数据湖 / Vibe-Trading / Freqtrade）各自怎么接、接口长什么样、出问题怎么隔离。
+> 本文回答：数据栈、可选研究/Agent 工具与 Freqtrade 怎样接入稳定的 AlphaMill 契约。
 
 ---
 
@@ -10,7 +10,7 @@
 
 ### 1.1 为什么需要这一层
 
-- Vibe-Trading 的 `local` loader 支持 CSV / Parquet / DuckDB，**不直连 Postgres**；
+- 生成器、评测、回测和可选第二实现需要共享同一份只读研究数据；
 - 研究需要不可变快照：TimescaleDB 数据会被回补/修订，Parquet 快照 + 版本号保证"同一版数据永远算出同一版结果"；
 - 双口径落盘（adjusted/raw）在导出时点固定，避免消费端各自解释。
 
@@ -31,7 +31,7 @@
 - 新版本 manifest 相对旧版本登记修订分区清单（差异记录），可审计"哪些数据变了"；
 - 在途实验不自动作废：实验 manifest 固定的 data_version 与湖内最新版本比对发现漂移时，仅打 `data_version_drift` 标记——建议在任何 gate 判定（留出/dry-run 决策）前用新版本重跑，但不强制。
 
-### 1.3 宇宙扩容（FR1.3）
+### 1.3 宇宙扩容（FR1.5）
 
 1. 运行 quant-crypto 的 `discover_okx_swap_universe.py`，按流动性（日均成交额）+ 上线时长（>180 天）筛 30~50 对；
 2. 复用 `historical_backfill.py` 分批回补（限速保护）；
@@ -39,7 +39,11 @@
 
 ---
 
-## 二、Vibe-Trading 接入
+## 二、可选 Vibe-Trading 适配器
+
+Vibe-Trading 只作为 FR3.7 第二实现与 FR6.4 AI 复盘的一种提供者，不是研究主链路或里程碑
+前置。接入 time-box 为 1 周；超时即弃置适配器，分别退化为独立重放器/手工第二实现和其他
+只读 Agent，不影响评测、门禁、组合或部署。
 
 ### 2.1 安装与形态
 
@@ -49,7 +53,7 @@ vibe-trading --version             # 本项目只用到 CLI + 本机 REST，不�
 ```
 
 - 仅本机回环运行；不配置 `API_AUTH_KEY` 之外的暴露面；不启用 shell 工具（保持默认关闭）。
-- 其审计/manifest 机制天然契合 FR6（每次 run 有 hash manifest + run_card），实验台账直接引用其 run_id。
+- 每次 run 的 hash manifest 与 run_card 由 FR7 实验台账引用，不作为 AlphaMill manifest 的替代。
 
 ### 2.2 Parquet 湖 → local loader
 
@@ -67,9 +71,12 @@ Vibe-Trading 的 `local` loader 通过 `local:` 前缀符号读取本地文件�
 }
 ```
 
-`src/alphamill/vibe_bridge/local_loader_config/` 维护：alphamill pair 命名 ↔ local loader 符号 的映射表、数据根路径、可用区间检查。
+`src/alphamill/vibe_bridge/local_loader_config/` 维护 Vibe 专属读取配置；三方符号翻译的唯一真源为
+`src/alphamill/data_bridge/symbol_map.csv`。
 
-**M1 出口标准（契约前置）**：M1 冻结 Parquet 分区与 pair 命名时，必须同时产出符号映射初版表（`src/alphamill/vibe_bridge/symbol_map.csv`）并锁定 UTC 对齐约定，不允许推迟到 M3 接入时再发明：
+**M1 出口标准（契约前置）**：M1 冻结 Parquet 分区与 pair 命名时，同时产出符号映射初版
+（`src/alphamill/data_bridge/symbol_map.csv`）并锁定 UTC；Vibe 列只在适配器启用时填写，不影响
+AlphaMill ↔ Freqtrade 的强制映射：
 
 | alphamill pair（湖内） | Vibe-Trading symbol | Freqtrade pair | 时间戳约定 |
 |---|---|---|---|
@@ -77,10 +84,10 @@ Vibe-Trading 的 `local` loader 通过 `local:` 前缀符号读取本地文件�
 
 契约三条：① 三方命名只经此映射表互译，禁止散落硬编码；② 无法直映的 pair 必须在初版中显式登记翻译规则，不留空；③ 映射表进 git，命名变更走评审，保证历史实验可复现。
 
-### 2.3 第二意见回测流程（FR4.2）
+### 2.3 第二意见回测流程（FR3.7）
 
 ```text
-候选通过统一评测台（RankIC 等达标）
+高价值候选、实现升级或评测差异触发复核
    ↓
 ① Freqtrade 级回测（既有流程，含成本三档）
    ↓ 并行
@@ -88,13 +95,14 @@ Vibe-Trading 的 `local` loader 通过 `local:` 前缀符号读取本地文件�
    ↓
 差异报告：两者收益曲线/成交列表 diff，逐笔归因（数据差异 / 撮合假设差异 / 信号时间戳差异）
    ↓
-差异可解释 → 候选进留出门；不可解释 → 回退排查（默认怀疑②的口径或①的前视）
+差异可解释 → 复核完成；不可解释 → 候选冻结并排查，不以任一实现自动胜出
 ```
 
-### 2.4 Agent 复盘工作流（FR4.3）
+### 2.4 Agent 复盘工作流（FR6.4）
 
 - 输入物：失败实验的 manifest（alphamill 侧）+ Vibe-Trading run_card（若该候选跑过②）+ 因子注册表条目。
-- 工作流（`src/alphamill/vibe_bridge/postmortem/`）：收集材料 → `vibe-trading run -p "<复盘 prompt>"` → 归因报告落 `reports/postmortem/` → 提取新假设进入生成器队列（人工审阅后生效）。
+- 工作流（`src/alphamill/vibe_bridge/postmortem/`）：收集不含永久确认窗的材料 → 运行只读 Agent
+  → 归因报告落 `reports/postmortem/` → 新假设草案经人工审阅后进入队列。Agent 无生产写权限。
 - 论文→因子：上传论文 PDF，参照其 SDM 技能的五阶段（INGEST→EXTRACT→IMPLEMENT→EVALUATE→MONITOR），产出的因子定义走 AST 纯度门后入库。
 
 ### 2.5 明确隔离
@@ -144,12 +152,14 @@ class {{ strategy_class }}(IStrategy):
 3. warmup 期禁止产生交易；
 4. 审计不通过 → 部署流水线拒绝生成配置。
 
-### 3.3 部署流水线（FR5.3）
+### 3.3 部署流水线（FR4 / FR5）
 
 ```text
-留出 PASS → writer 写 signal_cache → 渲染策略模板 → freqtrade backtesting 冒烟（7 天）
-        → dry-run 挂载（与现有 KronosFusionStrategy 并存，独立策略类）
-        → 人工确认 → paper
+因子选择期 → 组合边际贡献门 → Top-K/权重/净额化 → 冻结 PortfolioDef
+        → PortfolioDef 通过 90 天留出与永久隔离最终确认
+        → 部署前最近窗口复核 → writer 写版本化 signal_cache
+        → 渲染策略模板 → freqtrade backtesting 冒烟（7 天）
+        → dry-run → 人工确认 → paper
 ```
 
 ---
@@ -160,13 +170,16 @@ quant-crypto 的门禁脚本参数化迁移到 `src/alphamill/validation/`：
 
 | 迁移件 | 改造点 |
 |---|---|
-| 选择期脚本 | 窗口/阈值外置配置（`src/alphamill/validation/config.yaml`），规则先于数据确定并 git 提交 |
-| 最终 90 天留出 | 新增 **≥30 trades 判定门槛**：样本不足输出 `UNDERPOWERED`（不判 PASS 也不判 FAIL，触发扩宇宙/延长窗口） |
+| 选择期脚本 | 窗口/阈值外置配置；因子筛选、组合成员和权重在此阶段完成并冻结 PortfolioDef |
+| 最终 90 天留出 | <30 笔为 `UNDERPOWERED`；30~69 笔最多临时 PASS 并缩减仓位 paper；约 ≥69 笔才形成可信判定 |
+| 永久隔离最终确认 | 开发期不可见，每个晋级候选只使用一次；访问写 append-only 留出台账 |
 | 独立重放器 | 接口化为 `no_lookahead_audit(factor_def)`，进入因子工厂流水线而非一次性脚本 |
 | 成本敏感性 | 三档（taker/maker/零成本）为标准输出列，成本后 Sharpe 为排序主键 |
 | KPI 检查 | 继承阈值（Sharpe>1.5 / MDD<20% / WinRate>50% / 月均>20 笔），报告格式沿用 `reports/phase4-kpi-*` |
 
-**多条候选同时通过留出的处理**：按成本后 Sharpe 排序，取 Top1 进 dry-run；其余进入 monitoring 队列（防止 paper 组合同时验证多个高相关候选）。
+**多候选处理**：按 ADR-0004 在选择期构建 Top-K（v0.1 K=3、硬上限 5），同时评估组合边际
+贡献、相关性、容量和约束；其余进入 monitoring。冻结后的 PortfolioDef 以整体进入留出，禁止
+根据留出结果换成员或调权重。
 
 ---
 
@@ -178,7 +191,7 @@ quant-crypto 的门禁脚本参数化迁移到 `src/alphamill/validation/`：
 |---|---|---|---|
 | **AlphaGen** | **vendor** 进 `src/alphamill/factor_factory/generators/alphagen_vendor/` | 动大手术（换数据层、numpy/torch 现代化、gymnasium 化）+ 上游核心冻结（无 rebase 负担）+ 只用子集 | 记录 vendor 时的上游 commit hash 于 `VENDORED.md`；不考虑跟随上游 |
 | **Freqtrade** | 原样依赖（官方 docker 镜像 + `user_data/` 插件层） | 插件架构零改码即可用（quant-crypto 已验证）；上游月更，fork = rebase 跑步机 | pin 镜像 tag（如 2026.8），里程碑边界升级 |
-| **Vibe-Trading** | 原样依赖（pip pin + 本机 CLI/服务） | 只碰 4 个外部面（loader/回测工具/quantlib/agent），全在配置层 | pin 小版本；只在里程碑边界升级（保证实验结果可比） |
+| **Vibe-Trading** | 可选原样依赖（pip pin + 本机 CLI/服务） | 只读第二实现/Agent 适配；1 周 time-box，可弃置 | 启用时 pin 小版本；仅在里程碑边界升级 |
 | Kronos | 独立服务（上游 clone + pin commit，权重 HuggingFace 下载） | 模型代码上游化；服务薄壳为本仓 `src/alphamill/kronos_service/` | pin 上游 commit；见 docs/alphamill-architecture.md §七 |
 
 ### vendor 卫生规则（AlphaGen 专用）
@@ -200,7 +213,7 @@ quant-crypto 的门禁脚本参数化迁移到 `src/alphamill/validation/`：
 | 失败模式 | 隔离设计 |
 |---|---|
 | 导出桥数据错误 | manifest 对账 + data_version 失效标记；评测台拒绝 invalid 版本 |
-| Vibe-Trading 升级破坏行为 | 回测只在 M3/M4 验证点跑；其 run manifest 记录版本，可复现到具体版本 |
+| Vibe-Trading 升级破坏行为 | 冻结适配器并用独立重放器复核；其 run manifest 记录版本；主链路不受影响 |
 | 生成器产出垃圾海啸 | 评测台分诊阈值（RankIC + 查重）先行过滤；注册表只收存活者 |
 | Freqtrade 策略读取了坏缓存 | 冒烟回测前置 + 审计器校验时间戳对齐；坏缓存直接拒绝挂载 |
 | 夜间批处理超时 | 生成器/评测台分任务队列，单代失败不回滚已入库结果 |

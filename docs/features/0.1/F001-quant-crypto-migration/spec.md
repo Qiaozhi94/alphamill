@@ -17,7 +17,7 @@ updated: 2026-09-07
 
 ## 0. 来源与意图
 
-- **PRD 来源**：`docs/alphamill-prd.md` §1.3 决策 2（清算迁移）与里程碑 M0
+- **PRD 来源**：`docs/alphamill-prd.md` §1.2 决策 4（复用成熟基础设施）与里程碑 M0
 - **架构来源**：`docs/alphamill-architecture.md` §五（资产清算迁移表）、§七（部署拓扑）
 - **系统设计 / Research / Contract 来源**：`docs/features/0.1/F001-quant-crypto-migration/migration-plan.md`（迁移清单与验收）
 - **上游决策**：`docs/decisions/`（暂无；仓库归档处置记录于同目录 migration-plan.md §二）
@@ -81,7 +81,7 @@ quant-crypto 决定归档废弃，但其中 631 万行 OHLCV 数据、采集器�
 ### 范围外
 
 - Parquet 湖导出、DuckDB 取数、统一评测台泛化（F002+）。
-- 宇宙扩容到 30~50 对的执行（FR1.3 属 M1）。
+- 宇宙扩容到 30~50 对的执行（FR1.5 属 M1）。
 - 任何策略逻辑修改。
 
 ### 边界场景

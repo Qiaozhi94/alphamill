@@ -19,11 +19,12 @@ updated: 2026-09-07
 | # | 原则 | 短摘要 | 规范正文唯一拥有者 |
 |---|---|---|---|
 | 1 | 可追溯规格优先 | 功能必须先有已评审规格；实现/测试/实验/结论必须引用需求编号；未写入规格的行为不视为承诺 | 本文 + `docs/features/README.md` |
-| 2 | 留出门不降级 | 任何候选必须通过最终 90 天留出（≥30 笔）才能进 paper；吞吐提升只来自假设数量，不来自放宽门禁 | `docs/decisions/0003-validation-gate-non-degradation.md` |
+| 2 | 证据门不降级 | 候选按样本功效分级并经过留出与最终确认；效率提升不得来自放宽门禁 | `docs/decisions/0003-validation-gate-non-degradation.md` |
 | 3 | 无前视一等公民 | 因子定义过 AST 纯度门 + 独立逐 K 线重放审计 + 信号缓存时间戳对齐检查（三层防线） | `docs/alphamill-integration.md` |
 | 4 | 数据红线（只读湖快照） | 研究/回测只读 Parquet 湖不可变快照（data_version），不直读 TimescaleDB 修订态 | `docs/alphamill-architecture.md` |
-| 5 | 实盘红线（留出前置） | 无候选通过最终留出前，不触碰实盘下单路径 | `docs/alphamill-prd.md` |
-| 6 | 实验可复现 | 每个实验写 manifest（数据版本 + 代码版本 + 参数 + 结果），任一历史结果可从 manifest 从零复现 | `docs/alphamill-architecture.md`（manifest 契约） |
+| 5 | AI 权限边界 | Agent 只产候选和建议，不裁决门禁、不改变生产状态、不触发真实下单 | `docs/alphamill-prd.md` |
+| 6 | 实盘红线（最终确认前置） | 无候选通过最终确认并满足可信样本量前，不触碰实盘下单路径 | `docs/alphamill-prd.md` |
+| 7 | 实验可复现 | 每个实验写 manifest 并串联数据、因子、组合、信号和成交，任一历史结果可重建 | `docs/alphamill-architecture.md`（manifest 契约） |
 
 > 新建项目时：从 PRD/架构中提炼 3-7 条真正不可违反的原则填表，其余原则不要堆砌；
 > 每加一条必须同时指定唯一拥有者文档。
