@@ -15,6 +15,9 @@ import subprocess
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
+# 扫描器必须跳过自身：本文档字符串引用了被禁止的裸命令作规则说明（同 ruff 自含违例样本）。
+_SELF = pathlib.Path(__file__).resolve()
+
 # 历史档案（检视复盘 / 会话归档）原样保留，不参与当前规范扫描。
 _SCAN_EXEMPT_PARTS = {"docs/reviews", "conversations"}
 _BARE_COMMAND = re.compile(r"\bpython tools/verify\.py")
@@ -34,6 +37,8 @@ def _tracked_text_files() -> list[pathlib.Path]:
         if p.suffix not in {".md", ".py", ".yml", ".yaml", ".toml", ".cfg", ".txt"}:
             continue
         if any(part in _SCAN_EXEMPT_PARTS for part in p.parts):
+            continue
+        if (REPO_ROOT / p).resolve() == _SELF:
             continue
         files.append(REPO_ROOT / p)
     return files
