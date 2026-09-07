@@ -23,6 +23,9 @@ build/
 # 本机代理运行续接状态
 .sisyphus/
 
+# 本机 OpenCode 运行状态（含会话转录，严禁入库——密钥扫描门禁的原因之一）
+.omo/
+
 # 仿真/实验产生的数据与输出
 data/raw/
 data/processed/
