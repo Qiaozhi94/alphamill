@@ -42,20 +42,23 @@
 
 ## 四、TimescaleDB 去留（分阶段，可逆）
 
-- **阶段 A（迁移期，推荐）**：TimescaleDB 随 docker-compose 迁入照常运行——采集、聚合、质量监控全链路零风险接续；data_bridge 照原设计导出 Parquet 湖
+- **阶段 A（迁移期，推荐）**：TimescaleDB 随 docker-compose 迁入照常运行——采集、聚合、质量监控全链路零风险接续；data_bridge（F002 起）照原设计导出 Parquet 湖
 - **阶段 B（可选，跑稳后）**：若想精简运维，采集器改为直写 Parquet + DuckDB 查询层，撤掉 TimescaleDB——需重写聚合与质量监控查询，届时单独立项评估
 
 ## 五、迁移验收（全绿才算完成）
 
 ```text
 □ 行数对账：迁移后 DB 与旧仓行数/校验和一致（quality_flags 未解决数一致）
-□ data_bridge：首次全量导出 Parquet 湖成功，manifest 完整
 □ Kronos：/health 200；/predict/BTC-USDT 返回 source=kronos
 □ Freqtrade：dry-run 启动，读到 Kronos 信号缓存，风控三件套挂载
 □ 监控：Grafana 面板有数据（K 线延迟/信号质量/交易健康）
 □ verify.ps1 全绿（扩展为上述全链路检查）
 □ 旧仓打 tag 归档，主仓 git 历史干净（迁移 commit 单独可审）
 ```
+
+> 范围澄清（D033）：Parquet 湖首次全量导出与 manifest 产出属 F002 / M1 数据桥范围（见
+> `spec.md` §1 非目标），不列入本迁移验收——本迁移只保证 TimescaleDB 数据完整可查、
+> 全链路可运行；`lake/` 目录位仅随 §七 备份方案预留。
 
 ## 六、执行顺序建议（与里程碑对齐）
 
