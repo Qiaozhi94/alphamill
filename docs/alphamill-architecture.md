@@ -187,7 +187,7 @@ alphamill/                       # 仓库根（非 Python 资产留根，不进�
     │   └── registry/            # FR2.5：因子注册表（sqlite/parquet）
     ├── validation/              # FR3：从 quant-crypto 迁移 + 参数化
     │   ├── selection_gate.py
-    │   ├── holdout_gate.py      #   ≥30 trades 判定门槛
+    │   ├── holdout_gate.py      #   样本量三级裁决：<30 UNDERPOWERED / 30~69 临时 PASS / ≥69 可信（PRD FR3.5）
     │   └── no_lookahead_audit.py
     ├── portfolio/               # FR4：组合门、Top-K、权重、净额化与风险预算
     │   ├── contribution.py
