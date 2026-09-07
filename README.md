@@ -18,7 +18,7 @@
 
 | 文档 | 内容 |
 |---|---|
-| [docs/alphamill-prd.md](docs/alphamill-prd.md) | 背景诊断、目标（G1-G5 量化验收）、功能需求 FR1-FR6、非功能需求、里程碑 M0-M4、风险 |
+| [docs/alphamill-prd.md](docs/alphamill-prd.md) | 背景诊断、目标（G1-G6 量化验收）、功能需求 FR1-FR6、非功能需求、里程碑 M0-M4、风险 |
 | [docs/alphamill-architecture.md](docs/alphamill-architecture.md) | 存储三件套分工（TimescaleDB/Parquet/DuckDB）、三层模块级架构图（ASCII+Mermaid）、因子生命周期数据流、目录设计、4 个接口契约、quant-crypto 资产清算迁移表 |
 | [docs/alphamill-research-factor-mining.md](docs/alphamill-research-factor-mining.md) | 选型调研证据：因子挖掘引擎（AlphaGen/gplearn）、ML 框架（Qlib/FreqAI）、验证库、vectorbt、LLM agent |
 | [docs/alphamill-integration.md](docs/alphamill-integration.md) | 集成操作细节：数据桥、Vibe-Trading 四面接入、Freqtrade 策略模板与无前视对齐、门禁迁移、失败隔离 |

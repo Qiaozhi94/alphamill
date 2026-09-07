@@ -15,7 +15,7 @@ updated: 2026-09-07
 
 | 信息 | 唯一拥有者 | 说明 |
 |---|---|---|
-| 产品目标、范围和路线 | `alphamill-prd.md` | 产品真相源（G1-G5 / FR1-6 / 里程碑 M0-M4） |
+| 产品目标、范围和路线 | `alphamill-prd.md` | 产品真相源（G1-G6 / FR1-6 / 里程碑 M0-M4） |
 | 全局模块、进程与运行时边界 | `alphamill-architecture.md` | 分层架构（模块级）+ 存储三件套分工 + 闭环主循环 |
 | 字段、表、数据契约（FactorDef / 评测台 / 信号缓存 / manifest） | `alphamill-architecture.md` §四 | 接口契约真源 |
 | 因子挖掘主引擎选型（含降级阶梯） | `decisions/0001-factor-mining-engine.md` | 选型决策（证据：`alphamill-research-factor-mining.md`） |
