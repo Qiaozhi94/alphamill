@@ -74,11 +74,11 @@
 
 ## 循环 4：F001 设计文档开发前检视（full-scan）
 
-- report_type: doc-review | round: 1（full-scan）→ 2（diff-only 复核，含 R2-01 发现与当轮修复）→ 3（封顶复核，仅 R2-01 修复 diff）| 状态: 重开（round-3 审计发现 R3-01：T004 数据源不可达未定义，六路探测全否；闭环判定过早，见 CURRENT-doc.md）
+- report_type: doc-review | round: 1（full-scan）→ 2（diff-only 复核，含 R2-01 发现与当轮修复及封顶复核——闭环过早）→ 3（闭环后审计重开：发现 R3-01/R3-02 并当轮修复关闭）| 状态: 闭环
 - 日期：2026-09-07 | 基线：9a95cee（报告入库于 a7e93cd）→ 终基线 56c5724（修复轮 6 个提交）
 - 检视人：Sisyphus；修复方：同会话显式切换视角执行（状态翻转权归检视人）
 - 范围：F001 三件套 + migration-plan.md 全文；交叉契约 PRD M0/非目标、架构 §五/§七、SOP、features/README；开发环境实测取证
-- 结论：首轮 3 High / 1 Medium / 2 Low，全部"现在改半天文档、开工后改返工"型；修复轮一 finding 一 commit 全数处理（D034+D037 因共用 tasks.md 编号编辑面合并为一 commit，检视人追认）；round-2 diff-only 复核逐条验证通过，另探出 1 条首轮漏检（R2-01：D034 修复只覆盖检视人点名的 item 5/8，未对 SC-003 九项清单做全集核对——item 9 user_data 仍无任务）当轮修复；第 3 轮封顶复核无新发现。`python3 tools/verify.py` 全量七步全绿 ×2，闭环提交推送后 CI 观测绿。
+- 结论：首轮 3 High / 1 Medium / 2 Low，全部"现在改半天文档、开工后改返工"型；修复轮一 finding 一 commit 全数处理（D034+D037 因共用 tasks.md 编号编辑面合并为一 commit，检视人追认）；round-2 diff-only 复核逐条验证通过，另探出 1 条首轮漏检（R2-01：D034 修复只覆盖检视人点名的 item 5/8，未对 SC-003 九项清单做全集核对——item 9 user_data 仍无任务）当轮修复；第 3 轮封顶复核无新发现。`python3 tools/verify.py` 全量七步全绿 ×2，闭环提交推送后 CI 观测绿。round-2 闭环被检视人事后审计推翻——数据源「承认可达性未验」不应计入闭环；重开 round-3 实证（qiaozhi-lt 实为用户另一台 Windows 工作机，本开发机是 qiaozhi-gp，旧 skill 设备表已过期；数据在 qiaozhi-lt Docker 卷 `quant-crypto_timescale_data`，实测 ohlcv_1m 6,504,359 行 / 11 表 / 5 连续聚合；SSH 流式 pg_dump 路径免开 5432 防火墙），R3-01/R3-02 当轮修复关闭，附带 design §3 对账口径按实库 6→11 表补全，循环正式闭环。
 
 | ID | 一句话 | 严重度 | 分类 | 根因 | 来源 | 状态 | 修复方案（摘要） | 回归测试 | 首现轮 | 关闭轮 | 模式标签 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -89,6 +89,8 @@
 | D037 | tasks.md T018 编号乱序（Phase 2 内 T010 与 Phase 3 T011 之间） | 低 | 质量 | 症状 | 原始设计 | fixed | 全量重编号使编号=执行顺序（R2-01 插入后延至 T022 仍保持） | validate_spec_lifecycle | 1 | 1 | — |
 | D038 | item 9 kronos_cache/feather 的 git 边界未说明，"首批信号缓存样本"入库与否无定论 | 低 | 质量 | 症状 | 原始设计 | fixed | item 9 改造点注明：入库仅策略+config；缓存/feather 本地资产不进 git；样本供 F002 校验 | — | 1 | 1 | — |
 | R2-01 | D034 修复未对 SC-003 九项做全集核对：item 9（user_data 策略+config）仍无任务，SC-003 仍不可全勾 | 高 | 正确性 | 症状 | 原始设计（首轮漏检） | fixed | tasks 补 T014（user_data 迁移）+依赖 T014→T017，后续顺延至 T022 | validate_spec_lifecycle + verify | 2 | 2 | spec-tasks-traceability-gap |
+| R3-01 | T004 数据源不可达且未定义：六路探测全否（本机无 Docker Desktop/无原生 PG/无其他发行版/5432 全闭/无备份痕迹），round-2 以「承认未验」状态闭环过早 | 高 | 正确性 | 根因 | fix-regression（D035 数据面残留） | fixed | 数据源实证钉死：qiaozhi-lt（Tailscale `100.98.228.125`，SSH `Georg@` 密钥 `~/.ssh/gp-to-lt`）`D:\Projects\quant-crypto` Docker 卷 `quant-crypto_timescale_data`（实测 6,504,359 行/11 表/5 caggs）；SSH 流式 pg_dump 路径（免开 5432 防火墙）；design §0/§3、tasks T001/T004、spec §7、migration-plan item 1 五处同步 | verify.py 文档门禁 | 3 | 3 | unpinned-data-source |
+| R3-02 | T012/T013/T014 任务引用 SC-003 偏离 tasks 模板的「US/需求/AC ID」枚举 | 低 | 质量 | 症状 | fix-regression（D034/R2-01 修复引入） | fixed | tasks §0 显式扩展条款：SC-xxx 为合法任务引用锚 + 理由记录（泛化属 F002/M1，无对应 FR） | validate_spec_lifecycle | 3 | 3 | template-id-drift |
 
 ## 模式教训
 
@@ -101,16 +103,17 @@
 7. **open-ended-exit-no-clock**（D025）：无时钟的出口条款会被"系统正确工作"叙事无限续期——任何"等首个 X 出现"型验收都必须配触发器时钟与预注册分支，独立性口径要写明"测量而非名义计数"。
 8. **战略层问题域单独成轮**（循环 3）：D025-D031 全部是"计划接触现实后活不活"的问题，症状一致（系统绿灯运转但零存活），与循环 1 的"文档对不对/全不全"是不同问题域——两类检视交替扫，比混在同一轮更有效；战略层的修复多数是"预注册条款"（检查点/漏斗/边界/可弃置声明），特征是现在改半天、开工后改返工。
 9. **archive-without-secret-scan**（2026-09-07 事件，非检视循环内发现）：对话归档提交把会话转录中带 Bearer 凭证的 curl 命令原样入库并推送（火山 Ark API key，私有仓暴露约 1 小时，GitHub 侧检出告警）。处置：key 轮换 + git filter-repo 历史重写 + force push（21c95cd→c6ecf29、c3bad7b→3e4a260，早期哈希不变）。防线已门禁化：verify.py 第 4 步 check_secrets.py（uuid-bearer/apikey、github-token、sk-、AKIA、PEM 六类形态）+ test_repo_tree_self_scan_clean 双层拦截。教训：转录/归档类内容不是惰性文档——会话里执行过的带凭证命令会被原样记录；OpenCode 本地库仍含旧 key 串，将来重导归档会被门禁拦下，届时需先做导出侧脱敏。
+10. **closure-without-verification**（循环 4 round-2→3）：round-2 把「数据源可达性未验、仅文档承认」当作已知项计入闭环——重开审计六路探测全部落空，T004（红线资产迁移任务）按当时文档根本无法开工。教训：①任何「已知未验」的开放点不得计入停止条件，闭环只认实测；②环境事实必须 hostname/卷/行数级实测，不能引用旧 skill 设备表（本开发机实为 qiaozhi-gp 而非 qiaozhi-lt——设备表随机器迁移过期）；③「用户口头指认」也要复核（qiaozhi-lt 指认正确，但正确的原因是另一台机器持有卷——实测才发现本机不是它）。
 10. **spec-tasks-traceability-gap：清单验收只抽查不普查**（D034+R2-01，循环 4）：SC-003 要求 9 项全勾，首轮检视只点名了缺任务的 item 5/8，修复方照单补齐——但 item 9（user_data）同样无任务，round-2 diff-only 才暴露。教训：**凡是"清单全覆盖"型 finding（SC 要求 N 项全 X），修复时必须对清单全集逐项重新核对，不能只修检视人点名的子集**——检视人点名的是样本不是全集，照单全收会把漏检从检视方转移给修复方再一起背。round-2 抓到的是"首轮漏检"而非"修复引入"，证明 diff-only 复核对采样遗漏同样有效。
 11. **environment-contract-drift：环境假设未实测就成文**（D035，循环 4）：三件套+CLAUDE.md 全线假设 Windows 11+Docker Desktop+RTX 4060+`../quant-crypto`，无一行的真实（实况 WSL2+docker-ce、无 pwsh、GPU 不可见、旧仓不在本机），机器门禁全绿——结构门禁不校验环境事实。教训：**环境类契约写入文档前必须有当日实测记录**（内核/引擎版本/工具存在性/路径存在性），且"本机不可见"这类负事实（absence）也要成文，否则执行第一天撞墙。修复时把不可取证的项（旧仓路径）留为显式前置任务而非编造值。
 12. **合并 commit 的协议边界**（循环 4，D034+D037）：两 finding 共用同一编号编辑面时，拆分提交会人为制造"中间态编号错序"（恰是 D037 要修的缺陷）——此时合并为一 commit 并在 commit message 与 FIX-log 双处声明理由，属可追认偏差；判据是"拆分是否违背其中一条 finding 的修复目标本身"。
 
 ## 裁决分布与建议命中率
 
-- 裁决：accepted 44/44（29 + 循环 3 的 8 + 循环 4 的 7，含 N1/D032/R2-01），rejected 0，partial 0；建议命中率 ≈100%（D025-D031、D033-D038 修复均与建议一致或更完备，如 G6+§2.4 双落点、正控制提前到 M1、F002 范围澄清引注）。
+- 裁决：accepted 46/46（29 + 循环 3 的 8 + 循环 4 的 9，含 N1/D032/R2-01/R3-01），rejected 0，partial 0；建议命中率 ≈100%（D025-D031、D033-D038 修复均与建议一致或更完备，如 G6+§2.4 双落点、正控制提前到 M1、F002 范围澄清引注；循环 4 round-2 的闭环判定除外——已由重开轮纠正并沉淀为模式教训 #10）。
 - 协议偏差 3 项，裁决均接受并记录：① "一 finding 一 commit"改为按域分批 7 提交（循环 1；并行修复+同文件承载多条 finding，理由成立；bisect 粒度从 finding 级降为域级，后续修复轮应回到细粒度）；② 修复方在 7969a97 中翻 CURRENT 状态（协议规定检视人独占）——round-2 独立核对逐条证实翻状态与实际修复一致，予以追认；后续轮次状态翻权应仍由检视人执行（循环 3/4 已回归此惯例）；③ 循环 4 的 D034+D037 合并为一 commit（共用 tasks.md 编号编辑面，拆分将人为制造中间态错序，判据与记录见模式教训 12）。
 - origin 分布：原始设计 42 / fix-regression 2（N1、D032）。循环 3 自伤率 1/8 = 12.5%，循环 4 自伤率 0/7——但循环 4 round-2 抓到的是**首轮采样漏检**（R2-01）而非修复引入，证明 diff-only 复核对两类漏出（fix-regression 与 full-scan 采样遗漏）都有效，"1 轮闭环是假闭环"再次验证。
-- 存活轮数：循环 1/2 的 29 条全部首轮关闭；循环 3 的 D025-D031 存活 1 轮（round 3 → round 4 关闭），D032 当轮出现当轮关闭；循环 4 的 D033-D038 首轮关闭，R2-01 当轮出现当轮关闭。最长存活：2 轮以内，无滞留项。
+- 存活轮数：循环 1/2 的 29 条全部首轮关闭；循环 3 的 D025-D031 存活 1 轮（round 3 → round 4 关闭），D032 当轮出现当轮关闭；循环 4 的 D033-D038 首轮关闭，R2-01 当轮出现当轮关闭；R3-01/R3-02 重开轮当轮关闭（R3-01 自 round-2 带病闭环算起跨 1 轮）。最长存活：2 轮以内，无滞留项。
 - CI 终局门禁：循环 1/2 时无 git remote，客观不可执行（如实记录）；remote 配置后首推 8df5f9f（循环 3 修复轮末）已触发 CI——兑现补验义务。检视人 gh 认证后实测核对（2026-09-07）：run 34081647116（@ 8df5f9f）与 run 34081864805（@ 8116a0e）均 **success**，CI 终局门禁全绿，循环 3 正式闭环。循环 4 闭环提交推送后 CI 观测见循环 4 结论行。
 
 ## 残余观察项处置（2026-09-07 检视人闭环清理）
