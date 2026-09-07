@@ -50,3 +50,5 @@ issues_index:
 ## 5. 停止条件状态
 
 **本地停止条件全部满足（检视人终核）**：Medium/High 清零；pytest 25 passed、ruff 全绿、verify.py 六步全绿（检视人独立复跑 ×3）；检视人独立变异验证：check_doc_links 注入死链→exit 1→还原→exit 0；check_dep_pins 复现 C001 原始故障（pin 改 <9 vs 本地 9.0.3）→exit 1→字节级还原→exit 0。CI 最终门禁因无 git remote 客观不可执行（与 CURRENT-doc.md 同一情形），配置 remote 后首推补验。闭环收尾已完成：RETROSPECTIVE 回写 + 基线 re-baseline 至 7969a97。
+
+〔2026-09-07 终局复核补记：remote 已配置，首推 8df5f9f 触发 CI 且实测 success（run 34081647116；8116a0e 的 run 34081864805 亦 success）——上文「配置 remote 后首推补验」义务已兑现（记录见 RETROSPECTIVE「CI 终局门禁」节），本循环正式闭环。〕
