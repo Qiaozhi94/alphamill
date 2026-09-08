@@ -26,9 +26,15 @@ updated: 2026-09-08
 
 ## 1. 前置条件
 
+### 当前进展（2026-09-08）
+
+- 代码/配置迁移已完成并通过本地质量门：T006、T011、T012、T013 已完成。
+- 本机无独立显卡，`nvidia-smi` 不可见；按 FR-003/AC-002 采用 CPU 推理回退，T003 的 GPU 直通前置条件不满足但回退决策已完成。
+- 数据卷迁移、逐表对账、Kronos 上游代码与权重、容器联调、PowerShell 全链路和集成验收仍未完成，相关任务保持未勾选。
+
 - [ ] T001 (`NFR-001`): 旧仓双现场钉死与只读基线——①代码副本：`/root/projects/quant-crypto`（HEAD `d94f94f`，静态搬迁取用）；②运行现场＝数据源：qiaozhi-lt（Tailscale `100.98.228.125`，SSH `Georg@` 密钥 `~/.ssh/gp-to-lt`）`D:\Projects\quant-crypto`（含 `.env` 凭据与 Docker 卷 `quant-crypto_timescale_data`；实测 ohlcv_1m 6,504,359 行 / 11 表 / 5 连续聚合）——建立只读基线：本地全量备份 + 复核当前 commit — verify: 备份文件存在 + 旧仓 `git rev-parse HEAD` 记录（基线 `d94f94f`）
 - [ ] T002 (`FR-001`): 确认 WSL2 内 docker-ce、PowerShell 7（apt 安装）、Python 3.11+ 就绪且旧仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running
-- [ ] T003 (`FR-003`): GPU 直通检查——WSL2 内 `nvidia-smi` 应可见 RTX 4060（Windows 宿主装 NVIDIA 驱动并启用 WSL GPU 直通）；确认不可行时记录 CPU 推理回退决策（AC-002 冒烟不阻塞） — verify: nvidia-smi 输出存档，或 CPU 回退决策写入本任务备注
+- [x] T003 (`FR-003`): GPU 直通检查——本机无独立显卡，WSL2 内 `nvidia-smi` 不可见 RTX 4060；已记录 CPU 推理回退决策（AC-002 冒烟不阻塞） — verify: 无 GPU 实测，CPU 回退决策见本节进展记录与 `spec.md` §4 FR-003
 
 ## 2. 实现任务
 

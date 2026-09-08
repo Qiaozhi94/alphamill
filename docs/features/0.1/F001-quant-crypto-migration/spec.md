@@ -200,6 +200,7 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 | TimescaleDB 去留 | 阶段 A 保留（随编排迁入） | 零风险接续；阶段 B 另立 feature | F-后续评估 |
 | 数据卷直迁失败 | 回退 pg_dump/restore | 两种方案覆盖主流失败模式 | 迁移当天决定 |
 | HF 下载受网络限制 | 允许复制旧仓 models/ 已有权重 | 权重是静态资产，复制等价 | 无 |
+| 本机无独立显卡 | AC-002 采用 CPU 推理回退；GPU 直通不作为迁移完成前置条件 | `nvidia-smi` 实测不可见，且当前主机无独立 GPU | 后续具备 GPU 的运行环境再做性能验证 |
 
 ## 8. 待确认问题
 
