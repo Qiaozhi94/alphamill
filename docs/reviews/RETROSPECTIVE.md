@@ -92,6 +92,27 @@
 | R3-01 | T004 数据源不可达且未定义：六路探测全否（本机无 Docker Desktop/无原生 PG/无其他发行版/5432 全闭/无备份痕迹），round-2 以「承认未验」状态闭环过早 | 高 | 正确性 | 根因 | fix-regression（D035 数据面残留） | fixed | 数据源实证钉死：qiaozhi-lt（Tailscale `100.98.228.125`，SSH `Georg@` 密钥 `~/.ssh/gp-to-lt`）`D:\Projects\quant-crypto` Docker 卷 `quant-crypto_timescale_data`（实测 6,504,359 行/11 表/5 caggs）；SSH 流式 pg_dump 路径（免开 5432 防火墙）；design §0/§3、tasks T001/T004、spec §7、migration-plan item 1 五处同步 | verify.py 文档门禁 | 3 | 3 | unpinned-data-source |
 | R3-02 | T012/T013/T014 任务引用 SC-003 偏离 tasks 模板的「US/需求/AC ID」枚举 | 低 | 质量 | 症状 | fix-regression（D034/R2-01 修复引入） | fixed | tasks §0 显式扩展条款：SC-xxx 为合法任务引用锚 + 理由记录（泛化属 F002/M1，无对应 FR） | validate_spec_lifecycle | 3 | 3 | template-id-drift |
 
+## 循环 5：目标重构文档检视
+
+- report_type: doc-review | round: 1（full-scan）→ 2（diff-only，未验证即误报闭环）→ 3（回到基线重做 + diff-only 复核）| 状态: 闭环
+- 日期：2026-09-07 → 2026-09-08 | 基线：f6cd6a1 → 终基线 d2bb055（8 个 finding 修复提交 + 2 个 fix-regression 补充提交；D047 的 FIX-log 为 local-only 过程证据）
+- 检视人：Sisyphus；修复方：项目所有者（round-3 开工前独立核对 round-2 声明）
+- 范围：目标重构后的 PRD / 架构 / ADR-0001/0003/0004 / 三入口文档 / 检视产物生命周期 / 统一门禁可执行性。
+- 结论：共 5 High / 2 Medium / 3 Low，D039–D048 全数关闭。round-2 对 D039–D043 的 fixed 声明经工作树核对证伪；round-3 回到 f6cd6a1 重做后逐项复核，并在轮末门禁再捕获 2 处 fix-regression（功效论证引语、命令扫描器自引用），均已修复。本地 `python3 tools/verify.py` 七步全绿（40 passed）；GitHub Actions run 34133866296（@ d2bb055）success，正式满足停止条件。
+
+| ID | 一句话 | 严重度 | 分类 | 根因 | 来源 | 状态 | 修复方案（摘要） | 回归测试 | 首现轮 | 关闭轮 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| D039 | ADR-0001 M2 漏斗顺序与组合冻结契约冲突 | 高 | 正确性 | 根因 | fix-regression | fixed | 重做为「选择期 → 组合门/冻结 → 留出门 → 最终确认 → 部署前复核」 | 链接门 + 三处漏斗对照 | 1 | 3 | cross-doc-contract-drift |
+| D040 | PRD 漏斗与 FR3.2/3.4/3.5 不对齐 | 中 | 正确性 | 根因 | 原始编写 | fixed | 成本门前置，补去重/多重检验、组合冻结和样本量三级裁决 | 链接门 + 三处漏斗对照 | 1 | 3 | cross-doc-contract-drift |
+| D041 | ADR-0003 决策 2 缺 30–69 笔临时 PASS 档 | 低 | 正确性 | 症状 | 规格漂移 | fixed | 改为三级口径并同步功效论证引语 | 链接门 + 四处口径检索 | 1 | 3 | — |
+| D042 | 架构目录树 holdout_gate.py 仍是旧的二级口径 | 低 | 质量 | 症状 | 规格漂移 | fixed | 注释改为三级裁决并引用 FR3.5 | 链接门 + 注释复核 | 1 | 3 | — |
+| D043 | CLAUDE/README/docs README 的四平面命名不一致 | 低 | 质量 | 症状 | 规格漂移 | fixed | 三入口统一四平面全称 | 链接门 + 入口措辞检索 | 1 | 3 | — |
+| D044 | CURRENT 过程稿被反向放行且文档声明应入库 | 高 | 正确性 | 根因 | 流程缺口 | fixed | 仅放行 RETROSPECTIVE，同步 CLAUDE/SOP，增加 gitignore 契约测试 | 变异验证 + test_review_artifacts_gitignore | 2 | 3 | review-artifact-lifecycle-drift |
+| D045 | 组合门/PortfolioDef 冻结同时归属两个平面 | 中 | 正确性 | 根因 | 原始编写 | fixed | 冻结职责唯一归策略与执行面，同步面间箭头 | 链接门 + 平面职责复核 | 2 | 3 | cross-plane-ownership-drift |
+| D046 | 文档唯一门禁命令在目标环境不可执行 | 高 | 正确性 | 根因 | 原始编写 | fixed | 全仓统一 `python3 tools/verify.py`，ruff 改为 `sys.executable -m`，增命令契约测试 | 变异验证 + test_doc_gate_command | 2 | 3 | documented-command-not-runnable |
+| D047 | 修复缺 FIX-log、原子提交和可核验哈希 | 高 | 测试覆盖 | 根因 | 流程缺口 | fixed | 补齐 local-only FIX-log，逐条核对 f6cd6a1..d2bb055 提交证据 | git log 独立核验 | 2 | 3 | review-evidence-missing |
+| D048 | round-2 将未落地或错误落地的 D039–D043 标为 fixed | 高 | 正确性 | 根因 | 流程缺口 | fixed | 工作树证伪后从基线重做，fixed 翻转改为必须核对 diff 与测试 | baseline-vs-claim diff 核对 | 3 | 3 | marked-fixed-not-implemented |
+
 ## 模式教训
 
 1. **spec-internal-contradiction 五次复现**：D006（PRD 内部自相矛盾）、N1（PRD↔架构跨文档矛盾）、D032（G3↔FR4.6，由 D031 修复引入）、D033（migration-plan §五验收↔spec 非目标）、D036（AC-001↔design §3↔FR-001 三方口径）共用同一模式——多文档体系里"同一语义多处表述"必然漂移，且新条款引入时最容易砸中旧条款。循环 4 两条（D033/D036）都在 F001 三件套内部，印证"验收清单+范围声明"是漂移重灾区。防线已部分门禁化（check_doc_links 抓死链），但语义级一致性仍靠检视；后续同类风险点：cost_verdict 口径、30/69 笔数字、§2.4 检查点与 G1/G6 的触发器口径、FR6.3 漏斗分级名（PRD/ADR-0001 两处表述须同步改）。
@@ -103,22 +124,25 @@
 7. **open-ended-exit-no-clock**（D025）：无时钟的出口条款会被"系统正确工作"叙事无限续期——任何"等首个 X 出现"型验收都必须配触发器时钟与预注册分支，独立性口径要写明"测量而非名义计数"。
 8. **战略层问题域单独成轮**（循环 3）：D025-D031 全部是"计划接触现实后活不活"的问题，症状一致（系统绿灯运转但零存活），与循环 1 的"文档对不对/全不全"是不同问题域——两类检视交替扫，比混在同一轮更有效；战略层的修复多数是"预注册条款"（检查点/漏斗/边界/可弃置声明），特征是现在改半天、开工后改返工。
 9. **archive-without-secret-scan**（2026-09-07 事件，非检视循环内发现）：对话归档提交把会话转录中带 Bearer 凭证的 curl 命令原样入库并推送（火山 Ark API key，私有仓暴露约 1 小时，GitHub 侧检出告警）。处置：key 轮换 + git filter-repo 历史重写 + force push（21c95cd→c6ecf29、c3bad7b→3e4a260，早期哈希不变）。防线已门禁化：verify.py 第 4 步 check_secrets.py（uuid-bearer/apikey、github-token、sk-、AKIA、PEM 六类形态）+ test_repo_tree_self_scan_clean 双层拦截。教训：转录/归档类内容不是惰性文档——会话里执行过的带凭证命令会被原样记录；OpenCode 本地库仍含旧 key 串，将来重导归档会被门禁拦下，届时需先做导出侧脱敏。
-10. **closure-without-verification**（循环 4 round-2→3）：round-2 把「数据源可达性未验、仅文档承认」当作已知项计入闭环——重开审计六路探测全部落空，T004（红线资产迁移任务）按当时文档根本无法开工。教训：①任何「已知未验」的开放点不得计入停止条件，闭环只认实测；②环境事实必须 hostname/卷/行数级实测，不能引用旧 skill 设备表（本开发机实为 qiaozhi-gp 而非 qiaozhi-lt——设备表随机器迁移过期）；③「用户口头指认」也要复核（qiaozhi-lt 指认正确，但正确的原因是另一台机器持有卷——实测才发现本机不是它）。
-10. **spec-tasks-traceability-gap：清单验收只抽查不普查**（D034+R2-01，循环 4）：SC-003 要求 9 项全勾，首轮检视只点名了缺任务的 item 5/8，修复方照单补齐——但 item 9（user_data）同样无任务，round-2 diff-only 才暴露。教训：**凡是"清单全覆盖"型 finding（SC 要求 N 项全 X），修复时必须对清单全集逐项重新核对，不能只修检视人点名的子集**——检视人点名的是样本不是全集，照单全收会把漏检从检视方转移给修复方再一起背。round-2 抓到的是"首轮漏检"而非"修复引入"，证明 diff-only 复核对采样遗漏同样有效。
-11. **environment-contract-drift：环境假设未实测就成文**（D035，循环 4）：三件套+CLAUDE.md 全线假设 Windows 11+Docker Desktop+RTX 4060+`../quant-crypto`，无一行的真实（实况 WSL2+docker-ce、无 pwsh、GPU 不可见、旧仓不在本机），机器门禁全绿——结构门禁不校验环境事实。教训：**环境类契约写入文档前必须有当日实测记录**（内核/引擎版本/工具存在性/路径存在性），且"本机不可见"这类负事实（absence）也要成文，否则执行第一天撞墙。修复时把不可取证的项（旧仓路径）留为显式前置任务而非编造值。
-12. **合并 commit 的协议边界**（循环 4，D034+D037）：两 finding 共用同一编号编辑面时，拆分提交会人为制造"中间态编号错序"（恰是 D037 要修的缺陷）——此时合并为一 commit 并在 commit message 与 FIX-log 双处声明理由，属可追认偏差；判据是"拆分是否违背其中一条 finding 的修复目标本身"。
+10. **closure-without-verification / marked-fixed-not-implemented**（循环 4 round-2→3；循环 5 D048）：循环 4 把「数据源可达性未验」计入闭环；循环 5 round-2 又将未落地或错序落地的 D039–D043 标为 fixed。两者共同证明：闭环不认口头指认、FIX-log 自述或「已知未验」，只认目标环境实测、工作树 diff、回归测试和可核验提交。fixed 翻转前必须由检视人独立核对这四类物证。
+11. **spec-tasks-traceability-gap：清单验收只抽查不普查**（D034+R2-01，循环 4）：SC-003 要求 9 项全勾，首轮检视只点名了缺任务的 item 5/8，修复方照单补齐——但 item 9（user_data）同样无任务，round-2 diff-only 才暴露。教训：**凡是"清单全覆盖"型 finding（SC 要求 N 项全 X），修复时必须对清单全集逐项重新核对，不能只修检视人点名的子集**——检视人点名的是样本不是全集，照单全收会把漏检从检视方转移给修复方再一起背。round-2 抓到的是"首轮漏检"而非"修复引入"，证明 diff-only 复核对采样遗漏同样有效。
+12. **environment-contract-drift：环境假设未实测就成文**（D035，循环 4）：三件套+CLAUDE.md 全线假设 Windows 11+Docker Desktop+RTX 4060+`../quant-crypto`，无一行的真实（实况 WSL2+docker-ce、无 pwsh、GPU 不可见、旧仓不在本机），机器门禁全绿——结构门禁不校验环境事实。教训：**环境类契约写入文档前必须有当日实测记录**（内核/引擎版本/工具存在性/路径存在性），且"本机不可见"这类负事实（absence）也要成文，否则执行第一天撞墙。修复时把不可取证的项（旧仓路径）留为显式前置任务而非编造值。
+13. **合并 commit 的协议边界**（循环 4，D034+D037）：两 finding 共用同一编号编辑面时，拆分提交会人为制造"中间态编号错序"（恰是 D037 要修的缺陷）——此时合并为一 commit 并在 commit message 与 FIX-log 双处声明理由，属可追认偏差；判据是"拆分是否违背其中一条 finding 的修复目标本身"。
+14. **cross-doc-contract-drift：全局契约改写必须按语义全集复核**（D039–D043/D045，循环 5）：漏斗顺序、样本量口径、四平面命名和职责在 PRD/架构/ADR/入口文档多处投影，只修某个点会立即造成新的 fix-regression。此类修复的验收单位应是「语义的全部表示」，不是单文件 diff。
+15. **流程契约也要做可执行回归**（D044/D046，循环 5）：「过程稿不入库」和「统一命令可运行」不能只写在 SOP；前者用 gitignore 契约测试，后者用目标 shell 实跑与命令扫描器固化，且都应做变异验证确认门禁能真正变红。
 
 ## 裁决分布与建议命中率
 
-- 裁决：accepted 46/46（29 + 循环 3 的 8 + 循环 4 的 9，含 N1/D032/R2-01/R3-01），rejected 0，partial 0；建议命中率 ≈100%（D025-D031、D033-D038 修复均与建议一致或更完备，如 G6+§2.4 双落点、正控制提前到 M1、F002 范围澄清引注；循环 4 round-2 的闭环判定除外——已由重开轮纠正并沉淀为模式教训 #10）。
-- 协议偏差 3 项，裁决均接受并记录：① "一 finding 一 commit"改为按域分批 7 提交（循环 1；并行修复+同文件承载多条 finding，理由成立；bisect 粒度从 finding 级降为域级，后续修复轮应回到细粒度）；② 修复方在 7969a97 中翻 CURRENT 状态（协议规定检视人独占）——round-2 独立核对逐条证实翻状态与实际修复一致，予以追认；后续轮次状态翻权应仍由检视人执行（循环 3/4 已回归此惯例）；③ 循环 4 的 D034+D037 合并为一 commit（共用 tasks.md 编号编辑面，拆分将人为制造中间态错序，判据与记录见模式教训 12）。
-- origin 分布：原始设计 42 / fix-regression 2（N1、D032）。循环 3 自伤率 1/8 = 12.5%，循环 4 自伤率 0/7——但循环 4 round-2 抓到的是**首轮采样漏检**（R2-01）而非修复引入，证明 diff-only 复核对两类漏出（fix-regression 与 full-scan 采样遗漏）都有效，"1 轮闭环是假闭环"再次验证。
-- 存活轮数：循环 1/2 的 29 条全部首轮关闭；循环 3 的 D025-D031 存活 1 轮（round 3 → round 4 关闭），D032 当轮出现当轮关闭；循环 4 的 D033-D038 首轮关闭，R2-01 当轮出现当轮关闭；R3-01/R3-02 重开轮当轮关闭（R3-01 自 round-2 带病闭环算起跨 1 轮）。最长存活：2 轮以内，无滞留项。
-- CI 终局门禁：循环 1/2 时无 git remote，客观不可执行（如实记录）；remote 配置后首推 8df5f9f（循环 3 修复轮末）已触发 CI——兑现补验义务。检视人 gh 认证后实测核对（2026-09-07）：run 34081647116（@ 8df5f9f）与 run 34081864805（@ 8116a0e）均 **success**，CI 终局门禁全绿，循环 3 正式闭环。循环 4 闭环提交推送后 CI 观测见循环 4 结论行。
+- 裁决：accepted 56/56（29 + 循环 3 的 8 + 循环 4 的 9 + 循环 5 的 10，含 N1/D032/R2-01/R3-01/D048），rejected 0，partial 0；建议命中率 ≈100%。循环 4 round-2 与循环 5 round-2 的过早/false 闭环声明均已由重开复核纠正，沉淀为模式教训 #10。
+- 协议偏差 3 项，裁决均接受并记录：① "一 finding 一 commit"改为按域分批 7 提交（循环 1；并行修复+同文件承载多条 finding，理由成立；bisect 粒度从 finding 级降为域级，后续修复轮应回到细粒度）；② 修复方在 7969a97 中翻 CURRENT 状态（协议规定检视人独占）——round-2 独立核对逐条证实翻状态与实际修复一致，予以追认；后续轮次状态翻权应仍由检视人执行（循环 3/4 已回归此惯例）；③ 循环 4 的 D034+D037 合并为一 commit（共用 tasks.md 编号编辑面，拆分将人为制造中间态错序，判据与记录见模式教训 13）。
+- origin 分布：循环 1–4 主体为原始设计/编码，已记录 fix-regression 包括 N1、D032 与 R3-01；循环 5 新增 3 条原始编写、3 条规格漂移、3 条流程缺口、1 条 fix-regression，复核另抓到 2 处当轮 fix-regression 并在闭环前清零。
+- 存活轮数：循环 1/2 的 29 条全部首轮关闭；循环 3 的 D025–D031 存活 1 轮，D032 当轮关闭；循环 4 的 D033–D038 首轮关闭，R2-01/R3-01/R3-02 均在发现或重开轮关闭；循环 5 的 D039–D043 经 2 轮后关闭，D044–D047 经 1 轮关闭，D048 当轮关闭。最长存活 2 轮，无滞留项。
+- CI 终局门禁：循环 1/2 时无 git remote，客观不可执行（如实记录）；remote 配置后循环 3/4 闭环提交均已观测为绿。循环 5 终基线 d2bb055 对应 GitHub Actions run 34133866296（2026-09-07T14:36Z）**success**，于 2026-09-08 正式确认闭环。
 
-## 残余观察项处置（2026-09-07 检视人闭环清理）
+## 残余观察项与闭环处置
 
 - N2：ADR-0003 第 6 行机器路径已改为仓库名引用（见本轮清理提交）。
 - FIX-log 计数笔误：FIX-log 已按闭环协议删除（local-only 过程稿，内容已沉淀于本文件与 CURRENT 终态）；勘误记录留存：test_check_dep_pins 实为 9 tests。
 - 终局复核补记（2026-09-07 12:55，检视人独立审计，非新开轮次）：① CURRENT-code.md §5 已同步「首推补验」兑现记录（原文停留在"无 remote 不可执行"时点，与本文件闭环状态不一致）；② 闭环提交 0242075 自身触发的 CI run 因本机 gh token 失效 + 匿名 API 限流/断连未及观测——该提交仅触及 docs/reviews/ 两个过程文档，本地同款门禁全绿（检视人复验），ci.yml 与两次绿 run（34081647116/34081864805）之间无差异，风险≈0；已补看（2026-09-07 12:59）：34084533920（@0242075）与 34085129903（@cb0720e）均 success，残余项消解。审计另抽验 D025-D032 八条修复实物（PRD G6/§2.4/FR2.1/FR4.6/FR6.3、架构 §4.2、ADR-0001/0003/0004 补强节）均在位且交叉自洽。
 - 终态清理（2026-09-07 12:59，检视人执行）：三循环全部闭环、CI 全绿后，按闭环协议删除 docs/reviews/CURRENT-doc.md 与 CURRENT-code.md——过程稿生命周期终点，完整 issue 表与模式教训已沉淀于本文件；本仓惯例（CLAUDE.md/.gitignore 例外）下它们随循环进行而入库、随闭环而删除。
+- 循环 5 终态清理（2026-09-08）：D039–D048 完整证据、模式教训和 CI 终局结果已迁入本文件；按协议删除 local-only `docs/reviews/CURRENT-doc.md` 与 `docs/reviews/FIX-log.md`，未留任何开放 finding。
