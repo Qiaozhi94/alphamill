@@ -1,0 +1,102 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: quant-timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-quant}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me}
+      POSTGRES_DB: ${DB_NAME:-quant}
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ../db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-quant} -d ${DB_NAME:-quant}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks: [alphamill]
+
+  data-collector:
+    build:
+      context: ..
+      dockerfile: deployment/data-collector.Dockerfile
+    container_name: quant-data-collector
+    restart: unless-stopped
+    environment:
+      DB_HOST: timescaledb
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-quant}
+      DB_PASSWORD: ${DB_PASSWORD:-change-me}
+      DB_NAME: ${DB_NAME:-quant}
+      EXCHANGES: ${EXCHANGES:-okx}
+      SYMBOLS: ${SYMBOLS:-BTC/USDT,ETH/USDT}
+      TIMEFRAMES: ${TIMEFRAMES:-1m}
+      POLL_SECONDS: ${POLL_SECONDS:-30}
+      FETCH_LIMIT: ${FETCH_LIMIT:-5}
+    depends_on:
+      timescaledb: {condition: service_healthy}
+    networks: [alphamill]
+
+  kronos-signal:
+    build:
+      context: ..
+      dockerfile: deployment/kronos-service.Dockerfile
+    container_name: quant-kronos-signal
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      DB_HOST: timescaledb
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-quant}
+      DB_PASSWORD: ${DB_PASSWORD:-change-me}
+      DB_NAME: ${DB_NAME:-quant}
+      KRONOS_USE_REAL_MODEL: ${KRONOS_USE_REAL_MODEL:-false}
+      KRONOS_MODEL: ${KRONOS_MODEL:-models/Kronos-base}
+      KRONOS_TOKENIZER: ${KRONOS_TOKENIZER:-models/Kronos-Tokenizer-base}
+      KRONOS_DEVICE: ${KRONOS_DEVICE:-cpu}
+    depends_on:
+      timescaledb: {condition: service_healthy}
+    networks: [alphamill]
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: quant-grafana
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-change-me}
+      DB_USER: ${DB_USER:-quant}
+      DB_PASSWORD: ${DB_PASSWORD:-change-me}
+      DB_NAME: ${DB_NAME:-quant}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      timescaledb: {condition: service_healthy}
+    networks: [alphamill]
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: quant-prometheus
+    restart: unless-stopped
+    ports: ["9090:9090"]
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on: [grafana]
+    networks: [alphamill]
+
+volumes:
+  timescale_data:
+  grafana_data:
+  prometheus_data:
+
+networks:
+  alphamill:

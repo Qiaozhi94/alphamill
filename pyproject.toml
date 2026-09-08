@@ -8,7 +8,14 @@ version = "0.1.0"
 description = "以因子假设吞吐量为核心的加密量化研究系统：程序化挖掘 → 统一评测 → 严格留出门 → Freqtrade 执行"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "ccxt>=4.4,<5",
+  "fastapi>=0.115,<1",
+  "pandas>=2.2,<3",
+  "psycopg2-binary>=2.9,<3",
+  "pydantic>=2.10,<3",
+  "uvicorn>=0.34,<1",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -28,8 +35,8 @@ packages = ["src/alphamill"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
 testpaths = ["tests"]
-# 让测试可以直接 `from tools import ...`（tests/ 无 __init__.py，pytest 不含仓库根）。
-pythonpath = ["."]
+# 让测试可以直接导入门禁工具和 src 布局下的产品包。
+pythonpath = [".", "src"]
 
 [tool.ruff]
 line-length = 100
@@ -40,3 +47,9 @@ extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
+
+# F001 先原样迁移旧仓评测脚本；泛化改造和 lint 收紧属于 F002/M1。
+# 这些文件仍须通过 import/运行时验证，不在本阶段重写历史报告生成代码。
+[tool.ruff.lint.per-file-ignores]
+"src/alphamill/factor_factory/bench/*.py" = ["E501", "B023", "B905"]
+"src/alphamill/validation/validate_*.py" = ["E501"]

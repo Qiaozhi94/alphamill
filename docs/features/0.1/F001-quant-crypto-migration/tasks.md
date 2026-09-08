@@ -6,7 +6,7 @@ related_features: []
 topics: [migration, infra]
 doc_kind: tasks
 created: 2026-09-06
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 # F001：quant-crypto 资产清算迁移 - 任务
@@ -39,14 +39,14 @@ updated: 2026-09-07
 
 ### Phase 2：代码与服务搬迁
 
-- [ ] T006 [P] (`FR-002`): 采集器四模块迁入 `src/alphamill/data_bridge/collector/` 并并入 pyproject 依赖 — verify: `python -c "import"` 冒烟
+- [x] T006 [P] (`FR-002`): 采集器四模块迁入 `src/alphamill/data_bridge/collector/` 并并入 pyproject 依赖 — verify: `.venv/bin/python` 四模块 import smoke 通过；新增 `symbol_manager` 统一符号解析并有 6 个单元测试
 - [ ] T007 [P] (`FR-003`): 上游 Kronos fresh clone + pin commit + HF 权重下载（或旧仓 models/ 复制） — verify: 权重文件存在 + commit hash 记录于 VENDORED 说明
 - [ ] T008 (`FR-003`, `AC-002`): kronos-signal 薄壳迁入 `src/alphamill/kronos_service/` 并指向新 DB 与上游代码路径 — verify: `tests/integration/test_f001_kronos_smoke.py`
 - [ ] T009 [P] (`FR-004`): 风控三件套迁入 `src/alphamill/freqtrade_bridge/risk/` — verify: 策略 import 冒烟
 - [ ] T010 [P] (`FR-005`): Grafana/Prometheus 配置迁入 `monitoring/` 且数据源指向新 DB — verify: 容器启动无配置错误
-- [ ] T011 [P] (`FR-006`): docker-compose/.env 模板/verify 脚本迁入 `deployment/`（.env 人工搬运密钥，不进 git） — verify: `docker compose config` 无报错
-- [ ] T012 [P] (`SC-003`): 评测器/门禁脚本原样物理迁移（kronos_rankic_eval、kronos_ic_decay_eval、independent_cross_backtest、validate_*_holdout → `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/`；泛化改造属 F002/M1，不在本 feature） — verify: 迁入文件逐一 `python -c "import"` 冒烟通过
-- [ ] T013 [P] (`SC-003`): 宇宙发现脚本迁入 `scripts/`（discover_okx_swap_universe.py、download_okx_swap_1h.ps1，无改造） — verify: 文件存在且 `python scripts/discover_okx_swap_universe.py --help` 退出码 0
+- [x] T011 [P] (`FR-006`): docker-compose/.env 模板/verify 脚本迁入 `deployment/`（.env 人工搬运密钥，不进 git） — verify: `docker compose -f deployment/docker-compose.yml config` 无报错；PowerShell 脚本已迁入并固定 compose 文件路径
+- [x] T012 [P] (`SC-003`): 评测器/门禁脚本原样物理迁移（kronos_rankic_eval、kronos_ic_decay_eval、independent_cross_backtest、validate_*_holdout → `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/`；泛化改造属 F002/M1，不在本 feature） — verify: `.venv/bin/python` 迁入模块逐一 import smoke 通过
+- [x] T013 [P] (`SC-003`): 宇宙发现脚本迁入 `scripts/`（discover_okx_swap_universe.py、download_okx_swap_1h.ps1，无改造） — verify: `.venv/bin/python scripts/discover_okx_swap_universe.py --help` 退出码 0
 - [ ] T014 [P] (`SC-003`): Freqtrade user_data 策略与 config 迁入 `freqtrade/user_data/`（kronos_cache / feather 行情按 migration-plan.md item 9 git 边界留本地，不进 git） — verify: 策略与 config 文件存在且策略 python 文件 import 冒烟通过
 - [ ] T015 [P] (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七） — verify: 手动触发一次同步，NAS 端产物齐全
 

@@ -1,0 +1,152 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0 }] }, "unit": "currencyUSD" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT profit_all_abs FROM dryrun_runtime_snapshots ORDER BY time DESC LIMIT 1;", "refId": "A" }],
+      "title": "Dry-run PnL",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "id": 2,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT trade_count FROM dryrun_runtime_snapshots ORDER BY time DESC LIMIT 1;", "refId": "A" }],
+      "title": "Trades",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "id": 3,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT winrate FROM dryrun_runtime_snapshots ORDER BY time DESC LIMIT 1;", "refId": "A" }],
+      "title": "Win Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "id": 4,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT max_drawdown_abs FROM dryrun_runtime_snapshots ORDER BY time DESC LIMIT 1;", "refId": "A" }],
+      "title": "Max Drawdown",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "id": 5,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT open_trades FROM dryrun_runtime_snapshots ORDER BY time DESC LIMIT 1;", "refId": "A" }],
+      "title": "Open Positions",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "id": 6,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT EXTRACT(EPOCH FROM (NOW() - MAX(time))) AS snapshot_lag_seconds FROM dryrun_runtime_snapshots;", "refId": "A" }],
+      "title": "Snapshot Lag",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 7,
+      "options": { "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [{ "format": "time_series", "rawQuery": true, "rawSql": "SELECT time AS time, profit_all_abs AS value FROM dryrun_runtime_snapshots WHERE $__timeFilter(time) ORDER BY time;", "refId": "A" }],
+      "title": "Dry-run PnL History",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 8,
+      "options": { "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [{ "format": "time_series", "rawQuery": true, "rawSql": "SELECT time AS time, symbol AS metric, expected_return AS value FROM signals_log WHERE $__timeFilter(time) AND source='kronos' ORDER BY time;", "refId": "A" }],
+      "title": "Kronos Expected Return",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "id": 9,
+      "options": { "cellHeight": "sm", "showHeader": true },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT symbol, signal_type, confidence, ROUND((expected_return::numeric * 100), 4) AS expected_return_pct, latest_candle FROM signals_log WHERE time=(SELECT MAX(time) FROM signals_log) ORDER BY symbol;", "refId": "A" }],
+      "title": "Latest Kronos Signals",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "id": 10,
+      "options": { "cellHeight": "sm", "showHeader": true },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT symbol, direction, open_date, open_rate, current_rate, profit_abs, profit_ratio, stake_amount FROM dryrun_open_positions WHERE snapshot_time=(SELECT MAX(snapshot_time) FROM dryrun_open_positions) ORDER BY symbol;", "refId": "A" }],
+      "title": "Current Open Positions",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 20 },
+      "id": 11,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT CORR(expected_return, realized_return_60m) AS rolling_ic FROM signals_log WHERE source='kronos' AND evaluated_at >= NOW() - INTERVAL '7 days';", "refId": "A" }],
+      "title": "Kronos Rolling IC (7d)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 20 },
+      "id": 12,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS evaluated_signals FROM signals_log WHERE source='kronos' AND evaluated_at >= NOW() - INTERVAL '7 days';", "refId": "A" }],
+      "title": "Evaluated Signals (7d)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "id": 13,
+      "options": { "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "format": "time_series", "rawQuery": true, "rawSql": "SELECT latest_candle AS time, symbol || ' predicted' AS metric, expected_return AS value FROM signals_log WHERE $__timeFilter(latest_candle) AND source='kronos' AND realized_return_60m IS NOT NULL UNION ALL SELECT latest_candle AS time, symbol || ' realized' AS metric, realized_return_60m AS value FROM signals_log WHERE $__timeFilter(latest_candle) AND source='kronos' AND realized_return_60m IS NOT NULL ORDER BY time;", "refId": "A" }
+      ],
+      "title": "Kronos Predicted vs Realized 60m Return",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 40,
+  "tags": ["quant", "crypto", "dry-run"],
+  "templating": { "list": [] },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Quant Crypto Dry-run Monitoring",
+  "uid": "quant-crypto-dryrun",
+  "version": 1,
+  "weekStart": ""
+}
