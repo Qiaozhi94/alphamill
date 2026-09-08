@@ -2,13 +2,13 @@
 kind: feature
 id: F001
 version: "0.1"
-status: draft
+status: ready-for-development
 gate_version: 1
 related_features: []
 topics: [migration, infra]
 doc_kind: spec
 created: 2026-09-06
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 # F001：quant-crypto 资产清算迁移
