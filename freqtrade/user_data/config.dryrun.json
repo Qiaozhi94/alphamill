@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.freqtrade.io/schema.json",
+  "fiat_display_currency": "",
+  "api_server": {
+    "jwt_secret_key": "alphamill-dryrun-local-jwt-secret-0001",
+    "ws_token": "alphamill-dryrun-local-ws-token-0001"
+  },
+  "exchange": {
+    "name": "binance",
+    "key": "",
+    "secret": "",
+    "password": "",
+    "ccxt_config": {
+      "enableRateLimit": true,
+      "httpsProxy": "http://10.31.0.254:7890"
+    },
+    "ccxt_async_config": {
+      "enableRateLimit": true,
+      "httpsProxy": "http://10.31.0.254:7890"
+    }
+  }
+}
