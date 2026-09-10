@@ -56,7 +56,7 @@ updated: 2026-09-10
 
 - [x] T006 [P] (`FR-002`): 采集器四模块迁入 `src/alphamill/data_bridge/collector/` 并并入 pyproject 依赖 — verify: `.venv/bin/python` 四模块 import smoke 通过；新增 `symbol_manager` 统一符号解析并有 6 个单元测试
 - [x] T007 [P] (`FR-003`): 上游 Kronos fresh clone + pin commit + HF 权重下载（或旧仓 models/ 复制） — verify: 权重文件存在 + commit hash 记录于 VENDORED 说明（2026-09-10 实测：clone pin `67b630e`，`models/Kronos-base` 391MB + `models/Kronos-Tokenizer-base` 16MB safetensors 就位，记录见 `vendor/VENDORED.md`；旧仓 models/ 已灭失，走 HF 主路径）
-- [ ] T008 (`FR-003`, `AC-002`): kronos-signal 薄壳迁入 `src/alphamill/kronos_service/` 并指向新 DB 与上游代码路径 — verify: `tests/integration/test_f001_kronos_smoke.py`
+- [x] T008 (`FR-003`, `AC-002`): kronos-signal 薄壳迁入 `src/alphamill/kronos_service/` 并指向新 DB 与上游代码路径 — verify: `tests/integration/test_f001_kronos_smoke.py`（2026-09-10 实测 2 passed：真实 Kronos-base CPU 推理单次 1.76s，`KRONOS_USE_REAL_MODEL=true` + `KRONOS_REPO_PATH=vendor/Kronos` + 本机 8002 端口；宿主真实推理额外依赖 torch/cpu + einops + safetensors，见 `vendor/VENDORED.md`。compose 容器实例默认 mock 模式，权重挂载随 T017 全链路联调评估）
 - [x] T009 [P] (`FR-004`): 风控三件套迁入 `src/alphamill/freqtrade_bridge/risk/` — verify: 三模块 import 冒烟通过（2026-09-10 实测 CircuitBreaker/CorrelationGuard/DrawdownGuard）
 - [x] T010 [P] (`FR-005`): Grafana/Prometheus 配置迁入 `monitoring/` 且数据源指向新 DB — verify: 容器启动无配置错误（2026-09-10 实测 grafana/prometheus/kronos-signal 容器 Up、HTTP 健康端点全 200、日志无配置错误）
 - [x] T011 [P] (`FR-006`): docker-compose/.env 模板/verify 脚本迁入 `deployment/`（.env 人工搬运密钥，不进 git） — verify: `docker compose -f deployment/docker-compose.yml config` 无报错；PowerShell 脚本已迁入并固定 compose 文件路径

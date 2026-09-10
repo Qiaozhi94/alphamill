@@ -52,7 +52,7 @@ updated: 2026-09-10
 
 ### API / CLI / Adapter Contract
 
-Kronos HTTP API 契约不变：`GET /health`、`POST /predict/{symbol}`、`POST /predict_batch`。Freqtrade 容器经 `host.docker.internal` 访问薄壳。verify 脚本契约：单命令、退出码 0/非 0。
+Kronos HTTP API 契约不变：`GET /health`、`GET /predict/{symbol}`、`POST /predict_batch`（2026-09-10 以旧仓 server.py 实际路由勘正：predict 为 GET）。Freqtrade 容器经 `host.docker.internal` 访问薄壳。verify 脚本契约：单命令、退出码 0/非 0。
 
 符号映射契约前置：本 feature 对 pair 命名原样直迁、不改名；M1 数据桥须按集成文档 §2.2
 产出 `data_bridge/symbol_map.csv`（湖内 pair ↔ Freqtrade pair，按需附 Vibe symbol）并锁定 UTC。
