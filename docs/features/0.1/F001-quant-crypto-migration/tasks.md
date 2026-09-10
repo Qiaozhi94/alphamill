@@ -65,7 +65,7 @@ updated: 2026-09-10
 - [x] T012 [P] (`SC-003`): 评测器/门禁脚本原样物理迁移（kronos_rankic_eval、kronos_ic_decay_eval、independent_cross_backtest、validate_*_holdout → `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/`；泛化改造属 F002/M1，不在本 feature） — verify: `.venv/bin/python` 迁入模块逐一 import smoke 通过
 - [x] T013 [P] (`SC-003`): 宇宙发现脚本迁入 `scripts/`（discover_okx_swap_universe.py、download_okx_swap_1h.ps1，无改造） — verify: `.venv/bin/python scripts/discover_okx_swap_universe.py --help` 退出码 0
 - [x] T014 [P] (`SC-003`): Freqtrade user_data 策略与 config 迁入 `freqtrade/user_data/`（kronos_cache / feather 行情按 migration-plan.md item 9 git 边界留本地，不进 git；幸存样本已从 `D:\Projects\quant-crypto` 确认在旧仓只读副本中） — verify: 策略与 config 文件存在，`py_compile` 语法冒烟通过（2026-09-10 实测 5 文件）；完整 import 验证由 T017 dry-run 容器承载（freqtrade 依赖不在主仓 venv）
-- [ ] T015 (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七）——**数据重建完成后立即落地，不得后移到验收期**（2026-09-10 数据丢失事故的直接对策） — verify: 手动触发一次同步，NAS 端产物齐全
+- [x] T015 (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七）——**数据重建完成后立即落地，不得后移到验收期**（2026-09-10 数据丢失事故的直接对策） — verify: 手动触发一次同步，NAS 端产物齐全（2026-09-11 实测：`deployment/backup-nas.sh` + systemd user timer 03:00；UGREEN sshd 流式 reset 的绕行——4MB 分块追加+逐块校验+md5 双端一致；154MB dump 已上 NAS；恢复演练 dump→临时容器 6,312,924 行与源库精确一致）
 
 ### Phase 3：全链路验证
 
