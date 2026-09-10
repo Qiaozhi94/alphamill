@@ -26,7 +26,7 @@ updated: 2026-09-10
 
 ## 1. 前置条件
 
-### 当前进展（2026-09-10）
+### 当前进展（2026-09-11）
 
 - **数据源灭失与路线修订**：宿主机 2026-09-07~08 整机重装，原 qiaozhi-lt Docker 卷
   `quant-crypto_timescale_data` 随旧 C 盘丢失，六路取证确认无备份副本（见
@@ -39,7 +39,9 @@ updated: 2026-09-10
 - 代码/配置迁移已完成并通过本地质量门：T006、T011、T012、T013 已完成。
 - 本机开发环境已恢复：`.venv` 重建、`tools/verify.py` 六步全绿（2026-09-10）。
 - 本机无独立显卡，`nvidia-smi` 不可见；按 FR-003/AC-002 采用 CPU 推理回退，T003 的 GPU 直通前置条件不满足但回退决策已完成。
-- 数据重建、Kronos 权重下载、容器联调、PowerShell 全链路和集成验收仍在进行，相关任务保持未勾选。
+- 数据重建已完成并通过完整性校验（T005），NAS 每日备份与恢复演练已落地（T015）：
+  dump 154MB 经分块校验通道上 NAS（md5 双端一致），临时容器恢复 631 万行与源库精确一致。
+- 剩余：T017 Freqtrade dry-run、T018 verify.ps1 全链路、T019-T022 验收收口。
 
 - [x] T001 (`NFR-001`): 旧仓只读基线钉死——`D:\Projects\quant-crypto`（git HEAD `d94f94f` 已实证）设为只读参照并留存清单（顶层目录 + HEAD + 关键资产盘点：`.env`、`db/`、`freqtrade/user_data/`、`reports/`）；原运行现场（Docker 卷）已灭失，数据基线改由 T005 回填报告承载 — verify: `reports/f001-source-inventory-2026-09-10.md` 存在且记录 HEAD `d94f94f`
 - [x] T002 (`FR-001`): 确认 WSL2 内 docker-ce、PowerShell 7（apt 或用户态安装）、Python 3.11+ 就绪且主仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running（2026-09-10 实测：docker-ce 29.8.0、pwsh 7.6.6 用户态、Python 3.14 venv；timescaledb/kronos-signal/grafana/prometheus 四容器 Running，data-collector 有意待回填完成后拉起）
@@ -50,7 +52,7 @@ updated: 2026-09-10
 ### Phase 1：数据资产重建
 
 - [x] T004 (`FR-001`): 主仓编排起全新 TimescaleDB——`docker compose -f deployment/docker-compose.yml up -d timescaledb`，schema 由 `db/init.sql`（含 5 个连续聚合）自动初始化，`db/migrations/003_derivatives_market_data.sql` 手工应用 — verify: 容器 healthy + 全部公有表就位（2026-09-10 实测 11 张公有表 + 5 个连续聚合）
-- [ ] T005 (`FR-001`, `AC-001`): 重建 5 个连续聚合（ohlcv_5m/15m/1h/4h/1d）并执行交易所历史回填（`EXCHANGES=binance`，1m OHLCV + 衍生品三表，幂等 upsert、`backfill_progress` 断点续传，经 `{EXCHANGE}_HTTPS_PROXY` 内网代理出网），按 design §3 口径执行完整性校验并产出 `reports/f001-backfill-<date>.json` — verify: `tests/integration/test_f001_row_reconciliation.py`
+- [x] T005 (`FR-001`, `AC-001`): 重建 5 个连续聚合（ohlcv_5m/15m/1h/4h/1d）并执行交易所历史回填（`EXCHANGES=binance`，1m OHLCV + 衍生品三表，幂等 upsert、`backfill_progress` 断点续传，经 `{EXCHANGE}_HTTPS_PROXY` 内网代理出网），按 design §3 口径执行完整性校验并产出 `reports/f001-backfill-<date>.json` — verify: `tests/integration/test_f001_row_reconciliation.py`（2026-09-11 实测：6 对满窗 631 万行、BTC 缺 33 行=0.003% 其余零缺失；5 聚合与基表桶一致；funding 13152 行、OI 744 行（币安 30 天深度上限，缺口已记录）、basis 0（binanceusdm 无 index OHLCV，边界记录）；报告 `reports/f001-backfill-20260910.json` verdict=PASS；全量 pytest 50 passed）
 
 ### Phase 2：代码与服务搬迁
 

@@ -1,0 +1,109 @@
+{
+  "status": "complete",
+  "exchange": "binanceusdm",
+  "start": "2024-09-10 00:00:00+00:00",
+  "end": "2026-09-10 15:52:00+00:00",
+  "timeframe": "1h",
+  "symbols": [
+    {
+      "symbol": "BTC/USDT",
+      "market_symbol": "BTC/USDT:USDT",
+      "datasets": {
+        "funding": {
+          "rows_fetched": 2192,
+          "rows_upserted": 2192
+        },
+        "open_interest": {
+          "rows_fetched": 0,
+          "rows_upserted": 0,
+          "status": "failed",
+          "error": "binanceusdm {\"msg\":\"parameter 'startTime' is invalid.\",\"code\":-1130}"
+        }
+      }
+    },
+    {
+      "symbol": "ETH/USDT",
+      "market_symbol": "ETH/USDT:USDT",
+      "datasets": {
+        "funding": {
+          "rows_fetched": 2192,
+          "rows_upserted": 2192
+        },
+        "open_interest": {
+          "rows_fetched": 0,
+          "rows_upserted": 0,
+          "status": "failed",
+          "error": "binanceusdm {\"msg\":\"parameter 'startTime' is invalid.\",\"code\":-1130}"
+        }
+      }
+    },
+    {
+      "symbol": "SOL/USDT",
+      "market_symbol": "SOL/USDT:USDT",
+      "datasets": {
+        "funding": {
+          "rows_fetched": 2192,
+          "rows_upserted": 2192
+        },
+        "open_interest": {
+          "rows_fetched": 0,
+          "rows_upserted": 0,
+          "status": "failed",
+          "error": "binanceusdm {\"msg\":\"parameter 'startTime' is invalid.\",\"code\":-1130}"
+        }
+      }
+    },
+    {
+      "symbol": "BNB/USDT",
+      "market_symbol": "BNB/USDT:USDT",
+      "datasets": {
+        "funding": {
+          "rows_fetched": 2192,
+          "rows_upserted": 2192
+        },
+        "open_interest": {
+          "rows_fetched": 0,
+          "rows_upserted": 0,
+          "status": "failed",
+          "error": "binanceusdm {\"msg\":\"parameter 'startTime' is invalid.\",\"code\":-1130}"
+        }
+      }
+    },
+    {
+      "symbol": "XRP/USDT",
+      "market_symbol": "XRP/USDT:USDT",
+      "datasets": {
+        "funding": {
+          "rows_fetched": 2192,
+          "rows_upserted": 2192
+        },
+        "open_interest": {
+          "rows_fetched": 0,
+          "rows_upserted": 0,
+          "status": "failed",
+          "error": "binanceusdm {\"msg\":\"parameter 'startTime' is invalid.\",\"code\":-1130}"
+        }
+      }
+    },
+    {
+      "symbol": "DOGE/USDT",
+      "market_symbol": "DOGE/USDT:USDT",
+      "datasets": {
+        "funding": {
+          "rows_fetched": 2192,
+          "rows_upserted": 2192
+        },
+        "open_interest": {
+          "rows_fetched": 0,
+          "rows_upserted": 0,
+          "status": "failed",
+          "error": "binanceusdm {\"msg\":\"parameter 'startTime' is invalid.\",\"code\":-1130}"
+        }
+      }
+    }
+  ],
+  "totals": {
+    "funding": 13152,
+    "open_interest": 0
+  }
+}

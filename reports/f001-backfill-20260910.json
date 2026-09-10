@@ -1,0 +1,135 @@
+{
+  "generated_at": "2026-09-10T17:44:41.047181+00:00",
+  "feature": "F001",
+  "check_spec": "F001 design §3 / spec FR-001 AC-001",
+  "exchange": "binance",
+  "missing_ratio_threshold": 0.01,
+  "ohlcv_1m": {
+    "BNB/USDT": {
+      "rows": 1052152,
+      "first": "2024-09-10T00:00:00+00:00",
+      "last": "2026-09-10T15:51:00+00:00",
+      "expected_rows_in_span": 1052152,
+      "missing_rows": 0,
+      "missing_ratio": 0.0,
+      "gap_jumps_gt_1m": 0,
+      "max_gap": "0:01:00",
+      "verdict": "PASS"
+    },
+    "BTC/USDT": {
+      "rows": 1052161,
+      "first": "2024-09-10T00:00:00+00:00",
+      "last": "2026-09-10T17:40:00+00:00",
+      "expected_rows_in_span": 1052261,
+      "missing_rows": 100,
+      "missing_ratio": 9.5e-05,
+      "gap_jumps_gt_1m": 2,
+      "max_gap": "1:08:00",
+      "verdict": "PASS"
+    },
+    "DOGE/USDT": {
+      "rows": 1052152,
+      "first": "2024-09-10T00:00:00+00:00",
+      "last": "2026-09-10T15:51:00+00:00",
+      "expected_rows_in_span": 1052152,
+      "missing_rows": 0,
+      "missing_ratio": 0.0,
+      "gap_jumps_gt_1m": 0,
+      "max_gap": "0:01:00",
+      "verdict": "PASS"
+    },
+    "ETH/USDT": {
+      "rows": 1052152,
+      "first": "2024-09-10T00:00:00+00:00",
+      "last": "2026-09-10T15:51:00+00:00",
+      "expected_rows_in_span": 1052152,
+      "missing_rows": 0,
+      "missing_ratio": 0.0,
+      "gap_jumps_gt_1m": 0,
+      "max_gap": "0:01:00",
+      "verdict": "PASS"
+    },
+    "SOL/USDT": {
+      "rows": 1052152,
+      "first": "2024-09-10T00:00:00+00:00",
+      "last": "2026-09-10T15:51:00+00:00",
+      "expected_rows_in_span": 1052152,
+      "missing_rows": 0,
+      "missing_ratio": 0.0,
+      "gap_jumps_gt_1m": 0,
+      "max_gap": "0:01:00",
+      "verdict": "PASS"
+    },
+    "XRP/USDT": {
+      "rows": 1052152,
+      "first": "2024-09-10T00:00:00+00:00",
+      "last": "2026-09-10T15:51:00+00:00",
+      "expected_rows_in_span": 1052152,
+      "missing_rows": 0,
+      "missing_ratio": 0.0,
+      "gap_jumps_gt_1m": 0,
+      "max_gap": "0:01:00",
+      "verdict": "PASS"
+    }
+  },
+  "ohlcv_1m_top_gaps": {
+    "BNB/USDT": [],
+    "BTC/USDT": [
+      {
+        "from": "2026-09-10T16:29:00+00:00",
+        "to": "2026-09-10T17:37:00+00:00",
+        "gap": "1:08:00"
+      },
+      {
+        "from": "2026-09-10T15:51:00+00:00",
+        "to": "2026-09-10T16:25:00+00:00",
+        "gap": "0:34:00"
+      }
+    ],
+    "DOGE/USDT": [],
+    "ETH/USDT": [],
+    "SOL/USDT": [],
+    "XRP/USDT": []
+  },
+  "continuous_aggregates": {
+    "ohlcv_5m": {
+      "rows": 1262586,
+      "distinct_symbol_buckets_in_base": 1262586,
+      "verdict": "PASS"
+    },
+    "ohlcv_15m": {
+      "rows": 420864,
+      "distinct_symbol_buckets_in_base": 420864,
+      "verdict": "PASS"
+    },
+    "ohlcv_1h": {
+      "rows": 105216,
+      "distinct_symbol_buckets_in_base": 105216,
+      "verdict": "PASS"
+    },
+    "ohlcv_4h": {
+      "rows": 26304,
+      "distinct_symbol_buckets_in_base": 26304,
+      "verdict": "PASS"
+    },
+    "ohlcv_1d": {
+      "rows": 4386,
+      "distinct_symbol_buckets_in_base": 4386,
+      "verdict": "PASS"
+    }
+  },
+  "derivatives_rows": {
+    "derivatives_funding_rates": 13152,
+    "derivatives_open_interest": 744,
+    "derivatives_mark_index_basis": 0
+  },
+  "unrecoverable_history_rows": {
+    "signals_log": 0,
+    "trades_log": 0,
+    "ohlcv_quality_flags": 0,
+    "dryrun_open_positions": 0,
+    "dryrun_runtime_snapshots": 0
+  },
+  "unrecoverable_note": "signals/trades/quality 历史随数据源灭失，空表起步（migration-plan §八）",
+  "verdict": "PASS"
+}

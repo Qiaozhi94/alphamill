@@ -1,0 +1,84 @@
+{
+  "status": "complete",
+  "exchange": "binanceusdm",
+  "start": "2026-08-11 17:36:00+00:00",
+  "end": "2026-09-10 17:36:00+00:00",
+  "timeframe": "1h",
+  "symbols": [
+    {
+      "symbol": "BTC/USDT",
+      "market_symbol": "BTC/USDT:USDT",
+      "datasets": {
+        "open_interest": {
+          "rows_fetched": 124,
+          "rows_upserted": 124,
+          "status": "complete",
+          "effective_start": "2026-08-11 17:36:00+00:00"
+        }
+      }
+    },
+    {
+      "symbol": "ETH/USDT",
+      "market_symbol": "ETH/USDT:USDT",
+      "datasets": {
+        "open_interest": {
+          "rows_fetched": 124,
+          "rows_upserted": 124,
+          "status": "complete",
+          "effective_start": "2026-08-11 17:36:00+00:00"
+        }
+      }
+    },
+    {
+      "symbol": "SOL/USDT",
+      "market_symbol": "SOL/USDT:USDT",
+      "datasets": {
+        "open_interest": {
+          "rows_fetched": 124,
+          "rows_upserted": 124,
+          "status": "complete",
+          "effective_start": "2026-08-11 17:36:00+00:00"
+        }
+      }
+    },
+    {
+      "symbol": "BNB/USDT",
+      "market_symbol": "BNB/USDT:USDT",
+      "datasets": {
+        "open_interest": {
+          "rows_fetched": 124,
+          "rows_upserted": 124,
+          "status": "complete",
+          "effective_start": "2026-08-11 17:36:00+00:00"
+        }
+      }
+    },
+    {
+      "symbol": "XRP/USDT",
+      "market_symbol": "XRP/USDT:USDT",
+      "datasets": {
+        "open_interest": {
+          "rows_fetched": 124,
+          "rows_upserted": 124,
+          "status": "complete",
+          "effective_start": "2026-08-11 17:36:00+00:00"
+        }
+      }
+    },
+    {
+      "symbol": "DOGE/USDT",
+      "market_symbol": "DOGE/USDT:USDT",
+      "datasets": {
+        "open_interest": {
+          "rows_fetched": 124,
+          "rows_upserted": 124,
+          "status": "complete",
+          "effective_start": "2026-08-11 17:36:00+00:00"
+        }
+      }
+    }
+  ],
+  "totals": {
+    "open_interest": 744
+  }
+}

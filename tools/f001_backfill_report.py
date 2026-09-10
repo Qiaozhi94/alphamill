@@ -25,6 +25,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from alphamill.data_bridge.collector.db_writer import db_connect  # noqa: E402
 
 GAP_RATIO_THRESHOLD = 0.01  # 缺失率 1%：容忍交易所偶发缺失
+# 权威回填窗口（supervisor 与 AC-001 钉死的 BACKFILL_START/END）：聚合一致性对比
+# 只在窗口内进行——实时采集会在窗口外持续写入，不属于回填校验范畴。
+WINDOW_START = os.getenv("BACKFILL_WINDOW_START", "2024-09-10 00:00:00+00:00")
+WINDOW_END = os.getenv("BACKFILL_WINDOW_END", "2026-09-10 15:52:00+00:00")
 AGGREGATES = {
     "ohlcv_5m": "5 minutes",
     "ohlcv_15m": "15 minutes",
@@ -119,20 +123,32 @@ def top_gaps(conn, exchange: str, symbol: str) -> list[dict]:
 def aggregate_stats(conn, exchange: str) -> dict:
     stats = {}
     for view, bucket in AGGREGATES.items():
-        view_count = int(fetch_one(conn, f"SELECT count(*) FROM {view}")[0])
+        view_count = int(
+            fetch_one(
+                conn,
+                f"SELECT count(*) FROM {view} WHERE bucket >= %s AND bucket < %s",
+                (WINDOW_START, WINDOW_END),
+            )[0]
+        )
+        # 连续聚合保留 symbol 维度：基表侧按 (symbol, bucket) 去重后对齐。
         bucket_count = int(
             fetch_one(
                 conn,
                 f"""
-                SELECT count(DISTINCT time_bucket('{bucket}', time)) FROM ohlcv_1m
-                WHERE exchange = %s
+                SELECT count(*) FROM (
+                    SELECT symbol, time_bucket('{bucket}', time) AS b
+                    FROM ohlcv_1m
+                    WHERE exchange = %s
+                      AND time >= %s AND time < %s
+                    GROUP BY symbol, b
+                ) t
                 """,
-                (exchange,),
+                (exchange, WINDOW_START, WINDOW_END),
             )[0]
         )
         stats[view] = {
             "rows": view_count,
-            "distinct_buckets_in_base": bucket_count,
+            "distinct_symbol_buckets_in_base": bucket_count,
             "verdict": "PASS" if view_count == bucket_count else "FAIL",
         }
     return stats

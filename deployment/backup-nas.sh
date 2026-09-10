@@ -31,6 +31,35 @@ SSH_OPTS=(
 
 log() { echo "$(date -u +%FT%TZ) $LOG_TAG $*"; }
 
+# UGREEN NAS 的 sshd 会在 ~10MB 处 reset 入站流式 cat，且登录 shell 回显破坏
+# SFTP/rsync 协议——因此用 4MB 分块追加 + 逐块字节数校验 + 失败截断回退重试。
+nas_append_chunk() { # $1=本地文件 $2=skip_bytes $3=count_bytes $4=远端路径
+  dd if="$1" bs=4194304 skip="$2" count="$3" 2>/dev/null \
+    | ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "cat >> $4" 2>/dev/null
+}
+
+transfer_to_nas() { # $1=本地文件 $2=远端路径
+  local src="$1" dst="$2"
+  local size pos=0 chunk=4194304 want have expected try
+  size=$(stat -c %s "$src")
+  ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "rm -f $dst && touch $dst" 2>/dev/null
+  while [ "$pos" -lt "$size" ]; do
+    want=$chunk
+    [ $((pos + want)) -gt "$size" ] && want=$((size - pos))
+    for try in 1 2 3 4 5; do
+      nas_append_chunk "$src" $((pos / chunk)) 1 "$dst"
+      have=$(ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "stat -c %s $dst" 2>/dev/null | tail -n 1)
+      expected=$((pos + want))
+      [ "$have" = "$expected" ] && break
+      log "chunk@$pos 第${try}次校验不符(have=$have want=$expected)，截断重试"
+      ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "truncate -s $pos $dst" 2>/dev/null
+    done
+    [ "$have" = "$expected" ] || { log "FATAL: chunk@$pos 重试耗尽"; return 1; }
+    pos=$((pos + want))
+  done
+  return 0
+}
+
 mkdir -p "$LOCAL_BACKUP_DIR/db" "$LOCAL_BACKUP_DIR/logs"
 
 # 1) TimescaleDB 逻辑 dump
@@ -40,11 +69,15 @@ docker exec quant-timescaledb pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc > "$DUMP"
 [ -s "$DUMP" ] || { log "FATAL: dump 为空"; exit 1; }
 log "dump 大小 $(du -h "$DUMP" | cut -f1)"
 
-# 2) 同步到 NAS（tar-over-ssh：UGREEN 登录 shell 会回显 "proxy: OFF"，污染 rsync 协议流，
-#    故用字节流传输，天然免疫登录前导输出）
-log "tar/ssh db/reports/lake -> $NAS_USER@$NAS_HOST:$NAS_BASE/"
-ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "mkdir -p $NAS_BASE/db $NAS_BASE/reports $NAS_BASE/lake" 2>/dev/null
-cat "$DUMP" | ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "cat > $NAS_BASE/db/alphamill-$DATE.dump" 2>/dev/null
+# 2) 同步到 NAS（大文件走分块校验通道；小目录走单流，登录回显不污染原始字节流）
+log "db/reports/lake -> $NAS_USER@$NAS_HOST:$NAS_BASE/"
+transfer_to_nas "$DUMP" "$NAS_BASE/db/alphamill-$DATE.dump" || { log "FATAL: dump 传输失败"; exit 1; }
+# 传输完整性：双端字节数 + md5
+local_size=$(stat -c %s "$DUMP")
+remote_md5=$(ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "md5sum $NAS_BASE/db/alphamill-$DATE.dump" 2>/dev/null | tail -n 1 | awk '{print $1}')
+local_md5=$(md5sum "$DUMP" | awk '{print $1}')
+[ "$remote_md5" = "$local_md5" ] || { log "FATAL: md5 不一致 local=$local_md5 remote=$remote_md5"; exit 1; }
+log "dump 校验一致 md5=$local_md5 size=$local_size"
 tar -C "$REPO_ROOT/reports" -czf - . | ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "tar -xzf - -C $NAS_BASE/reports" 2>/dev/null
 if [ -d "$REPO_ROOT/lake" ]; then
   tar -C "$REPO_ROOT/lake" -czf - . | ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "tar -xzf - -C $NAS_BASE/lake" 2>/dev/null
@@ -57,7 +90,6 @@ find "$LOCAL_BACKUP_DIR/db" -name 'alphamill-*.dump' -mtime +7 -delete
 ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" \
   "find $NAS_BASE/db -name 'alphamill-*.dump' -mtime +30 -delete" 2>/dev/null
 
-# 4) NAS 端产物校验
-NAS_DUMPS=$(ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "ls -1 $NAS_BASE/db/alphamill-$DATE.dump" 2>/dev/null)
-[ -n "$NAS_DUMPS" ] || { log "FATAL: NAS 端未见今日 dump"; exit 1; }
-log "完成：NAS 端 $NAS_DUMPS"
+# 4) NAS 端产物校验（grep -c 输出纯净计数，天然免疫登录回显）
+NAS_DUMPS=$(ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "ls -1 $NAS_BASE/db/alphamill-$DATE.dump" 2>/dev/null | grep -c "alphamill-$DATE.dump")
+if [ "$NAS_DUMPS" -ge 1 ]; then log "完成：NAS 端副本已确认（$NAS_DUMPS）"; else log "FATAL: NAS 端未见今日 dump"; exit 1; fi

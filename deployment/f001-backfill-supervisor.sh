@@ -20,11 +20,15 @@ if [ -n "${1:-}" ]; then
   while kill -0 "$1" 2>/dev/null; do sleep 30; done
 fi
 
-for pass in 2 3 4 5 6 7 8; do
-  DONE=$($PSQL "SELECT count(*) FROM (SELECT DISTINCT symbol FROM backfill_progress WHERE exchange='binance' AND timeframe='1m' AND status='complete' AND target_end='2026-09-10 15:52:00+00:00' AND target_start='2024-09-10 00:00:00+00:00') t;")
-  echo "$(date -u +%FT%TZ) [supervisor] pass=$pass completed_symbols=$DONE/6"
+for pass in 2 3 4 5 6 7 8 9 10; do
+  # 只喂未完成的 symbol：权威窗口内最新状态为 complete 的不再重跑
+  #（模块的 load_progress 不跳过 complete，整轮重喂会无谓重下已完成的百万行）。
+  INCOMPLETE=$($PSQL "SELECT coalesce(string_agg(symbol, ',' ORDER BY symbol), '') FROM (SELECT symbol, status, row_number() OVER (PARTITION BY symbol ORDER BY updated_at DESC) AS rn FROM backfill_progress WHERE exchange='binance' AND timeframe='1m' AND target_start='2024-09-10 00:00:00+00:00' AND target_end='2026-09-10 15:52:00+00:00') t WHERE rn=1 AND status<>'complete';")
+  DONE=$($PSQL "SELECT count(*) FROM (SELECT DISTINCT symbol FROM backfill_progress WHERE exchange='binance' AND timeframe='1m' AND status='complete' AND target_start='2024-09-10 00:00:00+00:00' AND target_end='2026-09-10 15:52:00+00:00') t;")
+  echo "$(date -u +%FT%TZ) [supervisor] pass=$pass completed=$DONE/6 todo=[$INCOMPLETE]"
   [ "$DONE" -ge 6 ] && break
-  .venv/bin/python -m src.alphamill.data_bridge.collector.historical_backfill >> /tmp/f001-backfill.log 2>&1
+  [ -z "$INCOMPLETE" ] && break
+  SYMBOLS="$INCOMPLETE" .venv/bin/python -m src.alphamill.data_bridge.collector.historical_backfill >> /tmp/f001-backfill.log 2>&1
 done
 
 echo "$(date -u +%FT%TZ) [supervisor] OHLCV 回填收口，开始衍生品回填"
