@@ -6,7 +6,7 @@ related_features: []
 topics: [migration, infra]
 doc_kind: tasks
 created: 2026-09-06
-updated: 2026-09-08
+updated: 2026-09-10
 ---
 
 # F001：quant-crypto 资产清算迁移 - 任务
@@ -26,22 +26,27 @@ updated: 2026-09-08
 
 ## 1. 前置条件
 
-### 当前进展（2026-09-08）
+### 当前进展（2026-09-10）
 
+- **数据源灭失与路线修订**：宿主机 2026-09-07~08 整机重装，原 qiaozhi-lt Docker 卷
+  `quant-crypto_timescale_data` 随旧 C 盘丢失，六路取证确认无备份副本（见
+  `docs/reviews/RETROSPECTIVE.md` 模式教训 #16）。FR-001/AC-001 契约改为「交易所重建 +
+  回填完整性校验」，T001/T004/T005 已重写。
 - 代码/配置迁移已完成并通过本地质量门：T006、T011、T012、T013 已完成。
+- 本机开发环境已恢复：`.venv` 重建、`tools/verify.py` 六步全绿（2026-09-10）。
 - 本机无独立显卡，`nvidia-smi` 不可见；按 FR-003/AC-002 采用 CPU 推理回退，T003 的 GPU 直通前置条件不满足但回退决策已完成。
-- 数据卷迁移、逐表对账、Kronos 上游代码与权重、容器联调、PowerShell 全链路和集成验收仍未完成，相关任务保持未勾选。
+- 数据重建、Kronos 上游代码与权重、容器联调、PowerShell 全链路和集成验收仍未完成，相关任务保持未勾选。
 
-- [ ] T001 (`NFR-001`): 旧仓双现场钉死与只读基线——①代码副本：`/root/projects/quant-crypto`（HEAD `d94f94f`，静态搬迁取用）；②运行现场＝数据源：qiaozhi-lt（Tailscale `100.98.228.125`，SSH `Georg@` 密钥 `~/.ssh/gp-to-lt`）`D:\Projects\quant-crypto`（含 `.env` 凭据与 Docker 卷 `quant-crypto_timescale_data`；实测 ohlcv_1m 6,504,359 行 / 11 表 / 5 连续聚合）——建立只读基线：本地全量备份 + 复核当前 commit — verify: 备份文件存在 + 旧仓 `git rev-parse HEAD` 记录（基线 `d94f94f`）
-- [ ] T002 (`FR-001`): 确认 WSL2 内 docker-ce、PowerShell 7（apt 安装）、Python 3.11+ 就绪且旧仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running
+- [ ] T001 (`NFR-001`): 旧仓只读基线钉死——`D:\Projects\quant-crypto`（git HEAD `d94f94f` 已实证）设为只读参照并留存清单（顶层目录 + HEAD + 关键资产盘点：`.env`、`db/`、`freqtrade/user_data/`、`reports/`）；原运行现场（Docker 卷）已灭失，数据基线改由 T005 回填报告承载 — verify: `reports/f001-source-inventory-<date>.md` 存在且记录 HEAD `d94f94f`
+- [ ] T002 (`FR-001`): 确认 WSL2 内 docker-ce、PowerShell 7（apt 或用户态安装）、Python 3.11+ 就绪且主仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running
 - [x] T003 (`FR-003`): GPU 直通检查——本机无独立显卡，WSL2 内 `nvidia-smi` 不可见 RTX 4060；已记录 CPU 推理回退决策（AC-002 冒烟不阻塞） — verify: 无 GPU 实测，CPU 回退决策见本节进展记录与 `spec.md` §4 FR-003
 
 ## 2. 实现任务
 
-### Phase 1：数据资产迁移
+### Phase 1：数据资产重建
 
-- [ ] T004 (`FR-001`): 数据迁移（路径实证）：SSH qiaozhi-lt → `docker start quant-timescaledb`（等 healthy）→ `docker exec quant-timescaledb pg_dump -U quant -d quant -Fc` 经 SSH 流式重定向落地本仓 dump 文件 → `pg_restore` 进主仓编排的 TimescaleDB → `docker stop quant-timescaledb`（恢复 qiaozhi-lt 归档态；pg_dump 走容器本地 socket 免密，全程无需开放 5432 防火墙） — verify: restore 命令退出码 0
-- [ ] T005 (`FR-001`, `AC-001`): 逐表执行行数 + 校验和对账并产出 `reports/f001-reconciliation-<date>.json` — verify: `tests/integration/test_f001_row_reconciliation.py`
+- [ ] T004 (`FR-001`): 主仓编排起全新 TimescaleDB——`docker compose -f deployment/docker-compose.yml up -d timescaledb`，schema 由 `db/init.sql` + `db/migrations/003_derivatives_market_data.sql` 自动初始化 — verify: 容器 healthy + 11 张公有表存在
+- [ ] T005 (`FR-001`, `AC-001`): 重建 5 个连续聚合（ohlcv_5m/15m/1h/4h/1d）并执行 OKX 历史回填（1m OHLCV + 衍生品三表，幂等 upsert、`backfill_progress` 断点续传），按 design §3 口径执行完整性校验并产出 `reports/f001-backfill-<date>.json` — verify: `tests/integration/test_f001_row_reconciliation.py`
 
 ### Phase 2：代码与服务搬迁
 
@@ -54,7 +59,7 @@ updated: 2026-09-08
 - [x] T012 [P] (`SC-003`): 评测器/门禁脚本原样物理迁移（kronos_rankic_eval、kronos_ic_decay_eval、independent_cross_backtest、validate_*_holdout → `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/`；泛化改造属 F002/M1，不在本 feature） — verify: `.venv/bin/python` 迁入模块逐一 import smoke 通过
 - [x] T013 [P] (`SC-003`): 宇宙发现脚本迁入 `scripts/`（discover_okx_swap_universe.py、download_okx_swap_1h.ps1，无改造） — verify: `.venv/bin/python scripts/discover_okx_swap_universe.py --help` 退出码 0
 - [ ] T014 [P] (`SC-003`): Freqtrade user_data 策略与 config 迁入 `freqtrade/user_data/`（kronos_cache / feather 行情按 migration-plan.md item 9 git 边界留本地，不进 git） — verify: 策略与 config 文件存在且策略 python 文件 import 冒烟通过
-- [ ] T015 [P] (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七） — verify: 手动触发一次同步，NAS 端产物齐全
+- [ ] T015 (`FR-006`): 在 `deployment/` 落每日 NAS 备份同步（TimescaleDB pg_dump + `reports/`，预留 `lake/` 与 manifest 目录位；目标 UGREEN NAS，见 migration-plan.md §七）——**数据重建完成后立即落地，不得后移到验收期**（2026-09-10 数据丢失事故的直接对策） — verify: 手动触发一次同步，NAS 端产物齐全
 
 ### Phase 3：全链路验证
 
@@ -71,12 +76,12 @@ updated: 2026-09-08
 
 ## 4. 依赖与并行关系
 
-- `T001 -> T004`：备份基线先行。
-- `T004 -> T005`：对账依赖 restore 完成。
+- `T004 -> T005`：回填依赖全新库就绪。
+- `T005 -> T015`：备份在数据重建完成后立即落地（事故对策，不得后移）。
 - `T006 -> T016`、`T007 -> T008 -> T017`：冒烟依赖搬迁完成。
+- `T004 -> T016`：采集冒烟依赖 DB 可写。
 - `T003 -> T008`：GPU 直通结论先行于薄壳联调（决定推理后端）。
 - `T006/T007/T009/T010/T011/T012/T013/T014 [P]`：互相可并行（不同目录、无共享状态），但均依赖 T002。
-- `T011 -> T015`：NAS 备份同步随部署编排就绪后配置。
 - `T014 -> T017`：dry-run 冒烟依赖 user_data 策略就位。
 - `T018 -> T019 -> T022`：验收链顺序执行。
 

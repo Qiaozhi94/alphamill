@@ -8,7 +8,7 @@ related_features: []
 topics: [migration, infra]
 doc_kind: spec
 created: 2026-09-06
-updated: 2026-09-08
+updated: 2026-09-10
 ---
 
 # F001：quant-crypto 资产清算迁移
@@ -24,18 +24,19 @@ updated: 2026-09-08
 - **功能类型**：backend / workflow
 - **规格模式**：full
 - **变更类型**：ADDED
-- **一句话意图**：在 quant-crypto 归档前，把数据资产与可复用胶水代码一次性迁入本仓，使 AlphaMill 自包含可运行。
+- **一句话意图**：在 quant-crypto 归档前，把可复用胶水代码一次性迁入本仓，并把其历史数据资产在主仓编排内从交易所重建，使 AlphaMill 自包含可运行。
+- **路线修订（2026-09-10）**：原「数据卷 pg_dump 迁移 + 新旧库对账」契约因数据源灭失失效——宿主机于 2026-09-07~08 整机重装，quant-crypto 的 TimescaleDB 命名卷随 Docker Desktop 数据盘（旧 C 盘）丢失（六路取证钉死，见 `docs/reviews/RETROSPECTIVE.md` 模式教训 #16）。FR-001/AC-001/T001/T004/T005 已按「交易所重建 + 回填完整性校验」重写。
 
 ## 1. 问题、目标与非目标
 
 ### 问题
 
-quant-crypto 决定归档废弃，但其中 631 万行 OHLCV 数据、采集器、Kronos 服务薄壳、风控三件套、监控与部署编排是 AlphaMill M1+ 的运行前提；不迁移则主仓无法独立工作，数据重购成本为数周。
+quant-crypto 已随宿主机重装停止服务，其历史数据卷在重装中丢失（2026-09-10 取证钉死，无任何备份副本）；其采集器、Kronos 服务薄壳、风控三件套、监控与部署编排是 AlphaMill M1+ 的运行前提。数据侧须以交易所回填方式重建历史 OHLCV 与衍生品数据，signals/trades 等研究产物历史接受损失。
 
 ### 目标
 
-- 完成本仓内全链路可运行：数据可查、Kronos 推理服务健康、Freqtrade dry-run 挂载真实信号、监控面板有数。
-- quant-crypto 仓库可安全归档（打 tag，之后只读）。
+- 完成本仓内全链路可运行：数据可查（重建后）、Kronos 推理服务健康、Freqtrade dry-run 挂载真实信号、监控面板有数。
+- 旧仓资产处置收口：`D:\Projects\quant-crypto`（HEAD `d94f94f`）只读保留，主仓不再依赖旧仓任何运行路径。
 
 ### 非目标
 
@@ -55,7 +56,7 @@ quant-crypto 决定归档废弃，但其中 631 万行 OHLCV 数据、采集器�
 
 **验收场景**：
 
-1. Given `旧仓已停止服务且数据卷已迁移`，when `docker compose up + 启动 Kronos 薄壳`，then `/health` 返回 200、DB 行数与旧仓对账一致、Freqtrade dry-run 收到 Kronos 信号。
+1. Given `旧仓已停止服务且数据已重建`，when `docker compose up + 启动 Kronos 薄壳`，then `/health` 返回 200、回填完整性校验通过、Freqtrade dry-run 收到 Kronos 信号。
 2. Given `迁移后任一时点`，when `对比新旧 DB 的行数与校验和`，then `完全一致且旧仓零改动`。
 
 ### US-002：旧仓安全归档（Priority: P2）
@@ -86,23 +87,23 @@ quant-crypto 决定归档废弃，但其中 631 万行 OHLCV 数据、采集器�
 
 ### 边界场景
 
-- 数据卷直迁失败时：回退 pg_dump/restore 方案，两方案都失败则中止并保留旧仓服务（绝不在数据未对账前归档）。
-- HF 权重下载失败（网络）：允许从旧仓 `models/` 目录直接复制已下载权重。
+- OKX 历史 K 线深度不足的交易对：以 API 实际可得最早时间为准，缺口记入回填报告，不视为校验失败；连续聚合一律从 1m 基表重建，不单独回填。
+- HF 权重下载失败（网络）：配置代理后重试；旧仓 `models/` 已确认不存在，无复制回退。
 - 迁移期间发现旧仓代码依赖缺失：先在主仓 pyproject 落依赖再迁移代码，不留全局站点包隐式依赖。
 
 ## 4. 需求
 
 ### 功能需求
 
-### Requirement: 数据卷迁移与对账（`FR-001`）
+### Requirement: 数据资产重建与完整性校验（`FR-001`）
 
-系统应当将 quant-crypto 的 TimescaleDB 数据卷完整迁入主仓 docker-compose 编排，且迁移后行数与校验和同旧仓完全一致。
+系统应当在主仓 docker-compose 编排内重建 quant-crypto 的数据资产：全新 TimescaleDB（原 schema 初始化）→ 从交易所回填历史 1m OHLCV 与衍生品数据 → 重建连续聚合，且回填完整性可校验。
 
-#### Scenario: 行数对账
+#### Scenario: 回填完整性校验
 
-- GIVEN 旧仓 DB 与新仓 DB 同时可读
-- WHEN 按 design §3 对账口径对全部迁入表（ohlcv_1m、衍生品三表、quality_flags、signals_log、trades_log 及连续聚合）逐表执行行数与校验和比对
-- THEN 差异为 0，且 quality_flags 未解决标记数一致
+- GIVEN 全新 TimescaleDB 且 schema 已初始化（init.sql + 衍生品迁移）
+- WHEN 对配置宇宙的每个交易对执行 1m OHLCV 与衍生品数据回填，并按 design §3 口径执行完整性校验（逐表行数对交易所可得区间的预期、抽样时间轴连续性、连续聚合与基表重算一致）
+- THEN 校验差异在允许范围内且报告落 `reports/`，连续聚合行数与 1m 基表重算结果一致
 
 ### Requirement: 采集器迁入并持续运行（`FR-002`）
 
@@ -156,7 +157,7 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 ### 非功能需求
 
-- **NFR-001**：迁移期间旧仓必须保持只读（除 git tag 外零改动）；对账完成前不得归档。
+- **NFR-001**：旧仓副本（`D:\Projects\quant-crypto`，HEAD `d94f94f`）保持只读；数据重建完成并通过完整性校验前，不得删除/归档该副本。
 - **NFR-002**：跨环境路径与 UTF-8 编码兼容——所有迁移脚本在执行环境（WSL2 Ubuntu + PowerShell 7）下可运行，与 Windows 宿主交换文件时无路径/编码错误，中文内容无乱码。
 
 ## 5. 生命周期与不变量
@@ -173,7 +174,7 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `NFR-001`): 全部迁入表（口径见 design §3，含 signals_log/trades_log 与连续聚合）行数与校验和对账差异为 0，旧仓零改动 — tests: `tests/integration/test_f001_row_reconciliation.py`
+- [ ] **AC-001** (`FR-001`, `NFR-001`): 回填完整性校验通过（口径见 design §3：1m OHLCV 与衍生品表逐表行数符合交易所可得区间预期、抽样无缺口、连续聚合与基表重算一致），旧仓副本零改动 — tests: `tests/integration/test_f001_row_reconciliation.py`
 - [ ] **AC-002** (`FR-003`): Kronos /health 200 且 /predict 返回 source=kronos — tests: `tests/integration/test_f001_kronos_smoke.py`
 - [ ] **AC-003** (`FR-002`): 采集器单交易对冒烟通过且重复执行幂等 — tests: `tests/integration/test_f001_collector_smoke.py`
 - [ ] **AC-004** (`FR-004`, `FR-005`): dry-run 风控钩子生效且监控面板非空 — tests: `tests/integration/test_f001_dryrun_monitoring.py`
@@ -183,23 +184,24 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 ### 测试策略
 
-- 集成测试：行数对账、Kronos 冒烟、采集幂等、dry-run 风控挂载（pytest，需要本地服务在线）。
+- 集成测试：回填完整性校验、Kronos 冒烟、采集幂等、dry-run 风控挂载（pytest，需要本地服务在线）。
 - 真实环境 / 手动验证：Grafana 面板人工目检；HF 权重下载一次人工确认文件校验。
-- 不做单元测试覆盖——本 feature 以系统级对账为主。
+- 不做单元测试覆盖——本 feature 以系统级数据完整性为主。
 
 ### 依赖
 
-- 上游：quant-crypto 仓库（只读源；代码已克隆至本机 `/root/projects/quant-crypto`，HEAD `d94f94f`；**数据源在 qiaozhi-lt**（Tailscale `100.98.228.125`）`D:\Projects\quant-crypto` 的 Docker 卷 `quant-crypto_timescale_data`，SSH 访问路径见 tasks T001/T004）；HuggingFace 网络（权重）；docker-ce（WSL2）。
+- 上游：quant-crypto 仓库副本（`D:\Projects\quant-crypto`，HEAD `d94f94f`，只读；原 Docker 数据卷已灭失，见 §0 路线修订）；OKX 交易所 API（历史数据重建）；HuggingFace 网络（权重）；docker-ce（WSL2）。
 - 下游消费者：F002（数据桥）、F003（AlphaGen vendor）、所有后续 feature 的运行基座。
-- 外部 / 环境依赖：RTX 4060 GPU（WSL2 直通；未就绪时 AC-002 冒烟允许 CPU 推理回退）、docker-compose、PowerShell 7（apt 安装于 WSL2）。
+- 外部 / 环境依赖：GPU（未就绪时 AC-002 冒烟允许 CPU 推理回退）、docker-compose、PowerShell 7（WSL2 内可用，apt 或用户态安装均可）。
 
 ### 决策与风险
 
 | 决策 / 风险 | 结论或缓解 | 理由 | 后续 |
 |---|---|---|---|
-| TimescaleDB 去留 | 阶段 A 保留（随编排迁入） | 零风险接续；阶段 B 另立 feature | F-后续评估 |
-| 数据卷直迁失败 | 回退 pg_dump/restore | 两种方案覆盖主流失败模式 | 迁移当天决定 |
-| HF 下载受网络限制 | 允许复制旧仓 models/ 已有权重 | 权重是静态资产，复制等价 | 无 |
+| TimescaleDB 去留 | 阶段 A 保留（随编排重建） | 零风险接续；阶段 B 另立 feature | F-后续评估 |
+| 数据源灭失（2026-09-10 钉死） | 路线改为交易所重建 + 回填完整性校验；signals/trades/quality 历史接受损失 | 原卷随宿主机重装丢失且无备份副本（RETROSPECTIVE #16） | 旧实体机若复得可再评估补迁 |
+| 回填受 OKX 限速/历史深度限制 | 受控速率串行回填 + `backfill_progress` 断点续传；深度不足缺口记入报告 | 幂等 upsert 保证可重试 | 回填报告落 `reports/` |
+| HF 下载受网络限制 | 配置代理后重试（旧仓 `models/` 已确认不存在） | 权重是静态资产，网络问题可解 | 无 |
 | 本机无独立显卡 | AC-002 采用 CPU 推理回退；GPU 直通不作为迁移完成前置条件 | `nvidia-smi` 实测不可见，且当前主机无独立 GPU | 后续具备 GPU 的运行环境再做性能验证 |
 
 ## 8. 待确认问题

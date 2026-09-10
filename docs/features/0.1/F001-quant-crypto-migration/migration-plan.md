@@ -9,7 +9,7 @@
 
 | # | 资产 | 来源（quant-crypto） | 去处（AlphaMill） | 改造点 |
 |---|---|---|---|---|
-| 1 | **TimescaleDB 数据卷** | qiaozhi-lt（Tailscale `100.98.228.125`）`D:\Projects\quant-crypto` 的 Docker 卷 `quant-crypto_timescale_data`（实测 ohlcv_1m 6,504,359 行、11 表、5 连续聚合；凭据在同目录 `.env`） | 随 docker-compose 迁入，数据不重建 | SSH 流式 pg_dump/restore（路径实证见 tasks T004，无需开 5432 防火墙），行数对账 |
+| 1 | **TimescaleDB 数据** | 原卷 `quant-crypto_timescale_data` 已随宿主机重装灭失（2026-09-10 六路取证钉死，见 §八） | 主仓编排起全新 TimescaleDB（`db/init.sql` 初始化），从 OKX 回填历史数据并重建连续聚合；`D:\Projects\quant-crypto`（HEAD `d94f94f`）只读保留作代码/配置基线 | 重建路线：交易所回填 + 完整性校验（口径见 F001 design §3） |
 | 2 | 数据采集器 | `data-collector/`（ccxt_ingestor、db_writer、historical_backfill、symbol_manager、derivatives_market_backfill） | `src/alphamill/data_bridge/collector/` | 并入主仓依赖管理；保留 REST 轮询模式 |
 | 3 | Kronos 服务薄壳 | `kronos-signal/`（server/generator/db_adapter/kronos_real） | `src/alphamill/kronos_service/` | db_adapter 改读迁移后 DB；上游 Kronos 代码改为 clone+pin（见第三节） |
 | 4 | 风控三件套 | `risk/`（circuit_breaker、correlation_guard、drawdown_guard） | `src/alphamill/freqtrade_bridge/risk/` | 随策略模板挂载进 Freqtrade |
@@ -48,12 +48,12 @@
 ## 五、迁移验收（全绿才算完成）
 
 ```text
-□ 行数对账：迁移后 DB 与旧仓行数/校验和一致（quality_flags 未解决数一致）
+□ 回填完整性：重建后 DB 逐表行数符合交易所可得区间预期、抽样无缺口、连续聚合与基表重算一致（口径见 F001 design §3）
 □ Kronos：/health 200；/predict/BTC-USDT 返回 source=kronos
 □ Freqtrade：dry-run 启动，读到 Kronos 信号缓存，风控三件套挂载
 □ 监控：Grafana 面板有数据（K 线延迟/信号质量/交易健康）
 □ verify.ps1 全绿（扩展为上述全链路检查）
-□ 旧仓打 tag 归档，主仓 git 历史干净（迁移 commit 单独可审）
+□ NAS 每日备份落地并演练一次恢复；旧仓副本只读保留，主仓 git 历史干净（迁移 commit 单独可审）
 ```
 
 > 范围：Parquet 湖首次全量导出与 manifest 产出属 F002 / M1 数据桥范围（见
@@ -62,7 +62,7 @@
 
 ## 六、执行顺序建议（与里程碑对齐）
 
-1. **M0（新增，~2-3 天）**：数据卷迁移 + 采集器/薄壳/风控/监控代码搬迁 + verify 全绿
+1. **M0（新增，~2-3 天）**：数据重建（全新起库 + OKX 回填，见 §八）+ 采集器/薄壳/风控/监控代码搬迁 + verify 全绿
 2. M1 起：所有开发只在 AlphaMill 主仓进行；旧仓只读
 3. Kronos 上游化（clone+pin+权重下载）放在 M0 内完成，避免迁移期间推理断供
 
@@ -70,4 +70,11 @@
 
 - 每日定时向局域网 UGREEN NAS 同步三类资产：TimescaleDB 逻辑 dump（`deployment/backups/db/<date>.dump`）、Parquet 湖分区（`lake/`，F002 起生效）+ manifest（`lake/_manifests/`）、对账与报告（`reports/`）；
 - 同步脚本随 `deployment/` 迁入；NAS 不可达时本地保留 7 天滚动副本，恢复后自动补同步；
-- 恢复演练：M0 验收时从 NAS 副本完整恢复一次 DB 到临时容器并通过行数对账，此后每季度抽验一次。
+- 恢复演练：**数据重建完成后立即**从 NAS 副本完整恢复一次 DB 到临时容器并通过完整性校验（2026-09-10 事故后从"M0 验收时"提前），此后每季度抽验一次。
+
+## 八、2026-09-10 数据源灭失事件与路线修订（附录）
+
+- **事件**：宿主机（原 F001 数据源现场，hostname qiaozhi-lt）于 2026-09-07~08 按《VIBE-CODING-REINSTALL-PLAN-2026-09》整机重装 Windows 11。C 盘格式化前仅备份了 AI 会话/配置/旧 WSL 归档，未盘点 Docker Desktop 数据盘；quant-crypto 的 TimescaleDB 命名卷 `quant-crypto_timescale_data`（实测 ohlcv_1m 6,504,359 行、11 表、5 连续聚合）随旧 C 盘 VHDX 灭失。
+- **取证（2026-09-10，六路全否）**：D:/E: 全盘 vhdx 搜索、`pre-format-2026-09` 备份清单（`~/.docker` 被显式标为"不需要迁"）、旧 WSL 整盘 tar（2.4G，无 docker）、NAS docker 卷与 freqtrade/Vibe-Trading 目录、qiaozhi-gp 主机、Windows 侧 `.ssh`——均无数据副本。NVMe + TRIM 下格式化数据不可恢复。
+- **路线修订**：本文件 §一 item 1、§五 验收清单、F001 spec FR-001/AC-001 与 tasks T001/T004/T005 已改为「全新起库 → OKX 回填 → 完整性校验」；signals_log/trades_log/quality_flags 历史接受损失（空表起步，报告中记录）。T015（NAS 备份）提前至数据重建完成即落地。
+- **幸存资产**：`D:\Projects\quant-crypto`（HEAD `d94f94f`，只读）、`db/init.sql` + 迁移脚本、`.env`、`freqtrade/user_data/` 88MB（configs/信号 feather/kronos 缓存样本）、历史回测报告。
