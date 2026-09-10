@@ -43,4 +43,9 @@ docs/reviews/*
 # 本地运行时密钥（模板为 deployment/.env.example，真实凭据人工搬运不进 git）
 deployment/.env
 
+# Kronos 上游克隆（pin 记录见 vendor/VENDORED.md）与模型权重（migration-plan §三：不进 git）
+vendor/Kronos/
+models/
+deployment/backups/
+
 !.gitkeep
