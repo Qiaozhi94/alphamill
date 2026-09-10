@@ -37,6 +37,10 @@ addopts = "-ra --strict-markers"
 testpaths = ["tests"]
 # 让测试可以直接导入门禁工具和 src 布局下的产品包。
 pythonpath = [".", "src"]
+# 集成测试需要本地服务在线（DB 不可达时跳过），CI 默认跳过，本地全绿为准。
+markers = [
+  "integration: 需要本地服务（TimescaleDB 等）在线的集成测试",
+]
 
 [tool.ruff]
 line-length = 100
