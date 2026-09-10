@@ -49,3 +49,6 @@ models/
 deployment/backups/
 
 !.gitkeep
+
+# Freqtrade dry-run 运行时数据库（本地状态，不进 git）
+freqtrade/user_data/tradesv3.sqlite*
