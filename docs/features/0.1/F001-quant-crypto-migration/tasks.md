@@ -74,8 +74,12 @@ updated: 2026-09-10
   - 2026-09-11 进展：dry-run 容器已运行（freqtrade:stable + config.dryrun.json 覆盖：binance/代理/JWT/fiat），策略经
     `KRONOS_SIGNAL_URL=host.docker.internal:8001` + `KRONOS_SIGNAL_EXCHANGE=binance` 成功取得 6 对信号（BTC buy/XRP sell/其余 neutral），
     heartbeat 稳定。策略新增 `KRONOS_SIGNAL_EXCHANGE` 环境变量出口（默认 okx 保持旧行为）。
-  - 待完成：入场触发→confirm_trade_entry 风控钩子证据（入场受信号融合门控，属策略逻辑域）；`collect_runtime_snapshot.ps1`
-    （旧仓 scripts/，写 dryrun_runtime_snapshots/open_positions，不在迁移清单）需迁入才能点亮监控面板——属 T018 前置发现项。
+  - 2026-09-11 风控钩子证据（forceenter 双路径实测）：①拦截路径——BTC 强制入场被
+    `Entry blocked by Kronos sell signal (conf=1.0)` 拒绝，证明 confirm_trade_entry 执行且链路前三级
+    （熔断/回撤/相关性）全部评估放行；②放行路径——ETH 强制入场成功（trade_id=1，Binance dry-run，
+    0.0409 ETH @99.78 USDT，entry_fill 后 exit_signal 自动平仓），全链路入场→出场循环可用。
+  - 待完成：`collect_runtime_snapshot.ps1`（旧仓 scripts/，写 dryrun_runtime_snapshots/open_positions，
+    不在迁移清单）需迁入才能点亮监控面板——属 T018 前置发现项。
 - [ ] T018 (`FR-006`, `AC-005`): 扩展并运行 deployment/verify.ps1 全链路检查 — verify: `deployment/verify.ps1` 退出码 0
 
 ## 3. 验证与验收任务

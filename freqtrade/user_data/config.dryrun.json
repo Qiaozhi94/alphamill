@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.freqtrade.io/schema.json",
   "fiat_display_currency": "",
+  "force_entry_enable": true,
   "api_server": {
     "jwt_secret_key": "alphamill-dryrun-local-jwt-secret-0001",
     "ws_token": "alphamill-dryrun-local-ws-token-0001"
