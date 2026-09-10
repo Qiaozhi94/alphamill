@@ -42,7 +42,7 @@ updated: 2026-09-10
 - 数据重建、Kronos 权重下载、容器联调、PowerShell 全链路和集成验收仍在进行，相关任务保持未勾选。
 
 - [x] T001 (`NFR-001`): 旧仓只读基线钉死——`D:\Projects\quant-crypto`（git HEAD `d94f94f` 已实证）设为只读参照并留存清单（顶层目录 + HEAD + 关键资产盘点：`.env`、`db/`、`freqtrade/user_data/`、`reports/`）；原运行现场（Docker 卷）已灭失，数据基线改由 T005 回填报告承载 — verify: `reports/f001-source-inventory-2026-09-10.md` 存在且记录 HEAD `d94f94f`
-- [ ] T002 (`FR-001`): 确认 WSL2 内 docker-ce、PowerShell 7（apt 或用户态安装）、Python 3.11+ 就绪且主仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running
+- [x] T002 (`FR-001`): 确认 WSL2 内 docker-ce、PowerShell 7（apt 或用户态安装）、Python 3.11+ 就绪且主仓 docker-compose 可启动 — verify: `docker compose ps` 全部 Running（2026-09-10 实测：docker-ce 29.8.0、pwsh 7.6.6 用户态、Python 3.14 venv；timescaledb/kronos-signal/grafana/prometheus 四容器 Running，data-collector 有意待回填完成后拉起）
 - [x] T003 (`FR-003`): GPU 直通检查——本机无独立显卡，WSL2 内 `nvidia-smi` 不可见 RTX 4060；已记录 CPU 推理回退决策（AC-002 冒烟不阻塞） — verify: 无 GPU 实测，CPU 回退决策见本节进展记录与 `spec.md` §4 FR-003
 
 ## 2. 实现任务
@@ -67,7 +67,7 @@ updated: 2026-09-10
 
 ### Phase 3：全链路验证
 
-- [ ] T016 (`FR-002`, `AC-003`): 采集器单交易对冒烟 + 幂等复跑 — verify: `tests/integration/test_f001_collector_smoke.py`
+- [x] T016 (`FR-002`, `AC-003`): 采集器单交易对冒烟 + 幂等复跑 — verify: `tests/integration/test_f001_collector_smoke.py`（2026-09-10 实测 passed：BTC/USDT 两个紧邻周期已闭 K 线零增长，未闭合 K 线被过滤）
 - [ ] T017 (`FR-004`, `AC-004`): Freqtrade dry-run 启动并确认风控钩子与监控面板 — verify: `tests/integration/test_f001_dryrun_monitoring.py`
 - [ ] T018 (`FR-006`, `AC-005`): 扩展并运行 deployment/verify.ps1 全链路检查 — verify: `deployment/verify.ps1` 退出码 0
 

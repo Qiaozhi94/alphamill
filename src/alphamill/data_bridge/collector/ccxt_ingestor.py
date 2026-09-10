@@ -60,6 +60,11 @@ def build_exchange(exchange_id: str):
     if password:
         config["password"] = password
 
+    # 与回填模块一致：本机 DNS 污染时经内网代理出网（默认关闭，不影响直连行为）。
+    exchange_proxy = os.getenv(f"{exchange_id.upper()}_HTTPS_PROXY", "")
+    if exchange_proxy:
+        config["httpsProxy"] = exchange_proxy
+
     return exchange_class(config)
 
 
