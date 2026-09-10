@@ -1,0 +1,10 @@
+[Unit]
+Description=AlphaMill daily NAS backup (pg_dump + reports/lake rsync)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/alphamill
+ExecStart=%h/projects/alphamill/deployment/backup-nas.sh
+# 失败重试：15 分钟后重试，最多 3 次
+Restart=on-failure
+RestartSec=15min

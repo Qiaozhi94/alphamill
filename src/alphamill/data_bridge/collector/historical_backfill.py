@@ -74,6 +74,10 @@ def build_exchange(exchange_id: str):
         config["secret"] = secret
     if password:
         config["password"] = password
+    # 本机 DNS 对部分交易所域名存在污染时，经内网代理出网（默认关闭，不影响直连行为）。
+    exchange_proxy = os.getenv(f"{exchange_id.upper()}_HTTPS_PROXY", "")
+    if exchange_proxy:
+        config["httpsProxy"] = exchange_proxy
     return exchange_class(config)
 
 

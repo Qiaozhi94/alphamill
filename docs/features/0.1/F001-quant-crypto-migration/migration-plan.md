@@ -9,7 +9,7 @@
 
 | # | 资产 | 来源（quant-crypto） | 去处（AlphaMill） | 改造点 |
 |---|---|---|---|---|
-| 1 | **TimescaleDB 数据** | 原卷 `quant-crypto_timescale_data` 已随宿主机重装灭失（2026-09-10 六路取证钉死，见 §八） | 主仓编排起全新 TimescaleDB（`db/init.sql` 初始化），从 OKX 回填历史数据并重建连续聚合；`D:\Projects\quant-crypto`（HEAD `d94f94f`）只读保留作代码/配置基线 | 重建路线：交易所回填 + 完整性校验（口径见 F001 design §3） |
+| 1 | **TimescaleDB 数据** | 原卷 `quant-crypto_timescale_data` 已随宿主机重装灭失（2026-09-10 六路取证钉死，见 §八） | 主仓编排起全新 TimescaleDB（`db/init.sql` 初始化），从交易所（Binance，实证可用）回填历史数据并重建连续聚合；`D:\Projects\quant-crypto`（HEAD `d94f94f`）只读保留作代码/配置基线 | 重建路线：交易所回填 + 完整性校验（口径见 F001 design §3） |
 | 2 | 数据采集器 | `data-collector/`（ccxt_ingestor、db_writer、historical_backfill、symbol_manager、derivatives_market_backfill） | `src/alphamill/data_bridge/collector/` | 并入主仓依赖管理；保留 REST 轮询模式 |
 | 3 | Kronos 服务薄壳 | `kronos-signal/`（server/generator/db_adapter/kronos_real） | `src/alphamill/kronos_service/` | db_adapter 改读迁移后 DB；上游 Kronos 代码改为 clone+pin（见第三节） |
 | 4 | 风控三件套 | `risk/`（circuit_breaker、correlation_guard、drawdown_guard） | `src/alphamill/freqtrade_bridge/risk/` | 随策略模板挂载进 Freqtrade |
@@ -76,5 +76,6 @@
 
 - **事件**：宿主机（原 F001 数据源现场，hostname qiaozhi-lt）于 2026-09-07~08 按《VIBE-CODING-REINSTALL-PLAN-2026-09》整机重装 Windows 11。C 盘格式化前仅备份了 AI 会话/配置/旧 WSL 归档，未盘点 Docker Desktop 数据盘；quant-crypto 的 TimescaleDB 命名卷 `quant-crypto_timescale_data`（实测 ohlcv_1m 6,504,359 行、11 表、5 连续聚合）随旧 C 盘 VHDX 灭失。
 - **取证（2026-09-10，六路全否）**：D:/E: 全盘 vhdx 搜索、`pre-format-2026-09` 备份清单（`~/.docker` 被显式标为"不需要迁"）、旧 WSL 整盘 tar（2.4G，无 docker）、NAS docker 卷与 freqtrade/Vibe-Trading 目录、qiaozhi-gp 主机、Windows 侧 `.ssh`——均无数据副本。NVMe + TRIM 下格式化数据不可恢复。
-- **路线修订**：本文件 §一 item 1、§五 验收清单、F001 spec FR-001/AC-001 与 tasks T001/T004/T005 已改为「全新起库 → OKX 回填 → 完整性校验」；signals_log/trades_log/quality_flags 历史接受损失（空表起步，报告中记录）。T015（NAS 备份）提前至数据重建完成即落地。
+- **路线修订**：本文件 §一 item 1、§五 验收清单、F001 spec FR-001/AC-001 与 tasks T001/T004/T005 已改为「全新起库 → 交易所回填 → 完整性校验」；signals_log/trades_log/quality_flags 历史接受损失（空表起步，报告中记录）。T015（NAS 备份）提前至数据重建完成即落地。
+- **回填源实证（2026-09-10 晚）**：OKX 域名在本机被 DNS 污染不可达；Binance（spot 公开行情）直连可用、历史深度完整，回填与实时采集统一 `EXCHANGES=binance`，出网经 `{EXCHANGE}_HTTPS_PROXY` 内网 mihomo。行级 provenance 记录于回填报告。
 - **幸存资产**：`D:\Projects\quant-crypto`（HEAD `d94f94f`，只读）、`db/init.sql` + 迁移脚本、`.env`、`freqtrade/user_data/` 88MB（configs/信号 feather/kronos 缓存样本）、历史回测报告。

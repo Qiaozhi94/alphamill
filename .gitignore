@@ -40,4 +40,7 @@ docs/reviews/*
 # ...例外：curated 摘要入库
 !docs/reviews/RETROSPECTIVE.md
 
+# 本地运行时密钥（模板为 deployment/.env.example，真实凭据人工搬运不进 git）
+deployment/.env
+
 !.gitkeep

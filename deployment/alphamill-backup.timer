@@ -1,0 +1,10 @@
+[Unit]
+Description=Run AlphaMill NAS backup daily at 03:00 (UTC+8 04:00 前的低峰时段按本机时区)
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

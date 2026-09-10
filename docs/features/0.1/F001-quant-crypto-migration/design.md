@@ -39,7 +39,7 @@ updated: 2026-09-10
 
 ## 3. 数据模型与 Migration
 
-- 方案：主仓编排起全新 TimescaleDB（`db/init.sql` + `db/migrations/003_derivatives_market_data.sql` 自动初始化）→ 迁入的采集器 `historical_backfill` 从 OKX 回填（幂等 upsert、`backfill_progress` 断点续传）→ 重建 5 个连续聚合。**完整性校验口径（唯一权威定义，spec FR-001 / AC-001 与 design §8 引用此处）**：
+- 方案：主仓编排起全新 TimescaleDB（`db/init.sql` + `db/migrations/003_derivatives_market_data.sql` 自动初始化）→ 迁入的采集器 `historical_backfill` 回填（幂等 upsert、`backfill_progress` 断点续传）→ 重建 5 个连续聚合。**回填源（2026-09-10 实证钉死）**：`EXCHANGES=binance`（Binance 公开行情，spot 1m）——OKX 域名在本机被 DNS 污染不可达（解析到假 IP，六次探测超时），Binance 直连可用且 2024-09 以来的 1m 历史完整可得；出网经 `{EXCHANGE}_HTTPS_PROXY` 指向内网 mihomo（`deployment/.env` 记录，脚本不打印）。行级 provenance（来源交易所、回填窗口、缺口清单）记录于回填报告。**完整性校验口径（唯一权威定义，spec FR-001 / AC-001 与 design §8 引用此处）**：
   - `ohlcv_1m`：逐交易对行数 ≥ 交易所可得区间预期行数 × 阈值（容忍交易所侧偶发缺失）；抽样时间轴连续性——相邻 K 线间隔超出 1 分钟的孤立缺口数在阈值内（交易所停服/下架对导致的系统缺口记入报告而非判红）；
   - 衍生品三表（derivatives_funding_rates / derivatives_mark_index_basis / derivatives_open_interest）：同口径回填与校验；
   - 连续聚合（ohlcv_5m / 15m / 1h / 4h / 1d）：重建后行数与 1m 基表按桶重算结果一致（精确断言，无阈值）；
