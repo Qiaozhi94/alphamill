@@ -26,7 +26,7 @@ updated: 2026-09-10
 
 ## 1. 前置条件
 
-### 当前进展（2026-09-12）
+### 当前进展（2026-09-12，T018-T022 收口）
 
 - **数据源灭失与路线修订**：宿主机 2026-09-07~08 整机重装，原 qiaozhi-lt Docker 卷
   `quant-crypto_timescale_data` 随旧 C 盘丢失，六路取证确认无备份副本（见
@@ -83,14 +83,14 @@ updated: 2026-09-10
     （snapshots=1/positions=1/signals=6）；`alphamill-snapshot.timer` 每 5 分钟采集。
     注：当前薄壳为 mock 模式，signals_log.source=placeholder，60 分钟收益回填仅对 source=kronos 生效
     （真实模式容器化属 T018 范围）。
-- [ ] T018 (`FR-006`, `AC-005`): 扩展并运行 deployment/verify.ps1 全链路检查 — verify: `deployment/verify.ps1` 退出码 0
+- [x] T018 (`FR-006`, `AC-005`): 扩展并运行 deployment/verify.ps1 全链路检查 — verify: `deployment/verify.ps1` 退出码 0（2026-09-12 实测 26 项检查全绿：新增 F001 回填完整性阈值(6 对全≤1%)、signals_log 非空、快照新鲜度≤900s；Kronos 预测参数改 binance；Grafana 认证改从 .env 读取；postgres 插件经宿主下载挂载注册）。容器化真实推理评估结论：宿主 venv 真实推理已验证(T008)，容器化(torch 进镜像+权重挂载)列为后续独立评估项，不阻塞 AC-005
 
 ## 3. 验证与验收任务
 
-- [ ] T019 (`AC-001`, `AC-002`, `AC-003`, `AC-004`): 本地运行全部集成测试 — verify: `python -m pytest tests/integration -q`
-- [ ] T020 (`NFR-002`): 确认全部脚本在 PowerShell 7 下无路径/编码错误 — verify: T018 附带输出无乱码
-- [ ] T021 (`AC-005`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
-- [ ] T022: 回写 spec 验收证据、BACKLOG 状态与 migration-plan.md 清单勾选 — verify: `python tools/validate_spec_lifecycle.py`
+- [x] T019 (`AC-001`, `AC-002`, `AC-003`, `AC-004`): 本地运行全部集成测试 — verify: `python -m pytest tests/integration -q`（2026-09-12 实测 7 passed 0 skipped，含 AC-002 真实模型 CPU 推理）
+- [x] T020 (`NFR-002`): 确认全部脚本在 PowerShell 7 下无路径/编码错误 — verify: T018 附带输出无乱码（pwsh 7.6.6 实测 verify.ps1+snapshot 脚本，0 个 U+FFFD 替换符；快照脚本前斜线路径在 WSL2 正常）
+- [x] T021 (`AC-005`): 运行项目统一质量门 — verify: `python3 tools/verify.py`（全绿，见最后一次提交的本地运行记录）
+- [x] T022: 回写 spec 验收证据、BACKLOG 状态与 migration-plan.md 清单勾选 — verify: `python tools/validate_spec_lifecycle.py`（本次提交同笼完成；旧仓归档 tag 按 spec §1 修订口径以「只读保留+grep 无硬依赖(SC-002 已验)」替代，不对只读副本做写操作）
 
 ## 4. 依赖与并行关系
 

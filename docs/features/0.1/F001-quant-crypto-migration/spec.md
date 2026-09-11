@@ -2,13 +2,13 @@
 kind: feature
 id: F001
 version: "0.1"
-status: in-progress
+status: review
 gate_version: 1
 related_features: []
 topics: [migration, infra]
 doc_kind: spec
 created: 2026-09-06
-updated: 2026-09-10
+updated: 2026-09-12
 ---
 
 # F001：quant-crypto 资产清算迁移
@@ -174,11 +174,13 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `NFR-001`): 回填完整性校验通过（口径见 design §3：1m OHLCV 与衍生品表逐表行数符合交易所可得区间预期、抽样无缺口、连续聚合与基表重算一致），旧仓副本零改动 — tests: `tests/integration/test_f001_row_reconciliation.py`
-- [ ] **AC-002** (`FR-003`): Kronos /health 200 且 /predict 返回 source=kronos — tests: `tests/integration/test_f001_kronos_smoke.py`
-- [ ] **AC-003** (`FR-002`): 采集器单交易对冒烟通过且重复执行幂等 — tests: `tests/integration/test_f001_collector_smoke.py`
-- [ ] **AC-004** (`FR-004`, `FR-005`): dry-run 风控钩子生效且监控面板非空 — tests: `tests/integration/test_f001_dryrun_monitoring.py`
-- [ ] **AC-005** (`FR-006`, `NFR-002`): deployment/verify.ps1 单命令全绿 — tests: `deployment/verify.ps1`
+- [x] **AC-001** (`FR-001`, `NFR-001`): 回填完整性校验通过（口径见 design §3：1m OHLCV 与衍生品表逐表行数符合交易所可得区间预期、抽样无缺口、连续聚合与基表重算一致），旧仓副本零改动 — tests: `tests/integration/test_f001_row_reconciliation.py`
+- [x] **AC-002** (`FR-003`): Kronos /health 200 且 /predict 返回 source=kronos — tests: `tests/integration/test_f001_kronos_smoke.py`
+- [x] **AC-003** (`FR-002`): 采集器单交易对冒烟通过且重复执行幂等 — tests: `tests/integration/test_f001_collector_smoke.py`
+- [x] **AC-004** (`FR-004`, `FR-005`): dry-run 风控钩子生效且监控面板非空 — tests: `tests/integration/test_f001_dryrun_monitoring.py`
+- [x] **AC-005** (`FR-006`, `NFR-002`): deployment/verify.ps1 单命令全绿 — tests: `deployment/verify.ps1`
+
+**验收证据（2026-09-12）**：AC-001 `reports/f001-backfill-20260910.json` verdict=PASS（631 万行满窗，缺失率≤0.13%）+ `tests/integration/test_f001_row_reconciliation.py`；AC-002 `tests/integration/test_f001_kronos_smoke.py` 真实模型 CPU 推理通过（1.76s/次）；AC-003 `tests/integration/test_f001_collector_smoke.py` 幂等复跑通过；AC-004 `tests/integration/test_f001_dryrun_monitoring.py` 3 passed + tasks T017 forceenter 双路径实测；AC-005 `deployment/verify.ps1` 退出码 0（26 项检查，含回填完整性阈值）。集成测试汇总：7 passed 0 skipped（真实模型实例 :8002）。
 
 ## 7. 测试、依赖与决策
 

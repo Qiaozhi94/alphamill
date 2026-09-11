@@ -9,7 +9,7 @@
 
 | # | 资产 | 来源（quant-crypto） | 去处（AlphaMill） | 改造点 |
 |---|---|---|---|---|
-| 1 | **TimescaleDB 数据** | 原卷 `quant-crypto_timescale_data` 已随宿主机重装灭失（2026-09-10 六路取证钉死，见 §八） | 主仓编排起全新 TimescaleDB（`db/init.sql` 初始化），从交易所（Binance，实证可用）回填历史数据并重建连续聚合；`D:\Projects\quant-crypto`（HEAD `d94f94f`）只读保留作代码/配置基线 | 重建路线：交易所回填 + 完整性校验（口径见 F001 design §3） |
+| 1 | **TimescaleDB 数据** | 原卷 `quant-crypto_timescale_data` 已随宿主机重装灭失（2026-09-10 六路取证钉死，见 §八） | ✅ 已完成：主仓编排起全新 TimescaleDB（`db/init.sql` 初始化），从交易所（Binance，实证可用）回填历史数据并重建连续聚合；`D:\Projects\quant-crypto`（HEAD `d94f94f`）只读保留作代码/配置基线 | 重建路线：交易所回填 + 完整性校验（口径见 F001 design §3） |
 | 2 | 数据采集器 | `data-collector/`（ccxt_ingestor、db_writer、historical_backfill、symbol_manager、derivatives_market_backfill） | `src/alphamill/data_bridge/collector/` | 并入主仓依赖管理；保留 REST 轮询模式 |
 | 3 | Kronos 服务薄壳 | `kronos-signal/`（server/generator/db_adapter/kronos_real） | `src/alphamill/kronos_service/` | db_adapter 改读迁移后 DB；上游 Kronos 代码改为 clone+pin（见第三节） |
 | 4 | 风控三件套 | `risk/`（circuit_breaker、correlation_guard、drawdown_guard） | `src/alphamill/freqtrade_bridge/risk/` | 随策略模板挂载进 Freqtrade |
@@ -48,12 +48,12 @@
 ## 五、迁移验收（全绿才算完成）
 
 ```text
-□ 回填完整性：重建后 DB 逐表行数符合交易所可得区间预期、抽样无缺口、连续聚合与基表重算一致（口径见 F001 design §3）
-□ Kronos：/health 200；/predict/BTC-USDT 返回 source=kronos
-□ Freqtrade：dry-run 启动，读到 Kronos 信号缓存，风控三件套挂载
-□ 监控：Grafana 面板有数据（K 线延迟/信号质量/交易健康）
-□ verify.ps1 全绿（扩展为上述全链路检查）
-□ NAS 每日备份落地并演练一次恢复；旧仓副本只读保留，主仓 git 历史干净（迁移 commit 单独可审）
+[x] 回填完整性：重建后 DB 逐表行数符合交易所可得区间预期、抽样无缺口、连续聚合与基表重算一致（口径见 F001 design §3）
+[x] Kronos：/health 200；/predict/BTC-USDT 返回 source=kronos
+[x] Freqtrade：dry-run 启动，读到 Kronos 信号缓存，风控三件套挂载
+[x] 监控：Grafana 面板有数据（K 线延迟/信号质量/交易健康）
+[x] verify.ps1 全绿（扩展为上述全链路检查）
+[x] NAS 每日备份落地并演练一次恢复；旧仓副本只读保留，主仓 git 历史干净（迁移 commit 单独可审）
 ```
 
 > 范围：Parquet 湖首次全量导出与 manifest 产出属 F002 / M1 数据桥范围（见

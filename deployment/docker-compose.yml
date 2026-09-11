@@ -76,6 +76,7 @@ services:
       DB_NAME: ${DB_NAME:-quant}
     volumes:
       - grafana_data:/var/lib/grafana
+      - ${GRAFANA_PLUGINS_DIR:-./grafana-plugins}:/var/lib/grafana/plugins
       - ../monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
     depends_on:

@@ -42,7 +42,16 @@ if ($prometheusHealth -notmatch "Healthy") {
 Write-Host $prometheusHealth -ForegroundColor Green
 
 Write-Step "Grafana datasource health"
-$grafanaAuth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("admin:quant2026"))
+$dotEnvMap = @{}
+$dotEnvPath = Join-Path $PSScriptRoot ".env"
+if (Test-Path $dotEnvPath) {
+    Get-Content $dotEnvPath | ForEach-Object {
+        if ($_ -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') { $dotEnvMap[$Matches[1]] = $Matches[2] }
+    }
+}
+$grafanaUser = if ($dotEnvMap["GRAFANA_USER"]) { $dotEnvMap["GRAFANA_USER"] } else { "admin" }
+$grafanaPassword = if ($dotEnvMap["GRAFANA_PASSWORD"]) { $dotEnvMap["GRAFANA_PASSWORD"] } else { "quant2026" }
+$grafanaAuth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${grafanaUser}:${grafanaPassword}"))
 $timescaleHealth = Invoke-RestMethod -Uri "http://localhost:3000/api/datasources/uid/TimescaleDB/health" -Headers @{ Authorization = $grafanaAuth }
 $prometheusDatasourceHealth = Invoke-RestMethod -Uri "http://localhost:3000/api/datasources/uid/Prometheus/health" -Headers @{ Authorization = $grafanaAuth }
 if ($timescaleHealth.status -ne "OK") {
@@ -83,7 +92,7 @@ Write-Host "Freqtrade open trades: $($freqtradeCount.current)/$($freqtradeCount.
 
 Write-Step "Kronos Signal API health"
 $kronosHealth = Invoke-RestMethod -Uri "http://localhost:8001/health"
-$kronosPrediction = Invoke-RestMethod -Uri "http://localhost:8001/predict/BTC%2FUSDT?exchange=okx&limit=120"
+$kronosPrediction = Invoke-RestMethod -Uri "http://localhost:8001/predict/BTC%2FUSDT?exchange=binance&limit=120"
 if ($kronosHealth.status -ne "ok") {
     throw "Kronos Signal health failed"
 }
@@ -420,6 +429,43 @@ SELECT
 FROM sample s
 JOIN manual m USING (bucket, exchange, symbol);
 "@
+
+Write-Step "F001 backfill completeness (design section 3 thresholds)"
+$completenessLines = docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -t -A -c @"
+WITH spans AS (
+    SELECT symbol, count(*) AS n, min(time) AS t0, max(time) AS t1
+    FROM ohlcv_1m WHERE exchange = 'binance' GROUP BY symbol
+)
+SELECT symbol || '|' || n || '|' ||
+       ROUND(1 - n::numeric / (EXTRACT(EPOCH FROM (t1 - t0))/60 + 1), 6)
+FROM spans ORDER BY symbol;
+"@
+$completenessLines = @($completenessLines | Where-Object { $_ -and $_.Trim() -ne "" })
+if ($completenessLines.Count -eq 0) {
+    throw "Backfill completeness check found no rows in ohlcv_1m"
+}
+foreach ($line in $completenessLines) {
+    $parts = $line -split '\|'
+    $ratio = [double]$parts[2]
+    if ($ratio -gt 0.01) {
+        throw "Backfill completeness FAIL: $($parts[0]) missing_ratio=$ratio > 0.01"
+    }
+    Write-Host "$($parts[0]) rows=$($parts[1]) missing_ratio=$ratio" -ForegroundColor Green
+}
+
+Write-Step "F001 monitoring chain (signals log + snapshot freshness)"
+$signalsCount = docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -t -A -c "SELECT count(*) FROM signals_log;"
+$signalsCount = ($signalsCount | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1)
+if (-not $signalsCount -or [int]$signalsCount -lt 1) {
+    throw "signals_log is empty (quality panel has no data)"
+}
+Write-Host "signals_log rows: $signalsCount" -ForegroundColor Green
+$snapshotAgeSeconds = docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -t -A -c "SELECT EXTRACT(EPOCH FROM (NOW() - max(time))) FROM dryrun_runtime_snapshots;"
+$snapshotAgeSeconds = ($snapshotAgeSeconds | Where-Object { $_ -match '^\d+(\.\d+)?$' } | Select-Object -First 1)
+if (-not $snapshotAgeSeconds -or [double]$snapshotAgeSeconds -gt 900) {
+    throw "dryrun_runtime_snapshots stale or empty (age=$snapshotAgeSeconds s, threshold=900 s)"
+}
+Write-Host "latest snapshot age: $snapshotAgeSeconds s" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "Verification completed." -ForegroundColor Green
