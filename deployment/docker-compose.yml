@@ -37,6 +37,7 @@ services:
       TIMEFRAMES: ${TIMEFRAMES:-1m}
       POLL_SECONDS: ${POLL_SECONDS:-30}
       FETCH_LIMIT: ${FETCH_LIMIT:-5}
+      BINANCE_HTTPS_PROXY: ${BINANCE_HTTPS_PROXY:-}
     depends_on:
       timescaledb: {condition: service_healthy}
     networks: [alphamill]
