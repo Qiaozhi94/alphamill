@@ -9,15 +9,15 @@
 
 | # | 资产 | 来源（quant-crypto） | 去处（AlphaMill） | 改造点 |
 |---|---|---|---|---|
-| 1 | **TimescaleDB 数据** | 原卷 `quant-crypto_timescale_data` 已随宿主机重装灭失（2026-09-10 六路取证钉死，见 §八） | ✅ 已完成：主仓编排起全新 TimescaleDB（`db/init.sql` 初始化），从交易所（Binance，实证可用）回填历史数据并重建连续聚合；`D:\Projects\quant-crypto`（HEAD `d94f94f`）只读保留作代码/配置基线 | 重建路线：交易所回填 + 完整性校验（口径见 F001 design §3） |
-| 2 | 数据采集器 | `data-collector/`（ccxt_ingestor、db_writer、historical_backfill、symbol_manager、derivatives_market_backfill） | `src/alphamill/data_bridge/collector/` | 并入主仓依赖管理；保留 REST 轮询模式 |
-| 3 | Kronos 服务薄壳 | `kronos-signal/`（server/generator/db_adapter/kronos_real） | `src/alphamill/kronos_service/` | db_adapter 改读迁移后 DB；上游 Kronos 代码改为 clone+pin（见第三节） |
-| 4 | 风控三件套 | `risk/`（circuit_breaker、correlation_guard、drawdown_guard） | `src/alphamill/freqtrade_bridge/risk/` | 随策略模板挂载进 Freqtrade |
-| 5 | 评测器/门禁脚本 | `scripts/kronos_rankic_eval.py`、`kronos_ic_decay_eval.py`、`independent_cross_backtest.py`、`validate_*_holdout.py` | `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/` | 泛化改造（M1 主体工作，见 PRD） |
-| 6 | 监控配置 | `grafana/`、`prometheus/` | `monitoring/` | 数据源指向迁移后 DB |
-| 7 | 部署编排 | `docker-compose.yml`、`.env` 模板、`scripts/verify.ps1` | `deployment/` | 端口/网络按主仓调整；verify 扩展为全链路 |
-| 8 | 宇宙发现 | `scripts/discover_okx_swap_universe.py`、`download_okx_swap_1h.ps1` | `scripts/` | 无改造 |
-| 9 | Freqtrade user_data | `freqtrade/user_data/`（策略、config、kronos_cache、feather 行情） | `freqtrade/user_data/` | 入库仅策略与 config；kronos_cache / feather 行情为本地数据资产不进 git（主仓 .gitignore 已覆盖 *.feather/*.parquet）；缓存样本留存本地，作为首批信号缓存样本供 F002 信号缓存对齐校验用 |
+| 1 | ✅ **TimescaleDB 数据** | 原卷 `quant-crypto_timescale_data` 已随宿主机重装灭失（2026-09-10 六路取证钉死，见 §八） | ✅ 已完成：主仓编排起全新 TimescaleDB（`db/init.sql` 初始化），从交易所（Binance，实证可用）回填历史数据并重建连续聚合；`D:\Projects\quant-crypto`（HEAD `d94f94f`）只读保留作代码/配置基线 | 重建路线：交易所回填 + 完整性校验（口径见 F001 design §3） |
+| 2 | ✅ 数据采集器 | `data-collector/`（ccxt_ingestor、db_writer、historical_backfill、symbol_manager、derivatives_market_backfill） | `src/alphamill/data_bridge/collector/` | 并入主仓依赖管理；保留 REST 轮询模式 |
+| 3 | ✅ Kronos 服务薄壳 | `kronos-signal/`（server/generator/db_adapter/kronos_real） | `src/alphamill/kronos_service/` | db_adapter 改读迁移后 DB；上游 Kronos 代码改为 clone+pin（见第三节） |
+| 4 | ✅ 风控三件套 | `risk/`（circuit_breaker、correlation_guard、drawdown_guard） | `src/alphamill/freqtrade_bridge/risk/` | 随策略模板挂载进 Freqtrade |
+| 5 | ✅ 评测器/门禁脚本 | `scripts/kronos_rankic_eval.py`、`kronos_ic_decay_eval.py`、`independent_cross_backtest.py`、`validate_*_holdout.py` | `src/alphamill/factor_factory/bench/` + `src/alphamill/validation/` | 泛化改造（M1 主体工作，见 PRD） |
+| 6 | ✅ 监控配置 | `grafana/`、`prometheus/` | `monitoring/` | 数据源指向迁移后 DB |
+| 7 | ✅ 部署编排 | `docker-compose.yml`、`.env` 模板、`scripts/verify.ps1` | `deployment/` | 端口/网络按主仓调整；verify 扩展为全链路 |
+| 8 | ✅ 宇宙发现 | `scripts/discover_okx_swap_universe.py`、`download_okx_swap_1h.ps1` | `scripts/` | 无改造 |
+| 9 | ✅ Freqtrade user_data | `freqtrade/user_data/`（策略、config、kronos_cache、feather 行情） | `freqtrade/user_data/` | 入库仅策略与 config；kronos_cache / feather 行情为本地数据资产不进 git（主仓 .gitignore 已覆盖 *.feather/*.parquet）；缓存样本留存本地，作为首批信号缓存样本供 F002 信号缓存对齐校验用 |
 
 ## 二、留下不搬（归档处置）
 

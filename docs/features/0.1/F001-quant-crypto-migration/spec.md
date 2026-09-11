@@ -2,7 +2,7 @@
 kind: feature
 id: F001
 version: "0.1"
-status: review
+status: done
 gate_version: 1
 related_features: []
 topics: [migration, infra]
