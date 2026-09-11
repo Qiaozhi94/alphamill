@@ -149,4 +149,4 @@ def resolve(value: str, direction: Literal["to_lake", "to_freqtrade", "to_db"]) 
 
 - [x] DQ-001:signals_log 无 exchange 维度,分区省略 exchange 层——确认(spec 已同步)
 - [x] DQ-002:导出窗口与实时采集重叠如何保证分区完整——窗口截断 `[start, end)` 语义,跨窗口数据归下一窗口(§3)
-- [ ] DQ-003:增量导出窗口内 pair 无数据记 skipped——是否需要与"确实无行情"区分?倾向不区分(manifest 记录即可),实现时若误判风险显现再升级
+- [ ] DQ-003:增量导出窗口内 pair 无数据记 skipped,是否与"确实无行情"区分?——AI 建议:不区分,manifest 记录 skipped 清单(①区分需引入行情可得性外部探测,本期收益不抵成本;②FR1.5 质量流程天然覆盖此风险;③升级条件预定义:M1 评测台出现实际误判即加 pair 级探针)。待 owner 裁决后关闭
