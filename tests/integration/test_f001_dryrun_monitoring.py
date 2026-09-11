@@ -46,6 +46,17 @@ def _db_count(conn, table: str) -> int:
         return int(cur.fetchone()[0])
 
 
+def _kronos_available() -> bool:
+    try:
+        resp = requests.get(
+            f"{os.getenv('KRONOS_BASE_URL', 'http://127.0.0.1:8001')}/health", timeout=5
+        )
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _ft_available(), reason="Freqtrade dry-run 不可达")
 def test_freqtrade_dryrun_alive():
     """dry-run bot 存活且 state=RUNNING。"""
     resp = requests.get(f"{FREQTRADE_URL}/api/v1/show_config", auth=FREQTRADE_AUTH, timeout=10)
@@ -54,6 +65,7 @@ def test_freqtrade_dryrun_alive():
     assert resp.json()["state"] == "running"
 
 
+@pytest.mark.skipif(not _kronos_available(), reason="Kronos 薄壳不可达")
 def test_kronos_signal_source_reachable():
     """风控钩子的信号前置：Kronos 服务可出信号。"""
     resp = requests.get(
