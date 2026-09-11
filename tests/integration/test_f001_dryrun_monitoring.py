@@ -40,6 +40,15 @@ def _ft_available() -> bool:
         return False
 
 
+def _db_available() -> bool:
+    try:
+        conn = _db()
+    except Exception:
+        return False
+    conn.close()
+    return True
+
+
 def _db_count(conn, table: str) -> int:
     with conn.cursor() as cur:
         cur.execute(f"SELECT count(*) FROM {table}")  # noqa: S608 固定表名清单
@@ -77,7 +86,10 @@ def test_kronos_signal_source_reachable():
     assert resp.json()["signal_type"] in {"buy", "sell", "neutral"}
 
 
-@pytest.mark.skipif(not _ft_available(), reason="Freqtrade dry-run 不可达")
+@pytest.mark.skipif(
+    not _ft_available() or not _db_available(),
+    reason="Freqtrade dry-run 或 TimescaleDB 不可达",
+)
 def test_monitoring_panels_have_data():
     """AC-004 面板数据源非空：K 线延迟(ohlcv_1m)/信号质量(signals_log)/交易健康(snapshots)。"""
     conn = _db()
