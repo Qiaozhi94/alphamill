@@ -26,7 +26,7 @@ updated: 2026-09-10
 
 ## 1. 前置条件
 
-### 当前进展（2026-09-11）
+### 当前进展（2026-09-12）
 
 - **数据源灭失与路线修订**：宿主机 2026-09-07~08 整机重装，原 qiaozhi-lt Docker 卷
   `quant-crypto_timescale_data` 随旧 C 盘丢失，六路取证确认无备份副本（见
@@ -70,7 +70,7 @@ updated: 2026-09-10
 ### Phase 3：全链路验证
 
 - [x] T016 (`FR-002`, `AC-003`): 采集器单交易对冒烟 + 幂等复跑 — verify: `tests/integration/test_f001_collector_smoke.py`（2026-09-10 实测 passed：BTC/USDT 两个紧邻周期已闭 K 线零增长，未闭合 K 线被过滤）
-- [ ] T017 (`FR-004`, `AC-004`): Freqtrade dry-run 启动并确认风控钩子与监控面板 — verify: `tests/integration/test_f001_dryrun_monitoring.py`
+- [x] T017 (`FR-004`, `AC-004`): Freqtrade dry-run 启动并确认风控钩子与监控面板 — verify: `tests/integration/test_f001_dryrun_monitoring.py`（2026-09-12 实测 3 passed：dry-run RUNNING + Kronos 信号源可达 + 三面板数据源非空）
   - 2026-09-11 进展：dry-run 容器已运行（freqtrade:stable + config.dryrun.json 覆盖：binance/代理/JWT/fiat），策略经
     `KRONOS_SIGNAL_URL=host.docker.internal:8001` + `KRONOS_SIGNAL_EXCHANGE=binance` 成功取得 6 对信号（BTC buy/XRP sell/其余 neutral），
     heartbeat 稳定。策略新增 `KRONOS_SIGNAL_EXCHANGE` 环境变量出口（默认 okx 保持旧行为）。
@@ -78,8 +78,11 @@ updated: 2026-09-10
     `Entry blocked by Kronos sell signal (conf=1.0)` 拒绝，证明 confirm_trade_entry 执行且链路前三级
     （熔断/回撤/相关性）全部评估放行；②放行路径——ETH 强制入场成功（trade_id=1，Binance dry-run，
     0.0409 ETH @99.78 USDT，entry_fill 后 exit_signal 自动平仓），全链路入场→出场循环可用。
-  - 待完成：`collect_runtime_snapshot.ps1`（旧仓 scripts/，写 dryrun_runtime_snapshots/open_positions，
-    不在迁移清单）需迁入才能点亮监控面板——属 T018 前置发现项。
+  - 2026-09-12 监控数据链路：`scripts/collect_runtime_snapshot.ps1` 迁入（新增 `-Exchange` 参数/
+    `KRONOS_SIGNAL_EXCHANGE` 出口，路径改正斜杠），forceenter 后实测三表落数
+    （snapshots=1/positions=1/signals=6）；`alphamill-snapshot.timer` 每 5 分钟采集。
+    注：当前薄壳为 mock 模式，signals_log.source=placeholder，60 分钟收益回填仅对 source=kronos 生效
+    （真实模式容器化属 T018 范围）。
 - [ ] T018 (`FR-006`, `AC-005`): 扩展并运行 deployment/verify.ps1 全链路检查 — verify: `deployment/verify.ps1` 退出码 0
 
 ## 3. 验证与验收任务

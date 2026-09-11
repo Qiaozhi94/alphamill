@@ -1,0 +1,7 @@
+[Unit]
+Description=AlphaMill dry-run runtime snapshot (freqtrade API -> TimescaleDB)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/alphamill
+ExecStart=%h/.local/bin/pwsh -NoProfile -File %h/projects/alphamill/scripts/collect_runtime_snapshot.ps1 -KronosHostUrl http://127.0.0.1:8001 -Exchange binance
