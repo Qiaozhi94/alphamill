@@ -26,6 +26,9 @@ class _Cursor:
     def fetchone(self):
         return next(self.rows)
 
+    def fetchall(self):
+        return list(self.rows)
+
 
 class _Connection:
     def __init__(self, rows: list[tuple]) -> None:
@@ -74,6 +77,25 @@ def test_symbol_stats_uses_explicit_listing_boundary(monkeypatch) -> None:
     assert stats["verdict"] == "PASS"
 
 
+def test_symbol_stats_uses_explicit_delisting_boundary(monkeypatch) -> None:
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    effective_end = datetime(2024, 1, 1, 0, 2, tzinfo=UTC)
+    end = datetime(2024, 1, 1, 0, 3, tzinfo=UTC)
+    monkeypatch.setattr(report, "WINDOW_START", start)
+    monkeypatch.setattr(report, "WINDOW_END", end)
+    monkeypatch.setattr(report, "listing_start", lambda *_args: start)
+    monkeypatch.setattr(report, "delisting_end", lambda *_args: effective_end)
+    monkeypatch.setattr(report, "unavailable_symbols", lambda: set())
+
+    conn = _Connection([(2, start, effective_end - report.timedelta(minutes=1)), (0, None)])
+    stats = report.symbol_stats(conn, "binance", "DELISTED/USDT")
+
+    assert stats["expected_rows_in_window"] == 2
+    assert stats["availability_end"] == effective_end.isoformat()
+    assert stats["boundary_ok"] is True
+    assert stats["verdict"] == "PASS"
+
+
 def test_derivative_verdict_fails_failed_progress() -> None:
     stats = report.derivative_verdict(
         dataset="funding",
@@ -101,6 +123,25 @@ def test_derivative_verdict_fails_when_progress_does_not_cover_target_window() -
         progress_window_covers_authoritative_window=False,
     )
     assert stats["verdict"] == "FAIL"
+
+
+def test_progress_coverage_requires_every_configured_symbol() -> None:
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 2, tzinfo=UTC)
+    covered, failed, per_symbol = report.progress_coverage(
+        [
+            ("BTC/USDT", start, end, 0, True),
+            ("ETH/USDT", start, end, 0, False),
+        ],
+        ["BTC/USDT", "ETH/USDT"],
+        start,
+        end,
+    )
+
+    assert covered is False
+    assert failed == 0
+    assert per_symbol["BTC/USDT"]["covers_authoritative_window"] is True
+    assert per_symbol["ETH/USDT"]["covers_authoritative_window"] is False
 
 
 def test_basis_boundary_is_explicitly_allowlisted() -> None:
@@ -139,3 +180,11 @@ def test_powershell_completeness_uses_configured_window() -> None:
     assert "$backfillWindowEnd" in script
     assert "EXTRACT(EPOCH FROM ('$backfillWindowEnd'::timestamptz" in script
     assert "EXTRACT(EPOCH FROM (t1 - t0))" not in script
+
+
+def test_report_does_not_probe_and_discard_database_symbols() -> None:
+    source = Path(__file__).resolve().parents[2] / "tools/f001_backfill_report.py"
+    text = source.read_text(encoding="utf-8")
+
+    assert "SELECT DISTINCT symbol FROM ohlcv_1m" not in text
+    assert "no configured symbols; nothing to verify" in text

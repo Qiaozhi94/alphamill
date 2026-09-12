@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 
-def parse_symbol_listing_starts(raw: str) -> dict[str, datetime]:
+def parse_symbol_timestamps(raw: str) -> dict[str, datetime]:
     """Parse ``SYMBOL=ISO_TIMESTAMP`` entries from a comma-separated setting."""
     result: dict[str, datetime] = {}
     for item in raw.split(","):
@@ -20,11 +20,26 @@ def parse_symbol_listing_starts(raw: str) -> dict[str, datetime]:
     return result
 
 
+def parse_symbol_listing_starts(raw: str) -> dict[str, datetime]:
+    return parse_symbol_timestamps(raw)
+
+
+def parse_symbol_delisting_ends(raw: str) -> dict[str, datetime]:
+    return parse_symbol_timestamps(raw)
+
+
 def listing_start_for(symbol: str, window_start: datetime, raw: str = "") -> datetime:
     listing_start = parse_symbol_listing_starts(raw).get(symbol)
     if listing_start is None:
         return window_start
     return max(window_start, listing_start.astimezone(window_start.tzinfo))
+
+
+def delisting_end_for(symbol: str, window_end: datetime, raw: str = "") -> datetime:
+    delisting_end = parse_symbol_delisting_ends(raw).get(symbol)
+    if delisting_end is None:
+        return window_end
+    return min(window_end, delisting_end.astimezone(window_end.tzinfo))
 
 
 def parse_unavailable_symbols(raw: str) -> set[str]:

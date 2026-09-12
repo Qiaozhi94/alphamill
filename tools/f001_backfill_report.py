@@ -24,7 +24,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.dirname(__file__))
 
 from f001_backfill_config import (  # noqa: E402
+    configured_derivatives_exchange,
+    configured_exchanges,
     configured_symbols,
+    delisting_end,
     derivative_window,
     expected_minute_rows,
     listing_start,
@@ -65,7 +68,7 @@ DERIVATIVE_DATASETS = {
     "derivatives_open_interest": ("open_interest", timedelta(hours=6)),
     "derivatives_mark_index_basis": ("basis", timedelta(hours=1)),
 }
-DERIVATIVES_EXCHANGE = os.getenv("DERIVATIVES_EXCHANGE", "binanceusdm")
+DERIVATIVES_EXCHANGE = configured_derivatives_exchange()
 MAX_REPORTED_GAPS = 20
 
 
@@ -77,6 +80,16 @@ def fetch_one(conn, sql: str, params: tuple = ()) -> tuple:
 
 def symbol_stats(conn, exchange: str, symbol: str) -> dict:
     effective_start = listing_start(symbol, WINDOW_START)
+    effective_end = delisting_end(symbol, WINDOW_END)
+    if symbol in unavailable_symbols() or effective_start >= effective_end:
+        return {
+            "rows": 0,
+            "expected_rows_in_window": 0,
+            "availability_start": effective_start.isoformat(),
+            "availability_end": effective_end.isoformat(),
+            "status": "unavailable",
+            "verdict": "PASS",
+        }
     row = fetch_one(
         conn,
         """SELECT
@@ -84,23 +97,16 @@ def symbol_stats(conn, exchange: str, symbol: str) -> dict:
             min(time), max(time)
         FROM ohlcv_1m
         WHERE exchange = %s AND symbol = %s""",
-        (effective_start, WINDOW_END, exchange, symbol),
+        (effective_start, effective_end, exchange, symbol),
     )
     count, first, last = int(row[0]), row[1], row[2]
-    expected = expected_minute_rows(effective_start, WINDOW_END)
+    expected = expected_minute_rows(effective_start, effective_end)
     if count == 0:
-        if symbol in unavailable_symbols():
-            return {
-                "rows": 0,
-                "expected_rows_in_window": 0,
-                "availability_start": effective_start.isoformat(),
-                "status": "unavailable",
-                "verdict": "PASS",
-            }
         return {
             "rows": 0,
             "expected_rows_in_window": expected,
             "availability_start": effective_start.isoformat(),
+            "availability_end": effective_end.isoformat(),
             "verdict": "FAIL",
             "reason": "no rows in authoritative window",
         }
@@ -116,11 +122,11 @@ def symbol_stats(conn, exchange: str, symbol: str) -> dict:
                    max(time - prev)
             FROM ordered
         """,
-        (exchange, symbol, effective_start, WINDOW_END),
+        (exchange, symbol, effective_start, effective_end),
     )
     gap_count, max_gap = int(gaps[0]), gaps[1]
     gap_ratio = missing / expected
-    boundary_ok = first <= effective_start and last >= WINDOW_END - timedelta(minutes=1)
+    boundary_ok = first <= effective_start and last >= effective_end - timedelta(minutes=1)
     return {
         "rows": count,
         "first": first.isoformat(),
@@ -131,7 +137,8 @@ def symbol_stats(conn, exchange: str, symbol: str) -> dict:
         "gap_jumps_gt_1m": gap_count,
         "max_gap": str(max_gap),
         "window_start": effective_start.isoformat(),
-        "window_end": WINDOW_END.isoformat(),
+        "window_end": effective_end.isoformat(),
+        "availability_end": effective_end.isoformat(),
         "boundary_ok": boundary_ok,
         "verdict": "PASS" if gap_ratio <= GAP_RATIO_THRESHOLD and boundary_ok else "FAIL",
     }
@@ -151,7 +158,13 @@ def top_gaps(conn, exchange: str, symbol: str) -> list[dict]:
             ORDER BY time - prev DESC
             LIMIT %s
             """,
-            (exchange, symbol, effective_start, WINDOW_END, MAX_REPORTED_GAPS),
+            (
+                exchange,
+                symbol,
+                effective_start,
+                delisting_end(symbol, WINDOW_END),
+                MAX_REPORTED_GAPS,
+            ),
         )
         return [
             {"from": r[0].isoformat(), "to": r[1].isoformat(), "gap": str(r[2])}
@@ -259,23 +272,64 @@ def derivative_verdict(
     }
 
 
+def progress_coverage(
+    progress_rows: list[tuple], symbols: list[str], window_start: datetime, window_end: datetime
+) -> tuple[bool, int, dict[str, dict]]:
+    """Require every configured symbol to cover the complete authoritative window."""
+    by_symbol = {str(row[0]): row[1:] for row in progress_rows}
+    per_symbol = {}
+    failed_progress = 0
+    for symbol in symbols:
+        row = by_symbol.get(symbol)
+        progress_start, progress_end, failed, *coverage = row if row else (None, None, 0)
+        failed = int(failed or 0)
+        failed_progress += failed
+        covered = (
+            bool(coverage[0])
+            if coverage
+            else bool(
+                progress_start
+                and progress_end
+                and progress_start <= window_start
+                and progress_end >= window_end
+            )
+        )
+        per_symbol[symbol] = {
+            "target_start": progress_start.isoformat() if progress_start else None,
+            "target_end": progress_end.isoformat() if progress_end else None,
+            "failed_rows": failed,
+            "covers_authoritative_window": covered,
+        }
+    return (
+        bool(symbols)
+        and all(
+            item["covers_authoritative_window"] and item["failed_rows"] == 0
+            for item in per_symbol.values()
+        ),
+        failed_progress,
+        per_symbol,
+    )
+
+
 def derivative_stats(conn, exchange: str, symbols: list[str]) -> dict:
     stats = {}
     for table, (dataset, interval) in DERIVATIVE_DATASETS.items():
-        progress = fetch_one(
-            conn,
-            """SELECT min(target_start), max(target_end),
-                      count(*) FILTER (WHERE status = 'failed')
-               FROM derivatives_backfill_progress
-               WHERE exchange = %s AND dataset = %s""",
-            (exchange, dataset),
-        )
-        progress_start, progress_end, failed_progress = progress
-        progress_covers_window = bool(
-            progress_start
-            and progress_end
-            and progress_start <= WINDOW_START
-            and progress_end >= WINDOW_END
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT symbol, min(target_start), max(target_end),
+                          count(*) FILTER (
+                              WHERE status = 'failed'
+                                AND target_start <= %s AND target_end >= %s
+                          ),
+                          coalesce(bool_or(target_start <= %s AND target_end >= %s), false)
+                   FROM derivatives_backfill_progress
+                   WHERE exchange = %s AND dataset = %s
+                   GROUP BY symbol""",
+                (WINDOW_START, WINDOW_END, WINDOW_START, WINDOW_END, exchange, dataset),
+            )
+            progress_rows = cur.fetchall()
+        progress_covers_window, failed_progress, progress_by_symbol = progress_coverage(
+            progress_rows, symbols, WINDOW_START, WINDOW_END
         )
         effective_start, effective_end = derivative_window(dataset, WINDOW_START, WINDOW_END)
         data = fetch_one(
@@ -295,10 +349,11 @@ def derivative_stats(conn, exchange: str, symbols: list[str]) -> dict:
             effective_end=effective_end,
             failed_progress=int(failed_progress or 0),
             progress_window_covers_authoritative_window=progress_covers_window,
-            progress_window_start=progress_start,
-            progress_window_end=progress_end,
+            progress_window_start=None,
+            progress_window_end=None,
         )
         stats[table]["interval"] = str(interval)
+        stats[table]["progress_by_symbol"] = progress_by_symbol
     return stats
 
 
@@ -338,21 +393,17 @@ def build_report(conn, exchange: str, symbols: list[str]) -> dict:
 
 
 def main() -> int:
+    default_exchange = configured_exchanges()[0] if configured_exchanges() else "binance"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--exchange", default=os.getenv("EXCHANGES", "binance").split(",")[0])
+    parser.add_argument("--exchange", default=default_exchange)
     parser.add_argument("--report", default="")
     args = parser.parse_args()
 
     conn = db_connect()
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT DISTINCT symbol FROM ohlcv_1m WHERE exchange = %s ORDER BY 1",
-                (args.exchange,),
-            )
-            symbols = configured_symbols()
+        symbols = configured_symbols()
         if not symbols:
-            print(f"no rows for exchange={args.exchange}; nothing to verify")
+            print("no configured symbols; nothing to verify")
             return 2
         report = build_report(conn, args.exchange, symbols)
     finally:

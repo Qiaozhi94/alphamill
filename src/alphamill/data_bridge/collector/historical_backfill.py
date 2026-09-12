@@ -4,11 +4,15 @@ import time
 from datetime import UTC, datetime, timedelta
 
 try:  # Support both package imports and the legacy standalone container entrypoint.
-    from .backfill_boundaries import listing_start_for, parse_unavailable_symbols
+    from .backfill_boundaries import (
+        delisting_end_for,
+        listing_start_for,
+        parse_unavailable_symbols,
+    )
     from .db_writer import db_connect, normalize_ohlcv_rows, upsert_ohlcv
     from .symbol_manager import parse_symbols
 except ImportError:  # pragma: no cover - exercised only by direct script execution.
-    from backfill_boundaries import listing_start_for, parse_unavailable_symbols
+    from backfill_boundaries import delisting_end_for, listing_start_for, parse_unavailable_symbols
     from db_writer import db_connect, normalize_ohlcv_rows, upsert_ohlcv
     from symbol_manager import parse_symbols
 
@@ -32,6 +36,7 @@ REFRESH_AGGREGATES = os.getenv("BACKFILL_REFRESH_AGGREGATES", "true").lower() in
 }
 RESUME_BACKFILL = os.getenv("BACKFILL_RESUME", "true").lower() in {"1", "true", "yes"}
 LISTING_STARTS = os.getenv("BACKFILL_SYMBOL_LISTING_STARTS", "")
+DELISTING_ENDS = os.getenv("BACKFILL_SYMBOL_DELISTING_ENDS", "")
 UNAVAILABLE_SYMBOLS = parse_unavailable_symbols(os.getenv("BACKFILL_UNAVAILABLE_SYMBOLS", ""))
 
 logging.basicConfig(
@@ -203,12 +208,27 @@ def fetch_symbol(
         return 0
 
     availability_start = listing_start_for(symbol, start, LISTING_STARTS)
+    availability_end = delisting_end_for(symbol, end, DELISTING_ENDS)
+    if availability_start >= availability_end:
+        save_progress(
+            conn,
+            exchange_id,
+            symbol,
+            start,
+            end,
+            end,
+            "unavailable",
+            0,
+            "symbol has no available candles inside the target window",
+        )
+        return 0
+
     resume_start, total = load_progress(conn, exchange_id, symbol, start, end)
     resume_start = max(resume_start, availability_start)
     save_progress(conn, exchange_id, symbol, start, end, resume_start, "running", total)
 
     since_ms = int(resume_start.timestamp() * 1000)
-    end_ms = int(end.timestamp() * 1000)
+    end_ms = int(availability_end.timestamp() * 1000)
 
     while since_ms < end_ms:
         rows = None
@@ -259,10 +279,11 @@ def fetch_symbol(
                 next_since_dt,
                 "stalled",
                 total,
-                "exchange returned an empty batch before target_end",
+                "exchange returned an empty batch before configured availability boundary",
             )
             raise RuntimeError(
-                f"empty OHLCV batch before target_end for {exchange_id} {symbol} at {next_since_dt}"
+                "empty OHLCV batch before configured availability boundary "
+                f"for {exchange_id} {symbol} at {next_since_dt}"
             )
 
         total += upsert_ohlcv(conn, normalize_ohlcv_rows(exchange_id, symbol, rows))
@@ -294,11 +315,14 @@ def fetch_symbol(
             symbol,
             datetime.fromtimestamp(last_ts / 1000, tz=UTC).isoformat(),
             total,
-            end.isoformat(),
+            availability_end.isoformat(),
         )
         time.sleep(exchange.rateLimit / 1000 if exchange.rateLimit else 0.2)
 
-    save_progress(conn, exchange_id, symbol, start, end, end, "complete", total)
+    completion_note = (
+        "completed at configured delisting boundary" if availability_end < end else None
+    )
+    save_progress(conn, exchange_id, symbol, start, end, end, "complete", total, completion_note)
     return total
 
 
