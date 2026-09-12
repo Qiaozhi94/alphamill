@@ -17,9 +17,7 @@ def test_null_numeric_metrics_are_inserted_as_sql_null() -> None:
 
 def test_snapshot_schema_allows_unknown_numeric_metrics() -> None:
     init_sql = (ROOT / "db/init.sql").read_text(encoding="utf-8")
-    migration = (ROOT / "db/migrations/004_nullable_dryrun_metrics.sql").read_text(
-        encoding="utf-8"
-    )
+    migration = (ROOT / "db/migrations/004_nullable_dryrun_metrics.sql").read_text(encoding="utf-8")
 
     for column in (
         "total_stake",
@@ -36,3 +34,11 @@ def test_snapshot_schema_allows_unknown_numeric_metrics() -> None:
     snapshot_ddl = init_sql.split("CREATE TABLE IF NOT EXISTS dryrun_runtime_snapshots", 1)[1]
     snapshot_ddl = snapshot_ddl.split("CREATE INDEX", 1)[0]
     assert "winrate             DOUBLE PRECISION NOT NULL" not in snapshot_ddl
+
+
+def test_snapshot_uses_configured_database_identity() -> None:
+    script = (ROOT / "scripts/collect_runtime_snapshot.ps1").read_text(encoding="utf-8")
+
+    assert '$dbUser = if ($dotEnv["DB_USER"])' in script
+    assert '$dbName = if ($dotEnv["DB_NAME"])' in script
+    assert "psql -v ON_ERROR_STOP=1 -U quant -d quant" not in script

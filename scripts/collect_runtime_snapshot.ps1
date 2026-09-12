@@ -39,13 +39,17 @@ function Read-DotEnv {
 
 function Invoke-DbSql {
     param([string]$Sql)
-    $Sql | docker exec -i quant-timescaledb psql -v ON_ERROR_STOP=1 -U quant -d quant | Out-Null
+    $Sql | docker exec -i quant-timescaledb psql -v ON_ERROR_STOP=1 -U $dbUser -d $dbName | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Database write failed with exit code $LASTEXITCODE"
     }
 }
 
 $dotEnv = Read-DotEnv (Join-Path $projectRoot "deployment/.env")
+$dbUser = if ($dotEnv["DB_USER"]) { $dotEnv["DB_USER"] } else { $env:DB_USER }
+$dbName = if ($dotEnv["DB_NAME"]) { $dotEnv["DB_NAME"] } else { $env:DB_NAME }
+$dbUser = if ($dbUser) { $dbUser } else { "quant" }
+$dbName = if ($dbName) { $dbName } else { "quant" }
 $snapshotMigration = Join-Path $projectRoot "db/migrations/004_nullable_dryrun_metrics.sql"
 if (-not (Test-Path $snapshotMigration)) {
     throw "Runtime snapshot migration is missing: $snapshotMigration"
