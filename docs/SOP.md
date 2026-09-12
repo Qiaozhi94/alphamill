@@ -87,3 +87,20 @@ updated: 2026-09-07
 - 分层与命名约定：node 见 `docs/decisions/` 目录结构 ADR；python 采用单一布局
   `src/alphamill/<module>/`（子包：data_bridge、factor_factory、validation、
   kronos_service 等）；非 Python 资产（docker-compose、deployment/、docs/）留仓库根。
+
+### F001 原样迁移文件豁免
+
+以下文件是 F001 从旧仓原样迁入、且尚未进入 F002 泛化范围的历史脚本，暂不按 350 行
+硬上限拆分。豁免截止 `F002` 完成对应模块泛化时，由 owner 复核并删除或续期；豁免不
+放宽运行时验证和质量门。
+
+| 文件 | 豁免原因 | 解除期限 |
+|---|---|---|
+| `src/alphamill/data_bridge/collector/derivatives_market_backfill.py` | F001 原样迁移的回填脚本 | F002 泛化阶段 |
+| `freqtrade/user_data/strategies/KronosFusionStrategy.py` | F001 原样迁移的策略模板 | F002 策略整合阶段 |
+| `src/alphamill/validation/validate_low_frequency_expanded_holdout.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
+| `src/alphamill/validation/train_low_frequency_walk_forward_baselines.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
+| `src/alphamill/validation/validate_low_frequency_regime_filters.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
+| `deployment/verify.ps1` | F001 全链路验收脚本 | F002 验收门重构阶段 |
+| `src/alphamill/validation/validate_low_frequency_candidate_holdout.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
+| `src/alphamill/factor_factory/bench/independent_cross_backtest.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
