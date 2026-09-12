@@ -1,6 +1,6 @@
 param(
     [string]$KronosHostUrl = "http://127.0.0.1:8002",
-    [string]$Exchange = $(if ($env:KRONOS_SIGNAL_EXCHANGE) { $env:KRONOS_SIGNAL_EXCHANGE } else { "okx" }),
+    [string]$Exchange = $(if ($env:KRONOS_SIGNAL_EXCHANGE) { $env:KRONOS_SIGNAL_EXCHANGE } else { "binance" }),
     [string[]]$Symbols = @("BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT")
 )
 

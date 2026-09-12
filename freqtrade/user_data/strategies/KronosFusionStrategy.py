@@ -33,11 +33,11 @@ class KronosFusionStrategy(IStrategy):
     use_custom_stoploss = True
     startup_candle_count = 60
     process_only_new_candles = True
-    kronos_url = os.getenv("KRONOS_SIGNAL_URL", "http://host.docker.internal:8002")
+    kronos_url = os.getenv("KRONOS_SIGNAL_URL", "http://kronos-signal:8001")
     kronos_timeout = float(os.getenv("KRONOS_SIGNAL_TIMEOUT", "8"))
     kronos_limit = int(os.getenv("KRONOS_SIGNAL_LIMIT", "256"))
-    # 数据落库的交易所标签（F001 回填/采集源见 deployment/.env EXCHANGES），默认保持旧行为。
-    kronos_exchange = os.getenv("KRONOS_SIGNAL_EXCHANGE", "okx")
+    # 数据落库的交易所标签（F001 回填/采集源见 deployment/.env EXCHANGES）。
+    kronos_exchange = os.getenv("KRONOS_SIGNAL_EXCHANGE", "binance")
     kronos_cache_minutes = int(os.getenv("KRONOS_SIGNAL_CACHE_MINUTES", "5"))
     kronos_disable_live_in_backtest = (
         os.getenv("KRONOS_DISABLE_LIVE_IN_BACKTEST", "true").lower() == "true"

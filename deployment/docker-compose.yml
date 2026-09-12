@@ -32,7 +32,7 @@ services:
       DB_USER: ${DB_USER:-quant}
       DB_PASSWORD: ${DB_PASSWORD:-change-me}
       DB_NAME: ${DB_NAME:-quant}
-      EXCHANGES: ${EXCHANGES:-okx}
+      EXCHANGES: ${EXCHANGES:-binance}
       SYMBOLS: ${SYMBOLS:-BTC/USDT,ETH/USDT}
       TIMEFRAMES: ${TIMEFRAMES:-1m}
       POLL_SECONDS: ${POLL_SECONDS:-30}

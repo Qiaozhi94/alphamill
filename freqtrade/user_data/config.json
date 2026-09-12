@@ -64,7 +64,7 @@
     }
   ],
   "exchange": {
-    "name": "okx",
+    "name": "binance",
     "key": "",
     "secret": "",
     "password": "",

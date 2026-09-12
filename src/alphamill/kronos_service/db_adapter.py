@@ -84,7 +84,7 @@ COPY (
     return rows[0] if rows else {"total_rows": 0, "latest_candle": None, "latest_lag_seconds": None}
 
 
-def latest_ohlcv(symbol: str, exchange: str = "okx", limit: int = 120) -> list[dict]:
+def latest_ohlcv(symbol: str, exchange: str = "binance", limit: int = 120) -> list[dict]:
     try:
         with connect() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(

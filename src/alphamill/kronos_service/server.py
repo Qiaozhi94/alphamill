@@ -30,7 +30,7 @@ class PredictResponse(BaseModel):
 
 
 class BatchPredictRequest(BaseModel):
-    exchange: str = "okx"
+    exchange: str = "binance"
     symbols: list[str]
     limit: int = 120
 
@@ -66,7 +66,7 @@ def health():
 
 
 @app.get("/ohlcv/{symbol:path}")
-def ohlcv(symbol: str, exchange: str = "okx", limit: int = Query(default=120, ge=1, le=1000)):
+def ohlcv(symbol: str, exchange: str = "binance", limit: int = Query(default=120, ge=1, le=1000)):
     rows = latest_ohlcv(symbol=symbol, exchange=exchange, limit=limit)
     return {
         "exchange": exchange,
@@ -77,7 +77,7 @@ def ohlcv(symbol: str, exchange: str = "okx", limit: int = Query(default=120, ge
 
 
 @app.get("/predict/{symbol:path}", response_model=PredictResponse)
-def predict(symbol: str, exchange: str = "okx", limit: int = Query(default=120, ge=30, le=1000)):
+def predict(symbol: str, exchange: str = "binance", limit: int = Query(default=120, ge=30, le=1000)):
     return build_prediction(symbol=symbol, exchange=exchange, limit=limit)
 
 
