@@ -93,8 +93,11 @@ transfer_directory_to_nas() { # $1=local directory name; $2=remote directory nam
     log "FATAL: $remote_dir md5 不一致 local=$local_md5 remote=$remote_md5"
     return 1
   }
-  ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" \
-    "tar -xzf $remote_archive -C $NAS_BASE/$remote_dir && rm -f $remote_archive" 2>/dev/null
+  if ! ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" \
+    "tar -xzf $remote_archive -C $NAS_BASE/$remote_dir && rm -f $remote_archive" 2>/dev/null; then
+    log "FATAL: $remote_dir 远端解包失败"
+    return 1
+  fi
   rm -f "$archive"
   log "$remote_dir 校验一致 md5=$local_md5"
 }

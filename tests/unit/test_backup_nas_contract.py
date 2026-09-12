@@ -20,3 +20,5 @@ def test_backup_uses_chunk_byte_bounds_and_archive_checksum() -> None:
     assert 'UserKnownHostsFile="$NAS_KNOWN_HOSTS"' in script
     assert 'ssh-keygen -F "$NAS_HOST"' in script
     assert "StrictHostKeyChecking=no" not in script
+    assert 'if ! ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST"' in script
+    assert 'log "FATAL: $remote_dir 远端解包失败"' in script
