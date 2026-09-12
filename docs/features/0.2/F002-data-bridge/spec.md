@@ -96,7 +96,7 @@ updated: 2026-09-12
 - 湖内数据的因子计算或口径加工(FR1.4 双口径在本期仅落列语义与映射,不做复权计算——crypto 无复权);
 - 撤除 TimescaleDB(阶段 B)。
 
-- **Kronos 真实推理容器化**(compose 可选 profile `kronos-real`):F002 只保证 signals_log 的**导出管线**正确,不保证其内容来自真实模型。原 T014 曾挂在 FR-001 名下,但 FR-001 只承诺导出五个 dataset、AC-001 只核对分区与行数,容器化既无对应需求也无验收闭环(F002-Q001),故移出 F002。**载体待 owner 裁决**:①单独立一个上游 Feature;②在 F002 新增独立 FR/AC 并裁定它是否阻塞 F002 done。在裁决前它记录于 `docs/reviews/RETROSPECTIVE.md` 循环 6,不随本feature 收口而消失。
+- **Kronos 真实推理容器化**:F002 只保证 signals_log 的**导出管线**正确,不保证其内容来自真实模型。原 T014 曾挂在 FR-001 名下,但 FR-001 只承诺导出五个 dataset、AC-001 只核对分区与行数,容器化既无对应需求也无验收闭环(F002-Q001),故移出 F002。**正式载体已建立**:`docs/features/0.2/F004-kronos-inference-runtime/`(draft,带 FR-001/AC-001)。它是否阻塞 F002 done 记在 F004 spec §8 Q-001,待 owner 裁决。
 
 ### 边界场景
 
@@ -201,8 +201,10 @@ updated: 2026-09-12
 - [ ] **AC-005** (`FR-005`): 修订检测产生 v2+差异清单,v1 保留可读 — tests: `tests/integration/test_f002_revision.py`
 - [ ] **AC-006** (`FR-006`): 定时器安装且手动触发导出成功;backup-nas.sh 后 NAS 端 lake/ 产物齐全 — tests: `tests/integration/test_f002_schedule_backup.py`
 - [ ] **AC-007** (`FR-005`, `FR-001`): 版本物理隔离——修订产生 v2 后,v1 manifest 列出的每个分区文件字节不变,按 v1 读取返回修订前的行;并发读 v1/v2 不串版 — tests: `tests/integration/test_f002_revision.py`
-- [ ] **AC-008** (`FR-003`, `FR-001`): manifest 完整性 fail-closed——删一个分区文件 / 多一个未登记文件 / 改一字节,三种情形读取均抛 ManifestIntegrityError — tests: `tests/integration/test_f002_reader.py`
-- [ ] **AC-009** (`FR-004`): signals_log 时间窗无前视——latest_candle < T 但 time > T 的行必须落在 end=T 的结果内;latest_candle > T 但 time < T 的行必须不在 — tests: `tests/integration/test_f002_reader.py`
+- [ ] **AC-008** (`FR-003`, `FR-001`): manifest 完整性 fail-closed——删清单内文件 / 改一字节,两种情形读取均抛 ManifestIntegrityError;而目录中存在**本版本未引用**的 .rN 文件(其他版本的合法分区)时必须正常返回,reader 全程不扫描目录 — tests: `tests/integration/test_f002_reader.py`
+- [ ] **AC-009** (`FR-004`): as-of 双时间轴无前视——`read(as_of=T)` 当且仅当 event_time ≤ T **且** available_at ≤ T 才返回该行;反例 latest_candle=09:00 / time=12:00 的信号在 as_of=10:00 必须**不在**结果内,在 as_of=13:00 必须在;realized_return_60m 在 evaluated_at > T 时置 NULL 而非丢行 — tests: `tests/integration/test_f002_reader.py`
+- [ ] **AC-011** (`FR-001`, `FR-005`): manifest 是累计完整快照——连续两次增量导出后,第二个版本的 partitions 覆盖第一个版本的全部逻辑分区(未变项原样继承、变更项替换),`rows` 等于合成后清单的总和而非单日增量;按第二个版本读取返回全 span — tests: `tests/integration/test_f002_revision.py`
+- [ ] **AC-012** (`FR-002`): row_digest 规范性——同一批数据经 psycopg2 与 PyArrow 两路输入摘要相同;改写任一 double 的最低有效位摘要必变(证明未走定标丢精度);两行 +x/−x 抵消式改写摘要必变 — tests: `tests/unit/test_f002_digest.py`
 - [ ] **AC-010** (`FR-002`, `FR-003`): 并发改写不产伪 valid——对账期间对已导出窗口 upsert 历史行,导出仍基于同一快照;结果或为 valid 且与该快照一致,或为 invalid,不出现「对账 ok 但湖内是旧值」 — tests: `tests/integration/test_f002_export_reconcile.py`
 
 ## 7. 测试、依赖与决策

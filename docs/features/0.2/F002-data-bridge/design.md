@@ -46,28 +46,39 @@ src/alphamill/data_bridge/
 
 ## 3. 数据模型与 Migration
 
-- **dataset registry**(F002-D007 / F002-D006 冻结;`data_bridge/registry.py` 里的只读常量,
-  `export_dataset()` 与 `read()` 的 `dataset` 参数只接受表中的键,其余一律
-  `UnknownDatasetError`——不是自由字符串):
+- **dataset registry**(F002-D007 / R2-04 冻结;`data_bridge/registry.py` 的只读常量。
+  `export_dataset()` 与 `read()` 的 `dataset` 只接受下表键,其余抛 `UnknownDatasetError`。
+  **投影列逐一枚举,不用「等」占位**——摘要的稳定性取决于输入是否被完全规范化):
 
-  | dataset | 源表 | 主键(摘要排序键) | **事件时间列** | 分区键 | 数值列(参与摘要) |
-  |---|---|---|---|---|---|
-  | `ohlcv_1m` | `ohlcv_1m` | (exchange, symbol, time) | `time` | exchange / pair / date(time) | open, high, low, close, volume |
-  | `derivatives_funding_rates` | 同名 | (exchange, symbol, time) | `time` | exchange / pair / date(time) | funding_rate 等数值列 |
-  | `derivatives_open_interest` | 同名 | (exchange, symbol, timeframe, time) | `time` | exchange / pair / date(time) | open_interest 等 |
-  | `derivatives_mark_index_basis` | 同名 | (exchange, symbol, timeframe, time) | `time` | exchange / pair / date(time) | mark/index/basis 等 |
-  | `signals_log` | 同名 | (latest_candle, exchange, symbol, source) | **`latest_candle`** | date(latest_candle) | confidence, expected_return, volatility, direction_prob |
+  | dataset | 投影列(顺序即编码顺序) | 逻辑分区键 | **event_time** | **available_at** |
+  |---|---|---|---|---|
+  | `ohlcv_1m` | time,exchange,symbol,open,high,low,close,volume | (exchange,pair,date) | `time` | **无**(见下) |
+  | `derivatives_funding_rates` | time,exchange,symbol,funding_rate,next_funding_time,mark_price,index_price,metadata,ingested_at | (exchange,pair,date) | `time` | `ingested_at` |
+  | `derivatives_open_interest` | time,exchange,symbol,timeframe,open_interest,open_interest_value,base_volume,quote_volume,metadata,ingested_at | (exchange,pair,timeframe,date) | `time` | `ingested_at` |
+  | `derivatives_mark_index_basis` | time,exchange,symbol,timeframe,mark_open,mark_high,mark_low,mark_close,index_open,index_high,index_low,index_close,basis_close,basis_pct,metadata,ingested_at | (exchange,pair,timeframe,date) | `time` | `ingested_at` |
+  | `signals_log` | time,exchange,symbol,source,signal_type,confidence,metadata,latest_candle,expected_return,volatility,direction_prob,realized_return_60m,evaluated_at | (date) | `latest_candle` | `time` |
 
-  **signals_log 的时间语义必须显式冻结**(F002-D006):该表同时有 `time`(写入时刻,
-  `DEFAULT NOW()`)与 `latest_candle`(信号所依据的最后一根已闭 K 线,`db/init.sql:279` 的
-  `ALTER TABLE` 后加)。研究侧的 point-in-time 语义只能用 `latest_candle`——按 `time` 过滤会把
-  "在 T 之后才写入、但依据的是 T 之前行情"的信号算进 T 时点,**方向上等于前视**(违反项目原则 #3)。
-  故:分区键与 `read()` 的 `start/end` 一律作用于 `latest_candle`,`time` 原样导出但改称
-  `ingested_at` 语义、**不可作为过滤列**(registry 的"允许过滤列"不含它)。
+  类型只有五种,编码规则见下方 `row_digest`:`timestamptz` / `text` / `double precision` /
+  `jsonb` / NULL。允许出现在 `read()` 过滤条件里的列**仅** `event_time`、`available_at`、
+  `exchange`、`symbol`、`timeframe`;其余列只能读出来自己筛,不进 SQL/DuckDB 谓词。
 
-  边界:`latest_candle` 可为 NULL(非 kronos 来源,或 `ALTER` 之前的历史行)。**无事件时间的信号
-  不导出**,其行数记入 manifest 的 `excluded_null_event_time`——把它们按写入时间落进某一天,
-  等于制造一批前视样本;静默丢弃则会让"湖内行数 ≠ 库内行数"无法解释,所以必须显式计数。
+- **双时间轴与 as-of 语义**(F002-R2-01 冻结,本节是前视防线的文档落点):
+  研究侧的「T 时点可见」必须**同时**满足 `event_time <= T` **且** `available_at <= T`。
+  反例:一条 `latest_candle=09:00`、`time=12:00` 的信号,在 `as_of=10:00` 时**根本还不存在**,
+  把它算进 10:00 就是用未来模型/参数产生的信号倒灌历史。(Round 1 的 AC-009 正好把这条写反了,
+  要求"晚写早事件必含"——那是把前视固化成验收契约,已作废重写。)
+  `read(as_of=T)` 同时施加两条约束;不传 `as_of` 时只按 `start/end` 切 `event_time`,
+  返回值显式标注 `as_of=None`(纯历史切片,**不得**用于任何回测/门禁判定)。
+
+  **已知缺口(不掩盖)**:`ohlcv_1m` 表没有采集时间列,`available_at` 无法重建——回补写入的历史
+  K 线在湖内看不出"何时才可见"。因此 ohlcv 的 as-of 只能退化为 `event_time <= T`,该退化
+  **写进 manifest 的 `as_of_fidelity: "event_time_only"`**,由消费方自行判断可接受性;要做真正的
+  双时间轴需给 `ohlcv_1m` 加 `ingested_at` 列,属 F001 schema 变更,不在本 feature 范围。
+
+  **标签列的可用性单独处理**:`signals_log.realized_return_60m` 是事后回填的结果列,
+  其可用时间是 `evaluated_at`。`read(as_of=T)` 时若 `evaluated_at > T` 或为 NULL,
+  **该列置 NULL 而不是丢行**——丢行会让样本集随 T 变化,置 NULL 才是"当时还不知道结果"的忠实表达。
+  不做这一步等于把标签泄漏进特征。
 
 - **湖布局与版本隔离**(集成 §1.2;F002-D001 修订):
   ```
@@ -92,7 +103,7 @@ src/alphamill/data_bridge/
   **原子发布**:分区文件先写到 `lake/_staging/<dataset>/<data_version>/` 再 rename 进正式路径;
   **manifest 是发布点**——最后写(临时名 + rename),写成功前该 data_version 对 reader 不存在。
   中断留下的 staging 目录与孤儿 `.rN` 文件不被任何 manifest 引用,不影响正确性,由全量模式顺带清理。
-- **pair 目录命名**:湖内 pair 用 Freqtrade 风格 `BASE-QUOTE`(如 `BTC-USDT`,`/` 换 `-` 规避路径分隔符);`symbol_map.csv` 三列:`lake_pair,freqtrade_pair,db_symbol`,由库内 DISTINCT symbol 直接生成,双向查询 O(1)。
+- **pair 目录命名**:湖内 pair 用 `BASE-QUOTE`(`/` 换 `-` 规避路径分隔符),永续加 `-PERP` 后缀区分市场类型。映射表的键、列与碰撞规则见 §4「symbol_map 键的冻结」——**不是三列、也不能由 `DISTINCT symbol` 单独推导**(F002-D010)。
 - **data_version 语义**(spec Q-003 已裁决:**按 dataset 独立**,2026-09-12 owner):`vYYYY.MM.DD`,同日重导追加 `-r2/-r3`;排序 = 日期字典序 + 序号;最新 valid 版本 = 排序最大且 `status != invalid`。每 dataset 独立演进,互不阻塞。
 - **manifest 契约**(架构 §4.4 + 本期扩展字段):
   ```json
@@ -119,10 +130,12 @@ src/alphamill/data_bridge/
   }
   ```
   **`partitions` 是必填的版本身份**(F002-D002):它同时回答"这个版本由哪些文件组成"与
-  "这些文件有没有被改过"。缺一项则该版本无法自证完整。`reader` 在返回任何数据之前必须逐项校验
-  **文件存在、字节数相符、sha256 相符,且实际读到的文件集合与清单完全相等**——多一个文件同样判红
-  (防止把别的版本的 `.rN` 误读进来);任一不符抛 `ManifestIntegrityError`,不降级为警告。
-  这条是 NFR-002"同版本同查询同结果"的唯一技术保证,原设计只有 `rows/value_sum` 且只在导出时
+  `reader` **只按 `partitions` 清单构造输入路径,从不扫描目录**(F002-R2-02):逐项校验
+  **文件存在、字节数相符、sha256 相符**,任一不符抛 `ManifestIntegrityError`,不降级为警告。
+  Round 1 写的「实际读到的文件集合与清单完全相等、多一个文件同样判红」是错的——`.rN` 共享模型下
+  v1 的 `day.r1` 与 v2 的 `day.r2` 本来就必须同时在盘上,按目录全集比对会让两个版本互相判死。
+  防止「误读别的版本」的机制不是目录比对,而是**根本不按目录读**:输入路径全部来自清单。
+  这条是 NFR-002「同版本同查询同结果」的唯一技术保证,原设计只有 `rows/value_sum` 且只在导出时
   对源库比一次,证明不了以后读到的文件没被改。
 - **质量标记继承与裁决**(F002-D005 冻结):`ohlcv_quality_flags` 的未解决标记
   (`resolved_at IS NULL`)按 (exchange, symbol, date(time)) **落到分区级**,写进 manifest 的
@@ -141,28 +154,37 @@ src/alphamill/data_bridge/
   把选择权交给研究者并留下痕迹。
 
   `skipped` 登记窗口内查不到行的 (pair, date),**不记原因**——采集断线与确实无行情同样落这里(DQ-003 裁决);`revision_diff` 仅全量校验模式填写:相对上一 valid 版本登记修订分区清单(`[{pair, date, reason}]`);`status: invalid` 时 `reconcile` 记录失败项。
-- **对账口径**(F002-D003 冻结,唯一权威定义,spec/tasks/integration 引用此处):
+- **对账口径**(F002-D003 / R2-04 冻结,唯一权威定义,spec/tasks/integration 引用此处):
 
   | 字段 | 计算方 | 定义 |
   |---|---|---|
   | `rows` | 两侧 | 分区行数 |
-  | `time_min` / `time_max` | 两侧 | 分区事件时间边界 |
-  | `row_digest` | 两侧 | 按主键排序后逐行规范编码的 **SHA-256** 流式摘要 |
+  | `time_min` / `time_max` | 两侧 | 分区 `event_time` 边界 |
+  | `row_digest` | 两侧 | 规范编码后**按编码字节串字典序排序**的流式 SHA-256 |
 
-  **`row_digest` 由 Python 单侧实现,两端跑同一个函数**——源侧喂 psycopg2 游标流,湖侧喂
-  PyArrow 读回的 record batch,`data_bridge/digest.py` 里只有一份 `canonical_row_bytes()`。
-  规范编码:按 dataset registry 声明的主键升序排列,每行按列序编码为
-  `len-prefixed` 字节串(时间戳→UTC 微秒 int64;浮点→`Decimal` 定标 10 位后的定点字符串;
-  NULL→单字节哨兵),逐行 `sha256.update()`。
+  **规范编码(逐列,顺序 = registry 投影列顺序,无损)**:
 
-  **为什么不让 PG 和 DuckDB 各算一次**:两条路都不成立。`hashtext()` 是 PG 内部未文档化函数,
-  DuckDB/PyArrow 无等价物;换成 `sum(round(col::numeric,10))` 虽然跨引擎可算,却**不抗抵消**
-  ——两行分别 +x 与 -x 的改写能让和不变,而 F002-D003 要求的正是抓住"行数与极值都没变的内部
-  数值改写"。SHA-256 流式摘要既与聚合顺序无关(顺序由主键排序固定)又抗抵消,代价是要把行流过
-  Python——而导出本来就要把同一批行流过 Python 写 Parquet,增量模式只算新增分区。
-  **本设计不提供"实测不通过就退回弱口径"的降级出口**:降级会让上面那类改写重新变得不可见,
-  若 SHA-256 方案性能不可接受,属于规格问题,走 spec 修订而不是实现期自行放宽(原设计留的
-  降级条款已删除)。
+  | 类型 | 编码 |
+  |---|---|
+  | `timestamptz` | UTC 微秒 int64,8 字节大端 |
+  | `double precision` | **IEEE-754 binary64 原始位模式,8 字节大端**;`-0.0` 归一为 `+0.0`,`NaN` 归一为单一静默 NaN 位型 |
+  | `text` | UTF-8 字节,前置 uint32 大端长度 |
+  | `jsonb` | 规范 JSON(键按 Unicode 码点排序、无空白)后按 `text` 编码 |
+  | NULL | 单字节哨兵 `0x00`;非 NULL 值前置 `0x01`,故哨兵不与任何值碰撞 |
+
+  **`double` 必须走原始位模式,不得用 `Decimal` 定标**:Round 1 写的 `Decimal(10 位)` 会让
+  小于 `1e-10` 的改写完全不可见,而 `row_digest` 存在的理由正是抓这类改写(F002-R2-04)。
+
+  **排序键 = 该行的规范编码字节串本身**,不是逻辑主键。理由:`signals_log` 在库里**没有主键**
+  (实查确认),Round 1 提的 `(latest_candle,exchange,symbol,source)` 可重复、给不出确定顺序;
+  按编码字节串排序对任何 dataset 都成立——完全相同的两行编码相同且相邻,顺序唯一确定,
+  重复行也不破坏确定性。逻辑主键只用于**分区替换**(见增量合成),不参与摘要。
+
+  **两侧由 `digest.py` 的同一个 Python 函数计算**——源侧喂 psycopg2 游标、湖侧喂 PyArrow
+  record batch,只有一份 `canonical_row_bytes()`。不让 PG 与 DuckDB 各算一次:`hashtext()` 是 PG
+  内部未文档化函数、无跨引擎等价物;`sum(round(col::numeric,10))` 虽可跨引擎却**不抗抵消**
+  (两行 +x/−x 的改写让和不变)。SHA-256 与聚合顺序无关(顺序由字节序固定)且抗抵消。
+  **本设计不提供降级出口**:降级会让上述改写重新不可见;性能不可接受属规格问题,走 spec 修订。
 
   (原文称该方案「承 F001 design §3 同源」不成立:F001 的口径是行数 + 时间轴连续性 + 聚合桶
   精确一致,全程没有校验和,`hashtext` 在 F001 代码与文档中出现 0 次。)
@@ -175,8 +197,22 @@ src/alphamill/data_bridge/
   事后追溯它看到的是哪个时点的库。窗口截断 `[start, end)` 仍然保留,但它解决的是"分区边界",
   不是"并发一致性",两者不可互相替代。
 
+- **manifest 合成算法**(F002-R2-03 冻结;**每个 manifest 都是累计完整快照,不是一日 delta**):
+
+  1. 读上一个 valid manifest(无则空清单),把它的 `partitions` **全量继承**为基线;
+  2. 本轮产出的每个分区按**逻辑分区键**(registry 的 `(exchange,pair[,timeframe],date)`)
+     在基线里查找:命中则**整项替换**(新 `.rN` 路径 + 新 rows/边界/bytes/sha256),
+     未命中则**追加**;基线中本轮没碰的项原样保留;
+  3. `rows` / `pairs` / `quality.flagged_partitions` / `skipped` / `excluded_null_event_time`
+     一律**按合成后的完整清单重算**,不是本轮增量的计数;
+  4. 原子发布:清单齐备后写 manifest(临时名 + rename)。
+
+  没有这一条,"每日增量"产出的 manifest 到底是当天 delta 还是累计快照就没有定义,
+  `read(dataset, data_version=昨天)` 可能只拿到一天的数据——而 spec 承诺的是快照语义。
+  全量校验模式走同一算法,区别只在本轮产出覆盖全 span。
+
 - **导出窗口与增量语义**:增量导出窗口 = `[max(已有分区日期)+1, 导出日-1]`(昨日分区);**首次导出**(该 dataset 无任何已有分区)时 `max(已有分区日期)` 无定义,窗口起点取库内 `date(min(time))`,即首跑等价于一次全量;全量校验 = 全 span 重导至新 data_version 并做分区级 diff;窗口内无数据的 pair 跳过并记 skipped。
-- **回滚/前向兼容**:导出失败留下的半个分区文件,下次同 data_version 重导覆盖(分区文件原子写:临时名 + rename);invalid 版本永不复用版本号。DuckDB 侧无 migration。
+- **回滚/前向兼容**:导出失败留下的半成品只存在于 `lake/_staging/`,**不覆盖任何已发布分区**(已发布的 `.rN` 永不重写);未被任何 manifest 引用的 staging 残留与孤儿 `.rN` 由全量模式清理。invalid 版本永不复用版本号。DuckDB 侧无 migration。
 
 ## 4. 接口、Contract 与 Event
 
@@ -224,14 +260,14 @@ spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC
 ## 5. Runtime、Workflow 与并发
 
 - 调度:`alphamill-export.timer` 每日 **02:00** 增量导出;`alphamill-fullexport.timer` 周日 **04:00** 全量校验(systemd user timer,`Type=oneshot`,承 backup/snapshot 先例)。02:00 的取值不是随意的:`alphamill-backup.timer` 是 03:00 且带 `RandomizedDelaySec=10min`(实际 03:00-03:10),导出必须早于它完成,当日分区才会被同一晚的 NAS 备份带走;周日 04:00 的全量校验排在备份之后,本轮产出由次日备份带走。
-- 并发:单机单实例;导出与实时采集并行安全(导出只读库 + 窗口截断);DuckDB 查询为只读进程级并发,无锁。
+- 并发:单机单实例;导出与实时采集的并行安全由 §3 的 **REPEATABLE READ 快照**保证——窗口截断只解决分区边界,不解决并发一致性,两者不可互相替代;DuckDB 查询为只读进程级并发,无锁。
 - **退出码契约**(F002-D009):`0`=成功;`1`=**可重试**的瞬时故障(库连接失败、IO 错误、
   staging 写入中断);`2`=**不可重试**的数据裁决(对账失败 → 版本已标 invalid、manifest 完整性
   失败、registry 校验失败)。unit 用 `RestartPreventExitStatus=2` 锁定——原设计既要求"对账失败
   非零退出"又声明"对账失败不重试",而 `Restart=on-failure` 对任何非零码都会重试,两句直接冲突;
   退出码分层是让这两条同时成立的唯一方式。重试对账失败毫无意义:同一份数据重算必然同样失败,
   修复路径是产出新版本。
-- 重试:可重试故障由 systemd `Restart=on-failure` + `RestartSec=15min` 重试;**次数上限必须显式写 `StartLimitIntervalSec` + `StartLimitBurst=3`**——`alphamill-backup.service` 的注释写了「最多 3 次」却没写这两个指令,实际不生效,F002 的两个 unit 不重复该疏漏(并顺手给 backup.service 补上,列为 T009 附带项)。对账失败(退出码 2)不重试——直接 invalid(修复=新版本)。
+- 重试:可重试故障由 systemd `Restart=on-failure` + `RestartSec=15min` 重试;**次数上限必须显式写 `StartLimitIntervalSec` + `StartLimitBurst=3`**——`alphamill-backup.service` 的注释写了「最多 3 次」却没写这两个指令,实际不生效,F002 的两个 unit 不重复该疏漏(并顺手给 backup.service 补上,列为 T019)。对账失败(退出码 2)不重试——直接 invalid(修复=新版本)。
 - 不可回滚副作用边界:invalid 标记与新版本创建均不可逆,但旧版本永在(不可变),最坏情况 = 多一个废版本目录,无破坏性。
 
 ## 6. UI 与可观测性
@@ -258,8 +294,10 @@ spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC
 | `AC-005` | integration | `tests/integration/test_f002_revision.py` | 修订 → v2+差异清单;v1 文件字节不变 |
 | `AC-006` | integration | `tests/integration/test_f002_schedule_backup.py` | 导出 CLI 退出码 0;NAS 端 lake/ 文件存在 |
 | `AC-007` | integration | `tests/integration/test_f002_revision.py` | 修订后 v1 每个分区文件 sha256 与字节数不变;按 v1 读回修订前的值;v1/v2 并发读不串版 |
-| `AC-008` | integration | `tests/integration/test_f002_reader.py` | 删文件/加未登记文件/改一字节,三种情形均抛 ManifestIntegrityError |
-| `AC-009` | integration | `tests/integration/test_f002_reader.py` | signals_log 前视反例两条(晚写早事件必含、早写晚事件必不含) |
+| `AC-008` | integration | `tests/integration/test_f002_reader.py` | 删清单内文件/改一字节 → 抛 ManifestIntegrityError;目录存在他版本 .rN → 正常返回(reader 不扫目录) |
+| `AC-009` | integration | `tests/integration/test_f002_reader.py` | as-of 双时间轴:latest_candle=09:00/time=12:00 的信号在 as_of=10:00 必不在、as_of=13:00 必在;evaluated_at>T 时 realized_return_60m 置 NULL 不丢行 |
+| `AC-011` | integration | `tests/integration/test_f002_revision.py` | 两次增量后第二版 partitions 覆盖全部逻辑分区,rows 为累计而非单日 |
+| `AC-012` | unit | `tests/unit/test_f002_digest.py` | 两路输入同摘要;double 最低位改写摘要必变;+x/−x 抵消式改写摘要必变 |
 | `AC-010` | integration | `tests/integration/test_f002_export_reconcile.py` | 对账期间并发 upsert 历史行,结果为 valid 且与快照一致,或 invalid;不出现伪 valid |
 
 集成测试需要本地 TimescaleDB 在线,DB 不可达时跳过(CI),本地全绿为准;单元测试无条件跑。
@@ -275,7 +313,7 @@ spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC
 | 对账摘要在 Python 单侧实现,不做跨引擎哈希 | PG 与 DuckDB 无共同的可复现行哈希;同一函数喂两路数据则由构造保证一致 | `hashtext` 无跨引擎等价物;`sum(numeric)` 不抗抵消 | 若性能不可接受走 spec 修订,不在实现期降级 |
 | 导出与源侧对账共享一个 REPEATABLE READ 事务 | upsert 回补可在窗口终点前改写历史行 | 只读+时间截断不等于快照隔离 | 长事务会拖住 vacuum,全量模式需观察膨胀,必要时分 dataset 事务 |
 | 带质量旗分区仍为 valid,但 reader 默认拒绝 | 一个坏分区不该废掉整天可用数据;默认放行又会静默污染研究 | 质量标记描述源数据瑕疵,不是导出错误 | `allow_flagged=True` 显式豁免并回报清单 |
-| 残余风险:湖文件被误删/误改 | manifest 的 per-partition sha256 + 字节数在**每次读取前**校验,集合多一个文件同样判红;NAS 每日副本兜底 | 不可变 + 完整性校验 + 灾备三重 | 单盘故障场景由 F001 灾备覆盖 |
+| 残余风险:湖文件被误删/误改 | manifest 的 per-partition sha256 + 字节数在**每次读取前**校验;reader 只按清单读、不扫目录(目录余项是其他版本的合法分区) | 不可变 + 完整性校验 + 灾备三重 | 单盘故障场景由 F001 灾备覆盖 |
 
 ## 10. 待确认设计问题
 
