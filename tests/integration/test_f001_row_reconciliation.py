@@ -4,6 +4,7 @@
 数据库不可达时跳过（CI 无 DB 场景），本地全绿为准（见 SOP 真实环境测试纪律）。
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,15 @@ sys.path.insert(0, str(TOOLS_DIR))
 f001_backfill_report = pytest.importorskip("f001_backfill_report")
 
 pytestmark = pytest.mark.integration
+INTEGRATION_REQUIRED = os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "true", "yes"}
+
+
+def _require_or_skip(available: bool, reason: str) -> None:
+    if available:
+        return
+    if INTEGRATION_REQUIRED:
+        pytest.fail(reason)
+    pytest.skip(reason)
 
 
 def _db_available() -> bool:
@@ -26,13 +36,13 @@ def _db_available() -> bool:
     return True
 
 
-@pytest.mark.skipif(not _db_available(), reason="本地 TimescaleDB 不可达")
 def test_f001_backfill_completeness_passes():
     """AC-001：回填完整性校验按 design §3 口径通过。"""
+    _require_or_skip(_db_available(), "本地 TimescaleDB 不可达")
     conn = f001_backfill_report.db_connect()
     try:
         if _backfill_incomplete(conn):
-            pytest.skip("回填尚未完成（backfill_progress 存在非 complete 目标行）")
+            _require_or_skip(False, "回填尚未完成（backfill_progress 存在非 complete 目标行）")
         report = f001_backfill_report.build_report(conn, "binance", _symbols(conn))
     finally:
         conn.close()

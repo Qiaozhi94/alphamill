@@ -15,6 +15,15 @@ FREQTRADE_URL = os.getenv("FREQTRADE_URL", "http://127.0.0.1:8080")
 FREQTRADE_AUTH = ("admin", "quant2026")
 
 pytestmark = pytest.mark.integration
+INTEGRATION_REQUIRED = os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "true", "yes"}
+
+
+def _require_or_skip(available: bool, reason: str) -> None:
+    if available:
+        return
+    if INTEGRATION_REQUIRED:
+        pytest.fail(reason)
+    pytest.skip(reason)
 
 
 def _db():
@@ -65,18 +74,18 @@ def _kronos_available() -> bool:
         return False
 
 
-@pytest.mark.skipif(not _ft_available(), reason="Freqtrade dry-run 不可达")
 def test_freqtrade_dryrun_alive():
     """dry-run bot 存活且 state=RUNNING。"""
+    _require_or_skip(_ft_available(), "Freqtrade dry-run 不可达")
     resp = requests.get(f"{FREQTRADE_URL}/api/v1/show_config", auth=FREQTRADE_AUTH, timeout=10)
     assert resp.status_code == 200
     assert resp.json()["dry_run"] is True
     assert resp.json()["state"] == "running"
 
 
-@pytest.mark.skipif(not _kronos_available(), reason="Kronos 薄壳不可达")
 def test_kronos_signal_source_reachable():
     """风控钩子的信号前置：Kronos 服务可出信号。"""
+    _require_or_skip(_kronos_available(), "Kronos 薄壳不可达")
     resp = requests.get(
         f"{os.getenv('KRONOS_BASE_URL', 'http://127.0.0.1:8001')}/predict/BTC/USDT",
         params={"exchange": "binance"},
@@ -86,12 +95,11 @@ def test_kronos_signal_source_reachable():
     assert resp.json()["signal_type"] in {"buy", "sell", "neutral"}
 
 
-@pytest.mark.skipif(
-    not _ft_available() or not _db_available(),
-    reason="Freqtrade dry-run 或 TimescaleDB 不可达",
-)
 def test_monitoring_panels_have_data():
     """AC-004 面板数据源非空：K 线延迟(ohlcv_1m)/信号质量(signals_log)/交易健康(snapshots)。"""
+    _require_or_skip(
+        _ft_available() and _db_available(), "Freqtrade dry-run 或 TimescaleDB 不可达"
+    )
     conn = _db()
     try:
         assert _db_count(conn, "ohlcv_1m") > 0, "ohlcv_1m 无数据（K 线延迟面板空）"

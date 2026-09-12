@@ -4,6 +4,7 @@
 数据库不可达时跳过（CI 场景），本地全绿为准（SOP 真实环境测试纪律）。
 """
 
+import os
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,6 +17,15 @@ ccxt_ingestor = pytest.importorskip("alphamill.data_bridge.collector.ccxt_ingest
 db_writer = pytest.importorskip("alphamill.data_bridge.collector.db_writer")
 
 pytestmark = pytest.mark.integration
+INTEGRATION_REQUIRED = os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "true", "yes"}
+
+
+def _require_or_skip(available: bool, reason: str) -> None:
+    if available:
+        return
+    if INTEGRATION_REQUIRED:
+        pytest.fail(reason)
+    pytest.skip(reason)
 
 
 def _db_available() -> bool:
@@ -41,9 +51,9 @@ def _settled_rows(conn) -> int:
         return int(cur.fetchone()[0])
 
 
-@pytest.mark.skipif(not _db_available(), reason="本地 TimescaleDB 不可达")
 def test_collector_smoke_single_symbol_idempotent():
     """AC-003：采集一个周期写入，重复执行不产生重复行。"""
+    _require_or_skip(_db_available(), "本地 TimescaleDB 不可达")
     conn = db_writer.db_connect()
     try:
         exchange = ccxt_ingestor.build_exchange("binance")

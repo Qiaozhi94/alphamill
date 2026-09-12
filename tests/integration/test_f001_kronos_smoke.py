@@ -13,6 +13,15 @@ import requests
 BASE_URL = os.getenv("KRONOS_BASE_URL", "http://127.0.0.1:8001")
 
 pytestmark = pytest.mark.integration
+INTEGRATION_REQUIRED = os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "true", "yes"}
+
+
+def _require_or_skip(available: bool, reason: str) -> None:
+    if available:
+        return
+    if INTEGRATION_REQUIRED:
+        pytest.fail(reason)
+    pytest.skip(reason)
 
 
 def _service_up() -> bool:
@@ -22,20 +31,22 @@ def _service_up() -> bool:
         return False
 
 
-@pytest.mark.skipif(not _service_up(), reason=f"Kronos 服务不可达 {BASE_URL}")
 def test_kronos_health():
+    _require_or_skip(_service_up(), f"Kronos 服务不可达 {BASE_URL}")
     resp = requests.get(f"{BASE_URL}/health", timeout=10)
     assert resp.status_code == 200
 
 
-@pytest.mark.skipif(not _service_up(), reason=f"Kronos 服务不可达 {BASE_URL}")
 def test_kronos_predict_returns_kronos_source():
+    _require_or_skip(_service_up(), f"Kronos 服务不可达 {BASE_URL}")
     # AC-002 要求 source=kronos（真实模型）。compose 默认实例为 mock 模式
     # （KRONOS_USE_REAL_MODEL=false，source=placeholder），此时跳过而非判红；
     # 真实模型实例见 tasks T008 记录（KRONOS_BASE_URL 指向 8002）。
     health = requests.get(f"{BASE_URL}/health", timeout=10).json()
     if not health.get("model_enabled"):
-        pytest.skip("当前实例为 mock 模式（model_enabled=false），AC-002 需真实模型实例")
+        _require_or_skip(
+            False, "当前实例为 mock 模式（model_enabled=false），AC-002 需真实模型实例"
+        )
     # 服务契约即 GET /predict/{symbol:path}，符号为 ccxt 斜杠格式 BTC/USDT（旧仓现
     # 行为，design §4）；exchange 参数指向数据实际落库的交易所（F001 回填源
     # binance，见 deployment/.env EXCHANGES）。
