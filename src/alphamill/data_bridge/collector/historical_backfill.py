@@ -4,9 +4,11 @@ import time
 from datetime import UTC, datetime, timedelta
 
 try:  # Support both package imports and the legacy standalone container entrypoint.
+    from .backfill_boundaries import listing_start_for, parse_unavailable_symbols
     from .db_writer import db_connect, normalize_ohlcv_rows, upsert_ohlcv
     from .symbol_manager import parse_symbols
 except ImportError:  # pragma: no cover - exercised only by direct script execution.
+    from backfill_boundaries import listing_start_for, parse_unavailable_symbols
     from db_writer import db_connect, normalize_ohlcv_rows, upsert_ohlcv
     from symbol_manager import parse_symbols
 
@@ -29,6 +31,8 @@ REFRESH_AGGREGATES = os.getenv("BACKFILL_REFRESH_AGGREGATES", "true").lower() in
     "yes",
 }
 RESUME_BACKFILL = os.getenv("BACKFILL_RESUME", "true").lower() in {"1", "true", "yes"}
+LISTING_STARTS = os.getenv("BACKFILL_SYMBOL_LISTING_STARTS", "")
+UNAVAILABLE_SYMBOLS = parse_unavailable_symbols(os.getenv("BACKFILL_UNAVAILABLE_SYMBOLS", ""))
 
 logging.basicConfig(
     level=LOG_LEVEL,
@@ -111,7 +115,7 @@ def load_progress(
               AND timeframe = %s
               AND target_start = %s
               AND target_end = %s
-              AND status <> 'complete'
+              AND status NOT IN ('complete', 'unavailable')
             """,
             (exchange_id, symbol, TIMEFRAME, start, end),
         )
@@ -152,7 +156,7 @@ def save_progress(
                 completed_at
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(),
-                    CASE WHEN %s = 'complete' THEN NOW() ELSE NULL END)
+                    CASE WHEN %s IN ('complete', 'unavailable') THEN NOW() ELSE NULL END)
             ON CONFLICT (exchange, symbol, timeframe, target_start, target_end)
             DO UPDATE SET
                 next_since = EXCLUDED.next_since,
@@ -161,7 +165,7 @@ def save_progress(
                 last_error = EXCLUDED.last_error,
                 updated_at = NOW(),
                 completed_at = CASE
-                    WHEN EXCLUDED.status = 'complete' THEN NOW()
+                    WHEN EXCLUDED.status IN ('complete', 'unavailable') THEN NOW()
                     ELSE backfill_progress.completed_at
                 END
             """,
@@ -184,7 +188,23 @@ def save_progress(
 def fetch_symbol(
     exchange_id: str, exchange, conn, symbol: str, start: datetime, end: datetime
 ) -> int:
+    if symbol in UNAVAILABLE_SYMBOLS:
+        save_progress(
+            conn,
+            exchange_id,
+            symbol,
+            start,
+            end,
+            end,
+            "unavailable",
+            0,
+            "symbol explicitly configured as unavailable for the target window",
+        )
+        return 0
+
+    availability_start = listing_start_for(symbol, start, LISTING_STARTS)
     resume_start, total = load_progress(conn, exchange_id, symbol, start, end)
+    resume_start = max(resume_start, availability_start)
     save_progress(conn, exchange_id, symbol, start, end, resume_start, "running", total)
 
     since_ms = int(resume_start.timestamp() * 1000)
@@ -223,7 +243,8 @@ def fetch_symbol(
                 )
                 time.sleep(sleep_for)
 
-        rows = [row for row in rows if row[0] < end_ms]
+        availability_start_ms = int(availability_start.timestamp() * 1000)
+        rows = [row for row in rows if availability_start_ms <= row[0] < end_ms]
         if not rows:
             if since_ms >= end_ms:
                 save_progress(conn, exchange_id, symbol, start, end, end, "complete", total)

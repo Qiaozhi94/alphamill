@@ -362,9 +362,14 @@ def fetch_and_store_open_interest(
         )
         return {"rows_fetched": 0, "rows_upserted": 0, "status": "unsupported"}
     requested_start = start
-    if exchange_id == "okx":
+    configured_days = int(os.getenv("DERIVATIVES_OPEN_INTEREST_MAX_DAYS", "0") or 0)
+    if configured_days > 0:
+        # This is an explicit exchange-availability boundary, not an observed-data fallback.
+        start = max(start, end - timedelta(days=configured_days))
+    elif exchange_id == "okx":
         # OKX rejects old open-interest history windows with 50030 Illegal time range.
         start = max(start, end - timedelta(days=29))
+    effective_start = start
     raw_rows = []
     chunk_start = start
     while chunk_start < end:
@@ -415,7 +420,7 @@ def fetch_and_store_open_interest(
         symbol,
         "open_interest",
         timeframe,
-        start,
+        requested_start,
         end,
         end,
         "complete",
@@ -427,7 +432,7 @@ def fetch_and_store_open_interest(
         "rows_fetched": len(raw_rows),
         "rows_upserted": count,
         "status": status,
-        "effective_start": str(start),
+        "effective_start": str(effective_start),
     }
 
 

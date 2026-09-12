@@ -52,6 +52,28 @@ def test_symbol_stats_uses_authoritative_window_not_observed_span(monkeypatch) -
     assert all(start in params and end in params for _, params in conn.cursor_obj.statements)
 
 
+def test_symbol_stats_uses_explicit_listing_boundary(monkeypatch) -> None:
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    effective_start = datetime(2024, 1, 1, 0, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 1, 0, 3, tzinfo=UTC)
+    monkeypatch.setattr(report, "WINDOW_START", start)
+    monkeypatch.setattr(report, "WINDOW_END", end)
+    monkeypatch.setattr(report, "listing_start", lambda *_args: effective_start)
+    monkeypatch.setattr(report, "unavailable_symbols", lambda: set())
+
+    conn = _Connection(
+        [
+            (2, effective_start, end - report.timedelta(minutes=1)),
+            (0, None),
+        ]
+    )
+    stats = report.symbol_stats(conn, "binance", "NEW/USDT")
+
+    assert stats["expected_rows_in_window"] == 2
+    assert stats["boundary_ok"] is True
+    assert stats["verdict"] == "PASS"
+
+
 def test_derivative_verdict_fails_failed_progress() -> None:
     stats = report.derivative_verdict(
         dataset="funding",
@@ -62,6 +84,21 @@ def test_derivative_verdict_fails_failed_progress() -> None:
         effective_start=datetime(2024, 1, 1, tzinfo=UTC),
         effective_end=datetime(2024, 1, 2, tzinfo=UTC),
         failed_progress=1,
+    )
+    assert stats["verdict"] == "FAIL"
+
+
+def test_derivative_verdict_fails_when_progress_does_not_cover_target_window() -> None:
+    stats = report.derivative_verdict(
+        dataset="open_interest",
+        exchange="binanceusdm",
+        actual_rows=10_000,
+        populated_symbols=6,
+        expected_symbols=6,
+        effective_start=datetime(2024, 1, 1, tzinfo=UTC),
+        effective_end=datetime(2024, 1, 2, tzinfo=UTC),
+        failed_progress=0,
+        progress_window_covers_authoritative_window=False,
     )
     assert stats["verdict"] == "FAIL"
 

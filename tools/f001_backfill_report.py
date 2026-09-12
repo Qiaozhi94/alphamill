@@ -23,7 +23,15 @@ from datetime import UTC, datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.dirname(__file__))
 
-from f001_backfill_config import expected_minute_rows, window_datetimes, window_values  # noqa: E402
+from f001_backfill_config import (  # noqa: E402
+    configured_symbols,
+    derivative_window,
+    expected_minute_rows,
+    listing_start,
+    unavailable_symbols,
+    window_datetimes,
+    window_values,
+)
 
 from alphamill.data_bridge.collector.db_writer import db_connect  # noqa: E402
 from alphamill.data_bridge.collector.derivatives_market_backfill import (  # noqa: E402
@@ -68,6 +76,7 @@ def fetch_one(conn, sql: str, params: tuple = ()) -> tuple:
 
 
 def symbol_stats(conn, exchange: str, symbol: str) -> dict:
+    effective_start = listing_start(symbol, WINDOW_START)
     row = fetch_one(
         conn,
         """SELECT
@@ -75,14 +84,23 @@ def symbol_stats(conn, exchange: str, symbol: str) -> dict:
             min(time), max(time)
         FROM ohlcv_1m
         WHERE exchange = %s AND symbol = %s""",
-        (WINDOW_START, WINDOW_END, exchange, symbol),
+        (effective_start, WINDOW_END, exchange, symbol),
     )
     count, first, last = int(row[0]), row[1], row[2]
-    expected = expected_minute_rows(WINDOW_START, WINDOW_END)
+    expected = expected_minute_rows(effective_start, WINDOW_END)
     if count == 0:
+        if symbol in unavailable_symbols():
+            return {
+                "rows": 0,
+                "expected_rows_in_window": 0,
+                "availability_start": effective_start.isoformat(),
+                "status": "unavailable",
+                "verdict": "PASS",
+            }
         return {
             "rows": 0,
             "expected_rows_in_window": expected,
+            "availability_start": effective_start.isoformat(),
             "verdict": "FAIL",
             "reason": "no rows in authoritative window",
         }
@@ -98,11 +116,11 @@ def symbol_stats(conn, exchange: str, symbol: str) -> dict:
                    max(time - prev)
             FROM ordered
         """,
-        (exchange, symbol, WINDOW_START, WINDOW_END),
+        (exchange, symbol, effective_start, WINDOW_END),
     )
     gap_count, max_gap = int(gaps[0]), gaps[1]
     gap_ratio = missing / expected
-    boundary_ok = first <= WINDOW_START and last >= WINDOW_END - timedelta(minutes=1)
+    boundary_ok = first <= effective_start and last >= WINDOW_END - timedelta(minutes=1)
     return {
         "rows": count,
         "first": first.isoformat(),
@@ -112,7 +130,7 @@ def symbol_stats(conn, exchange: str, symbol: str) -> dict:
         "missing_ratio": round(gap_ratio, 6),
         "gap_jumps_gt_1m": gap_count,
         "max_gap": str(max_gap),
-        "window_start": WINDOW_START.isoformat(),
+        "window_start": effective_start.isoformat(),
         "window_end": WINDOW_END.isoformat(),
         "boundary_ok": boundary_ok,
         "verdict": "PASS" if gap_ratio <= GAP_RATIO_THRESHOLD and boundary_ok else "FAIL",
@@ -120,6 +138,7 @@ def symbol_stats(conn, exchange: str, symbol: str) -> dict:
 
 
 def top_gaps(conn, exchange: str, symbol: str) -> list[dict]:
+    effective_start = listing_start(symbol, WINDOW_START)
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -132,7 +151,7 @@ def top_gaps(conn, exchange: str, symbol: str) -> list[dict]:
             ORDER BY time - prev DESC
             LIMIT %s
             """,
-            (exchange, symbol, WINDOW_START, WINDOW_END, MAX_REPORTED_GAPS),
+            (exchange, symbol, effective_start, WINDOW_END, MAX_REPORTED_GAPS),
         )
         return [
             {"from": r[0].isoformat(), "to": r[1].isoformat(), "gap": str(r[2])}
@@ -188,6 +207,9 @@ def derivative_verdict(
     effective_start: datetime,
     effective_end: datetime,
     failed_progress: int,
+    progress_window_covers_authoritative_window: bool = True,
+    progress_window_start: datetime | None = None,
+    progress_window_end: datetime | None = None,
 ) -> dict:
     if dataset == "basis" and exchange in BASIS_UNSUPPORTED_EXCHANGES:
         return {
@@ -196,6 +218,9 @@ def derivative_verdict(
             "expected_min_rows": 0,
             "effective_start": effective_start.isoformat(),
             "effective_end": effective_end.isoformat(),
+            "progress_window_covers_authoritative_window": (
+                progress_window_covers_authoritative_window
+            ),
             "boundary": "exchange_mark_index_ohlcv_unavailable",
             "verdict": "PASS",
         }
@@ -213,6 +238,7 @@ def derivative_verdict(
     status = "failed" if failed_progress else "complete"
     passed = (
         status == "complete"
+        and progress_window_covers_authoritative_window
         and populated_symbols == expected_symbols
         and actual_rows >= expected_min_rows
     )
@@ -224,6 +250,11 @@ def derivative_verdict(
         "effective_end": effective_end.isoformat(),
         "populated_symbols": populated_symbols,
         "expected_symbols": expected_symbols,
+        "progress_window_covers_authoritative_window": progress_window_covers_authoritative_window,
+        "progress_window_start": progress_window_start.isoformat()
+        if progress_window_start
+        else None,
+        "progress_window_end": progress_window_end.isoformat() if progress_window_end else None,
         "verdict": "PASS" if passed else "FAIL",
     }
 
@@ -239,9 +270,14 @@ def derivative_stats(conn, exchange: str, symbols: list[str]) -> dict:
                WHERE exchange = %s AND dataset = %s""",
             (exchange, dataset),
         )
-        effective_start, effective_end, failed_progress = progress
-        if effective_start is None or effective_end is None:
-            effective_start, effective_end = WINDOW_START, WINDOW_END
+        progress_start, progress_end, failed_progress = progress
+        progress_covers_window = bool(
+            progress_start
+            and progress_end
+            and progress_start <= WINDOW_START
+            and progress_end >= WINDOW_END
+        )
+        effective_start, effective_end = derivative_window(dataset, WINDOW_START, WINDOW_END)
         data = fetch_one(
             conn,
             f"""SELECT count(*), count(DISTINCT symbol)
@@ -258,6 +294,9 @@ def derivative_stats(conn, exchange: str, symbols: list[str]) -> dict:
             effective_start=effective_start,
             effective_end=effective_end,
             failed_progress=int(failed_progress or 0),
+            progress_window_covers_authoritative_window=progress_covers_window,
+            progress_window_start=progress_start,
+            progress_window_end=progress_end,
         )
         stats[table]["interval"] = str(interval)
     return stats
@@ -311,7 +350,7 @@ def main() -> int:
                 "SELECT DISTINCT symbol FROM ohlcv_1m WHERE exchange = %s ORDER BY 1",
                 (args.exchange,),
             )
-            symbols = [r[0] for r in cur.fetchall()]
+            symbols = configured_symbols()
         if not symbols:
             print(f"no rows for exchange={args.exchange}; nothing to verify")
             return 2
