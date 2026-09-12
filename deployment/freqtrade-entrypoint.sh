@@ -38,6 +38,10 @@ def replace(value: object) -> object:
 
 
 config = replace(json.loads(template.read_text(encoding="utf-8")))
+api_server = config.get("api_server", {})
+jwt_secret_key = api_server.get("jwt_secret_key")
+if not isinstance(jwt_secret_key, str) or len(jwt_secret_key) < 32:
+    raise SystemExit("FREQTRADE_JWT_SECRET_KEY must be at least 32 characters")
 rendered.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 

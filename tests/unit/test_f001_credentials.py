@@ -18,6 +18,21 @@ def test_freqtrade_configs_use_environment_placeholders() -> None:
             assert api_server[key].startswith("${FREQTRADE_")
 
 
+def test_freqtrade_example_credentials_meet_runtime_length_contract() -> None:
+    values = {}
+    for line in (ROOT / "deployment/.env.example").read_text(encoding="utf-8").splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            key, value = line.split("=", 1)
+            values[key] = value
+
+    for key in (
+        "FREQTRADE_API_PASSWORD",
+        "FREQTRADE_JWT_SECRET_KEY",
+        "FREQTRADE_WS_TOKEN",
+    ):
+        assert len(values[key]) >= 32
+
+
 def test_secret_scanner_rejects_plaintext_freqtrade_password(tmp_path: Path) -> None:
     config = {
         "api_server": {
@@ -39,6 +54,7 @@ def test_entrypoint_renders_credentials_without_mutating_template(tmp_path: Path
     rendered = tmp_path / "rendered.json"
     template.write_text(
         '{"api_server": {"password": "${FREQTRADE_API_PASSWORD}", '
+        '"jwt_secret_key": "${FREQTRADE_JWT_SECRET_KEY}", '
         '"httpsProxy": "${BINANCE_HTTPS_PROXY:-}"}}\n',
         encoding="utf-8",
     )
@@ -54,6 +70,8 @@ def test_entrypoint_renders_credentials_without_mutating_template(tmp_path: Path
         **os.environ,
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "FREQTRADE_API_PASSWORD": "runtime-only-password",
+        "FREQTRADE_JWT_SECRET_KEY": "runtime-only-jwt-secret-with-32-chars",
+        "BINANCE_HTTPS_PROXY": "",
         "FREQTRADE_CONFIG_TEMPLATE": str(template),
         "FREQTRADE_CONFIG_RENDERED": str(rendered),
     }
@@ -73,3 +91,31 @@ def test_entrypoint_renders_credentials_without_mutating_template(tmp_path: Path
         "runtime-only-password"
     )
     assert json.loads(rendered.read_text(encoding="utf-8"))["api_server"]["httpsProxy"] == ""
+
+
+def test_entrypoint_rejects_short_jwt_secret(tmp_path: Path) -> None:
+    template = tmp_path / "config.json"
+    rendered = tmp_path / "rendered.json"
+    template.write_text(
+        '{"api_server": {"password": "${FREQTRADE_API_PASSWORD}", '
+        '"jwt_secret_key": "${FREQTRADE_JWT_SECRET_KEY}"}}\n',
+        encoding="utf-8",
+    )
+    env = {
+        **os.environ,
+        "FREQTRADE_API_PASSWORD": "runtime-only-password",
+        "FREQTRADE_JWT_SECRET_KEY": "too-short",
+        "FREQTRADE_CONFIG_TEMPLATE": str(template),
+        "FREQTRADE_CONFIG_RENDERED": str(rendered),
+    }
+
+    result = subprocess.run(
+        [str(ROOT / "deployment/freqtrade-entrypoint.sh"), "trade"],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "at least 32 characters" in result.stderr

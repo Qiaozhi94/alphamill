@@ -81,9 +81,9 @@ services:
     environment:
       PYTHONPATH: /app/src:/freqtrade
       FREQTRADE_API_USERNAME: ${FREQTRADE_API_USERNAME:-admin}
-      FREQTRADE_API_PASSWORD: ${FREQTRADE_API_PASSWORD:-change-me-freqtrade}
-      FREQTRADE_JWT_SECRET_KEY: ${FREQTRADE_JWT_SECRET_KEY:-change-me-freqtrade-jwt}
-      FREQTRADE_WS_TOKEN: ${FREQTRADE_WS_TOKEN:-change-me-freqtrade-ws}
+      FREQTRADE_API_PASSWORD: ${FREQTRADE_API_PASSWORD:-change-me-freqtrade-password-32-chars}
+      FREQTRADE_JWT_SECRET_KEY: ${FREQTRADE_JWT_SECRET_KEY:-change-me-freqtrade-jwt-secret-32-chars}
+      FREQTRADE_WS_TOKEN: ${FREQTRADE_WS_TOKEN:-change-me-freqtrade-ws-token-32-chars}
       BINANCE_HTTPS_PROXY: ${BINANCE_HTTPS_PROXY:-}
       HTTP_PROXY: ${BINANCE_HTTPS_PROXY:-}
       HTTPS_PROXY: ${BINANCE_HTTPS_PROXY:-}
