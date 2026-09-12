@@ -43,7 +43,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Backfill derivatives funding/open-interest/mark-index basis data."
     )
-    parser.add_argument("--exchange", default=os.getenv("DERIVATIVES_EXCHANGE", "okx"))
+    parser.add_argument("--exchange", default=os.getenv("DERIVATIVES_EXCHANGE", "binanceusdm"))
     parser.add_argument(
         "--symbols", default=os.getenv("DERIVATIVES_SYMBOLS", os.getenv("SYMBOLS", DEFAULT_PAIRS))
     )
@@ -104,13 +104,18 @@ def main() -> int:
         report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         write_markdown(report_path.with_suffix(".md"), result)
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 0
+        return 1 if result.get("status") == "failed" else 0
     finally:
         conn.close()
 
 
 def csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+BASIS_UNSUPPORTED_EXCHANGES = set(
+    csv(os.getenv("DERIVATIVES_BASIS_UNSUPPORTED_EXCHANGES", "binanceusdm"))
+)
 
 
 def parse_utc(value: str) -> datetime:
@@ -249,7 +254,7 @@ def run_backfill(
             )
         rows.append(item)
     return {
-        "status": "complete",
+        "status": overall_backfill_status(rows),
         "exchange": exchange_id,
         "start": str(start),
         "end": str(end),
@@ -326,7 +331,7 @@ def fetch_and_store_funding(
     save_progress(
         conn, exchange_id, symbol, "funding", "none", start, end, end, "complete", count, None
     )
-    return {"rows_fetched": len(raw_rows), "rows_upserted": count}
+    return {"rows_fetched": len(raw_rows), "rows_upserted": count, "status": "complete"}
 
 
 def fetch_and_store_open_interest(
@@ -438,6 +443,28 @@ def fetch_and_store_basis(
     limit: int,
     retries: int,
 ) -> dict:
+    if exchange_id in BASIS_UNSUPPORTED_EXCHANGES:
+        save_progress(
+            conn,
+            exchange_id,
+            symbol,
+            "basis",
+            timeframe,
+            start,
+            end,
+            start,
+            "unsupported",
+            0,
+            "exchange is explicitly allowlisted as lacking mark/index OHLCV",
+        )
+        return {
+            "mark_rows": 0,
+            "index_rows": 0,
+            "rows_upserted": 0,
+            "status": "unsupported",
+            "boundary": "exchange_mark_index_ohlcv_unavailable",
+        }
+
     mark_rows = fetch_price_ohlcv(
         exchange, market_symbol, timeframe, start, end, limit, retries, "mark"
     )
@@ -482,7 +509,12 @@ def fetch_and_store_basis(
     save_progress(
         conn, exchange_id, symbol, "basis", timeframe, start, end, end, "complete", count, None
     )
-    return {"mark_rows": len(mark_rows), "index_rows": len(index_rows), "rows_upserted": count}
+    return {
+        "mark_rows": len(mark_rows),
+        "index_rows": len(index_rows),
+        "rows_upserted": count,
+        "status": "complete",
+    }
 
 
 def fetch_paginated(
@@ -706,6 +738,16 @@ def summarize_totals(rows: list[dict]) -> dict:
         for name, stats in symbol["datasets"].items():
             totals[name] = totals.get(name, 0) + int(stats.get("rows_upserted", 0))
     return totals
+
+
+def overall_backfill_status(rows: list[dict]) -> str:
+    """Any failed dataset makes the batch fail; unsupported is an explicit boundary."""
+    statuses = [
+        stats.get("status")
+        for symbol in rows
+        for stats in symbol["datasets"].values()
+    ]
+    return "failed" if "failed" in statuses else "complete"
 
 
 def dt_from_ms(value: Any) -> datetime:

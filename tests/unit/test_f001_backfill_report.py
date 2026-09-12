@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from tools import f001_backfill_report as report
+from alphamill.data_bridge.collector import derivatives_market_backfill as derivatives
 
 
 class _Cursor:
@@ -48,3 +49,34 @@ def test_symbol_stats_uses_authoritative_window_not_observed_span(monkeypatch) -
     assert stats["missing_rows"] == 1
     assert stats["verdict"] == "FAIL"
     assert all(start in params and end in params for _, params in conn.cursor_obj.statements)
+
+
+def test_derivative_verdict_fails_failed_progress() -> None:
+    stats = report.derivative_verdict(
+        dataset="funding",
+        exchange="binanceusdm",
+        actual_rows=10_000,
+        populated_symbols=6,
+        expected_symbols=6,
+        effective_start=datetime(2024, 1, 1, tzinfo=UTC),
+        effective_end=datetime(2024, 1, 2, tzinfo=UTC),
+        failed_progress=1,
+    )
+    assert stats["verdict"] == "FAIL"
+
+
+def test_basis_boundary_is_explicitly_allowlisted() -> None:
+    stats = report.derivative_verdict(
+        dataset="basis",
+        exchange="binanceusdm",
+        actual_rows=0,
+        populated_symbols=0,
+        expected_symbols=6,
+        effective_start=datetime(2024, 1, 1, tzinfo=UTC),
+        effective_end=datetime(2024, 1, 2, tzinfo=UTC),
+        failed_progress=0,
+    )
+    assert "binanceusdm" in derivatives.BASIS_UNSUPPORTED_EXCHANGES
+    assert stats["status"] == "unsupported"
+    assert stats["verdict"] == "PASS"
+    assert stats["expected_min_rows"] == 0

@@ -24,6 +24,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.dirname(__file__))
 
 from alphamill.data_bridge.collector.db_writer import db_connect  # noqa: E402
+from alphamill.data_bridge.collector.derivatives_market_backfill import (  # noqa: E402
+    BASIS_UNSUPPORTED_EXCHANGES,
+)
 from f001_backfill_config import expected_minute_rows, window_datetimes, window_values  # noqa: E402
 
 GAP_RATIO_THRESHOLD = 0.01  # 缺失率 1%：容忍交易所偶发缺失
@@ -48,6 +51,12 @@ DERIVATIVES_TABLES = [
     "derivatives_open_interest",
     "derivatives_mark_index_basis",
 ]
+DERIVATIVE_DATASETS = {
+    "derivatives_funding_rates": ("funding", timedelta(hours=8)),
+    "derivatives_open_interest": ("open_interest", timedelta(hours=6)),
+    "derivatives_mark_index_basis": ("basis", timedelta(hours=1)),
+}
+DERIVATIVES_EXCHANGE = os.getenv("DERIVATIVES_EXCHANGE", "binanceusdm")
 MAX_REPORTED_GAPS = 20
 
 
@@ -168,6 +177,89 @@ def table_counts(conn, tables: list[str]) -> dict:
     return {t: int(fetch_one(conn, f"SELECT count(*) FROM {t}")[0]) for t in tables}
 
 
+def derivative_verdict(
+    *,
+    dataset: str,
+    exchange: str,
+    actual_rows: int,
+    populated_symbols: int,
+    expected_symbols: int,
+    effective_start: datetime,
+    effective_end: datetime,
+    failed_progress: int,
+) -> dict:
+    if dataset == "basis" and exchange in BASIS_UNSUPPORTED_EXCHANGES:
+        return {
+            "status": "unsupported",
+            "actual_rows": actual_rows,
+            "expected_min_rows": 0,
+            "effective_start": effective_start.isoformat(),
+            "effective_end": effective_end.isoformat(),
+            "boundary": "exchange_mark_index_ohlcv_unavailable",
+            "verdict": "PASS",
+        }
+
+    interval = DERIVATIVE_DATASETS[{
+        "funding": "derivatives_funding_rates",
+        "open_interest": "derivatives_open_interest",
+        "basis": "derivatives_mark_index_basis",
+    }[dataset]][1]
+    duration = effective_end - effective_start
+    expected_per_symbol = max(1, int(duration.total_seconds() // interval.total_seconds()))
+    expected_min_rows = expected_per_symbol * expected_symbols
+    status = "failed" if failed_progress else "complete"
+    passed = (
+        status == "complete"
+        and populated_symbols == expected_symbols
+        and actual_rows >= expected_min_rows
+    )
+    return {
+        "status": status,
+        "actual_rows": actual_rows,
+        "expected_min_rows": expected_min_rows,
+        "effective_start": effective_start.isoformat(),
+        "effective_end": effective_end.isoformat(),
+        "populated_symbols": populated_symbols,
+        "expected_symbols": expected_symbols,
+        "verdict": "PASS" if passed else "FAIL",
+    }
+
+
+def derivative_stats(conn, exchange: str, symbols: list[str]) -> dict:
+    stats = {}
+    for table, (dataset, interval) in DERIVATIVE_DATASETS.items():
+        progress = fetch_one(
+            conn,
+            """SELECT min(target_start), max(target_end),
+                      count(*) FILTER (WHERE status = 'failed')
+               FROM derivatives_backfill_progress
+               WHERE exchange = %s AND dataset = %s""",
+            (exchange, dataset),
+        )
+        effective_start, effective_end, failed_progress = progress
+        if effective_start is None or effective_end is None:
+            effective_start, effective_end = WINDOW_START, WINDOW_END
+        data = fetch_one(
+            conn,
+            f"""SELECT count(*), count(DISTINCT symbol)
+                FROM {table}
+                WHERE exchange = %s AND time >= %s AND time < %s""",
+            (exchange, WINDOW_START, WINDOW_END),
+        )
+        stats[table] = derivative_verdict(
+            dataset=dataset,
+            exchange=exchange,
+            actual_rows=int(data[0]),
+            populated_symbols=int(data[1]),
+            expected_symbols=len(symbols),
+            effective_start=effective_start,
+            effective_end=effective_end,
+            failed_progress=int(failed_progress or 0),
+        )
+        stats[table]["interval"] = str(interval)
+    return stats
+
+
 def build_report(conn, exchange: str, symbols: list[str]) -> dict:
     per_symbol = {s: symbol_stats(conn, exchange, s) for s in symbols}
     gaps = {s: top_gaps(conn, exchange, s) for s in symbols}
@@ -186,6 +278,8 @@ def build_report(conn, exchange: str, symbols: list[str]) -> dict:
             "end_is_exclusive": True,
         },
         "continuous_aggregates": aggregate_stats(conn, exchange),
+        "derivatives_exchange": DERIVATIVES_EXCHANGE,
+        "derivatives": derivative_stats(conn, DERIVATIVES_EXCHANGE, symbols),
         "derivatives_rows": table_counts(conn, DERIVATIVES_TABLES),
         "unrecoverable_history_rows": table_counts(conn, LOSING_TABLES),
         "unrecoverable_note": (
@@ -194,7 +288,7 @@ def build_report(conn, exchange: str, symbols: list[str]) -> dict:
     }
     checks = [v["verdict"] for v in per_symbol.values()] + [
         v["verdict"] for v in report["continuous_aggregates"].values()
-    ]
+    ] + [v["verdict"] for v in report["derivatives"].values()]
     report["verdict"] = "PASS" if checks and all(v == "PASS" for v in checks) else "FAIL"
     return report
 
