@@ -97,9 +97,10 @@ updated: 2026-09-07
 | 文件 | 豁免原因 | 解除期限 |
 |---|---|---|
 | `src/alphamill/data_bridge/collector/derivatives_market_backfill.py` | F001 原样迁移的回填脚本 | F002 泛化阶段 |
+| `src/alphamill/data_bridge/collector/historical_backfill.py` | F001 原样迁移的回填脚本 | F002 泛化阶段 |
 | `freqtrade/user_data/strategies/KronosFusionStrategy.py` | F001 原样迁移的策略模板 | F002 策略整合阶段 |
 | `src/alphamill/validation/validate_low_frequency_expanded_holdout.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
-| `src/alphamill/validation/train_low_frequency_walk_forward_baselines.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
+| `src/alphamill/factor_factory/bench/train_low_frequency_walk_forward_baselines.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
 | `src/alphamill/validation/validate_low_frequency_regime_filters.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
 | `deployment/verify.ps1` | F001 全链路验收脚本 | F002 验收门重构阶段 |
 | `src/alphamill/validation/validate_low_frequency_candidate_holdout.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
