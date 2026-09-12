@@ -64,6 +64,34 @@ services:
       timescaledb: {condition: service_healthy}
     networks: [alphamill]
 
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    container_name: quant-freqtrade
+    restart: unless-stopped
+    command:
+      - trade
+      - --config
+      - /freqtrade/user_data/config.json
+      - --strategy
+      - KronosFusionStrategy
+      - --strategy-path
+      - /freqtrade/user_data/strategies
+    environment:
+      PYTHONPATH: /app/src
+      FREQTRADE_API_USERNAME: ${FREQTRADE_API_USERNAME:-admin}
+      FREQTRADE_API_PASSWORD: ${FREQTRADE_API_PASSWORD:-change-me-freqtrade}
+      FREQTRADE_JWT_SECRET_KEY: ${FREQTRADE_JWT_SECRET_KEY:-change-me-freqtrade-jwt}
+      FREQTRADE_WS_TOKEN: ${FREQTRADE_WS_TOKEN:-change-me-freqtrade-ws}
+      KRONOS_SIGNAL_URL: http://kronos-signal:8001
+      KRONOS_SIGNAL_EXCHANGE: ${EXCHANGES:-binance}
+    volumes:
+      - ../freqtrade/user_data:/freqtrade/user_data
+      - ../freqtrade/signal_fusion:/freqtrade/signal_fusion:ro
+      - ../src:/app/src:ro
+    depends_on:
+      kronos-signal: {condition: service_started}
+    networks: [alphamill]
+
   grafana:
     image: grafana/grafana:latest
     container_name: quant-grafana
