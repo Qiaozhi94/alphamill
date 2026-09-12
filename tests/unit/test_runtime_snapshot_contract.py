@@ -42,3 +42,13 @@ def test_snapshot_uses_configured_database_identity() -> None:
     assert '$dbUser = if ($dotEnv["DB_USER"])' in script
     assert '$dbName = if ($dotEnv["DB_NAME"])' in script
     assert "psql -v ON_ERROR_STOP=1 -U quant -d quant" not in script
+
+
+def test_snapshot_checks_schema_without_running_migrations() -> None:
+    script = (ROOT / "scripts/collect_runtime_snapshot.ps1").read_text(encoding="utf-8")
+
+    assert "function Invoke-DbScalar" in script
+    assert "information_schema.columns" in script
+    assert "is_nullable = 'YES'" in script
+    assert "004_nullable_dryrun_metrics.sql" not in script
+    assert "Invoke-DbSql (Get-Content $snapshotMigration -Raw)" not in script

@@ -45,16 +45,37 @@ function Invoke-DbSql {
     }
 }
 
+function Invoke-DbScalar {
+    param([string]$Sql)
+    $output = $Sql | docker exec -i quant-timescaledb psql -v ON_ERROR_STOP=1 -U $dbUser -d $dbName -t -A
+    if ($LASTEXITCODE -ne 0) {
+        throw "Database check failed with exit code $LASTEXITCODE"
+    }
+    return (($output | Out-String).Trim())
+}
+
 $dotEnv = Read-DotEnv (Join-Path $projectRoot "deployment/.env")
 $dbUser = if ($dotEnv["DB_USER"]) { $dotEnv["DB_USER"] } else { $env:DB_USER }
 $dbName = if ($dotEnv["DB_NAME"]) { $dotEnv["DB_NAME"] } else { $env:DB_NAME }
 $dbUser = if ($dbUser) { $dbUser } else { "quant" }
 $dbName = if ($dbName) { $dbName } else { "quant" }
-$snapshotMigration = Join-Path $projectRoot "db/migrations/004_nullable_dryrun_metrics.sql"
-if (-not (Test-Path $snapshotMigration)) {
-    throw "Runtime snapshot migration is missing: $snapshotMigration"
+$schemaCheck = @"
+SELECT CASE WHEN to_regclass('public.dryrun_runtime_snapshots') IS NOT NULL
+    AND (
+        SELECT COUNT(*)
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'dryrun_runtime_snapshots'
+          AND column_name IN ('total_stake', 'trade_count', 'closed_trade_count',
+                              'profit_all_abs', 'profit_all_pct', 'winrate',
+                              'max_drawdown_abs', 'max_drawdown_ratio')
+          AND is_nullable = 'YES'
+    ) = 8
+    THEN 1 ELSE 0 END;
+"@
+if ((Invoke-DbScalar $schemaCheck) -ne "1") {
+    throw "dryrun_runtime_snapshots schema is missing or unknown metrics are not nullable"
 }
-Invoke-DbSql (Get-Content $snapshotMigration -Raw)
 
 $freqtradeUser = if ($dotEnv["FREQTRADE_API_USERNAME"]) { $dotEnv["FREQTRADE_API_USERNAME"] } else { $env:FREQTRADE_API_USERNAME }
 $freqtradePassword = if ($dotEnv["FREQTRADE_API_PASSWORD"]) { $dotEnv["FREQTRADE_API_PASSWORD"] } else { $env:FREQTRADE_API_PASSWORD }

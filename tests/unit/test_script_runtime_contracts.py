@@ -60,3 +60,24 @@ try {{
 }}
 """
     subprocess.run(["pwsh", "-NoProfile", "-Command", command], check=True)
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell 7 unavailable")
+def test_snapshot_schema_check_rejects_missing_nullable_columns() -> None:
+    script_path = (ROOT / "scripts/collect_runtime_snapshot.ps1").as_posix()
+    command = f"""
+$source = [IO.File]::ReadAllText('{script_path}')
+$start = $source.IndexOf('$schemaCheck = @"')
+$end = $source.IndexOf('$freqtradeUser =')
+function Invoke-DbScalar {{ param([string]$Sql); '0' }}
+try {{
+    Invoke-Expression $source.Substring($start, $end - $start)
+    exit 1
+}} catch {{
+    if ($_.Exception.Message -notmatch 'schema is missing or unknown metrics are not nullable') {{
+        exit 2
+    }}
+    exit 0
+}}
+"""
+    subprocess.run(["pwsh", "-NoProfile", "-Command", command], check=True)
