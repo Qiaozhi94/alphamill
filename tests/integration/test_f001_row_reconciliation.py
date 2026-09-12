@@ -13,6 +13,7 @@ import pytest
 TOOLS_DIR = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS_DIR))
 
+import f001_backfill_config
 f001_backfill_report = pytest.importorskip("f001_backfill_report")
 
 pytestmark = pytest.mark.integration
@@ -57,15 +58,17 @@ def test_f001_backfill_completeness_passes():
 def _backfill_incomplete(conn) -> bool:
     # 权威窗口 = supervisor/首跑钉死的 BACKFILL_START/END（跨进程 resume 的主键）。
     # 早期失败行（其他 target_end）已被权威窗口的重跑取代，不参与判据。
+    window_start, window_end = f001_backfill_config.window_datetimes()
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT count(DISTINCT symbol) FROM backfill_progress
             WHERE exchange = 'binance' AND timeframe = '1m'
               AND status = 'complete'
-              AND target_start = '2024-09-10 00:00:00+00:00'
-              AND target_end = '2026-09-10 15:52:00+00:00'
-            """
+              AND target_start = %s
+              AND target_end = %s
+            """,
+            (window_start, window_end),
         )
         done = int(cur.fetchone()[0])
     # 6 个交易对全部在权威窗口 complete 才算回填完成，否则跳过（回填进行中）。
