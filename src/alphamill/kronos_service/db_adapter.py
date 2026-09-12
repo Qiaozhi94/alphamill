@@ -2,10 +2,14 @@ import os
 import subprocess
 from contextlib import contextmanager
 from io import StringIO
+from pathlib import Path
 
 import pandas as pd
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
+
+COMPOSE_FILE = Path(__file__).resolve().parents[3] / "deployment" / "docker-compose.yml"
 
 
 def database_url() -> str | None:
@@ -65,6 +69,8 @@ COPY (
         [
             "docker",
             "compose",
+            "-f",
+            str(COMPOSE_FILE),
             "exec",
             "-T",
             "timescaledb",
@@ -109,22 +115,22 @@ def latest_ohlcv(symbol: str, exchange: str = "binance", limit: int = 120) -> li
 
 
 def latest_ohlcv_via_docker(symbol: str, exchange: str, limit: int) -> list[dict]:
-    safe_exchange = exchange.replace("'", "''")
-    safe_symbol = symbol.replace("'", "''")
     sql = f"""
 COPY (
     SELECT time, exchange, symbol, open, high, low, close, volume
     FROM ohlcv_1m
-    WHERE exchange = '{safe_exchange}'
-      AND symbol = '{safe_symbol}'
+    WHERE exchange = :'exchange'
+      AND symbol = :'symbol'
     ORDER BY time DESC
-    LIMIT {int(limit)}
+    LIMIT :row_limit
 ) TO STDOUT WITH CSV HEADER
 """
     result = subprocess.run(
         [
             "docker",
             "compose",
+            "-f",
+            str(COMPOSE_FILE),
             "exec",
             "-T",
             "timescaledb",
@@ -133,6 +139,12 @@ COPY (
             os.getenv("DB_USER", "quant"),
             "-d",
             os.getenv("DB_NAME", "quant"),
+            "-v",
+            f"exchange={exchange}",
+            "-v",
+            f"symbol={symbol}",
+            "-v",
+            f"row_limit={int(limit)}",
             "-c",
             sql,
         ],
