@@ -3,8 +3,8 @@
   "fiat_display_currency": "",
   "force_entry_enable": true,
   "api_server": {
-    "jwt_secret_key": "alphamill-dryrun-local-jwt-secret-0001",
-    "ws_token": "alphamill-dryrun-local-ws-token-0001"
+    "jwt_secret_key": "${FREQTRADE_JWT_SECRET_KEY}",
+    "ws_token": "${FREQTRADE_WS_TOKEN}"
   },
   "exchange": {
     "name": "binance",

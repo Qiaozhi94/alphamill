@@ -1,5 +1,23 @@
 $ErrorActionPreference = "Stop"
 $ComposeFile = Join-Path $PSScriptRoot "docker-compose.yml"
+$dotEnvMap = @{}
+$dotEnvPath = Join-Path $PSScriptRoot ".env"
+if (Test-Path $dotEnvPath) {
+    Get-Content $dotEnvPath | ForEach-Object {
+        if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+            $dotEnvMap[$Matches[1]] = $Matches[2].Trim().Trim('"').Trim("'")
+        }
+    }
+}
+
+function Required-Secret {
+    param([string]$Name)
+    $value = if ($dotEnvMap[$Name]) { $dotEnvMap[$Name] } else { [Environment]::GetEnvironmentVariable($Name) }
+    if (-not $value -or $value -like "change-me*") {
+        throw "$Name must be set to a non-placeholder value in deployment/.env or the environment"
+    }
+    return $value
+}
 
 function Write-Step {
     param([string]$Message)
@@ -58,15 +76,8 @@ if ($prometheusHealth -notmatch "Healthy") {
 Write-Host $prometheusHealth -ForegroundColor Green
 
 Write-Step "Grafana datasource health"
-$dotEnvMap = @{}
-$dotEnvPath = Join-Path $PSScriptRoot ".env"
-if (Test-Path $dotEnvPath) {
-    Get-Content $dotEnvPath | ForEach-Object {
-        if ($_ -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') { $dotEnvMap[$Matches[1]] = $Matches[2] }
-    }
-}
 $grafanaUser = if ($dotEnvMap["GRAFANA_USER"]) { $dotEnvMap["GRAFANA_USER"] } else { "admin" }
-$grafanaPassword = if ($dotEnvMap["GRAFANA_PASSWORD"]) { $dotEnvMap["GRAFANA_PASSWORD"] } else { "quant2026" }
+$grafanaPassword = Required-Secret "GRAFANA_PASSWORD"
 $grafanaAuth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${grafanaUser}:${grafanaPassword}"))
 $timescaleHealth = Invoke-RestMethod -Uri "http://localhost:3000/api/datasources/uid/TimescaleDB/health" -Headers @{ Authorization = $grafanaAuth }
 $prometheusDatasourceHealth = Invoke-RestMethod -Uri "http://localhost:3000/api/datasources/uid/Prometheus/health" -Headers @{ Authorization = $grafanaAuth }
@@ -92,7 +103,9 @@ if ($dryrunDashboard.meta.url -ne "/d/quant-crypto-dryrun/quant-crypto-dry-run-m
 Write-Host "Dry-run dashboard: $($dryrunDashboard.meta.url)" -ForegroundColor Green
 
 Write-Step "Freqtrade API health"
-$freqtradeAuth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("admin:quant2026"))
+$freqtradeUser = Required-Secret "FREQTRADE_API_USERNAME"
+$freqtradePassword = Required-Secret "FREQTRADE_API_PASSWORD"
+$freqtradeAuth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${freqtradeUser}:${freqtradePassword}"))
 $freqtradePing = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/ping"
 $freqtradeHealth = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/health" -Headers @{ Authorization = $freqtradeAuth }
 $freqtradeCount = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/count" -Headers @{ Authorization = $freqtradeAuth }

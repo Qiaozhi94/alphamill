@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import sys
@@ -71,6 +72,18 @@ def check(root: pathlib.Path = ROOT) -> list[str]:
                     rel = path.relative_to(root)
                     snippet = line.strip()[:80]
                     findings.append(f"{rel}:{lineno} [{name}] {snippet}")
+        if path.name.startswith("config") and path.suffix == ".json":
+            try:
+                config = json.loads(text)
+            except json.JSONDecodeError:
+                config = {}
+            api_server = config.get("api_server", {})
+            for key in ("password", "jwt_secret_key", "ws_token"):
+                value = api_server.get(key)
+                if isinstance(value, str) and value and not re.fullmatch(
+                    r"\$\{[A-Z][A-Z0-9_]*\}", value
+                ):
+                    findings.append(f"{path.relative_to(root)} [freqtrade-plaintext-{key}]")
     return findings
 
 

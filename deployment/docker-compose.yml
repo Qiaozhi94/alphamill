@@ -71,8 +71,6 @@ services:
     restart: unless-stopped
     command:
       - trade
-      - --config
-      - /freqtrade/user_data/config.json
       - --strategy
       - KronosFusionStrategy
       - --strategy-path
@@ -89,6 +87,8 @@ services:
       - ../freqtrade/user_data:/freqtrade/user_data
       - ../freqtrade/signal_fusion:/freqtrade/signal_fusion:ro
       - ../src:/app/src:ro
+      - ./freqtrade-entrypoint.sh:/usr/local/bin/alphamill-freqtrade-entrypoint.sh:ro
+    entrypoint: ["/usr/local/bin/alphamill-freqtrade-entrypoint.sh"]
     depends_on:
       kronos-signal: {condition: service_started}
     networks: [alphamill]

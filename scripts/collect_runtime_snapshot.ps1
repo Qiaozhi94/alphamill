@@ -24,6 +24,19 @@ function ConvertTo-SqlNumber {
     return ([Convert]::ToDouble($Value)).ToString([Globalization.CultureInfo]::InvariantCulture)
 }
 
+function Read-DotEnv {
+    param([string]$Path)
+    $values = @{}
+    if (Test-Path $Path) {
+        Get-Content $Path | ForEach-Object {
+            if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+                $values[$Matches[1]] = $Matches[2].Trim().Trim('"').Trim("'")
+            }
+        }
+    }
+    return $values
+}
+
 function Invoke-DbSql {
     param([string]$Sql)
     $Sql | docker exec -i quant-timescaledb psql -v ON_ERROR_STOP=1 -U quant -d quant | Out-Null
@@ -32,8 +45,13 @@ function Invoke-DbSql {
     }
 }
 
-$config = Get-Content "./freqtrade/user_data/config.json" -Raw | ConvertFrom-Json
-$credentials = "$($config.api_server.username):$($config.api_server.password)"
+$dotEnv = Read-DotEnv (Join-Path $projectRoot "deployment/.env")
+$freqtradeUser = if ($dotEnv["FREQTRADE_API_USERNAME"]) { $dotEnv["FREQTRADE_API_USERNAME"] } else { $env:FREQTRADE_API_USERNAME }
+$freqtradePassword = if ($dotEnv["FREQTRADE_API_PASSWORD"]) { $dotEnv["FREQTRADE_API_PASSWORD"] } else { $env:FREQTRADE_API_PASSWORD }
+if (-not $freqtradeUser -or -not $freqtradePassword) {
+    throw "FREQTRADE_API_USERNAME and FREQTRADE_API_PASSWORD must be configured"
+}
+$credentials = "${freqtradeUser}:${freqtradePassword}"
 $auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($credentials))
 $headers = @{ Authorization = $auth }
 $snapshotTime = (Get-Date).ToUniversalTime().ToString("o")
