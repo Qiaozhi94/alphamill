@@ -16,7 +16,13 @@ TIMEFRAME = "1m"
 TIMEFRAME_MS = 60_000
 DEFAULT_DAYS = int(os.getenv("BACKFILL_DAYS", "1"))
 FETCH_LIMIT = int(os.getenv("BACKFILL_FETCH_LIMIT", "100"))
-FETCH_RETRIES = int(os.getenv("BACKFILL_RETRIES", "3"))
+
+
+def retry_count(value: str | int) -> int:
+    return max(1, int(value))
+
+
+FETCH_RETRIES = retry_count(os.getenv("BACKFILL_RETRIES", "3"))
 REFRESH_AGGREGATES = os.getenv("BACKFILL_REFRESH_AGGREGATES", "true").lower() in {
     "1",
     "true",
@@ -83,31 +89,9 @@ def build_exchange(exchange_id: str):
 
 def ensure_progress_table(conn):
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS backfill_progress (
-                exchange      TEXT NOT NULL,
-                symbol        TEXT NOT NULL,
-                timeframe     TEXT NOT NULL,
-                target_start  TIMESTAMPTZ NOT NULL,
-                target_end    TIMESTAMPTZ NOT NULL,
-                next_since    TIMESTAMPTZ NOT NULL,
-                status        TEXT NOT NULL DEFAULT 'running',
-                rows_upserted BIGINT NOT NULL DEFAULT 0,
-                last_error    TEXT,
-                started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                completed_at  TIMESTAMPTZ,
-                PRIMARY KEY (exchange, symbol, timeframe, target_start, target_end)
-            )
-            """
-        )
-        cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_backfill_progress_status
-                ON backfill_progress (status, updated_at DESC)
-            """
-        )
+        cur.execute("SELECT to_regclass('public.backfill_progress')")
+        if cur.fetchone()[0] is None:
+            raise RuntimeError("backfill_progress is missing; initialize db/init.sql first")
     conn.commit()
 
 
@@ -241,13 +225,42 @@ def fetch_symbol(
 
         rows = [row for row in rows if row[0] < end_ms]
         if not rows:
-            break
+            if since_ms >= end_ms:
+                save_progress(conn, exchange_id, symbol, start, end, end, "complete", total)
+                break
+            next_since_dt = datetime.fromtimestamp(since_ms / 1000, tz=UTC)
+            save_progress(
+                conn,
+                exchange_id,
+                symbol,
+                start,
+                end,
+                next_since_dt,
+                "stalled",
+                total,
+                "exchange returned an empty batch before target_end",
+            )
+            raise RuntimeError(
+                f"empty OHLCV batch before target_end for {exchange_id} {symbol} at {next_since_dt}"
+            )
 
         total += upsert_ohlcv(conn, normalize_ohlcv_rows(exchange_id, symbol, rows))
         last_ts = rows[-1][0]
         next_since = last_ts + TIMEFRAME_MS
         if next_since <= since_ms:
-            break
+            next_since_dt = datetime.fromtimestamp(since_ms / 1000, tz=UTC)
+            save_progress(
+                conn,
+                exchange_id,
+                symbol,
+                start,
+                end,
+                next_since_dt,
+                "stalled",
+                total,
+                "exchange batch did not advance the cursor",
+            )
+            raise RuntimeError(f"OHLCV cursor stalled for {exchange_id} {symbol} at {next_since_dt}")
         since_ms = next_since
         next_since_dt = datetime.fromtimestamp(since_ms / 1000, tz=UTC)
         save_progress(conn, exchange_id, symbol, start, end, next_since_dt, "running", total)
@@ -284,8 +297,8 @@ def refresh_aggregates(conn, start: datetime, end: datetime):
         conn.autocommit = previous_autocommit
 
 
-def main():
-    exchanges = csv_env("EXCHANGES", "okx")
+def main() -> int:
+    exchanges = csv_env("EXCHANGES", "binance")
     symbols = parse_symbols(os.getenv("SYMBOLS"))
     start, end = date_range()
     logger.info(
@@ -300,6 +313,7 @@ def main():
     try:
         ensure_progress_table(conn)
         grand_total = 0
+        failed = False
         for exchange_id in exchanges:
             exchange = build_exchange(exchange_id)
             try:
@@ -316,15 +330,20 @@ def main():
                     except Exception:
                         logger.exception("symbol failed exchange=%s symbol=%s", exchange_id, symbol)
                         conn.rollback()
+                        failed = True
             finally:
                 close = getattr(exchange, "close", None)
                 if callable(close):
                     close()
+        if failed:
+            logger.error("backfill stopped with failed symbols; aggregates were not refreshed")
+            return 1
         refresh_aggregates(conn, start, end)
         logger.info("backfill complete rows_upserted=%s", grand_total)
+        return 0
     finally:
         conn.close()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
