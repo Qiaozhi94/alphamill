@@ -221,8 +221,6 @@ def derivative_verdict(
     effective_end: datetime,
     failed_progress: int,
     progress_window_covers_authoritative_window: bool = True,
-    progress_window_start: datetime | None = None,
-    progress_window_end: datetime | None = None,
 ) -> dict:
     if dataset == "basis" and exchange in BASIS_UNSUPPORTED_EXCHANGES:
         return {
@@ -264,10 +262,6 @@ def derivative_verdict(
         "populated_symbols": populated_symbols,
         "expected_symbols": expected_symbols,
         "progress_window_covers_authoritative_window": progress_window_covers_authoritative_window,
-        "progress_window_start": progress_window_start.isoformat()
-        if progress_window_start
-        else None,
-        "progress_window_end": progress_window_end.isoformat() if progress_window_end else None,
         "verdict": "PASS" if passed else "FAIL",
     }
 
@@ -349,8 +343,6 @@ def derivative_stats(conn, exchange: str, symbols: list[str]) -> dict:
             effective_end=effective_end,
             failed_progress=int(failed_progress or 0),
             progress_window_covers_authoritative_window=progress_covers_window,
-            progress_window_start=None,
-            progress_window_end=None,
         )
         stats[table]["interval"] = str(interval)
         stats[table]["progress_by_symbol"] = progress_by_symbol

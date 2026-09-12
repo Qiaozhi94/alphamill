@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import tools.f001_backfill_config as backfill_config
 from tools.f001_backfill_config import (
     WINDOW_FILE,
     configured_derivatives_exchange,
@@ -38,3 +39,22 @@ def test_backfill_universe_comes_from_tracked_window_file(monkeypatch) -> None:
     assert f"SYMBOLS={','.join(symbols)}" in window_file
     assert f"EXCHANGES={','.join(exchanges)}" in window_file
     assert f"DERIVATIVES_EXCHANGE={configured_derivatives_exchange()}" in window_file
+
+
+def test_runtime_dotenv_overrides_tracked_defaults_consistently(
+    monkeypatch, tmp_path: Path
+) -> None:
+    supervisor = (ROOT / "deployment/f001-backfill-supervisor.sh").read_text(encoding="utf-8")
+    assert supervisor.index("source deployment/f001-backfill-window.env") < supervisor.index(
+        "source deployment/.env"
+    )
+
+    window_file = tmp_path / "window.env"
+    dotenv_file = tmp_path / "runtime.env"
+    window_file.write_text("SYMBOLS=TRACKED/USDT\n", encoding="utf-8")
+    dotenv_file.write_text("SYMBOLS=RUNTIME/USDT\n", encoding="utf-8")
+    monkeypatch.setattr(backfill_config, "WINDOW_FILE", window_file)
+    monkeypatch.setattr(backfill_config, "DOTENV_FILE", dotenv_file)
+    monkeypatch.delenv("SYMBOLS", raising=False)
+
+    assert configured_symbols() == ["RUNTIME/USDT"]

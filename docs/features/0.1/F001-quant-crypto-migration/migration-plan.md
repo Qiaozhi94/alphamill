@@ -66,6 +66,16 @@
 2. M1 起：所有开发只在 AlphaMill 主仓进行；旧仓只读
 3. Kronos 上游化（clone+pin+权重下载）放在 M0 内完成，避免迁移期间推理断供
 
+### 既有数据库升级入口
+
+已有 TimescaleDB 不会再次执行 Compose 的 `initdb` 挂载。升级应用版本后，必须在仓库根目录执行：
+
+```bash
+./.venv/bin/python tools/apply_migrations.py
+```
+
+该入口按文件名顺序执行 `db/migrations/*.sql`，在 `schema_migrations` 中记录版本并支持重复执行；全新数据库仍由 Compose 首次启动时的 initdb 挂载初始化。
+
 ## 七、备份与灾备（单盘故障 ≠ 项目清零）
 
 - 每日定时向局域网 UGREEN NAS 同步三类资产：TimescaleDB 逻辑 dump（`deployment/backups/db/<date>.dump`）、Parquet 湖分区（`lake/`，F002 起生效）+ manifest（`lake/_manifests/`）、对账与报告（`reports/`）；

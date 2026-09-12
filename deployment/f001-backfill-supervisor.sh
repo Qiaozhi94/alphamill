@@ -6,15 +6,17 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-set -a; source deployment/.env; set +a
 set -a; source deployment/f001-backfill-window.env; set +a
+if [ -f deployment/.env ]; then
+  set -a; source deployment/.env; set +a
+fi
 export DB_HOST=127.0.0.1
 export BACKFILL_START="$BACKFILL_WINDOW_START"
 export BACKFILL_END="$BACKFILL_WINDOW_END"
 export BACKFILL_FETCH_LIMIT=1000
 export LOG_LEVEL=INFO
 export BINANCE_HTTPS_PROXY="${BINANCE_HTTPS_PROXY:-}"
-BACKFILL_SYMBOLS="${SYMBOLS:-BTC/USDT,ETH/USDT}"
+BACKFILL_SYMBOLS="${SYMBOLS:-BTC/USDT,ETH/USDT,SOL/USDT,BNB/USDT,XRP/USDT,DOGE/USDT}"
 IFS=',' read -r -a CONFIGURED_SYMBOLS <<< "$BACKFILL_SYMBOLS"
 EXPECTED_SYMBOL_COUNT=0
 for configured_symbol in "${CONFIGURED_SYMBOLS[@]}"; do

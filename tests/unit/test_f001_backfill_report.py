@@ -125,6 +125,22 @@ def test_derivative_verdict_fails_when_progress_does_not_cover_target_window() -
     assert stats["verdict"] == "FAIL"
 
 
+def test_derivative_verdict_does_not_emit_null_progress_window_fields() -> None:
+    stats = report.derivative_verdict(
+        dataset="funding",
+        exchange="binanceusdm",
+        actual_rows=10,
+        populated_symbols=1,
+        expected_symbols=1,
+        effective_start=datetime(2024, 1, 1, tzinfo=UTC),
+        effective_end=datetime(2024, 1, 2, tzinfo=UTC),
+        failed_progress=0,
+    )
+
+    assert "progress_window_start" not in stats
+    assert "progress_window_end" not in stats
+
+
 def test_progress_coverage_requires_every_configured_symbol() -> None:
     start = datetime(2024, 1, 1, tzinfo=UTC)
     end = datetime(2024, 1, 2, tzinfo=UTC)

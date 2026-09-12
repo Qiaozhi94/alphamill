@@ -49,13 +49,12 @@ def _dotenv_values() -> dict[str, str]:
 
 
 def _setting(name: str, default: str = "") -> str:
-    return os.getenv(name, _file_values().get(name, _dotenv_values().get(name, default)))
+    return os.getenv(name, _dotenv_values().get(name, _file_values().get(name, default)))
 
 
 def window_values() -> tuple[str, str]:
-    defaults = _file_values()
-    start = os.getenv("BACKFILL_WINDOW_START", defaults.get("BACKFILL_WINDOW_START", ""))
-    end = os.getenv("BACKFILL_WINDOW_END", defaults.get("BACKFILL_WINDOW_END", ""))
+    start = _setting("BACKFILL_WINDOW_START")
+    end = _setting("BACKFILL_WINDOW_END")
     if not start or not end:
         raise RuntimeError("F001 回填窗口未配置 BACKFILL_WINDOW_START/BACKFILL_WINDOW_END")
     return start, end
@@ -86,7 +85,11 @@ def expected_minute_rows(start: datetime, end: datetime) -> int:
 
 def configured_symbols() -> list[str]:
     return [
-        item.strip() for item in _setting("SYMBOLS", "BTC/USDT,ETH/USDT").split(",") if item.strip()
+        item.strip()
+        for item in _setting(
+            "SYMBOLS", "BTC/USDT,ETH/USDT,SOL/USDT,BNB/USDT,XRP/USDT,DOGE/USDT"
+        ).split(",")
+        if item.strip()
     ]
 
 

@@ -55,7 +55,7 @@ updated: 2026-09-10
 
 ### Phase 1：数据资产重建
 
-- [x] T004 (`FR-001`): 主仓编排起全新 TimescaleDB——`docker compose -f deployment/docker-compose.yml up -d timescaledb`，schema 由 `db/init.sql`（含 5 个连续聚合）自动初始化，`db/migrations/003_derivatives_market_data.sql` 手工应用 — verify: 容器 healthy + 全部公有表就位（2026-09-10 实测 11 张公有表 + 5 个连续聚合）
+- [x] T004 (`FR-001`): 主仓编排起全新 TimescaleDB——`docker compose -f deployment/docker-compose.yml up -d timescaledb`，schema 由 `db/init.sql`（含 5 个连续聚合）自动初始化；既有库升级使用 `./.venv/bin/python tools/apply_migrations.py` 按序幂等应用 `db/migrations/*.sql` — verify: 容器 healthy + 全部公有表就位（2026-09-10 实测 11 张公有表 + 5 个连续聚合）
 - [x] T005 (`FR-001`, `AC-001`): 重建 5 个连续聚合（ohlcv_5m/15m/1h/4h/1d）并执行交易所历史回填（`EXCHANGES=binance`，1m OHLCV + 衍生品三表，幂等 upsert、`backfill_progress` 断点续传，经 `{EXCHANGE}_HTTPS_PROXY` 内网代理出网），按 design §3 口径执行完整性校验并产出 `reports/f001-backfill-<date>.json` — verify: `tests/integration/test_f001_row_reconciliation.py`（2026-09-11 实测：6 对满窗 631 万行、BTC 缺 33 行=0.003% 其余零缺失；5 聚合与基表桶一致；funding 13152 行、OI 744 行（币安 30 天深度上限，缺口已记录）、basis 0（binanceusdm 无 index OHLCV，边界记录）；报告 `reports/f001-backfill-20260910.json` verdict=PASS；全量 pytest 50 passed）
 
 ### Phase 2：代码与服务搬迁
