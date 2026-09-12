@@ -74,3 +74,25 @@ def test_drawdown_guard_positive_and_negative_paths() -> None:
 
     assert blocked.blocked is True
     assert allowed.blocked is False
+
+
+def test_drawdown_lookback_uses_explicit_window_start_equity() -> None:
+    now = datetime(2026, 1, 2, tzinfo=UTC)
+    trades = [
+        _trade(now - timedelta(days=3), 100),
+        _trade(now - timedelta(hours=3), -20),
+        _trade(now - timedelta(hours=2), 5),
+        _trade(now - timedelta(hours=1), 5),
+    ]
+
+    state = DrawdownGuard(max_drawdown_ratio=0.2, lookback_days=1, min_closed_trades=3).evaluate(
+        trades,
+        current_equity=90,
+        current_time=now,
+        starting_equity=100,
+    )
+
+    assert state.closed_trades == 3
+    assert state.peak_equity == 100
+    assert state.trough_equity == 80
+    assert state.blocked is True

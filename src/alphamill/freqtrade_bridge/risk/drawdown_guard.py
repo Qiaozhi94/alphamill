@@ -34,6 +34,7 @@ class DrawdownGuard:
         closed_trades: Iterable,
         current_equity: float,
         current_time: datetime | None = None,
+        starting_equity: float | None = None,
     ) -> DrawdownGuardState:
         trades = self._closed_trades_in_scope(closed_trades, current_time)
         if current_equity <= 0 or len(trades) < self.min_closed_trades:
@@ -42,8 +43,16 @@ class DrawdownGuard:
             )
 
         realized_profit = sum(self._profit_abs(trade) for trade in trades)
-        equity = current_equity - realized_profit
-        peak_equity = max(equity, 0.0)
+        # For a lookback window, the peak must start at the equity immediately
+        # before that window. Callers with an authoritative wallet snapshot can
+        # pass it explicitly; the fallback reconstructs the same value from the
+        # scoped realized PnL without resetting a negative baseline to zero.
+        equity = (
+            float(starting_equity)
+            if starting_equity is not None
+            else current_equity - realized_profit
+        )
+        peak_equity = equity
         trough_equity = peak_equity
         max_drawdown_abs = 0.0
 
