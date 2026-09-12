@@ -3,6 +3,8 @@
   "fiat_display_currency": "",
   "force_entry_enable": true,
   "api_server": {
+    "username": "${FREQTRADE_API_USERNAME}",
+    "password": "${FREQTRADE_API_PASSWORD}",
     "jwt_secret_key": "${FREQTRADE_JWT_SECRET_KEY}",
     "ws_token": "${FREQTRADE_WS_TOKEN}"
   },

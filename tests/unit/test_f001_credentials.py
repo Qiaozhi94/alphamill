@@ -14,9 +14,8 @@ def test_freqtrade_configs_use_environment_placeholders() -> None:
     for name in ("config.json", "config.dryrun.json"):
         config = json.loads((ROOT / "freqtrade/user_data" / name).read_text(encoding="utf-8"))
         api_server = config.get("api_server", {})
-        for key in ("password", "jwt_secret_key", "ws_token"):
-            if key in api_server:
-                assert api_server[key].startswith("${FREQTRADE_")
+        for key in ("username", "password", "jwt_secret_key", "ws_token"):
+            assert api_server[key].startswith("${FREQTRADE_")
 
 
 def test_secret_scanner_rejects_plaintext_freqtrade_password(tmp_path: Path) -> None:
