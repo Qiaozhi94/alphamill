@@ -49,12 +49,33 @@ def _dotenv_values() -> dict[str, str]:
 
 
 def _setting(name: str, default: str = "") -> str:
+    """运行量：显式环境变量 > 本机 deployment/.env > 入库的 window.env 默认值。"""
     return os.getenv(name, _dotenv_values().get(name, _file_values().get(name, default)))
 
 
+# 判据量（窗口与可用性边界）直接决定 AC-001 的验收口径，必须来自入库文件，
+# 不接受 gitignored 的 deployment/.env 覆盖——否则本机文件可以悄悄改窄验收范围
+# （C203 修掉的就是这个模式，C401 是它在 C302 优先级反转后的回潮）。
+VERDICT_SETTINGS = (
+    "BACKFILL_WINDOW_START",
+    "BACKFILL_WINDOW_END",
+    "BACKFILL_SYMBOL_LISTING_STARTS",
+    "BACKFILL_SYMBOL_DELISTING_ENDS",
+    "BACKFILL_UNAVAILABLE_SYMBOLS",
+    "DERIVATIVES_OPEN_INTEREST_MAX_DAYS",
+)
+
+
+def _verdict_setting(name: str, default: str = "") -> str:
+    """判据量：显式环境变量 > 入库的 window.env；不读 deployment/.env。"""
+    if name not in VERDICT_SETTINGS:
+        raise KeyError(f"{name} 不是判据量；运行量请用 _setting()")
+    return os.getenv(name, _file_values().get(name, default))
+
+
 def window_values() -> tuple[str, str]:
-    start = _setting("BACKFILL_WINDOW_START")
-    end = _setting("BACKFILL_WINDOW_END")
+    start = _verdict_setting("BACKFILL_WINDOW_START")
+    end = _verdict_setting("BACKFILL_WINDOW_END")
     if not start or not end:
         raise RuntimeError("F001 回填窗口未配置 BACKFILL_WINDOW_START/BACKFILL_WINDOW_END")
     return start, end
@@ -102,17 +123,17 @@ def configured_derivatives_exchange() -> str:
 
 
 def listing_start(symbol: str, start: datetime) -> datetime:
-    return listing_start_for(symbol, start, _setting("BACKFILL_SYMBOL_LISTING_STARTS"))
+    return listing_start_for(symbol, start, _verdict_setting("BACKFILL_SYMBOL_LISTING_STARTS"))
 
 
 def delisting_end(symbol: str, end: datetime) -> datetime:
-    return delisting_end_for(symbol, end, _setting("BACKFILL_SYMBOL_DELISTING_ENDS"))
+    return delisting_end_for(symbol, end, _verdict_setting("BACKFILL_SYMBOL_DELISTING_ENDS"))
 
 
 def unavailable_symbols() -> set[str]:
-    return parse_unavailable_symbols(_setting("BACKFILL_UNAVAILABLE_SYMBOLS"))
+    return parse_unavailable_symbols(_verdict_setting("BACKFILL_UNAVAILABLE_SYMBOLS"))
 
 
 def derivative_window(dataset: str, start: datetime, end: datetime) -> tuple[datetime, datetime]:
-    max_days = int(_setting("DERIVATIVES_OPEN_INTEREST_MAX_DAYS", "0") or 0)
+    max_days = int(_verdict_setting("DERIVATIVES_OPEN_INTEREST_MAX_DAYS", "0") or 0)
     return effective_derivative_window(dataset, start, end, max_days)

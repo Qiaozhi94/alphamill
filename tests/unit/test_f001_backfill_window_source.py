@@ -58,3 +58,45 @@ def test_runtime_dotenv_overrides_tracked_defaults_consistently(
     monkeypatch.delenv("SYMBOLS", raising=False)
 
     assert configured_symbols() == ["RUNTIME/USDT"]
+
+
+def test_verdict_settings_ignore_runtime_dotenv(monkeypatch, tmp_path: Path) -> None:
+    """判据量只认入库的 window.env：本机 .env 不得改窄 AC-001 的验收口径。"""
+    window_file = tmp_path / "window.env"
+    dotenv_file = tmp_path / "runtime.env"
+    window_file.write_text(
+        "BACKFILL_WINDOW_START=2024-09-10T00:00:00Z\n"
+        "BACKFILL_WINDOW_END=2026-09-10T15:52:00Z\n"
+        "BACKFILL_UNAVAILABLE_SYMBOLS=\n",
+        encoding="utf-8",
+    )
+    dotenv_file.write_text(
+        "BACKFILL_WINDOW_START=2026-09-01T00:00:00Z\n"
+        "BACKFILL_WINDOW_END=2026-09-02T00:00:00Z\n"
+        "BACKFILL_UNAVAILABLE_SYMBOLS=BTC/USDT\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(backfill_config, "WINDOW_FILE", window_file)
+    monkeypatch.setattr(backfill_config, "DOTENV_FILE", dotenv_file)
+    for name in backfill_config.VERDICT_SETTINGS:
+        monkeypatch.delenv(name, raising=False)
+
+    assert window_values() == ("2024-09-10T00:00:00Z", "2026-09-10T15:52:00Z")
+    assert backfill_config.unavailable_symbols() == set()
+
+
+def test_runtime_dotenv_files_carry_no_verdict_settings() -> None:
+    """deployment/.env 与 .env.example 都不得携带判据量，避免优先级再次回潮。"""
+    for name in ("deployment/.env", "deployment/.env.example"):
+        path = ROOT / name
+        if not path.is_file():
+            continue
+        keys = {
+            line.split("=", 1)[0].strip()
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if "=" in line and not line.lstrip().startswith("#")
+        }
+        assert not keys & set(backfill_config.VERDICT_SETTINGS), (
+            f"{name} 含判据量 {sorted(keys & set(backfill_config.VERDICT_SETTINGS))}，"
+            "应只留在 deployment/f001-backfill-window.env"
+        )
