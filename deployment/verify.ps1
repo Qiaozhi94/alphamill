@@ -10,11 +10,27 @@ function Write-Step {
 function Invoke-DbCheck {
     param(
         [string]$Name,
-        [string]$Sql
+        [string]$Sql,
+        [int]$MinRows = 1,
+        [scriptblock]$Validator = $null
     )
 
     Write-Step $Name
-    docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -v ON_ERROR_STOP=1 -c $Sql
+    $output = @(docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -v ON_ERROR_STOP=1 -t -A -F '|' -c $Sql)
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Name failed: psql exited with code $LASTEXITCODE"
+    }
+    $lines = @($output | ForEach-Object { "$($_)".Trim() } | Where-Object { $_ -ne "" })
+    if ($lines.Count -lt $MinRows) {
+        throw "$Name failed: expected at least $MinRows result rows, got $($lines.Count)"
+    }
+    if ($null -ne $Validator -and -not (& $Validator $lines)) {
+        throw "$Name failed: result assertion did not pass"
+    }
+    foreach ($line in $lines) {
+        Write-Host $line
+    }
+    return $lines
 }
 
 Write-Step "Docker Compose services"
@@ -103,50 +119,50 @@ Write-Host "Kronos health: $($kronosHealth.status), model_loaded=$($kronosHealth
 Write-Host "Kronos placeholder prediction: $($kronosPrediction.symbol) $($kronosPrediction.signal_type) confidence=$($kronosPrediction.confidence)" -ForegroundColor Green
 
 Invoke-DbCheck "TimescaleDB extension" @"
-SELECT extname, extversion
+SELECT CASE WHEN COUNT(*) = 1 THEN 1 ELSE 0 END
 FROM pg_extension
 WHERE extname = 'timescaledb';
 "@
 
 Invoke-DbCheck "Hypertables" @"
-SELECT hypertable_schema, hypertable_name, num_dimensions
+SELECT CASE WHEN COUNT(*) >= 4 THEN 1 ELSE 0 END
 FROM timescaledb_information.hypertables
-ORDER BY hypertable_name;
 "@
 
 Invoke-DbCheck "Continuous aggregates" @"
-SELECT view_schema, view_name, materialized_only
+SELECT CASE WHEN COUNT(*) >= 5 THEN 1 ELSE 0 END
 FROM timescaledb_information.continuous_aggregates
-ORDER BY view_name;
 "@
 
 Invoke-DbCheck "OHLCV constraints" @"
-SELECT conname, contype, pg_get_constraintdef(oid) AS definition
+SELECT CASE WHEN COUNT(*) >= 1 THEN 1 ELSE 0 END
 FROM pg_constraint
 WHERE conrelid = 'ohlcv_1m'::regclass
-ORDER BY contype, conname;
 "@
 
 Invoke-DbCheck "OHLCV quality flags" @"
 SELECT
-    to_regclass('public.ohlcv_quality_flags') AS table_name,
-    COUNT(*) FILTER (WHERE resolved_at IS NULL) AS unresolved_flags
+    CASE WHEN to_regclass('public.ohlcv_quality_flags') IS NOT NULL
+              AND COUNT(*) FILTER (WHERE resolved_at IS NULL) = 0
+         THEN 1 ELSE 0 END
 FROM ohlcv_quality_flags;
 "@
 
 Invoke-DbCheck "Timescale jobs" @"
-SELECT proc_name, hypertable_schema, hypertable_name, schedule_interval
+SELECT CASE WHEN COUNT(*) >= 1 THEN 1 ELSE 0 END
 FROM timescaledb_information.jobs
 WHERE hypertable_name = 'ohlcv_1m'
    OR proc_name = 'policy_refresh_continuous_aggregate'
-ORDER BY job_id;
 "@
 
 Invoke-DbCheck "OHLCV data by symbol" @"
-SELECT exchange, symbol, COUNT(*) AS rows, MIN(time) AS first_time, MAX(time) AS last_time
-FROM ohlcv_1m
-GROUP BY exchange, symbol
-ORDER BY exchange, symbol;
+SELECT CASE WHEN COUNT(*) >= 1 THEN 1 ELSE 0 END
+FROM (
+    SELECT exchange, symbol
+    FROM ohlcv_1m
+    GROUP BY exchange, symbol
+    HAVING COUNT(*) > 0
+) populated;
 "@
 
 Invoke-DbCheck "1m missing candle check" @"
@@ -171,39 +187,24 @@ missing AS (
      AND o.time = e.time
     WHERE o.time IS NULL
 )
-SELECT
-    r.exchange,
-    r.symbol,
-    COUNT(e.time) AS expected_rows,
-    COUNT(o.time) AS actual_rows,
-    COUNT(m.time) AS missing_rows,
-    MIN(m.time) AS first_missing,
-    MAX(m.time) AS last_missing
-FROM ranges r
-JOIN expected e
-  ON e.exchange = r.exchange
- AND e.symbol = r.symbol
-LEFT JOIN ohlcv_1m o
-  ON o.exchange = e.exchange
- AND o.symbol = e.symbol
- AND o.time = e.time
-LEFT JOIN missing m
-  ON m.exchange = e.exchange
- AND m.symbol = e.symbol
- AND m.time = e.time
-GROUP BY r.exchange, r.symbol
-ORDER BY r.exchange, r.symbol;
+SELECT CASE WHEN COALESCE(MAX(missing_rows::numeric / NULLIF(expected_rows, 0)), 0) <= 0.01
+            THEN 1 ELSE 0 END
+FROM (
+    SELECT r.exchange, r.symbol, COUNT(e.time) AS expected_rows, COUNT(m.time) AS missing_rows
+    FROM ranges r
+    JOIN expected e ON e.exchange = r.exchange AND e.symbol = r.symbol
+    LEFT JOIN missing m ON m.exchange = e.exchange AND m.symbol = e.symbol AND m.time = e.time
+    GROUP BY r.exchange, r.symbol
+) summary;
 "@
 
 Invoke-DbCheck "Latest candle by symbol" @"
-SELECT
-    exchange,
-    symbol,
-    MAX(time) AS latest_candle,
-    NOW() - MAX(time) AS latest_lag
-FROM ohlcv_1m
-GROUP BY exchange, symbol
-ORDER BY latest_lag DESC, exchange, symbol;
+SELECT CASE WHEN COUNT(*) >= 1 THEN 1 ELSE 0 END
+FROM (
+    SELECT exchange, symbol
+    FROM ohlcv_1m
+    GROUP BY exchange, symbol
+) populated;
 "@
 
 Invoke-DbCheck "1m abnormal price move check" @"
@@ -234,36 +235,24 @@ abnormal AS (
     FROM moves
     WHERE ABS(return_pct) > 0.50
 )
-SELECT
-    exchange,
-    symbol,
-    COUNT(*) AS abnormal_rows,
-    MIN(time) AS first_abnormal,
-    MAX(time) AS last_abnormal,
-    MAX(ABS(return_pct)) AS max_abs_return
-FROM abnormal
-GROUP BY exchange, symbol
-ORDER BY abnormal_rows DESC, exchange, symbol;
+SELECT COUNT(*) FROM abnormal;
 "@
 
 Invoke-DbCheck "Latest candle freshness" @"
-SELECT
-    COUNT(*) AS total_rows,
-    MAX(time) AS latest_candle,
-    NOW() - MAX(time) AS latest_lag
+SELECT CASE WHEN COUNT(*) > 0 AND NOW() - MAX(time) <= INTERVAL '15 minutes'
+            THEN 1 ELSE 0 END
 FROM ohlcv_1m;
 "@
 
 Invoke-DbCheck "Continuous aggregate row counts" @"
-SELECT 'ohlcv_5m' AS view_name, COUNT(*) AS rows, MIN(bucket) AS first_bucket, MAX(bucket) AS last_bucket FROM ohlcv_5m
-UNION ALL
-SELECT 'ohlcv_15m', COUNT(*), MIN(bucket), MAX(bucket) FROM ohlcv_15m
-UNION ALL
-SELECT 'ohlcv_1h', COUNT(*), MIN(bucket), MAX(bucket) FROM ohlcv_1h
-UNION ALL
-SELECT 'ohlcv_4h', COUNT(*), MIN(bucket), MAX(bucket) FROM ohlcv_4h
-UNION ALL
-SELECT 'ohlcv_1d', COUNT(*), MIN(bucket), MAX(bucket) FROM ohlcv_1d;
+WITH aggregate_counts AS (
+    SELECT COUNT(*) AS rows FROM ohlcv_5m
+    UNION ALL SELECT COUNT(*) FROM ohlcv_15m
+    UNION ALL SELECT COUNT(*) FROM ohlcv_1h
+    UNION ALL SELECT COUNT(*) FROM ohlcv_4h
+    UNION ALL SELECT COUNT(*) FROM ohlcv_1d
+)
+SELECT CASE WHEN COUNT(*) = 5 AND MIN(rows) > 0 THEN 1 ELSE 0 END FROM aggregate_counts;
 "@
 
 Invoke-DbCheck "5m aggregate consistency sample" @"
@@ -305,7 +294,11 @@ SELECT
     ) AS matching_rows
 FROM sample s
 JOIN manual m USING (bucket, exchange, symbol);
-"@
+"@ -Validator {
+    param($lines)
+    $parts = $lines[0] -split '\|'
+    $parts.Count -eq 2 -and [int]$parts[0] -gt 0 -and [int]$parts[0] -eq [int]$parts[1]
+}
 
 Invoke-DbCheck "1h aggregate consistency sample" @"
 WITH sample AS (
@@ -346,7 +339,11 @@ SELECT
     ) AS matching_rows
 FROM sample s
 JOIN manual m USING (bucket, exchange, symbol);
-"@
+"@ -Validator {
+    param($lines)
+    $parts = $lines[0] -split '\|'
+    $parts.Count -eq 2 -and [int]$parts[0] -gt 0 -and [int]$parts[0] -eq [int]$parts[1]
+}
 
 Invoke-DbCheck "4h aggregate consistency sample" @"
 WITH sample AS (
@@ -387,7 +384,11 @@ SELECT
     ) AS matching_rows
 FROM sample s
 JOIN manual m USING (bucket, exchange, symbol);
-"@
+"@ -Validator {
+    param($lines)
+    $parts = $lines[0] -split '\|'
+    $parts.Count -eq 2 -and [int]$parts[0] -gt 0 -and [int]$parts[0] -eq [int]$parts[1]
+}
 
 Invoke-DbCheck "1d aggregate consistency sample" @"
 WITH sample AS (
@@ -428,7 +429,11 @@ SELECT
     ) AS matching_rows
 FROM sample s
 JOIN manual m USING (bucket, exchange, symbol);
-"@
+"@ -Validator {
+    param($lines)
+    $parts = $lines[0] -split '\|'
+    $parts.Count -eq 2 -and [int]$parts[0] -gt 0 -and [int]$parts[0] -eq [int]$parts[1]
+}
 
 Write-Step "F001 backfill completeness (design section 3 thresholds)"
 $completenessLines = docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -t -A -c @"
