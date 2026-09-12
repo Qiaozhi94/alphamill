@@ -15,11 +15,11 @@
     "password": "",
     "ccxt_config": {
       "enableRateLimit": true,
-      "httpsProxy": "http://10.31.0.254:7890"
+      "httpsProxy": "${BINANCE_HTTPS_PROXY:-}"
     },
     "ccxt_async_config": {
       "enableRateLimit": true,
-      "httpsProxy": "http://10.31.0.254:7890"
+      "httpsProxy": "${BINANCE_HTTPS_PROXY:-}"
     }
   }
 }

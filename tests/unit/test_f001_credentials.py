@@ -38,7 +38,9 @@ def test_entrypoint_renders_credentials_without_mutating_template(tmp_path: Path
     template = tmp_path / "config.json"
     rendered = tmp_path / "rendered.json"
     template.write_text(
-        '{"api_server": {"password": "${FREQTRADE_API_PASSWORD}"}}\n', encoding="utf-8"
+        '{"api_server": {"password": "${FREQTRADE_API_PASSWORD}", '
+        '"httpsProxy": "${BINANCE_HTTPS_PROXY:-}"}}\n',
+        encoding="utf-8",
     )
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -70,3 +72,4 @@ def test_entrypoint_renders_credentials_without_mutating_template(tmp_path: Path
     assert json.loads(rendered.read_text(encoding="utf-8"))["api_server"]["password"] == (
         "runtime-only-password"
     )
+    assert json.loads(rendered.read_text(encoding="utf-8"))["api_server"]["httpsProxy"] == ""

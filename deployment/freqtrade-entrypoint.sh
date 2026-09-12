@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 template, rendered = map(Path, sys.argv[1:])
-pattern = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
+pattern = re.compile(r"\$\{([A-Z][A-Z0-9_]*)(:-[^}]*)?\}")
 
 
 def replace(value: object) -> object:
@@ -22,12 +22,19 @@ def replace(value: object) -> object:
         return [replace(item) for item in value]
     if not isinstance(value, str):
         return value
-    missing = [name for name in pattern.findall(value) if not os.getenv(name)]
+    missing = [
+        name
+        for name, default in pattern.findall(value)
+        if not os.getenv(name) and not default
+    ]
     if missing:
         raise SystemExit(
             "missing required Freqtrade environment variables: " + ", ".join(missing)
         )
-    return pattern.sub(lambda match: os.environ[match.group(1)], value)
+    return pattern.sub(
+        lambda match: os.getenv(match.group(1), match.group(2)[2:] if match.group(2) else ""),
+        value,
+    )
 
 
 config = replace(json.loads(template.read_text(encoding="utf-8")))

@@ -70,10 +70,12 @@
     "password": "",
     "enable_ws": false,
     "ccxt_config": {
-      "enableRateLimit": true
+      "enableRateLimit": true,
+      "httpsProxy": "${BINANCE_HTTPS_PROXY:-}"
     },
     "ccxt_async_config": {
-      "enableRateLimit": true
+      "enableRateLimit": true,
+      "httpsProxy": "${BINANCE_HTTPS_PROXY:-}"
     },
     "pair_whitelist": [
       "BTC/USDT",
