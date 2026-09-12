@@ -34,7 +34,7 @@ updated: 2026-09-12
 - [ ] T001 [P] (`FR-001`): pyproject 新增 `pyarrow`/`duckdb` 依赖 pin(版本范围本地验证后落定),`.venv` 安装验证 — verify: `.venv/bin/python -c "import pyarrow, duckdb"` 退出码 0
 - [ ] T002 (`FR-001`): `src/alphamill/data_bridge/manifest.py`——manifest 契约读写(架构 §4.4 字段 + status/reconcile/revision_diff 扩展)、data_version 排序与最新 valid 解析 — verify: `tests/unit/test_f002_manifest.py`
 - [ ] T003 (`FR-001`): `src/alphamill/data_bridge/exporter.py`——ohlcv_1m 全量导出:库查询 → 按 `exchange/pair/date` 分区原子写 Parquet → 生成 manifest — verify: 手动执行一次,`lake/ohlcv_1m/` 分区文件与 `_manifests/ohlcv_1m/<version>.json` 齐备
-- [ ] T004 (`FR-002`): 对账器——逐分区行数 + hashtext 校验和 vs TimescaleDB,不一致标记 invalid — verify: `tests/integration/test_f002_export_reconcile.py`(AC-001/AC-002)
+- [ ] T004 (`FR-002`): 对账器——逐分区 rows + time_min/time_max + 逐数值列 `sum(round(col::numeric,10))`(design §3 口径,两端同形表达式)vs TimescaleDB,不一致标记 invalid;**实现前先做一次跨引擎一致性实测**(取一个分区在 PG 与 DuckDB 各算一遍,确认 numeric 舍入与DECIMAL 精度不产生差异),不通过则按 design §3 退回弱口径并记录 — verify: `tests/integration/test_f002_export_reconcile.py`(AC-001/AC-002)
 - [ ] T005 [P] (`FR-004`): `src/alphamill/data_bridge/symbol_map.py`——从库 DISTINCT symbol 生成 `symbol_map.csv`(lake_pair/freqtrade_pair/db_symbol)与双向解析 — verify: `tests/unit/test_f002_symbol_map.py`(AC-004)
 
 ### Phase 2:取数入口与 dataset 扩展
@@ -45,7 +45,7 @@ updated: 2026-09-12
 
 ### Phase 3:运维化
 
-- [ ] T009 (`FR-006`): 导出 CLI 入口(`python -m alphamill.data_bridge.exporter --dataset ... --mode ...`)+ systemd user timer(每日 02:00 增量;周日 04:00 全量,与 03:00 NAS 备份错峰) — verify: 手动触发退出码 0,journalctl 可查
+- [ ] T009 (`FR-006`): 导出 CLI 入口(`python -m alphamill.data_bridge.exporter --dataset ... --mode ...`)+ systemd user timer(每日 02:00 增量;周日 04:00 全量,与 03:00 NAS 备份错峰) (两个 unit 显式写 `StartLimitIntervalSec`+`StartLimitBurst=3`;附带回补 `alphamill-backup.service` 同样缺失的这两个指令,其注释声称的「最多 3 次」当前不生效) — verify: 手动触发退出码 0,journalctl 可查
 - [ ] T010 (`FR-006`): `backup-nas.sh` lake/ 同步实测——触发备份后 NAS 端 `lake/` 与 `_manifests/` 产物齐全 — verify: NAS 端 ls 校验(AC-006)
 - [ ] T014 (`FR-001`): Kronos 真实推理容器化——compose 可选 profile `kronos-real`(torch/cpu 进镜像 + `vendor/Kronos` 与 `models/` 挂载,默认不启动),使 T007 导出的 signals_log 是真实信号而非 placeholder;同时让 F001 AC-006 可由编排直接复跑而非手工起实例 — verify: `docker compose --profile kronos-real up -d` 后 `ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py -q` 全绿,且 `signals_log` 新增行 `source=kronos`
 

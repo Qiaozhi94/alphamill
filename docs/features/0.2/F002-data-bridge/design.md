@@ -18,7 +18,7 @@ updated: 2026-09-12
 - **行为契约**:`spec.md`(FR-001..006 / NFR-001..003)
 - **PRD / Architecture / System Design**:`docs/alphamill-prd.md` FR1.2/1.3/1.4/1.6、M1;`docs/alphamill-architecture.md` §〇、§四、§4.4;`docs/alphamill-integration.md` §1.2(导出设计与修订政策,唯一权威)、§2.2(symbol_map M1 出口)
 - **执行环境(2026-09-12 实测钉死)**:与 F001 收口态一致——WSL2 Ubuntu 26.04 + docker-ce 29.8.0;TimescaleDB 容器 healthy(631 万行 binance 数据);pwsh 7.6.6 用户态;systemd user timers(backup/snapshot 两个先例);`.venv` Python 3.14 + pyproject 依赖管理;出网经 `BINANCE_HTTPS_PROXY`(本特性无需出网,DuckDB 为本地库)
-- **实现约束**:D4 数据红线(研究只读湖快照);取数模块零写路径;湖分区文件与 manifest 不可变(INFR-002)
+- **实现约束**:D4 数据红线(研究只读湖快照);取数模块零写路径;湖分区文件与 manifest 不可变(NFR-002)
 
 ## 1. 技术概要与影响面
 
@@ -57,7 +57,7 @@ src/alphamill/data_bridge/
   └── _manifests/<dataset>/<data_version>.json
   ```
 - **pair 目录命名**:湖内 pair 用 Freqtrade 风格 `BASE-QUOTE`(如 `BTC-USDT`,`/` 换 `-` 规避路径分隔符);`symbol_map.csv` 三列:`lake_pair,freqtrade_pair,db_symbol`,由库内 DISTINCT symbol 直接生成,双向查询 O(1)。
-- **data_version 语义**(spec Q-003 裁定:按 dataset 独立):`vYYYY.MM.DD`,同日重导追加 `-r2/-r3`;排序 = 日期字典序 + 序号;最新 valid 版本 = 排序最大且 `status != invalid`。每 dataset 独立演进,互不阻塞。
+- **data_version 语义**(spec Q-003 **未裁决**;本设计按 AI 建议的「按 dataset 独立」撰写,若 owner 裁为全局递增,需同步改本节、§9 决策行与 manifest 契约的版本号生成规则):`vYYYY.MM.DD`,同日重导追加 `-r2/-r3`;排序 = 日期字典序 + 序号;最新 valid 版本 = 排序最大且 `status != invalid`。每 dataset 独立演进,互不阻塞。
 - **manifest 契约**(架构 §4.4 + 本期扩展字段):
   ```json
   {
@@ -69,14 +69,33 @@ src/alphamill/data_bridge/
     "caliber": {"close": "raw", "adjclose": "none_crypto"},
     "data_version": "v2026.09.12",
     "status": "valid",
-    "reconcile": {"row_count": "ok", "checksum": "ok"},
+    "reconcile": {"rows": "ok", "time_bounds": "ok", "value_sum": "ok"},
     "quality_flags_unresolved": 0,
     "revision_diff": []
   }
   ```
   `revision_diff` 仅全量校验模式填写:相对上一 valid 版本登记修订分区清单(`[{pair, date, reason}]`);`status: invalid` 时 `reconcile` 记录失败项。
-- **对账口径**:逐 dataset 逐分区——行数 + `sum(hashtext(ohlcv_1m.*::text))` 式校验和(承 F001 design §3 同源方案);校验和在导出端与库端各算一次比对。性能预估:631 万行 hashtext 全表约 1-2 分钟,可接受;增量模式只对新增分区算。
-- **导出窗口与增量语义**:增量导出窗口 = `[max(已有分区日期)+1, 导出日-1]`(昨日分区);全量校验 = 全 span 重导至新 data_version 并做分区级 diff;窗口内无数据的 pair 跳过并记 skipped。
+- **对账口径**(逐 dataset 逐分区,两端各算一次后比对):
+
+  | 字段 | 表达式(两端同形) | 能抓到的问题 |
+  |---|---|---|
+  | `rows` | `count(*)` | 漏行、重复行 |
+  | `time_min` / `time_max` | `min(time)` / `max(time)` | 窗口截断、边界错位 |
+  | `value_sum` | 每个数值列 `sum(round(col::numeric, 10))` | 数值被改写、列错位 |
+
+  **不用 `hashtext()`**:它是 Postgres 内部未文档化函数,取值依赖 PG 的内部哈希实现与行文本表示,
+  DuckDB/PyArrow 侧无等价物——「在导出端与库端各算一次」在跨引擎场景下根本算不出同一个值。
+  (原文称该方案「承 F001 design §3 同源」亦不成立:F001 的口径是行数 + 时间轴连续性 + 聚合桶
+  精确一致,全程没有校验和,`hashtext` 在 F001 代码与文档中出现 0 次。)
+
+  选 `numeric` 而非直接 `sum(double)` 的理由:浮点加法不满足结合律,两端聚合顺序不同即可能在末位
+  产生差异;先 `::numeric` 转定点再求和是精确十进制运算,与顺序无关,PG 与 DuckDB 都支持。
+  **残余不确定性**:DuckDB 的 `DECIMAL` 有精度上限(38 位),631 万行求和是否溢出、以及
+  `double → numeric` 的舍入在两端是否逐位一致,必须在 T004 实现前用一个分区做一次实测比对
+  (T001 装好 duckdb/pyarrow 后即可做,半小时内);实测不通过则退回「行数 + min/max + 逐列
+  min/max」的弱口径并在此记录降级理由。性能:增量模式只对新增分区算;全量模式 631 万行的
+  `sum(numeric)` 预估分钟级,与 NFR-003 相容。
+- **导出窗口与增量语义**:增量导出窗口 = `[max(已有分区日期)+1, 导出日-1]`(昨日分区);**首次导出**(该 dataset 无任何已有分区)时 `max(已有分区日期)` 无定义,窗口起点取库内 `date(min(time))`,即首跑等价于一次全量;全量校验 = 全 span 重导至新 data_version 并做分区级 diff;窗口内无数据的 pair 跳过并记 skipped。
 - **回滚/前向兼容**:导出失败留下的半个分区文件,下次同 data_version 重导覆盖(分区文件原子写:临时名 + rename);invalid 版本永不复用版本号。DuckDB 侧无 migration。
 
 ## 4. 接口、Contract 与 Event
@@ -90,10 +109,11 @@ def export_dataset(dataset: str, mode: Literal["incremental", "full"],
 # reader.py
 def read(dataset: str, data_version: str | None = None,         # None=最新 valid
          start: datetime | None = None, end: datetime | None = None,
-         pairs: list[str] | None = None) -> pl.DataFrame | pd.DataFrame
+         pairs: list[str] | None = None) -> pd.DataFrame   # 定死 pandas:polars 未入 pyproject
 def latest_valid_version(dataset: str) -> str                    # 无 valid 版本则抛 DataBridgeError
 # symbol_map.py
-def build_symbol_map() -> pd.DataFrame    # 从库 DISTINCT symbol 生成并写 symbol_map.csv
+def build_symbol_map(db_symbols: list[str]) -> pd.DataFrame   # 纯函数:符号列表 → 三列映射表
+def export_symbol_map(conn=None) -> Path                      # 薄壳:查库 DISTINCT symbol 后落 csv
 def resolve(value: str, direction: Literal["to_lake", "to_freqtrade", "to_db"]) -> str
 ```
 
@@ -105,9 +125,9 @@ def resolve(value: str, direction: Literal["to_lake", "to_freqtrade", "to_db"]) 
 
 ## 5. Runtime、Workflow 与并发
 
-- 调度:`alphamill-export.timer` 每日 03:00 增量导出;`alphamill-fullexport.timer` 周日 04:00 全量校验(systemd user timer,承 backup/snapshot 先例);与 backup-nas(03:00)错峰——导出 timer 改 02:00,确保 03:00 NAS 备份带走当日分区。
+- 调度:`alphamill-export.timer` 每日 **02:00** 增量导出;`alphamill-fullexport.timer` 周日 **04:00** 全量校验(systemd user timer,`Type=oneshot`,承 backup/snapshot 先例)。02:00 的取值不是随意的:`alphamill-backup.timer` 是 03:00 且带 `RandomizedDelaySec=10min`(实际 03:00-03:10),导出必须早于它完成,当日分区才会被同一晚的 NAS 备份带走;周日 04:00 的全量校验排在备份之后,本轮产出由次日备份带走。
 - 并发:单机单实例;导出与实时采集并行安全(导出只读库 + 窗口截断);DuckDB 查询为只读进程级并发,无锁。
-- 重试:导出步骤失败即失败(退出码非零),由 systemd `Restart=on-failure` 重试 ×3;对账失败不重试——直接 invalid(修复=新版本)。
+- 重试:导出步骤失败即失败(退出码非零),由 systemd `Restart=on-failure` + `RestartSec=15min` 重试;**次数上限必须显式写 `StartLimitIntervalSec` + `StartLimitBurst=3`**——`alphamill-backup.service` 的注释写了「最多 3 次」却没写这两个指令,实际不生效,F002 的两个 unit 不重复该疏漏(并顺手给 backup.service 补上,列为 T009 附带项)。对账失败不重试——直接 invalid(修复=新版本)。
 - 不可回滚副作用边界:invalid 标记与新版本创建均不可逆,但旧版本永在(不可变),最坏情况 = 多一个废版本目录,无破坏性。
 
 ## 6. UI 与可观测性
@@ -130,7 +150,7 @@ def resolve(value: str, direction: Literal["to_lake", "to_freqtrade", "to_db"]) 
 | `AC-001` | integration | `tests/integration/test_f002_export_reconcile.py` | 全量导出后五 dataset 分区+manifest 齐备;DuckDB 行数=库内行数 |
 | `AC-002` | integration | `tests/integration/test_f002_export_reconcile.py` | 构造对账失败 → manifest invalid |
 | `AC-003` | integration | `tests/integration/test_f002_reader.py` | 版本/时间范围/pair 过滤正确;invalid 抛 InvalidVersionError |
-| `AC-004` | unit | `tests/unit/test_f002_symbol_map.py` | 生成/双向解析/UTC 断言 |
+| `AC-004` | unit | `tests/unit/test_f002_symbol_map.py` | 生成/双向解析/UTC 断言(靠 `build_symbol_map(db_symbols)` 的纯函数形态脱离库依赖;查库那层由 AC-001 的集成路径覆盖) |
 | `AC-005` | integration | `tests/integration/test_f002_revision.py` | 修订 → v2+差异清单;v1 文件字节不变 |
 | `AC-006` | integration | `tests/integration/test_f002_schedule_backup.py` | 导出 CLI 退出码 0;NAS 端 lake/ 文件存在 |
 
@@ -141,7 +161,7 @@ def resolve(value: str, direction: Literal["to_lake", "to_freqtrade", "to_db"]) 
 | 决策 / 风险 | 结论或缓解 | 理由 | 替代方案 / 后续 |
 |---|---|---|---|
 | 导出器直写 Parquet(PyArrow)而非经 DuckDB | PyArrow 写、DuckDB 只读,职责分离 | 写路径唯一(NFR-001);DuckDB 专注查询 | 若 DuckDB COPY 更简可评估,接口不变 |
-| data_version 按 dataset 独立(spec Q-003 裁定) | 各 dataset 导出互不阻塞,演进解耦 | signals_log 与 ohlcv 节奏不同 | 全局版本号若 FR7 需要再评估 |
+| data_version 按 dataset 独立(**spec Q-003 待裁决**,本表记录的是建议而非结论) | 各 dataset 导出互不阻塞,演进解耦 | signals_log 与 ohlcv 节奏不同 | 若裁为全局递增:改版本号生成为单调序列并在 manifest 增 global_version 字段 |
 | DuckDB 引入为运行时依赖 | pyproject dependencies 新增 pin | 取数入口是其唯一用途 | 备选:polars scan_parquet(接口已抽象,可替换) |
 | 残余风险:湖文件被误删/误改 | manifest 校验和可在读取时发现;NAS 每日副本兜底 | 不可变 + 对账 + 灾备三重 | 单盘故障场景由 F001 灾备覆盖 |
 
