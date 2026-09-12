@@ -12,6 +12,7 @@ services:
     volumes:
       - timescale_data:/var/lib/postgresql/data
       - ../db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ../db/migrations/003_derivatives_market_data.sql:/docker-entrypoint-initdb.d/02_derivatives_market_data.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-quant} -d ${DB_NAME:-quant}"]
       interval: 10s
