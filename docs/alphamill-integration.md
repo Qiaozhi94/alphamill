@@ -18,11 +18,11 @@
 
 | 项 | 设计 |
 |---|---|
-| 调度 | 每日 03:00 增量导出（昨日分区），每周日全量校验 |
+| 调度 | 每日 **02:00** 增量导出（昨日分区），每周日 04:00 全量校验；02:00 是排序约束——NAS 备份 03:00 起跑（带 10 分钟随机延迟），导出须先完成当日分区才会被同一晚的备份带走 |
 | 分区 | `lake/ohlcv_1m/exchange=<ex>/pair=<pair>/date=<YYYY-MM-DD>.parquet` |
 | 口径列 | crypto 无复权概念，保留 `open/high/low/close/volume` + `funding_rate/open_interest/basis`（衍生品表同构导出） |
 | manifest | 每次导出写 `lake/_manifests/<dataset>/<data_version>.json`（schema 见架构文档 4.4） |
-| 一致性 | 导出后行数/校验和与 TimescaleDB 对账；不一致则该 data_version 标记 `invalid`，消费端拒绝读取 |
+| 一致性 | 导出后逐分区行数 + 时间边界 + `row_digest`（按主键排序的 SHA-256，两侧由同一 Python 函数计算；口径唯一权威定义见 F002 design §3）与 TimescaleDB 对账，且与导出共享同一 REPEATABLE READ 快照；不一致则该 data_version 标记 `invalid`，消费端拒绝读取 |
 | 质量继承 | `ohlcv_quality_flags` 未解决标记 > 0 的分区在 manifest 里标注，评测台可选跳过 |
 
 **数据修订政策（point-in-time）**：

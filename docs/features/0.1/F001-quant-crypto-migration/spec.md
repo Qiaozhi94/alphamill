@@ -197,8 +197,9 @@ ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0
   .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py -q
 ```
 
-把真实推理纳入默认 compose（torch 进镜像 + 权重挂载，可选 profile）列为 F002 T014，
-届时 AC-006 可由编排直接复跑；在此之前它是一条留档的显式命令，不是待办。
+把真实推理纳入默认 compose（torch 进镜像 + 权重挂载，可选 profile）**载体待 owner 裁决**——
+原挂 F002 T014，但 F002 检视（F002-Q001）判定它不在数据桥契约内已移出；在裁决前记录于
+`docs/reviews/RETROSPECTIVE.md` 循环 6。在此之前 AC-006 是一条留档的显式命令，不是待办。
 
 **验收证据（2026-09-12）**：AC-001 `reports/f001-backfill-20260910.json` verdict=PASS（631 万行满窗，缺失率≤0.13%）+ `tests/integration/test_f001_row_reconciliation.py`；AC-002 `tests/integration/test_f001_kronos_smoke.py` 编排内契约与模式自洽通过（两个方向各经一次变异验证：声称 real 却回 placeholder 判红）；AC-006 同文件真实模型 CPU 推理通过（`KRONOS_REQUIRE_REAL_MODEL=1` + :8002 实例，1.76s/次，T008 记录）；AC-003 `tests/integration/test_f001_collector_smoke.py` 幂等复跑通过；AC-004 `tests/integration/test_f001_dryrun_monitoring.py` 3 passed + tasks T017 forceenter 双路径实测；AC-005 `deployment/verify.ps1` 退出码 0（26 项检查，含回填完整性阈值）。集成测试汇总：`ALPHAMILL_INTEGRATION=1 pytest tests/integration` → 7 passed 1 skipped（skip 项为 AC-006，需上面的显式命令；默认编排是 mock 实例）。
 

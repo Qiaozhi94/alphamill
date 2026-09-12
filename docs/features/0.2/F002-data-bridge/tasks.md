@@ -32,22 +32,26 @@ updated: 2026-09-12
 ### Phase 1:导出器核心(ohlcv_1m 端到端)
 
 - [ ] T001 [P] (`FR-001`): pyproject 新增 `pyarrow`/`duckdb` 依赖 pin(版本范围本地验证后落定),`.venv` 安装验证 — verify: `.venv/bin/python -c "import pyarrow, duckdb"` 退出码 0
-- [ ] T002 (`FR-001`): `src/alphamill/data_bridge/manifest.py`——manifest 契约读写(架构 §4.4 字段 + status/reconcile/revision_diff 扩展)、data_version 排序与最新 valid 解析 — verify: `tests/unit/test_f002_manifest.py`
-- [ ] T003 (`FR-001`): `src/alphamill/data_bridge/exporter.py`——ohlcv_1m 全量导出:库查询 → 按 `exchange/pair/date` 分区原子写 Parquet → 生成 manifest — verify: 手动执行一次,`lake/ohlcv_1m/` 分区文件与 `_manifests/ohlcv_1m/<version>.json` 齐备
+- [ ] T015 (`FR-001`): `src/alphamill/data_bridge/registry.py`——dataset 只读白名单(design §3 表:源表/主键/事件时间列/分区键/数值列/允许过滤列),未登记名字抛 `UnknownDatasetError` — verify: `tests/unit/test_f002_registry.py`(五个 dataset 齐备 + 未知名字判红 + signals_log 事件时间列为 latest_candle)
+- [ ] T016 (`FR-002`): `src/alphamill/data_bridge/digest.py`——`canonical_row_bytes()` 与流式 SHA-256 `row_digest`(design §3 规范编码),**同一函数同时喂 psycopg2 游标与 PyArrow batch** — verify: `tests/unit/test_f002_digest.py`(同数据两路输入摘要相同;单行单列改写摘要必变;两行 +x/-x 抵消式改写摘要必变——这正是 sum 口径抓不住的)
+- [ ] T002 (`FR-001`): `src/alphamill/data_bridge/manifest.py`——manifest 契约读写(架构 §4.4 字段 + status/reconcile/revision_diff/**partitions/quality/source_snapshot** 扩展)、data_version 排序与最新 valid 解析、**partitions 完整性校验(存在/字节数/sha256/集合相等,任一不符抛 ManifestIntegrityError)** — verify: `tests/unit/test_f002_manifest.py`
+- [ ] T003 (`FR-001`): `src/alphamill/data_bridge/exporter.py`——ohlcv_1m 全量导出:**单个 REPEATABLE READ 只读事务**内查询 → 按 `exchange/pair/date` 写 `date=YYYY-MM-DD.rN.parquet`(写入后永不覆盖,内容变化写 rN+1)→ 先落 `lake/_staging/` 再 rename → **最后写 manifest 作为原子发布点**,含 partitions 清单与 source_snapshot — verify: 手动执行一次,`lake/ohlcv_1m/` 分区文件与 `_manifests/ohlcv_1m/<version>.json` 齐备
 - [ ] T004 (`FR-002`): 对账器——逐分区 rows + time_min/time_max + 逐数值列 `sum(round(col::numeric,10))`(design §3 口径,两端同形表达式)vs TimescaleDB,不一致标记 invalid;**实现前先做一次跨引擎一致性实测**(取一个分区在 PG 与 DuckDB 各算一遍,确认 numeric 舍入与DECIMAL 精度不产生差异),不通过则按 design §3 退回弱口径并记录 — verify: `tests/integration/test_f002_export_reconcile.py`(AC-001/AC-002)
-- [ ] T005 [P] (`FR-004`): `src/alphamill/data_bridge/symbol_map.py`——从库 DISTINCT symbol 生成 `symbol_map.csv`(lake_pair/freqtrade_pair/db_symbol)与双向解析 — verify: `tests/unit/test_f002_symbol_map.py`(AC-004)
+- [ ] T005 [P] (`FR-004`): `src/alphamill/data_bridge/symbol_map.py`——映射键 **(exchange, market_type, db_symbol)**,五列 csv 落 `src/alphamill/data_bridge/symbol_map.csv`(集成 §2.2 权威路径),spot/perp 格式按 design §4 冻结,**lake_pair 碰撞直接抛 `SymbolCollisionError`** — verify: `tests/unit/test_f002_symbol_map.py`(AC-004 + 碰撞判红 + 同 symbol 跨 spot/perp 不混淆)
 
 ### Phase 2:取数入口与 dataset 扩展
 
-- [ ] T006 (`FR-003`): `src/alphamill/data_bridge/reader.py`——DuckDB 只读取数(dataset+data_version+时间范围+pair 过滤;invalid/缺失版本抛错) — verify: `tests/integration/test_f002_reader.py`(AC-003)
+- [ ] T006 (`FR-003`): `src/alphamill/data_bridge/reader.py`——DuckDB 只读取数(dataset+data_version+时间范围+pair 过滤);**返回数据前先跑 manifest 完整性校验**;时间过滤作用于 registry 声明的事件时间列(signals_log 即 `latest_candle`);带质量旗分区默认抛 `FlaggedPartitionError`,`allow_flagged=True` 显式豁免并回报清单;invalid/缺失版本抛错 — verify: `tests/integration/test_f002_reader.py`(AC-003/AC-008/AC-009)
 - [ ] T007 (`FR-001`): 导出器扩展至衍生品三表与 signals_log(signals_log 无 exchange 维度,按日分区) — verify: AC-001 测试覆盖五 dataset
 - [ ] T008 [P] (`FR-005`): 全量校验模式——库内 vs 既有快照的分区级 diff,修订时递增 data_version 并登记 revision_diff,旧版本原样保留 — verify: `tests/integration/test_f002_revision.py`(AC-005)
 
 ### Phase 3:运维化
 
-- [ ] T009 (`FR-006`): 导出 CLI 入口(`python -m alphamill.data_bridge.exporter --dataset ... --mode ...`)+ systemd user timer(每日 02:00 增量;周日 04:00 全量,与 03:00 NAS 备份错峰) (两个 unit 显式写 `StartLimitIntervalSec`+`StartLimitBurst=3`;附带回补 `alphamill-backup.service` 同样缺失的这两个指令,其注释声称的「最多 3 次」当前不生效) — verify: 手动触发退出码 0,journalctl 可查
+- [ ] T009 (`FR-006`): 导出 CLI 入口(`python -m alphamill.data_bridge.exporter --dataset ... --mode ...`),**退出码契约 0/1/2**(design §5) — verify: `tests/unit/test_f002_cli_contract.py`(三类结局各返回约定退出码)
+- [ ] T017 (`FR-006`): 增量导出 timer——`alphamill-export.{service,timer}`,每日 **02:00**,`Type=oneshot` + `Restart=on-failure` + `RestartSec=15min` + `StartLimitIntervalSec`/`StartLimitBurst=3` + **`RestartPreventExitStatus=2`** — verify: `tests/unit/test_f002_timer_contract.py`(unit 文件含上述全部指令且 OnCalendar=02:00)
+- [ ] T018 (`FR-006`): 全量校验 timer——`alphamill-fullexport.{service,timer}`,周日 **04:00**,指令同 T017 — verify: 同上契约测试覆盖第二组 unit
+- [ ] T019 (`FR-006`): 回补 F001 疏漏——`alphamill-backup.service` 注释声称「最多 3 次」却缺 `StartLimitIntervalSec`/`StartLimitBurst`,实际不生效,补齐使注释与行为一致 — verify: `tests/unit/test_backup_nas_contract.py` 增断言(两指令存在)
 - [ ] T010 (`FR-006`): `backup-nas.sh` lake/ 同步实测——触发备份后 NAS 端 `lake/` 与 `_manifests/` 产物齐全 — verify: NAS 端 ls 校验(AC-006)
-- [ ] T014 (`FR-001`): Kronos 真实推理容器化——compose 可选 profile `kronos-real`(torch/cpu 进镜像 + `vendor/Kronos` 与 `models/` 挂载,默认不启动),使 T007 导出的 signals_log 是真实信号而非 placeholder;同时让 F001 AC-006 可由编排直接复跑而非手工起实例 — verify: `docker compose --profile kronos-real up -d` 后 `ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py -q` 全绿,且 `signals_log` 新增行 `source=kronos`
 
 ## 3. 验证与验收任务
 
@@ -59,7 +63,6 @@ updated: 2026-09-12
 
 - `T001 -> T002/T003/T005/T006`:依赖就绪(P0)。
 - `T002 -> T003 -> T004`:manifest 是导出与对账的公共契约。
-- `T014 -> T007`(质量前置,非硬阻塞):薄壳仍是 mock 时 signals_log 导出的是 placeholder 行,湖内该 dataset 对因子研究无价值;导出管线本身不依赖 T014。
 - `T003 -> T006`:取数测试依赖已有快照。
 - `T004 -> T008`:修订 diff 复用对账器。
 - `T002/T005 [P]`、`T006(依赖T003)`、`T008(依赖T004)` 分支并行。

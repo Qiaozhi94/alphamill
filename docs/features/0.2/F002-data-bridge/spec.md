@@ -36,10 +36,10 @@ updated: 2026-09-12
 ### 目标
 
 - `lake/` 内出现分区化 Parquet 快照(ohlcv_1m、衍生品三表、signals_log),每次导出附 manifest(dataset/rows/data_version/对账状态);
-- 导出与 TimescaleDB 逐 dataset 对账(行数+校验和),不一致的 data_version 被标记 `invalid`;
+- 导出与 TimescaleDB 逐 dataset 对账(行数 + 时间边界 + `row_digest`,口径见 design §3 唯一权威定义),不一致的 data_version 被标记 `invalid`;
 - 提供统一 DuckDB 取数模块:按 dataset+data_version 查询,**拒绝读取 invalid 快照**;
 - `symbol_map.csv` 落地(湖内 pair ↔ Freqtrade pair,UTC 锁定),满足集成文档 §2.2 的 M1 出口标准;
-- 每日 03:00 增量导出 + 周日全量校验进入调度;`backup-nas.sh` 的 `lake/` 目录位激活。
+- 每日 **02:00** 增量导出 + 周日 04:00 全量校验进入调度;`backup-nas.sh` 的 `lake/` 目录位激活。
 
 ### 非目标
 
@@ -82,10 +82,10 @@ updated: 2026-09-12
 
 - `src/alphamill/data_bridge/exporter.py`:导出器(TimescaleDB → 分区 Parquet,增量/全量两种模式);
 - manifest 生成与读写(架构 §4.4 JSON 契约 + `status: valid|invalid` + 修订差异清单字段);
-- 导出后对账(逐 dataset 行数 + 校验和 vs TimescaleDB);
+- 导出后对账(逐分区 行数 + 时间边界 + `row_digest` vs TimescaleDB,同一 REPEATABLE READ 快照内);
 - `src/alphamill/data_bridge/reader.py`:DuckDB 只读取数模块(dataset+data_version+时间范围查询,invalid 拒绝);
 - `symbol_map.csv` 生成与加载(湖内 pair ↔ Freqtrade pair);
-- 调度接入:每日 03:00 增量、周日全量校验(systemd user timer,沿用 F001 模式);
+- 调度接入:每日 02:00 增量、周日 04:00 全量校验(systemd user timer,沿用 F001 模式);
 - `backup-nas.sh` 的 `lake/` 目录位激活(湖与 manifest 进入每日 NAS 同步)。
 
 ### 范围外
@@ -95,6 +95,8 @@ updated: 2026-09-12
 - Vibe-Trading local loader 对接(集成 §二,可选time-box);
 - 湖内数据的因子计算或口径加工(FR1.4 双口径在本期仅落列语义与映射,不做复权计算——crypto 无复权);
 - 撤除 TimescaleDB(阶段 B)。
+
+- **Kronos 真实推理容器化**(compose 可选 profile `kronos-real`):F002 只保证 signals_log 的**导出管线**正确,不保证其内容来自真实模型。原 T014 曾挂在 FR-001 名下,但 FR-001 只承诺导出五个 dataset、AC-001 只核对分区与行数,容器化既无对应需求也无验收闭环(F002-Q001),故移出 F002。**载体待 owner 裁决**:①单独立一个上游 Feature;②在 F002 新增独立 FR/AC 并裁定它是否阻塞 F002 done。在裁决前它记录于 `docs/reviews/RETROSPECTIVE.md` 循环 6,不随本feature 收口而消失。
 
 ### 边界场景
 
@@ -119,7 +121,7 @@ updated: 2026-09-12
 
 ### Requirement: 导出对账与失效语义(`FR-002`,对应 FR1.2/FR1.3)
 
-导出完成后必须逐 dataset 与 TimescaleDB 对账(行数+校验和);不一致时该 data_version 标记 `invalid`,消费端必须拒绝读取 invalid 快照。
+导出完成后必须逐分区与 TimescaleDB 对账(行数 + 时间边界 + `row_digest`;口径与规范编码见 design §3,该处为唯一权威定义);导出查询与源侧对账必须共享同一个 REPEATABLE READ 快照。不一致时该 data_version 标记 `invalid`,消费端必须拒绝读取 invalid 快照。
 
 #### Scenario: 对账失败标记失效
 
@@ -159,7 +161,7 @@ updated: 2026-09-12
 
 ### Requirement: 调度与灾备接入(`FR-006`,对应 FR1.6 湖部分)
 
-每日 03:00 增量导出与周日全量校验进入 systemd user timer 调度;`backup-nas.sh` 同步 `lake/` 与 `lake/_manifests/` 到 NAS(激活 F001 预留目录位)。
+每日 **02:00** 增量导出与周日 **04:00** 全量校验进入 systemd user timer 调度(02:00 是排序约束不是偏好:`alphamill-backup.timer` 03:00 起跑且带 10 分钟随机延迟,导出须先完成当日分区才会被同一晚的 NAS 备份带走;集成 §1.2 已同步);`backup-nas.sh` 同步 `lake/` 与 `lake/_manifests/` 到 NAS(激活 F001 预留目录位)。
 
 #### Scenario: 调度运行
 
@@ -198,6 +200,10 @@ updated: 2026-09-12
 - [ ] **AC-004** (`FR-004`): symbol_map.csv 生成、双向映射查询正确、时间列全 UTC — tests: `tests/unit/test_f002_symbol_map.py`
 - [ ] **AC-005** (`FR-005`): 修订检测产生 v2+差异清单,v1 保留可读 — tests: `tests/integration/test_f002_revision.py`
 - [ ] **AC-006** (`FR-006`): 定时器安装且手动触发导出成功;backup-nas.sh 后 NAS 端 lake/ 产物齐全 — tests: `tests/integration/test_f002_schedule_backup.py`
+- [ ] **AC-007** (`FR-005`, `FR-001`): 版本物理隔离——修订产生 v2 后,v1 manifest 列出的每个分区文件字节不变,按 v1 读取返回修订前的行;并发读 v1/v2 不串版 — tests: `tests/integration/test_f002_revision.py`
+- [ ] **AC-008** (`FR-003`, `FR-001`): manifest 完整性 fail-closed——删一个分区文件 / 多一个未登记文件 / 改一字节,三种情形读取均抛 ManifestIntegrityError — tests: `tests/integration/test_f002_reader.py`
+- [ ] **AC-009** (`FR-004`): signals_log 时间窗无前视——latest_candle < T 但 time > T 的行必须落在 end=T 的结果内;latest_candle > T 但 time < T 的行必须不在 — tests: `tests/integration/test_f002_reader.py`
+- [ ] **AC-010** (`FR-002`, `FR-003`): 并发改写不产伪 valid——对账期间对已导出窗口 upsert 历史行,导出仍基于同一快照;结果或为 valid 且与该快照一致,或为 invalid,不出现「对账 ok 但湖内是旧值」 — tests: `tests/integration/test_f002_export_reconcile.py`
 
 ## 7. 测试、依赖与决策
 
@@ -209,7 +215,7 @@ updated: 2026-09-12
 
 ### 依赖
 
-- 上游:F001(TimescaleDB 数据与调度模式)、集成文档 §1.2 导出契约、架构 §4.4 manifest 契约;signals_log dataset 的**内容质量**另依赖 Kronos 真实推理容器化(T014)——薄壳为 mock 时导出的是 placeholder 行;
+- 上游:F001(TimescaleDB 数据与调度模式)、集成文档 §1.2 导出契约、架构 §4.4 manifest 契约;signals_log dataset 的**内容质量**另依赖 Kronos 真实推理容器化——薄壳为 mock 时导出的是 `source=placeholder` 行,导出管线正确不等于内容可用于因子研究;**该项不在 F002 契约内**(见 §3 范围外);
 - 下游:M1 评测台(FR3)、FR7 manifest 实验链、Vibe local loader(可选);
 - 新增依赖:DuckDB(pyproject 新增 pin,版本范围本地验证后落定);
 - 外部/环境:无新外部依赖;lake/ 磁盘空间(全量约 1-2GB)。
@@ -219,7 +225,7 @@ updated: 2026-09-12
 | 决策 / 风险 | 结论或缓解 | 理由 | 后续 |
 |---|---|---|---|
 | data_version 语义 | 日期版 `vYYYY.MM.DD` 起步,同日重导追加序号(`-r2`);修订递增不复用 | 简单可读;不可变与 invalid 不可逆不变量由测试锁定 | 版本号策略若不敷用,升 ADR |
-| 对账口径 | 行数 + `sum(hashtext(rowtext))` 校验和(与 F001 原 design §3 同源) | 校验和抓静默截断;行数抓缺块 | 不一致定位到分区级 |
+| 对账口径 | 行数 + 时间边界 + 按主键排序的 SHA-256 `row_digest`(定义见 design §3;两侧由同一 Python 函数计算) | 摘要抗抵消,抓得住行数与极值都不变的内部数值改写;行数抓缺块 | 不一致定位到分区级;**不设降级出口**,性能不可接受时走 spec 修订 |
 | 双口径 | 本期仅落列语义(close 原样)与 symbol_map;无复权计算 | crypto 无复权;集成 §1.2 已明确 | FR1.4 完整口径随评测台需求演进 |
 | 风险:DuckDB 新依赖引入版本漂移 | pin 范围入 pyproject,check_dep_pins 门禁覆盖 | dev 依赖锁定惯例(C001 教训) | 版本升级走显式改动 |
 | 风险:湖与库漂移不可见 | 每次导出强制对账;周日全量校验兜底 | 对账是本 feature 的灵魂(承 F001) | 漂移审计进 manifest 差异清单 |
