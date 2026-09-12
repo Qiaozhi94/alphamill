@@ -54,7 +54,8 @@ function Invoke-DbCheck {
         [string]$Name,
         [string]$Sql,
         [int]$MinRows = 1,
-        [scriptblock]$Validator = $null
+        [scriptblock]$Validator = $null,
+        [switch]$ExpectPass
     )
 
     Write-Step $Name
@@ -65,6 +66,9 @@ function Invoke-DbCheck {
     $lines = @($output | ForEach-Object { "$($_)".Trim() } | Where-Object { $_ -ne "" })
     if ($lines.Count -lt $MinRows) {
         throw "$Name failed: expected at least $MinRows result rows, got $($lines.Count)"
+    }
+    if ($ExpectPass -and ($lines.Count -ne 1 -or $lines[0] -ne "1")) {
+        throw "$Name failed: expected PASS (1), got $($lines -join ', ')"
     }
     if ($null -ne $Validator -and -not (& $Validator $lines)) {
         throw "$Name failed: result assertion did not pass"
@@ -159,23 +163,23 @@ Invoke-DbCheck "TimescaleDB extension" @"
 SELECT CASE WHEN COUNT(*) = 1 THEN 1 ELSE 0 END
 FROM pg_extension
 WHERE extname = 'timescaledb';
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "Hypertables" @"
 SELECT CASE WHEN COUNT(*) >= 4 THEN 1 ELSE 0 END
 FROM timescaledb_information.hypertables
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "Continuous aggregates" @"
 SELECT CASE WHEN COUNT(*) >= 5 THEN 1 ELSE 0 END
 FROM timescaledb_information.continuous_aggregates
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "OHLCV constraints" @"
 SELECT CASE WHEN COUNT(*) >= 1 THEN 1 ELSE 0 END
 FROM pg_constraint
 WHERE conrelid = 'ohlcv_1m'::regclass
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "OHLCV quality flags" @"
 SELECT
@@ -183,14 +187,14 @@ SELECT
               AND COUNT(*) FILTER (WHERE resolved_at IS NULL) = 0
          THEN 1 ELSE 0 END
 FROM ohlcv_quality_flags;
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "Timescale jobs" @"
 SELECT CASE WHEN COUNT(*) >= 1 THEN 1 ELSE 0 END
 FROM timescaledb_information.jobs
 WHERE hypertable_name = 'ohlcv_1m'
    OR proc_name = 'policy_refresh_continuous_aggregate'
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "OHLCV data by symbol" @"
 SELECT CASE WHEN COUNT(*) >= 1 THEN 1 ELSE 0 END
@@ -200,7 +204,7 @@ FROM (
     GROUP BY exchange, symbol
     HAVING COUNT(*) > 0
 ) populated;
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "1m missing candle check" @"
 WITH ranges AS (
@@ -233,7 +237,7 @@ FROM (
     LEFT JOIN missing m ON m.exchange = e.exchange AND m.symbol = e.symbol AND m.time = e.time
     GROUP BY r.exchange, r.symbol
 ) summary;
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "Latest candle by symbol" @"
 SELECT CASE WHEN COUNT(*) >= 1 THEN 1 ELSE 0 END
@@ -242,7 +246,7 @@ FROM (
     FROM ohlcv_1m
     GROUP BY exchange, symbol
 ) populated;
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "1m abnormal price move check" @"
 WITH priced AS (
@@ -279,7 +283,7 @@ Invoke-DbCheck "Latest candle freshness" @"
 SELECT CASE WHEN COUNT(*) > 0 AND NOW() - MAX(time) <= INTERVAL '15 minutes'
             THEN 1 ELSE 0 END
 FROM ohlcv_1m;
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "Continuous aggregate row counts" @"
 WITH aggregate_counts AS (
@@ -290,7 +294,7 @@ WITH aggregate_counts AS (
     UNION ALL SELECT COUNT(*) FROM ohlcv_1d
 )
 SELECT CASE WHEN COUNT(*) = 5 AND MIN(rows) > 0 THEN 1 ELSE 0 END FROM aggregate_counts;
-"@
+"@ -ExpectPass
 
 Invoke-DbCheck "5m aggregate consistency sample" @"
 WITH sample AS (
