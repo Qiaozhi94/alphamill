@@ -11,6 +11,28 @@ if (Test-Path $dotEnvPath) {
 }
 $dbUser = if ($dotEnvMap["DB_USER"]) { $dotEnvMap["DB_USER"] } else { "quant" }
 $dbName = if ($dotEnvMap["DB_NAME"]) { $dotEnvMap["DB_NAME"] } else { "quant" }
+$windowConfigPath = Join-Path $PSScriptRoot "f001-backfill-window.env"
+$windowMap = @{}
+if (Test-Path $windowConfigPath) {
+    Get-Content $windowConfigPath | ForEach-Object {
+        if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+            $windowMap[$Matches[1]] = $Matches[2].Trim().Trim('"').Trim("'")
+        }
+    }
+}
+$backfillWindowStart = if ($dotEnvMap["BACKFILL_WINDOW_START"]) {
+    $dotEnvMap["BACKFILL_WINDOW_START"]
+} else {
+    $windowMap["BACKFILL_WINDOW_START"]
+}
+$backfillWindowEnd = if ($dotEnvMap["BACKFILL_WINDOW_END"]) {
+    $dotEnvMap["BACKFILL_WINDOW_END"]
+} else {
+    $windowMap["BACKFILL_WINDOW_END"]
+}
+if (-not $backfillWindowStart -or -not $backfillWindowEnd) {
+    throw "F001 backfill window is not configured"
+}
 
 function Required-Secret {
     param([string]$Name)
@@ -451,15 +473,33 @@ JOIN manual m USING (bucket, exchange, symbol);
 }
 
 Write-Step "F001 backfill completeness (design section 3 thresholds)"
-$completenessLines = docker compose -f $ComposeFile exec -T timescaledb psql -U $dbUser -d $dbName -t -A -c @"
+$backfillExchange = if ($dotEnvMap["EXCHANGES"]) { ($dotEnvMap["EXCHANGES"] -split ',')[0].Trim() } else { "binance" }
+$completenessSql = @"
 WITH spans AS (
-    SELECT symbol, count(*) AS n, min(time) AS t0, max(time) AS t1
-    FROM ohlcv_1m WHERE exchange = 'binance' GROUP BY symbol
+    SELECT
+        symbol,
+        count(*) FILTER (WHERE time >= '$backfillWindowStart'::timestamptz
+                              AND time < '$backfillWindowEnd'::timestamptz) AS n,
+        min(time) AS t0,
+        max(time) AS t1
+    FROM ohlcv_1m
+    WHERE exchange = '$backfillExchange'
+    GROUP BY symbol
 )
 SELECT symbol || '|' || n || '|' ||
-       ROUND(1 - n::numeric / (EXTRACT(EPOCH FROM (t1 - t0))/60 + 1), 6)
+       ROUND(1 - n::numeric /
+           (EXTRACT(EPOCH FROM ('$backfillWindowEnd'::timestamptz
+                              - '$backfillWindowStart'::timestamptz)) / 60), 6)
+       || '|' ||
+       CASE WHEN t0 <= '$backfillWindowStart'::timestamptz
+                  AND t1 >= ('$backfillWindowEnd'::timestamptz - INTERVAL '1 minute')
+            THEN 1 ELSE 0 END
 FROM spans ORDER BY symbol;
 "@
+$completenessLines = @(docker compose -f $ComposeFile exec -T timescaledb psql -U $dbUser -d $dbName -t -A -c $completenessSql)
+if ($LASTEXITCODE -ne 0) {
+    throw "F001 backfill completeness query failed with code $LASTEXITCODE"
+}
 $completenessLines = @($completenessLines | Where-Object { $_ -and $_.Trim() -ne "" })
 if ($completenessLines.Count -eq 0) {
     throw "Backfill completeness check found no rows in ohlcv_1m"
@@ -467,8 +507,8 @@ if ($completenessLines.Count -eq 0) {
 foreach ($line in $completenessLines) {
     $parts = $line -split '\|'
     $ratio = [double]$parts[2]
-    if ($ratio -gt 0.01) {
-        throw "Backfill completeness FAIL: $($parts[0]) missing_ratio=$ratio > 0.01"
+    if ($ratio -gt 0.01 -or [int]$parts[3] -ne 1) {
+        throw "Backfill completeness FAIL: $($parts[0]) missing_ratio=$ratio boundary_ok=$($parts[3])"
     }
     Write-Host "$($parts[0]) rows=$($parts[1]) missing_ratio=$ratio" -ForegroundColor Green
 }

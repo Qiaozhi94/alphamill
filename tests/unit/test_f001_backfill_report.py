@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from alphamill.data_bridge.collector import derivatives_market_backfill as derivatives
 from tools import f001_backfill_report as report
@@ -90,3 +91,14 @@ def test_aggregate_view_query_filters_exchange() -> None:
     assert len(view_queries) == len(report.AGGREGATES)
     assert all("WHERE exchange = %s" in sql for sql, _ in view_queries)
     assert all(params[0] == "binance" for _, params in view_queries)
+
+
+def test_powershell_completeness_uses_configured_window() -> None:
+    script = (Path(__file__).resolve().parents[2] / "deployment/verify.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "$backfillWindowStart" in script
+    assert "$backfillWindowEnd" in script
+    assert "EXTRACT(EPOCH FROM ('$backfillWindowEnd'::timestamptz" in script
+    assert "EXTRACT(EPOCH FROM (t1 - t0))" not in script
