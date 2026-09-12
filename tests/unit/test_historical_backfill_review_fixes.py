@@ -14,6 +14,34 @@ class _Exchange:
         return []
 
 
+class _SchemaCursor:
+    def __init__(self, table_name):
+        self.table_name = table_name
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def execute(self, *_args):
+        return None
+
+    def fetchone(self):
+        return (self.table_name,)
+
+
+class _SchemaConnection:
+    def __init__(self, table_name):
+        self.cursor_obj = _SchemaCursor(table_name)
+
+    def cursor(self):
+        return self.cursor_obj
+
+    def commit(self):
+        return None
+
+
 def test_empty_batch_before_end_is_stalled_not_complete(monkeypatch) -> None:
     start = datetime(2024, 1, 1, tzinfo=UTC)
     end = datetime(2024, 1, 1, 0, 2, tzinfo=UTC)
@@ -32,3 +60,10 @@ def test_retry_count_has_safe_lower_bound() -> None:
     assert backfill.retry_count(0) == 1
     assert backfill.retry_count("-2") == 1
     assert backfill.retry_count(3) == 3
+
+
+def test_progress_schema_is_required_from_init_sql() -> None:
+    with pytest.raises(RuntimeError, match="backfill_progress is missing"):
+        backfill.ensure_progress_table(_SchemaConnection(None))
+
+    backfill.ensure_progress_table(_SchemaConnection("backfill_progress"))
