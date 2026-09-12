@@ -1,6 +1,7 @@
 """F001 risk guard unit and batch-scenario regression tests."""
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -96,3 +97,13 @@ def test_drawdown_lookback_uses_explicit_window_start_equity() -> None:
     assert state.peak_equity == 100
     assert state.trough_equity == 80
     assert state.blocked is True
+
+
+def test_strategy_passes_drawdown_baseline_at_both_runtime_hooks() -> None:
+    root = Path(__file__).resolve().parents[2]
+    strategy = (root / "freqtrade/user_data/strategies/KronosFusionStrategy.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert strategy.count("starting_equity=self._drawdown_starting_equity()") == 2
+    assert "RISK_DRAWDOWN_LOOKBACK_DAYS requires" in strategy

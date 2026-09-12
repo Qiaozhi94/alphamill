@@ -347,6 +347,7 @@ class KronosFusionStrategy(IStrategy):
             Trade.get_trades_proxy(is_open=False),
             current_equity=self._current_equity(),
             current_time=current_time,
+            starting_equity=self._drawdown_starting_equity(),
         )
         if drawdown_state.blocked:
             logger.warning(
@@ -447,6 +448,7 @@ class KronosFusionStrategy(IStrategy):
             Trade.get_trades_proxy(is_open=False),
             current_equity=self._current_equity(),
             current_time=current_time,
+            starting_equity=self._drawdown_starting_equity(),
         )
         if drawdown_state.blocked:
             logger.warning(
@@ -535,6 +537,22 @@ class KronosFusionStrategy(IStrategy):
             return float(
                 self.config.get("dry_run_wallet") or self.config.get("stake_amount") or 0.0
             )
+
+    def _drawdown_starting_equity(self) -> float | None:
+        if self.drawdown_lookback_days <= 0:
+            return None
+        configured = self._optional_float_env("RISK_DRAWDOWN_STARTING_EQUITY")
+        if configured is not None:
+            if configured <= 0:
+                raise ValueError("RISK_DRAWDOWN_STARTING_EQUITY must be positive")
+            return configured
+        wallet = self.config.get("dry_run_wallet")
+        if wallet is not None and float(wallet) > 0:
+            return float(wallet)
+        raise RuntimeError(
+            "RISK_DRAWDOWN_LOOKBACK_DAYS requires RISK_DRAWDOWN_STARTING_EQUITY "
+            "or a positive dry_run_wallet"
+        )
 
     def _close_series_for_pair(self, pair: str):
         if not self.dp:
