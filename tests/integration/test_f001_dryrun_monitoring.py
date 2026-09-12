@@ -7,12 +7,29 @@ forceenter 双路径实测；本测试守护面板数据链路的持续可用。
 """
 
 import os
+from pathlib import Path
 
 import pytest
 import requests
 
 FREQTRADE_URL = os.getenv("FREQTRADE_URL", "http://127.0.0.1:8080")
-FREQTRADE_AUTH = ("admin", "quant2026")
+
+
+def _dotenv_value(name: str) -> str | None:
+    path = Path(__file__).resolve().parents[2] / "deployment" / ".env"
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith(f"{name}="):
+                return line.partition("=")[2].strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return os.getenv(name)
+
+
+FREQTRADE_AUTH = (
+    _dotenv_value("FREQTRADE_API_USERNAME") or "admin",
+    _dotenv_value("FREQTRADE_API_PASSWORD") or "",
+)
 
 pytestmark = pytest.mark.integration
 INTEGRATION_REQUIRED = os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "true", "yes"}
