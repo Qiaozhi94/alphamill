@@ -15,3 +15,7 @@ def test_backup_uses_chunk_byte_bounds_and_archive_checksum() -> None:
     assert "transfer_directory_to_nas lake lake" in script
     assert "md5sum \"$archive\"" in script
     assert "pg_restore --list" in script
+    assert "StrictHostKeyChecking=yes" in script
+    assert "UserKnownHostsFile=\"$NAS_KNOWN_HOSTS\"" in script
+    assert "ssh-keygen -F \"$NAS_HOST\"" in script
+    assert "StrictHostKeyChecking=no" not in script

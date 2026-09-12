@@ -21,15 +21,25 @@ NAS_BASE="/volume1/alphamill-backups"
 LOCAL_BACKUP_DIR="$REPO_ROOT/deployment/backups"
 DATE="$(date -u +%Y%m%d)"
 LOG_TAG="[backup $DATE]"
+NAS_KNOWN_HOSTS="${ALPHAMILL_NAS_KNOWN_HOSTS:-$HOME/.ssh/alphamill_known_hosts}"
 
 SSH_OPTS=(
   -i "${ALPHAMILL_NAS_KEY:-$HOME/.ssh/id_ed25519_remote}"
-  -o StrictHostKeyChecking=no
-  -o UserKnownHostsFile=/dev/null
+  -o StrictHostKeyChecking=yes
+  -o UserKnownHostsFile="$NAS_KNOWN_HOSTS"
   -o ConnectTimeout=15
 )
 
 log() { echo "$(date -u +%FT%TZ) $LOG_TAG $*"; }
+
+[ -f "$NAS_KNOWN_HOSTS" ] || {
+  log "FATAL: NAS known_hosts 不存在：$NAS_KNOWN_HOSTS"
+  exit 1
+}
+ssh-keygen -F "$NAS_HOST" -f "$NAS_KNOWN_HOSTS" >/dev/null || {
+  log "FATAL: NAS host key 未预注册：$NAS_HOST"
+  exit 1
+}
 
 # UGREEN NAS 的 sshd 会在 ~10MB 处 reset 入站流式 cat，且登录 shell 回显破坏
 # SFTP/rsync 协议——因此用 4MB 分块追加 + 逐块字节数校验 + 失败截断回退重试。
