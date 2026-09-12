@@ -9,6 +9,8 @@ if (Test-Path $dotEnvPath) {
         }
     }
 }
+$dbUser = if ($dotEnvMap["DB_USER"]) { $dotEnvMap["DB_USER"] } else { "quant" }
+$dbName = if ($dotEnvMap["DB_NAME"]) { $dotEnvMap["DB_NAME"] } else { "quant" }
 
 function Required-Secret {
     param([string]$Name)
@@ -34,7 +36,7 @@ function Invoke-DbCheck {
     )
 
     Write-Step $Name
-    $output = @(docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -v ON_ERROR_STOP=1 -t -A -F '|' -c $Sql)
+    $output = @(docker compose -f $ComposeFile exec -T timescaledb psql -U $dbUser -d $dbName -v ON_ERROR_STOP=1 -t -A -F '|' -c $Sql)
     if ($LASTEXITCODE -ne 0) {
         throw "$Name failed: psql exited with code $LASTEXITCODE"
     }
@@ -449,7 +451,7 @@ JOIN manual m USING (bucket, exchange, symbol);
 }
 
 Write-Step "F001 backfill completeness (design section 3 thresholds)"
-$completenessLines = docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -t -A -c @"
+$completenessLines = docker compose -f $ComposeFile exec -T timescaledb psql -U $dbUser -d $dbName -t -A -c @"
 WITH spans AS (
     SELECT symbol, count(*) AS n, min(time) AS t0, max(time) AS t1
     FROM ohlcv_1m WHERE exchange = 'binance' GROUP BY symbol
@@ -472,13 +474,13 @@ foreach ($line in $completenessLines) {
 }
 
 Write-Step "F001 monitoring chain (signals log + snapshot freshness)"
-$signalsCount = docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -t -A -c "SELECT count(*) FROM signals_log;"
+$signalsCount = docker compose -f $ComposeFile exec -T timescaledb psql -U $dbUser -d $dbName -t -A -c "SELECT count(*) FROM signals_log;"
 $signalsCount = ($signalsCount | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1)
 if (-not $signalsCount -or [int]$signalsCount -lt 1) {
     throw "signals_log is empty (quality panel has no data)"
 }
 Write-Host "signals_log rows: $signalsCount" -ForegroundColor Green
-$snapshotAgeSeconds = docker compose -f $ComposeFile exec -T timescaledb psql -U quant -d quant -t -A -c "SELECT EXTRACT(EPOCH FROM (NOW() - max(time))) FROM dryrun_runtime_snapshots;"
+$snapshotAgeSeconds = docker compose -f $ComposeFile exec -T timescaledb psql -U $dbUser -d $dbName -t -A -c "SELECT EXTRACT(EPOCH FROM (NOW() - max(time))) FROM dryrun_runtime_snapshots;"
 $snapshotAgeSeconds = ($snapshotAgeSeconds | Where-Object { $_ -match '^\d+(\.\d+)?$' } | Select-Object -First 1)
 if (-not $snapshotAgeSeconds -or [double]$snapshotAgeSeconds -gt 900) {
     throw "dryrun_runtime_snapshots stale or empty (age=$snapshotAgeSeconds s, threshold=900 s)"
