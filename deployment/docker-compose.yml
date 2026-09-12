@@ -84,6 +84,9 @@ services:
       FREQTRADE_API_PASSWORD: ${FREQTRADE_API_PASSWORD:-change-me-freqtrade}
       FREQTRADE_JWT_SECRET_KEY: ${FREQTRADE_JWT_SECRET_KEY:-change-me-freqtrade-jwt}
       FREQTRADE_WS_TOKEN: ${FREQTRADE_WS_TOKEN:-change-me-freqtrade-ws}
+      HTTP_PROXY: ${BINANCE_HTTPS_PROXY:-}
+      HTTPS_PROXY: ${BINANCE_HTTPS_PROXY:-}
+      NO_PROXY: timescaledb,kronos-signal,localhost,127.0.0.1
       KRONOS_SIGNAL_URL: http://kronos-signal:8001
       KRONOS_SIGNAL_EXCHANGE: ${EXCHANGES:-binance}
     volumes:

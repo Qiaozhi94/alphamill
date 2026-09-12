@@ -13,6 +13,9 @@ def test_freqtrade_service_mounts_repo_strategy_dependencies() -> None:
 
     assert "  freqtrade:" in compose
     assert '      - "8080:8080"' in compose
+    assert "HTTP_PROXY: ${BINANCE_HTTPS_PROXY:-}" in compose
+    assert "HTTPS_PROXY: ${BINANCE_HTTPS_PROXY:-}" in compose
+    assert "NO_PROXY: timescaledb,kronos-signal,localhost,127.0.0.1" in compose
     assert "../src:/app/src:ro" in compose
     assert "../freqtrade/signal_fusion:/freqtrade/signal_fusion:ro" in compose
     assert (
