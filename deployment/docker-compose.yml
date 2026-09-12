@@ -69,6 +69,8 @@ services:
     image: freqtradeorg/freqtrade:stable
     container_name: quant-freqtrade
     restart: unless-stopped
+    ports:
+      - "8080:8080"
     command:
       - trade
       - --strategy
