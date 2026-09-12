@@ -18,17 +18,17 @@ import argparse
 import json
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from alphamill.data_bridge.collector.db_writer import db_connect  # noqa: E402
+from f001_backfill_config import expected_minute_rows, window_datetimes, window_values  # noqa: E402
 
 GAP_RATIO_THRESHOLD = 0.01  # 缺失率 1%：容忍交易所偶发缺失
-# 权威回填窗口（supervisor 与 AC-001 钉死的 BACKFILL_START/END）：聚合一致性对比
-# 只在窗口内进行——实时采集会在窗口外持续写入，不属于回填校验范畴。
-WINDOW_START = os.getenv("BACKFILL_WINDOW_START", "2024-09-10 00:00:00+00:00")
-WINDOW_END = os.getenv("BACKFILL_WINDOW_END", "2026-09-10 15:52:00+00:00")
+WINDOW_START_TEXT, WINDOW_END_TEXT = window_values()
+WINDOW_START, WINDOW_END = window_datetimes()
 AGGREGATES = {
     "ohlcv_5m": "5 minutes",
     "ohlcv_15m": "15 minutes",
@@ -60,42 +60,52 @@ def fetch_one(conn, sql: str, params: tuple = ()) -> tuple:
 def symbol_stats(conn, exchange: str, symbol: str) -> dict:
     row = fetch_one(
         conn,
-        """
-        SELECT count(*), min(time), max(time) FROM ohlcv_1m
-        WHERE exchange = %s AND symbol = %s
-        """,
-        (exchange, symbol),
+        """SELECT
+            count(*) FILTER (WHERE time >= %s AND time < %s),
+            min(time), max(time)
+        FROM ohlcv_1m
+        WHERE exchange = %s AND symbol = %s""",
+        (WINDOW_START, WINDOW_END, exchange, symbol),
     )
     count, first, last = int(row[0]), row[1], row[2]
+    expected = expected_minute_rows(WINDOW_START, WINDOW_END)
     if count == 0:
-        return {"rows": 0, "verdict": "FAIL", "reason": "no rows"}
-    expected = int((last - first).total_seconds() // 60) + 1
+        return {
+            "rows": 0,
+            "expected_rows_in_window": expected,
+            "verdict": "FAIL",
+            "reason": "no rows in authoritative window",
+        }
     missing = expected - count
     gaps = fetch_one(
         conn,
         """
-        WITH ordered AS (
-            SELECT time, lag(time) OVER (ORDER BY time) AS prev FROM ohlcv_1m
-            WHERE exchange = %s AND symbol = %s
-        )
-        SELECT count(*) FILTER (WHERE time - prev > interval '1 minute'),
-               max(time - prev)
-        FROM ordered
+            WITH ordered AS (
+                SELECT time, lag(time) OVER (ORDER BY time) AS prev FROM ohlcv_1m
+                WHERE exchange = %s AND symbol = %s AND time >= %s AND time < %s
+            )
+            SELECT count(*) FILTER (WHERE time - prev > interval '1 minute'),
+                   max(time - prev)
+            FROM ordered
         """,
-        (exchange, symbol),
+        (exchange, symbol, WINDOW_START, WINDOW_END),
     )
     gap_count, max_gap = int(gaps[0]), gaps[1]
     gap_ratio = missing / expected
+    boundary_ok = first <= WINDOW_START and last >= WINDOW_END - timedelta(minutes=1)
     return {
         "rows": count,
         "first": first.isoformat(),
         "last": last.isoformat(),
-        "expected_rows_in_span": expected,
+        "expected_rows_in_window": expected,
         "missing_rows": missing,
         "missing_ratio": round(gap_ratio, 6),
         "gap_jumps_gt_1m": gap_count,
         "max_gap": str(max_gap),
-        "verdict": "PASS" if gap_ratio <= GAP_RATIO_THRESHOLD else "FAIL",
+        "window_start": WINDOW_START.isoformat(),
+        "window_end": WINDOW_END.isoformat(),
+        "boundary_ok": boundary_ok,
+        "verdict": "PASS" if gap_ratio <= GAP_RATIO_THRESHOLD and boundary_ok else "FAIL",
     }
 
 
@@ -105,14 +115,14 @@ def top_gaps(conn, exchange: str, symbol: str) -> list[dict]:
             """
             WITH ordered AS (
                 SELECT time, lag(time) OVER (ORDER BY time) AS prev FROM ohlcv_1m
-                WHERE exchange = %s AND symbol = %s
+                WHERE exchange = %s AND symbol = %s AND time >= %s AND time < %s
             )
             SELECT prev, time, time - prev FROM ordered
             WHERE time - prev > interval '5 minutes'
             ORDER BY time - prev DESC
             LIMIT %s
             """,
-            (exchange, symbol, MAX_REPORTED_GAPS),
+            (exchange, symbol, WINDOW_START, WINDOW_END, MAX_REPORTED_GAPS),
         )
         return [
             {"from": r[0].isoformat(), "to": r[1].isoformat(), "gap": str(r[2])}
@@ -126,8 +136,8 @@ def aggregate_stats(conn, exchange: str) -> dict:
         view_count = int(
             fetch_one(
                 conn,
-                f"SELECT count(*) FROM {view} WHERE bucket >= %s AND bucket < %s",
-                (WINDOW_START, WINDOW_END),
+                f"SELECT count(*) FROM {view} WHERE exchange = %s AND bucket >= %s AND bucket < %s",
+                (exchange, WINDOW_START, WINDOW_END),
             )[0]
         )
         # 连续聚合保留 symbol 维度：基表侧按 (symbol, bucket) 去重后对齐。
@@ -169,6 +179,12 @@ def build_report(conn, exchange: str, symbols: list[str]) -> dict:
         "missing_ratio_threshold": GAP_RATIO_THRESHOLD,
         "ohlcv_1m": per_symbol,
         "ohlcv_1m_top_gaps": gaps,
+        "backfill_window": {
+            "start": WINDOW_START_TEXT,
+            "end": WINDOW_END_TEXT,
+            "timezone": "UTC",
+            "end_is_exclusive": True,
+        },
         "continuous_aggregates": aggregate_stats(conn, exchange),
         "derivatives_rows": table_counts(conn, DERIVATIVES_TABLES),
         "unrecoverable_history_rows": table_counts(conn, LOSING_TABLES),
