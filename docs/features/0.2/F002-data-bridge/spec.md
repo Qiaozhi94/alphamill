@@ -228,4 +228,4 @@ updated: 2026-09-12
 
 - [x] Q-001:导出哪些 dataset?——ohlcv_1m + 衍生品三表 + signals_log 五个(FR1.2 列举);quality_flags 不单独导出,以 manifest 质量标注继承(集成 §1.2)
 - [x] Q-002:F002 放 0.1 还是 0.2?——0.2(0.1 已收口,M1 数据桥是新能力版本)
-- [ ] Q-003:data_version 全局唯一还是按 dataset 独立递增?——AI 建议:按 dataset 独立递增(①各 dataset 导出节奏与失败域不同,全局版本号让单 dataset 失败拖累全部;②FR7 实验链引用 `dataset + data_version` 二元组,无需全局时间戳;③「全局时点」可由 exported_at 聚合派生)。待 owner 裁决后关闭
+- [x] Q-003:data_version 全局唯一还是按 dataset 独立递增?——**裁决(2026-09-12, owner):按 dataset 独立递增**。理由:①各 dataset 导出节奏与失败域不同,全局版本号会让单 dataset 对账失败作废整批;②FR7 实验链引用 `dataset + data_version` 二元组,不需要全局时间戳;③「全局时点」可由各 manifest 的 `exported_at` 聚合派生。放弃的好处:没有单一数字能一句话描述「整个湖的状态」——需要时用 exported_at 聚合

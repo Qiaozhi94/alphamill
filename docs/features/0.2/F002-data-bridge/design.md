@@ -57,7 +57,7 @@ src/alphamill/data_bridge/
   └── _manifests/<dataset>/<data_version>.json
   ```
 - **pair 目录命名**:湖内 pair 用 Freqtrade 风格 `BASE-QUOTE`(如 `BTC-USDT`,`/` 换 `-` 规避路径分隔符);`symbol_map.csv` 三列:`lake_pair,freqtrade_pair,db_symbol`,由库内 DISTINCT symbol 直接生成,双向查询 O(1)。
-- **data_version 语义**(spec Q-003 **未裁决**;本设计按 AI 建议的「按 dataset 独立」撰写,若 owner 裁为全局递增,需同步改本节、§9 决策行与 manifest 契约的版本号生成规则):`vYYYY.MM.DD`,同日重导追加 `-r2/-r3`;排序 = 日期字典序 + 序号;最新 valid 版本 = 排序最大且 `status != invalid`。每 dataset 独立演进,互不阻塞。
+- **data_version 语义**(spec Q-003 已裁决:**按 dataset 独立**,2026-09-12 owner):`vYYYY.MM.DD`,同日重导追加 `-r2/-r3`;排序 = 日期字典序 + 序号;最新 valid 版本 = 排序最大且 `status != invalid`。每 dataset 独立演进,互不阻塞。
 - **manifest 契约**(架构 §4.4 + 本期扩展字段):
   ```json
   {
@@ -71,10 +71,11 @@ src/alphamill/data_bridge/
     "status": "valid",
     "reconcile": {"rows": "ok", "time_bounds": "ok", "value_sum": "ok"},
     "quality_flags_unresolved": 0,
+    "skipped": [{"pair": "DOGE-USDT", "date": "2026-09-11"}],
     "revision_diff": []
   }
   ```
-  `revision_diff` 仅全量校验模式填写:相对上一 valid 版本登记修订分区清单(`[{pair, date, reason}]`);`status: invalid` 时 `reconcile` 记录失败项。
+  `skipped` 登记窗口内查不到行的 (pair, date),**不记原因**——采集断线与确实无行情同样落这里(DQ-003 裁决);`revision_diff` 仅全量校验模式填写:相对上一 valid 版本登记修订分区清单(`[{pair, date, reason}]`);`status: invalid` 时 `reconcile` 记录失败项。
 - **对账口径**(逐 dataset 逐分区,两端各算一次后比对):
 
   | 字段 | 表达式(两端同形) | 能抓到的问题 |
@@ -161,7 +162,7 @@ def resolve(value: str, direction: Literal["to_lake", "to_freqtrade", "to_db"]) 
 | 决策 / 风险 | 结论或缓解 | 理由 | 替代方案 / 后续 |
 |---|---|---|---|
 | 导出器直写 Parquet(PyArrow)而非经 DuckDB | PyArrow 写、DuckDB 只读,职责分离 | 写路径唯一(NFR-001);DuckDB 专注查询 | 若 DuckDB COPY 更简可评估,接口不变 |
-| data_version 按 dataset 独立(**spec Q-003 待裁决**,本表记录的是建议而非结论) | 各 dataset 导出互不阻塞,演进解耦 | signals_log 与 ohlcv 节奏不同 | 若裁为全局递增:改版本号生成为单调序列并在 manifest 增 global_version 字段 |
+| data_version 按 dataset 独立(spec Q-003 已裁决,2026-09-12) | 各 dataset 导出互不阻塞,演进解耦 | signals_log 与 ohlcv 节奏不同 | 放弃项:无单一全局版本号;需要「全湖时点」时由各 manifest 的 exported_at 聚合派生 |
 | DuckDB 引入为运行时依赖 | pyproject dependencies 新增 pin | 取数入口是其唯一用途 | 备选:polars scan_parquet(接口已抽象,可替换) |
 | 残余风险:湖文件被误删/误改 | manifest 校验和可在读取时发现;NAS 每日副本兜底 | 不可变 + 对账 + 灾备三重 | 单盘故障场景由 F001 灾备覆盖 |
 
@@ -169,4 +170,4 @@ def resolve(value: str, direction: Literal["to_lake", "to_freqtrade", "to_db"]) 
 
 - [x] DQ-001:signals_log 无 exchange 维度,分区省略 exchange 层——确认(spec 已同步)
 - [x] DQ-002:导出窗口与实时采集重叠如何保证分区完整——窗口截断 `[start, end)` 语义,跨窗口数据归下一窗口(§3)
-- [ ] DQ-003:增量导出窗口内 pair 无数据记 skipped,是否与"确实无行情"区分?——AI 建议:不区分,manifest 记录 skipped 清单(①区分需引入行情可得性外部探测,本期收益不抵成本;②FR1.5 质量流程天然覆盖此风险;③升级条件预定义:M1 评测台出现实际误判即加 pair 级探针)。待 owner 裁决后关闭
+- [x] DQ-003:增量导出窗口内 pair 无数据记 skipped,是否与"确实无行情"区分?——**裁决(2026-09-12, owner):不区分**,manifest 记 `skipped` 清单即可。理由:①区分需要在导出器里引入行情可得性外部探测,把一个纯本地模块变成有出网依赖(限速/代理/失败重试全要处理),本期收益不抵成本;②采集断线由 FR1.5 质量流程与 K 线延迟面板覆盖,不靠导出器发现。**升级条件(预先定死,避免事后扯皮)**:M1 评测台一旦出现因 skipped 语义不明导致的实际误判,即为 `skipped` 增补 `reason` 字段并加 pair 级可得性探针
