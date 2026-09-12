@@ -209,7 +209,7 @@ updated: 2026-09-12
 
 ### 依赖
 
-- 上游:F001(TimescaleDB 数据与调度模式)、集成文档 §1.2 导出契约、架构 §4.4 manifest 契约;
+- 上游:F001(TimescaleDB 数据与调度模式)、集成文档 §1.2 导出契约、架构 §4.4 manifest 契约;signals_log dataset 的**内容质量**另依赖 Kronos 真实推理容器化(T014)——薄壳为 mock 时导出的是 placeholder 行;
 - 下游:M1 评测台(FR3)、FR7 manifest 实验链、Vibe local loader(可选);
 - 新增依赖:DuckDB(pyproject 新增 pin,版本范围本地验证后落定);
 - 外部/环境:无新外部依赖;lake/ 磁盘空间(全量约 1-2GB)。

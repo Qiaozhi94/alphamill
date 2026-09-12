@@ -175,12 +175,29 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 ### 验收清单
 
 - [x] **AC-001** (`FR-001`, `NFR-001`): 回填完整性校验通过（口径见 design §3：1m OHLCV 与衍生品表逐表行数符合交易所可得区间预期、抽样无缺口、连续聚合与基表重算一致），旧仓副本零改动 — tests: `tests/integration/test_f001_row_reconciliation.py`
-- [x] **AC-002** (`FR-003`): Kronos /health 200 且 /predict 返回 source=kronos — tests: `tests/integration/test_f001_kronos_smoke.py`
+- [x] **AC-002** (`FR-003`): Kronos 编排内契约——/health 200 且 /predict 返回结构合法信号，source 与 /health 的 model_enabled 一致（mock→placeholder，real→kronos；声明 real 却回 placeholder 判红） — tests: `tests/integration/test_f001_kronos_smoke.py`
 - [x] **AC-003** (`FR-002`): 采集器单交易对冒烟通过且重复执行幂等 — tests: `tests/integration/test_f001_collector_smoke.py`
 - [x] **AC-004** (`FR-004`, `FR-005`): dry-run 风控钩子生效且监控面板非空 — tests: `tests/integration/test_f001_dryrun_monitoring.py`
 - [x] **AC-005** (`FR-006`, `NFR-002`): deployment/verify.ps1 单命令全绿 — tests: `deployment/verify.ps1`
+- [x] **AC-006** (`FR-003`): 真实推理证据——真实模型实例 /predict 返回 source=kronos 且回报权重路径；权重（391MB）与 vendor clone 不入库，故由独立命令验证而非默认编排 — tests: `tests/integration/test_f001_kronos_smoke.py`
 
-**验收证据（2026-09-12）**：AC-001 `reports/f001-backfill-20260910.json` verdict=PASS（631 万行满窗，缺失率≤0.13%）+ `tests/integration/test_f001_row_reconciliation.py`；AC-002 `tests/integration/test_f001_kronos_smoke.py` 真实模型 CPU 推理通过（1.76s/次）；AC-003 `tests/integration/test_f001_collector_smoke.py` 幂等复跑通过；AC-004 `tests/integration/test_f001_dryrun_monitoring.py` 3 passed + tasks T017 forceenter 双路径实测；AC-005 `deployment/verify.ps1` 退出码 0（26 项检查，含回填完整性阈值）。集成测试汇总：7 passed 0 skipped（真实模型实例 :8002）。
+**验收修订（2026-09-12，F001 done 后）**：原 AC-002 一条同时承载「薄壳遵守 HTTP 契约」与
+「真实 Kronos 模型出信号」两个主张——前者编排内可证，后者依赖 391MB 权重与 vendor clone
+（二者均不入库），因此 `ALPHAMILL_INTEGRATION=1` 下该条恒红。现拆为 **AC-002（编排内契约，
+常绿且双向 fail-closed）** 与 **AC-006（真实推理证据，独立命令）**，验收范围不缩小：AC-006
+的证据即原 AC-002 的 T008 实测。AC-006 复跑命令（前置条件见 §7 依赖与 `vendor/VENDORED.md`）：
+
+```bash
+KRONOS_USE_REAL_MODEL=true KRONOS_REPO_PATH=vendor/Kronos \
+  .venv/bin/python -m uvicorn alphamill.kronos_service.server:app --port 8002 &
+ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 \
+  .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py -q
+```
+
+把真实推理纳入默认 compose（torch 进镜像 + 权重挂载，可选 profile）列为 F002 T014，
+届时 AC-006 可由编排直接复跑；在此之前它是一条留档的显式命令，不是待办。
+
+**验收证据（2026-09-12）**：AC-001 `reports/f001-backfill-20260910.json` verdict=PASS（631 万行满窗，缺失率≤0.13%）+ `tests/integration/test_f001_row_reconciliation.py`；AC-002 `tests/integration/test_f001_kronos_smoke.py` 编排内契约与模式自洽通过（两个方向各经一次变异验证：声称 real 却回 placeholder 判红）；AC-006 同文件真实模型 CPU 推理通过（`KRONOS_REQUIRE_REAL_MODEL=1` + :8002 实例，1.76s/次，T008 记录）；AC-003 `tests/integration/test_f001_collector_smoke.py` 幂等复跑通过；AC-004 `tests/integration/test_f001_dryrun_monitoring.py` 3 passed + tasks T017 forceenter 双路径实测；AC-005 `deployment/verify.ps1` 退出码 0（26 项检查，含回填完整性阈值）。集成测试汇总：`ALPHAMILL_INTEGRATION=1 pytest tests/integration` → 7 passed 1 skipped（skip 项为 AC-006，需上面的显式命令；默认编排是 mock 实例）。
 
 ## 7. 测试、依赖与决策
 
@@ -194,7 +211,7 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 
 - 上游：quant-crypto 仓库副本（`D:\Projects\quant-crypto`，HEAD `d94f94f`，只读；原 Docker 数据卷已灭失，见 §0 路线修订）；OKX 交易所 API（历史数据重建）；HuggingFace 网络（权重）；docker-ce（WSL2）。
 - 下游消费者：F002（数据桥）、F003（AlphaGen vendor）、所有后续 feature 的运行基座。
-- 外部 / 环境依赖：GPU（未就绪时 AC-002 冒烟允许 CPU 推理回退）、docker-compose、PowerShell 7（WSL2 内可用，apt 或用户态安装均可）。
+- 外部 / 环境依赖：GPU（未就绪时 AC-006 真实推理允许 CPU 回退）；AC-006 前置：`vendor/Kronos`（pin `67b630e`）+ `models/Kronos-base`、`models/Kronos-Tokenizer-base`（HF 下载，不入库）+ 宿主 venv 的 torch/cpu、einops、safetensors（见 `vendor/VENDORED.md`）、docker-compose、PowerShell 7（WSL2 内可用，apt 或用户态安装均可）。
 
 ### 决策与风险
 

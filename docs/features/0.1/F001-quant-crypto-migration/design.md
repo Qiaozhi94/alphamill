@@ -83,7 +83,8 @@ Kronos HTTP API 契约不变：`GET /health`、`GET /predict/{symbol}`、`POST /
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
 | `AC-001` | integration | `tests/integration/test_f001_row_reconciliation.py` | design §3 口径：ohlcv_1m/衍生品表行数与连续性达标，连续聚合与基表重算一致 |
-| `AC-002` | integration | `tests/integration/test_f001_kronos_smoke.py` | /health 200；/predict source=kronos |
+| `AC-002` | integration | `tests/integration/test_f001_kronos_smoke.py` | /health 200；/predict 结构合法且 source 与 model_enabled 自洽（双向判红） |
+| `AC-006` | integration（独立命令） | `tests/integration/test_f001_kronos_smoke.py` | 真实模型实例 source=kronos 且回报权重路径；由 `KRONOS_REQUIRE_REAL_MODEL=1` 启用 |
 | `AC-003` | integration | `tests/integration/test_f001_collector_smoke.py` | 单对采集写入且二次执行行数不变 |
 | `AC-004` | integration | `tests/integration/test_f001_dryrun_monitoring.py` | 风控钩子日志存在；Grafana API 返回非空序列 |
 | `AC-005` | integration | `deployment/verify.ps1` | 全部检查 PASS，退出码 0 |

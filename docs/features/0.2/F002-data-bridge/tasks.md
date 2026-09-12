@@ -47,6 +47,7 @@ updated: 2026-09-12
 
 - [ ] T009 (`FR-006`): 导出 CLI 入口(`python -m alphamill.data_bridge.exporter --dataset ... --mode ...`)+ systemd user timer(每日 02:00 增量;周日 04:00 全量,与 03:00 NAS 备份错峰) — verify: 手动触发退出码 0,journalctl 可查
 - [ ] T010 (`FR-006`): `backup-nas.sh` lake/ 同步实测——触发备份后 NAS 端 `lake/` 与 `_manifests/` 产物齐全 — verify: NAS 端 ls 校验(AC-006)
+- [ ] T014 (`FR-001`): Kronos 真实推理容器化——compose 可选 profile `kronos-real`(torch/cpu 进镜像 + `vendor/Kronos` 与 `models/` 挂载,默认不启动),使 T007 导出的 signals_log 是真实信号而非 placeholder;同时让 F001 AC-006 可由编排直接复跑而非手工起实例 — verify: `docker compose --profile kronos-real up -d` 后 `ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py -q` 全绿,且 `signals_log` 新增行 `source=kronos`
 
 ## 3. 验证与验收任务
 
@@ -58,6 +59,7 @@ updated: 2026-09-12
 
 - `T001 -> T002/T003/T005/T006`:依赖就绪(P0)。
 - `T002 -> T003 -> T004`:manifest 是导出与对账的公共契约。
+- `T014 -> T007`(质量前置,非硬阻塞):薄壳仍是 mock 时 signals_log 导出的是 placeholder 行,湖内该 dataset 对因子研究无价值;导出管线本身不依赖 T014。
 - `T003 -> T006`:取数测试依赖已有快照。
 - `T004 -> T008`:修订 diff 复用对账器。
 - `T002/T005 [P]`、`T006(依赖T003)`、`T008(依赖T004)` 分支并行。
