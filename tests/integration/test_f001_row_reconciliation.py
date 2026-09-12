@@ -41,11 +41,13 @@ def _db_available() -> bool:
 def test_f001_backfill_completeness_passes():
     """AC-001：回填完整性校验按 design §3 口径通过。"""
     _require_or_skip(_db_available(), "本地 TimescaleDB 不可达")
+    exchange = f001_backfill_config.configured_exchanges()[0]
+    symbols = f001_backfill_config.configured_symbols()
     conn = f001_backfill_report.db_connect()
     try:
-        if _backfill_incomplete(conn):
+        if _backfill_incomplete(conn, exchange, symbols):
             _require_or_skip(False, "回填尚未完成（backfill_progress 存在非 complete 目标行）")
-        report = f001_backfill_report.build_report(conn, "binance", _symbols(conn))
+        report = f001_backfill_report.build_report(conn, exchange, symbols)
     finally:
         conn.close()
 
@@ -56,7 +58,7 @@ def test_f001_backfill_completeness_passes():
         assert stats["verdict"] == "PASS", f"{view}: 连续聚合与基表重算不一致 {stats}"
 
 
-def _backfill_incomplete(conn) -> bool:
+def _backfill_incomplete(conn, exchange: str, symbols: list[str]) -> bool:
     # 权威窗口 = supervisor/首跑钉死的 BACKFILL_START/END（跨进程 resume 的主键）。
     # 早期失败行（其他 target_end）已被权威窗口的重跑取代，不参与判据。
     window_start, window_end = f001_backfill_config.window_datetimes()
@@ -64,19 +66,12 @@ def _backfill_incomplete(conn) -> bool:
         cur.execute(
             """
             SELECT count(DISTINCT symbol) FROM backfill_progress
-            WHERE exchange = 'binance' AND timeframe = '1m'
-              AND status = 'complete'
+            WHERE exchange = %s AND timeframe = '1m'
+              AND status IN ('complete', 'unavailable')
               AND target_start = %s
               AND target_end = %s
             """,
-            (window_start, window_end),
+            (exchange, window_start, window_end),
         )
         done = int(cur.fetchone()[0])
-    # 6 个交易对全部在权威窗口 complete 才算回填完成，否则跳过（回填进行中）。
-    return done < 6
-
-
-def _symbols(conn) -> list[str]:
-    with conn.cursor() as cur:
-        cur.execute("SELECT DISTINCT symbol FROM ohlcv_1m WHERE exchange = 'binance' ORDER BY 1")
-        return [r[0] for r in cur.fetchall()]
+    return done < len(symbols)
