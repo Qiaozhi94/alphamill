@@ -79,7 +79,7 @@ services:
       - --strategy-path
       - /freqtrade/user_data/strategies
     environment:
-      PYTHONPATH: /app/src
+      PYTHONPATH: /app/src:/freqtrade
       FREQTRADE_API_USERNAME: ${FREQTRADE_API_USERNAME:-admin}
       FREQTRADE_API_PASSWORD: ${FREQTRADE_API_PASSWORD:-change-me-freqtrade}
       FREQTRADE_JWT_SECRET_KEY: ${FREQTRADE_JWT_SECRET_KEY:-change-me-freqtrade-jwt}
