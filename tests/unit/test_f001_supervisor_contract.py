@@ -14,3 +14,8 @@ def test_supervisor_has_portable_root_env_and_fail_closed_shell_options() -> Non
     assert 'psql -U "$DB_USER" -d "$DB_NAME"' in script
     assert "10.31.0.254:7890" not in script
     assert 'PYTHONPATH="$REPO_ROOT/src"' in script
+    assert 'BACKFILL_SYMBOLS="${SYMBOLS:-BTC/USDT,ETH/USDT}"' in script
+    assert "EXPECTED_SYMBOL_COUNT" in script
+    assert "status IN ('complete', 'unavailable')" in script
+    assert 'DERIVATIVES_SYMBOLS="${DERIVATIVES_SYMBOLS:-$BACKFILL_SYMBOLS}"' in script
+    assert "${DERIVATIVES_SYMBOLS:-$SYMBOLS}" not in script

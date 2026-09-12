@@ -14,6 +14,12 @@ export BACKFILL_END="$BACKFILL_WINDOW_END"
 export BACKFILL_FETCH_LIMIT=1000
 export LOG_LEVEL=INFO
 export BINANCE_HTTPS_PROXY="${BINANCE_HTTPS_PROXY:-}"
+BACKFILL_SYMBOLS="${SYMBOLS:-BTC/USDT,ETH/USDT}"
+IFS=',' read -r -a CONFIGURED_SYMBOLS <<< "$BACKFILL_SYMBOLS"
+EXPECTED_SYMBOL_COUNT=0
+for configured_symbol in "${CONFIGURED_SYMBOLS[@]}"; do
+  [ -n "${configured_symbol// /}" ] && EXPECTED_SYMBOL_COUNT=$((EXPECTED_SYMBOL_COUNT + 1))
+done
 
 psql_query() {
   docker exec quant-timescaledb psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "$1"
@@ -27,22 +33,22 @@ fi
 for pass in 2 3 4 5 6 7 8 9 10; do
   # 只喂未完成的 symbol：权威窗口内最新状态为 complete 的不再重跑
   #（模块的 load_progress 不跳过 complete，整轮重喂会无谓重下已完成的百万行）。
-  INCOMPLETE=$(psql_query "SELECT coalesce(string_agg(symbol, ',' ORDER BY symbol), '') FROM (SELECT symbol, status, row_number() OVER (PARTITION BY symbol ORDER BY updated_at DESC) AS rn FROM backfill_progress WHERE exchange='binance' AND timeframe='1m' AND target_start='$BACKFILL_START' AND target_end='$BACKFILL_END') t WHERE rn=1 AND status<>'complete';")
-  DONE=$(psql_query "SELECT count(*) FROM (SELECT DISTINCT symbol FROM backfill_progress WHERE exchange='binance' AND timeframe='1m' AND status='complete' AND target_start='$BACKFILL_START' AND target_end='$BACKFILL_END') t;")
-  echo "$(date -u +%FT%TZ) [supervisor] pass=$pass completed=$DONE/6 todo=[$INCOMPLETE]"
-  [ "$DONE" -ge 6 ] && break
+  INCOMPLETE=$(psql_query "SELECT coalesce(string_agg(symbol, ',' ORDER BY symbol), '') FROM (SELECT symbol, status, row_number() OVER (PARTITION BY symbol ORDER BY updated_at DESC) AS rn FROM backfill_progress WHERE exchange='binance' AND timeframe='1m' AND target_start='$BACKFILL_START' AND target_end='$BACKFILL_END') t WHERE rn=1 AND status NOT IN ('complete', 'unavailable');")
+  DONE=$(psql_query "SELECT count(*) FROM (SELECT DISTINCT symbol FROM backfill_progress WHERE exchange='binance' AND timeframe='1m' AND status IN ('complete', 'unavailable') AND target_start='$BACKFILL_START' AND target_end='$BACKFILL_END') t;")
+  echo "$(date -u +%FT%TZ) [supervisor] pass=$pass completed=$DONE/$EXPECTED_SYMBOL_COUNT todo=[$INCOMPLETE]"
+  [ "$DONE" -ge "$EXPECTED_SYMBOL_COUNT" ] && break
   [ -z "$INCOMPLETE" ] && break
   SYMBOLS="$INCOMPLETE" PYTHONPATH="$REPO_ROOT/src" .venv/bin/python -m alphamill.data_bridge.collector.historical_backfill >> /tmp/f001-backfill.log 2>&1
 done
 
-if [ "$DONE" -lt 6 ]; then
-  echo "$(date -u +%FT%TZ) [supervisor] OHLCV 回填未完成：$DONE/6" >&2
+if [ "$DONE" -lt "$EXPECTED_SYMBOL_COUNT" ]; then
+  echo "$(date -u +%FT%TZ) [supervisor] OHLCV 回填未完成：$DONE/$EXPECTED_SYMBOL_COUNT" >&2
   exit 1
 fi
 
 echo "$(date -u +%FT%TZ) [supervisor] OHLCV 回填收口，开始衍生品回填"
 DERIVATIVES_EXCHANGE="${DERIVATIVES_EXCHANGE:-binanceusdm}" \
-DERIVATIVES_SYMBOLS="${DERIVATIVES_SYMBOLS:-$SYMBOLS}" \
+DERIVATIVES_SYMBOLS="${DERIVATIVES_SYMBOLS:-$BACKFILL_SYMBOLS}" \
 DERIVATIVES_DATASETS="funding,open_interest" \
 DERIVATIVES_START="$BACKFILL_WINDOW_START" \
 DERIVATIVES_END="$BACKFILL_WINDOW_END" \
