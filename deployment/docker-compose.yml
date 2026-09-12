@@ -12,8 +12,11 @@ services:
     volumes:
       - timescale_data:/var/lib/postgresql/data
       - ../db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
-      - ../db/migrations/003_derivatives_market_data.sql:/docker-entrypoint-initdb.d/02_derivatives_market_data.sql:ro
-      - ../db/migrations/004_nullable_dryrun_metrics.sql:/docker-entrypoint-initdb.d/03_nullable_dryrun_metrics.sql:ro
+      # 迁移目录整挂到 initdb 的子目录（子目录不会被 entrypoint 直接执行），
+      # 由 02_apply_migrations.sh 按序应用并登记 schema_migrations——与既有库的
+      # tools/apply_migrations.py 共用同一个版本账本（C402）。
+      - ../db/migrations:/docker-entrypoint-initdb.d/migrations:ro
+      - ./initdb-apply-migrations.sh:/docker-entrypoint-initdb.d/02_apply_migrations.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-quant} -d ${DB_NAME:-quant}"]
       interval: 10s

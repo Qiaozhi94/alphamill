@@ -20,10 +20,23 @@ def test_freqtrade_service_mounts_repo_strategy_dependencies() -> None:
     assert "../src:/app/src:ro" in compose
     assert "PYTHONPATH: /app/src:/freqtrade" in compose
     assert "../freqtrade/signal_fusion:/freqtrade/signal_fusion:ro" in compose
+    # C009 的意图（衍生品 schema 必须随全新库自动初始化）不变，机制改为整目录挂载 +
+    # initdb 脚本按序应用并登记账本（C402），逐文件挂载已移除。
+    assert "../db/migrations:/docker-entrypoint-initdb.d/migrations:ro" in compose
     assert (
-        "../db/migrations/003_derivatives_market_data.sql:"
-        "/docker-entrypoint-initdb.d/02_derivatives_market_data.sql:ro"
+        "./initdb-apply-migrations.sh:/docker-entrypoint-initdb.d/02_apply_migrations.sh:ro"
     ) in compose
     assert "--strategy-path" in compose
     assert "from alphamill.freqtrade_bridge.risk.circuit_breaker import CircuitBreaker" in strategy
     assert "from risk." not in strategy
+
+
+def test_ac006_command_carries_host_database_env() -> None:
+    """C501：文档化的 AC-006 命令必须带宿主 DB 环境，否则照抄会 500（实测踩过）。"""
+    spec = (ROOT / "docs/features/0.1/F001-quant-crypto-migration/spec.md").read_text(
+        encoding="utf-8"
+    )
+    smoke = (ROOT / "tests/integration/test_f001_kronos_smoke.py").read_text(encoding="utf-8")
+    for text, name in ((spec, "spec.md"), (smoke, "test_f001_kronos_smoke.py")):
+        assert "DB_HOST=127.0.0.1" in text, f"{name} 的 AC-006 命令缺少 DB_HOST"
+        assert "./deployment/.env" in text, f"{name} 的 AC-006 命令缺少 .env 载入"

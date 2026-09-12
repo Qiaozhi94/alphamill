@@ -188,7 +188,10 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 的证据即原 AC-002 的 T008 实测。AC-006 复跑命令（前置条件见 §7 依赖与 `vendor/VENDORED.md`）：
 
 ```bash
-KRONOS_USE_REAL_MODEL=true KRONOS_REPO_PATH=vendor/Kronos \
+# 宿主侧运行：DB_HOST 默认是 compose 服务名 timescaledb，宿主上解析不到，
+# 必须先载入 .env 并改指回环——与 deployment/f001-backfill-supervisor.sh 同一约定。
+set -a; . ./deployment/.env; set +a
+DB_HOST=127.0.0.1 KRONOS_USE_REAL_MODEL=true KRONOS_REPO_PATH=vendor/Kronos \
   .venv/bin/python -m uvicorn alphamill.kronos_service.server:app --port 8002 &
 ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 \
   .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py -q

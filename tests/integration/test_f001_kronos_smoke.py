@@ -7,7 +7,8 @@ AC-002 —— 编排内常绿：`/health` 200，`/predict` 返回结构合法的
 AC-006 —— 真实推理证据：需要 391MB 权重与 vendor clone，不在默认编排内，因此由独立
 命令验证（前置条件见 spec §7 / vendor/VENDORED.md）：
 
-    KRONOS_USE_REAL_MODEL=true KRONOS_REPO_PATH=vendor/Kronos \
+    set -a; . ./deployment/.env; set +a   # DB_HOST 默认是 compose 服务名，宿主上不可解析
+    DB_HOST=127.0.0.1 KRONOS_USE_REAL_MODEL=true KRONOS_REPO_PATH=vendor/Kronos \
       .venv/bin/python -m uvicorn alphamill.kronos_service.server:app --port 8002 &
     ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 \
       KRONOS_BASE_URL=http://127.0.0.1:8002 \
