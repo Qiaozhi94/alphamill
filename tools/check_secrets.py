@@ -80,8 +80,10 @@ def check(root: pathlib.Path = ROOT) -> list[str]:
             api_server = config.get("api_server", {})
             for key in ("password", "jwt_secret_key", "ws_token"):
                 value = api_server.get(key)
-                if isinstance(value, str) and value and not re.fullmatch(
-                    r"\$\{[A-Z][A-Z0-9_]*\}", value
+                if (
+                    isinstance(value, str)
+                    and value
+                    and not re.fullmatch(r"\$\{[A-Z][A-Z0-9_]*\}", value)
                 ):
                     findings.append(f"{path.relative_to(root)} [freqtrade-plaintext-{key}]")
     return findings

@@ -9,7 +9,7 @@ def test_docker_fallback_uses_repository_compose_file_and_psql_variables() -> No
     source = Path(db_adapter.__file__).read_text(encoding="utf-8")
 
     assert '"-f"' in source
-    assert 'str(COMPOSE_FILE)' in source
+    assert "str(COMPOSE_FILE)" in source
     assert "exchange = :'exchange'" in source
     assert "symbol = :'symbol'" in source
     assert "LIMIT :row_limit" in source

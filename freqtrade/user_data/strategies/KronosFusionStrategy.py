@@ -7,11 +7,12 @@ import requests
 from freqtrade.persistence import Trade
 from freqtrade.strategy import IStrategy
 from pandas import DataFrame
+from signal_fusion.lightgbm_meta import LightGBMFusionMetaModel
+from signal_fusion.meta_model import FusionWeights, SignalFusionMetaModel
+
 from alphamill.freqtrade_bridge.risk.circuit_breaker import CircuitBreaker
 from alphamill.freqtrade_bridge.risk.correlation_guard import CorrelationGuard
 from alphamill.freqtrade_bridge.risk.drawdown_guard import DrawdownGuard
-from signal_fusion.lightgbm_meta import LightGBMFusionMetaModel
-from signal_fusion.meta_model import FusionWeights, SignalFusionMetaModel
 
 logger = logging.getLogger(__name__)
 

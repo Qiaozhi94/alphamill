@@ -78,7 +78,9 @@ def ohlcv(symbol: str, exchange: str = "binance", limit: int = Query(default=120
 
 
 @app.get("/predict/{symbol:path}", response_model=PredictResponse)
-def predict(symbol: str, exchange: str = "binance", limit: int = Query(default=120, ge=30, le=1000)):
+def predict(
+    symbol: str, exchange: str = "binance", limit: int = Query(default=120, ge=30, le=1000)
+):
     return build_prediction(symbol=symbol, exchange=exchange, limit=limit)
 
 

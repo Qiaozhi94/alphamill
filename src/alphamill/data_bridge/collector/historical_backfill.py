@@ -260,7 +260,9 @@ def fetch_symbol(
                 total,
                 "exchange batch did not advance the cursor",
             )
-            raise RuntimeError(f"OHLCV cursor stalled for {exchange_id} {symbol} at {next_since_dt}")
+            raise RuntimeError(
+                f"OHLCV cursor stalled for {exchange_id} {symbol} at {next_since_dt}"
+            )
         since_ms = next_since
         next_since_dt = datetime.fromtimestamp(since_ms / 1000, tz=UTC)
         save_progress(conn, exchange_id, symbol, start, end, next_since_dt, "running", total)

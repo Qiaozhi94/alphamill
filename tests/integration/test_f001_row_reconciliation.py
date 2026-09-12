@@ -13,7 +13,8 @@ import pytest
 TOOLS_DIR = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS_DIR))
 
-import f001_backfill_config
+import f001_backfill_config  # noqa: E402
+
 f001_backfill_report = pytest.importorskip("f001_backfill_report")
 
 pytestmark = pytest.mark.integration

@@ -8,7 +8,6 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-
 COMPOSE_FILE = Path(__file__).resolve().parents[3] / "deployment" / "docker-compose.yml"
 
 
@@ -115,7 +114,7 @@ def latest_ohlcv(symbol: str, exchange: str = "binance", limit: int = 120) -> li
 
 
 def latest_ohlcv_via_docker(symbol: str, exchange: str, limit: int) -> list[dict]:
-    sql = f"""
+    sql = """
 COPY (
     SELECT time, exchange, symbol, open, high, low, close, volume
     FROM ohlcv_1m

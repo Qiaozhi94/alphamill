@@ -23,11 +23,12 @@ from datetime import UTC, datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.dirname(__file__))
 
+from f001_backfill_config import expected_minute_rows, window_datetimes, window_values  # noqa: E402
+
 from alphamill.data_bridge.collector.db_writer import db_connect  # noqa: E402
 from alphamill.data_bridge.collector.derivatives_market_backfill import (  # noqa: E402
     BASIS_UNSUPPORTED_EXCHANGES,
 )
-from f001_backfill_config import expected_minute_rows, window_datetimes, window_values  # noqa: E402
 
 GAP_RATIO_THRESHOLD = 0.01  # 缺失率 1%：容忍交易所偶发缺失
 WINDOW_START_TEXT, WINDOW_END_TEXT = window_values()
@@ -199,11 +200,13 @@ def derivative_verdict(
             "verdict": "PASS",
         }
 
-    interval = DERIVATIVE_DATASETS[{
-        "funding": "derivatives_funding_rates",
-        "open_interest": "derivatives_open_interest",
-        "basis": "derivatives_mark_index_basis",
-    }[dataset]][1]
+    interval = DERIVATIVE_DATASETS[
+        {
+            "funding": "derivatives_funding_rates",
+            "open_interest": "derivatives_open_interest",
+            "basis": "derivatives_mark_index_basis",
+        }[dataset]
+    ][1]
     duration = effective_end - effective_start
     expected_per_symbol = max(1, int(duration.total_seconds() // interval.total_seconds()))
     expected_min_rows = expected_per_symbol * expected_symbols
@@ -286,9 +289,11 @@ def build_report(conn, exchange: str, symbols: list[str]) -> dict:
             "signals/trades/quality 历史随数据源灭失，空表起步（migration-plan §八）"
         ),
     }
-    checks = [v["verdict"] for v in per_symbol.values()] + [
-        v["verdict"] for v in report["continuous_aggregates"].values()
-    ] + [v["verdict"] for v in report["derivatives"].values()]
+    checks = (
+        [v["verdict"] for v in per_symbol.values()]
+        + [v["verdict"] for v in report["continuous_aggregates"].values()]
+        + [v["verdict"] for v in report["derivatives"].values()]
+    )
     report["verdict"] = "PASS" if checks and all(v == "PASS" for v in checks) else "FAIL"
     return report
 

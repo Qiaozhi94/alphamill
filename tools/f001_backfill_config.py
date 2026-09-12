@@ -11,7 +11,6 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-
 WINDOW_FILE = Path(__file__).resolve().parents[1] / "deployment" / "f001-backfill-window.env"
 
 

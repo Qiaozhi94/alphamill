@@ -97,9 +97,7 @@ def test_kronos_signal_source_reachable():
 
 def test_monitoring_panels_have_data():
     """AC-004 面板数据源非空：K 线延迟(ohlcv_1m)/信号质量(signals_log)/交易健康(snapshots)。"""
-    _require_or_skip(
-        _ft_available() and _db_available(), "Freqtrade dry-run 或 TimescaleDB 不可达"
-    )
+    _require_or_skip(_ft_available() and _db_available(), "Freqtrade dry-run 或 TimescaleDB 不可达")
     conn = _db()
     try:
         assert _db_count(conn, "ohlcv_1m") > 0, "ohlcv_1m 无数据（K 线延迟面板空）"

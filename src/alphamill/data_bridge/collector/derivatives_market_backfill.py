@@ -742,11 +742,7 @@ def summarize_totals(rows: list[dict]) -> dict:
 
 def overall_backfill_status(rows: list[dict]) -> str:
     """Any failed dataset makes the batch fail; unsupported is an explicit boundary."""
-    statuses = [
-        stats.get("status")
-        for symbol in rows
-        for stats in symbol["datasets"].values()
-    ]
+    statuses = [stats.get("status") for symbol in rows for stats in symbol["datasets"].values()]
     return "failed" if "failed" in statuses else "complete"
 
 
