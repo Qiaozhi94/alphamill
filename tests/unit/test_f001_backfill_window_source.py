@@ -4,6 +4,7 @@ from pathlib import Path
 
 from tools.f001_backfill_config import (
     WINDOW_FILE,
+    configured_derivatives_exchange,
     configured_exchanges,
     configured_symbols,
     window_values,
@@ -25,12 +26,15 @@ def test_window_file_is_used_by_code_and_supervisor() -> None:
     assert "BACKFILL_END=2026-09-10" not in supervisor
 
 
-def test_backfill_universe_comes_from_runtime_dotenv() -> None:
-    dotenv = (ROOT / "deployment/.env").read_text(encoding="utf-8")
+def test_backfill_universe_comes_from_tracked_window_file(monkeypatch) -> None:
+    monkeypatch.delenv("SYMBOLS", raising=False)
+    monkeypatch.delenv("EXCHANGES", raising=False)
+    window_file = WINDOW_FILE.read_text(encoding="utf-8")
     symbols = configured_symbols()
     exchanges = configured_exchanges()
 
     assert symbols
     assert exchanges
-    assert f"SYMBOLS={','.join(symbols)}" in dotenv
-    assert f"EXCHANGES={','.join(exchanges)}" in dotenv
+    assert f"SYMBOLS={','.join(symbols)}" in window_file
+    assert f"EXCHANGES={','.join(exchanges)}" in window_file
+    assert f"DERIVATIVES_EXCHANGE={configured_derivatives_exchange()}" in window_file

@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from alphamill.data_bridge.collector.backfill_boundaries import (
+    delisting_end_for,
     effective_derivative_window,
     listing_start_for,
     parse_unavailable_symbols,
@@ -93,8 +94,16 @@ def configured_exchanges() -> list[str]:
     return [item.strip() for item in _setting("EXCHANGES", "binance").split(",") if item.strip()]
 
 
+def configured_derivatives_exchange() -> str:
+    return _setting("DERIVATIVES_EXCHANGE", "binanceusdm")
+
+
 def listing_start(symbol: str, start: datetime) -> datetime:
     return listing_start_for(symbol, start, _setting("BACKFILL_SYMBOL_LISTING_STARTS"))
+
+
+def delisting_end(symbol: str, end: datetime) -> datetime:
+    return delisting_end_for(symbol, end, _setting("BACKFILL_SYMBOL_DELISTING_ENDS"))
 
 
 def unavailable_symbols() -> set[str]:
