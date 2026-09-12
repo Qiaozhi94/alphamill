@@ -19,7 +19,7 @@ function ConvertTo-SqlLiteral {
 function ConvertTo-SqlNumber {
     param([AllowNull()]$Value)
     if ($null -eq $Value -or "$Value" -eq "") {
-        return "0"
+        return "NULL"
     }
     return ([Convert]::ToDouble($Value)).ToString([Globalization.CultureInfo]::InvariantCulture)
 }
