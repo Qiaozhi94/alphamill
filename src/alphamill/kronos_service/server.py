@@ -51,8 +51,9 @@ app = FastAPI(title="Kronos Signal Service", version="0.1.0")
 def health():
     db = healthcheck()
     model_status = real_signal.status()
+    service_status = "degraded" if model_status.enabled and not model_status.available else "ok"
     return {
-        "status": "ok",
+        "status": service_status,
         "service": "kronos-signal",
         "model_loaded": model_status.loaded,
         "model_enabled": model_status.enabled,

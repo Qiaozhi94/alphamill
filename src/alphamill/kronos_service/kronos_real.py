@@ -33,7 +33,7 @@ class KronosRealSignal:
             "KRONOS_TOKENIZER_PATH",
             os.getenv("KRONOS_TOKENIZER", "models/Kronos-Tokenizer-base"),
         )
-        self.kronos_root = os.getenv("KRONOS_REPO_PATH", "external/Kronos")
+        self.kronos_root = os.getenv("KRONOS_REPO_PATH", "vendor/Kronos")
         self.max_context = int(os.getenv("KRONOS_MAX_CONTEXT", "512"))
         self.pred_len = int(os.getenv("KRONOS_PRED_LEN", "12"))
         self.device_request = os.getenv("KRONOS_DEVICE", "cuda")
