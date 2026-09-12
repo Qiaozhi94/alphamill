@@ -46,6 +46,12 @@ function Invoke-DbSql {
 }
 
 $dotEnv = Read-DotEnv (Join-Path $projectRoot "deployment/.env")
+$snapshotMigration = Join-Path $projectRoot "db/migrations/004_nullable_dryrun_metrics.sql"
+if (-not (Test-Path $snapshotMigration)) {
+    throw "Runtime snapshot migration is missing: $snapshotMigration"
+}
+Invoke-DbSql (Get-Content $snapshotMigration -Raw)
+
 $freqtradeUser = if ($dotEnv["FREQTRADE_API_USERNAME"]) { $dotEnv["FREQTRADE_API_USERNAME"] } else { $env:FREQTRADE_API_USERNAME }
 $freqtradePassword = if ($dotEnv["FREQTRADE_API_PASSWORD"]) { $dotEnv["FREQTRADE_API_PASSWORD"] } else { $env:FREQTRADE_API_PASSWORD }
 if (-not $freqtradeUser -or -not $freqtradePassword) {
