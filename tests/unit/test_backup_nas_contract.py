@@ -10,6 +10,8 @@ def test_backup_uses_chunk_byte_bounds_and_archive_checksum() -> None:
 
     assert "iflag=skip_bytes,count_bytes" in script
     assert 'nas_append_chunk "$src" "$pos" "$want"' in script
+    assert "if ! nas_append_chunk" in script
+    assert "have=0" in script
     assert "transfer_directory_to_nas reports reports" in script
     assert "transfer_directory_to_nas lake lake" in script
     assert 'md5sum "$archive"' in script

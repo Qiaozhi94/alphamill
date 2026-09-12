@@ -57,12 +57,18 @@ transfer_to_nas() { # $1=本地文件 $2=远端路径
     want=$chunk
     [ $((pos + want)) -gt "$size" ] && want=$((size - pos))
     for try in 1 2 3 4 5; do
-      nas_append_chunk "$src" "$pos" "$want" "$dst"
-      have=$(ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "stat -c %s $dst" 2>/dev/null | tail -n 1)
+      if ! nas_append_chunk "$src" "$pos" "$want" "$dst"; then
+        have=0
+      else
+        have=$(ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "stat -c %s $dst" 2>/dev/null | tail -n 1) || have=0
+      fi
       expected=$((pos + want))
       [ "$have" = "$expected" ] && break
       log "chunk@$pos 第${try}次校验不符(have=$have want=$expected)，截断重试"
-      ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "truncate -s $pos $dst" 2>/dev/null
+      if ! ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST" "truncate -s $pos $dst" 2>/dev/null; then
+        log "FATAL: 无法截断远端文件 $dst"
+        return 1
+      fi
     done
     [ "$have" = "$expected" ] || { log "FATAL: chunk@$pos 重试耗尽"; return 1; }
     pos=$((pos + want))
