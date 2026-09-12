@@ -80,3 +80,13 @@ def test_basis_boundary_is_explicitly_allowlisted() -> None:
     assert stats["status"] == "unsupported"
     assert stats["verdict"] == "PASS"
     assert stats["expected_min_rows"] == 0
+
+
+def test_aggregate_view_query_filters_exchange() -> None:
+    conn = _Connection([(1,), (1,)] * len(report.AGGREGATES))
+    report.aggregate_stats(conn, "binance")
+
+    view_queries = conn.cursor_obj.statements[::2]
+    assert len(view_queries) == len(report.AGGREGATES)
+    assert all("WHERE exchange = %s" in sql for sql, _ in view_queries)
+    assert all(params[0] == "binance" for _, params in view_queries)
