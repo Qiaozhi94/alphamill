@@ -21,6 +21,7 @@ Kronos（时序基础模型）。需要统一"改谁、不改谁、怎么跟上�
 | Freqtrade | 原样依赖（官方 docker 镜像 + `user_data/` 插件层） | 零源码改动；pin 镜像 tag；上游 bug 走 issue + monkey-patch 过渡 |
 | Vibe-Trading | 可选原样依赖（pip pin + 本机 CLI/服务） | 只碰只读配置层接入面；1 周 time-box，可弃置，不阻塞主链路 |
 | Kronos 模型代码 | 原样依赖（上游 fresh clone + pin commit） | 零改动；权重走 HuggingFace；服务薄壳为本仓 `kronos_service/` |
+| 前端构建期工具链（Node/npm，`web/` SPA） | 原样依赖（**仅构建期**，pin lockfile） | 生产运行时零新增（构建产物静态托管）；`package-lock.json` 入库、pin Node 主版本；仅在里程碑边界升级（ADR-0005 决策 4/7） |
 
 **永不 fork。**
 
@@ -32,6 +33,8 @@ vendor 卫生规则（AlphaGen 专用）：
 4. 上游若复活且需新特性，按修改清单手工重移植。
 
 升级纪律：依赖版本 pin；只在里程碑边界升级；升级后先跑冒烟再继续实验（保证实验结果可比）。
+前端构建期依赖同受此纪律：pin 值（Node 主版本 + `package-lock.json` 完整性）随 F005 立项
+锁定并进门禁，见 ADR-0005 后续行动。
 
 ## 后果
 

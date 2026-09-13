@@ -88,4 +88,6 @@
   （权益/回撤/分位数收益/IC 衰减），Parquet + manifest 关联」**——本决策的呈现层契约
   依赖，先于 F005 开发锁定。
 - 后续行动：① 立 F005 研究控制台 spec（引用本 ADR，版本归属 0.2）；② 评测台（F007）spec
-  落曲线序列契约；③ 现有 Grafana 两板随需瘦身为视图渲染（口径逐步下沉 `db/migrations/`）。
+  落曲线序列契约；③ 现有 Grafana 两板随需瘦身为视图渲染（口径逐步下沉 `db/migrations/`）；
+  ④ F005 立项时扩展 `tools/check_dep_pins.py` 覆盖前端构建期依赖（Node 主版本 +
+  `package-lock.json` 完整性），使「按 ADR-0002 纪律 pin」成为可机器校验的门禁。
