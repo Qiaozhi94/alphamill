@@ -237,7 +237,6 @@
 - 范围：F002 需求设计三件套起步；owner 后续明确收窄为 `docs/features/0.2/F002-data-bridge/design.md`，spec/tasks/integration/F004 与 ADR-0005 工作区改动不纳入最终裁决。
 - 结论：设计范围内 Critical/High/Medium/Low 全部清零；本地 `tools/verify.py` 101 passed、8 个环境依赖项 skipped、ruff 全绿；最终 CI 由闭环提交触发并由 reviewer 观测。
 - 终态门禁（2026-09-13）：GitHub Billing 阻塞解除（仓库转 public，Actions 免费额度生效）。rerun 原失败 run `34737667094`（@ `aa0ebbe`）双 job 全绿（py3.11 29s / py3.13 37s）；另 run `34738191708`（@ `2d9c556`）亦双绿。全绿后按闭环协议删除 local-only `CURRENT-doc.md` 与 `FIX-log.md`。
-- 范围外补记（2026-09-13）：闭环后 owner 指示将 ADR-0005 工作区改动提交并推送（`2d9c556`）。该改动不在本循环裁决范围内、未经检视，记此以备后续审计；如需覆盖，应另立 ADR-0005 检视循环。
 
 | ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
