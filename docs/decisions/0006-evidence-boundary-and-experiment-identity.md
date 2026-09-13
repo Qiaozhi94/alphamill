@@ -28,7 +28,8 @@ ml4t 配套仓提供了可借鉴的模式：显式 `preview/canonical` 执行层
    population、消耗留出预算、访问永久确认窗或产生可晋级结论；只有 `canonical` 可执行这些
    动作。层级不得从环境变量、当前目录或进程全局状态推断。
 3. **实验身份按语义内容寻址**：`experiment_id` 由上游对象 ID、cohort、规范化方法/窗口/成本
-   配置、数据**值语义摘要**、代码/构建摘要与随机种子共同导出。execution tier、supersedes、
+   配置、`research_snapshot_id`、代码/构建摘要与随机种子共同导出。ResearchSnapshot 如何组合
+   dataset versions/value digests 由 ADR-0007 拥有。execution tier、supersedes、
    文件路径、压缩编码、写出时间、主机和 wall-clock 不参与身份；同一语义输入应得到同一 ID。
    输入或规则变化生成新 ID，以 `supersedes` 串联，不覆盖历史产物。
 4. **正式试验按 cohort 记账**：`canonical` 运行在看结果前冻结 cohort、试验定义、选择阶段、
@@ -45,7 +46,8 @@ ml4t 配套仓提供了可借鉴的模式：显式 `preview/canonical` 执行层
 
 - 标签切分以 outcome/label endpoint 为边界，而非信号起点；不同 pair 使用各自可交易日历。
 - embargo 不短于本次运行全部标签中的最大 horizon；拟合型变换只在训练折拟合。
-- 数据身份使用 canonical rows/value digest；Parquet 文件 SHA-256 仅作物理完整性校验。
+- 数据身份使用 ADR-0007 ResearchSnapshot；其成员使用 canonical rows/value digest，Parquet 文件
+  SHA-256 仅作物理完整性校验。
 - Agent 可以生成候选、读取允许的报告并提出建议，但不能设置 `canonical`、写正式台账、豁免门禁
   或改变生产状态。
 - `preview` 产物升级为正式证据时必须以冻结上下文重新执行 `canonical`，不能改标签直接晋级。
@@ -56,8 +58,9 @@ ml4t 配套仓提供了可借鉴的模式：显式 `preview/canonical` 执行层
   通过；F005、F006 与后续执行记录共享同一身份链。
 - 负面/义务：需要隔离存储、canonical 单写者/幂等约束、值语义摘要和 cohort 台账；preview
   结果不能直接复用为晋级结论，会增加一次正式重跑成本。
-- 实施：F007 落执行上下文、实验身份、cohort/population、方法论门和 `synthesis_report`；
-  F002 继续拥有数据值摘要与 point-in-time 数据契约，不因本 ADR 扩 scope；F006/M3 落
+- 实施：F007 落 ResearchSnapshot、执行上下文、实验身份、cohort/population、方法论门和
+  `synthesis_report`；F002 继续拥有 dataset manifest/value digest 与 point-in-time 数据契约，
+  不负责跨 dataset 组合；F006/M3 落
   deployment parity、`run_record`、持久化 kill-switch 与启动对账。
 
 ## 备选方案

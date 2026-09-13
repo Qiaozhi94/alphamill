@@ -6,7 +6,7 @@ related_features: [F001]
 topics: [data-bridge, parquet, duckdb, m1]
 doc_kind: design
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-09-13
 ---
 
 # F002:数据桥——Parquet 湖导出与 DuckDB 研究取数层 - 设计
@@ -22,13 +22,14 @@ updated: 2026-09-12
 
 ## 1. 技术概要与影响面
 
-三步走:① 导出器核心——ohlcv_1m 一个 dataset 端到端(查询 → 分区 Parquet → manifest → 对账);② 扩展——衍生品三表与 signals_log、DuckDB 取数模块、symbol_map;③ 运维化——每日/周日调度与 NAS `lake/` 激活,修订检测(全量校验模式)。
+三步走:① 导出器核心——ohlcv_1m 一个 dataset 端到端(查询 → 分区 Parquet → manifest/value digest → 对账);② 扩展——衍生品三表与 signals_log、DuckDB 取数模块、不可变 symbol-map artifact;③ 运维化——每日/周日调度与 NAS `lake/` 激活,修订检测(全量校验模式)。
 
 - 前端:不适用
 - 后端 / API:新增 `src/alphamill/data_bridge/exporter.py`(导出器)、`manifest.py`(manifest 读写)、`reader.py`(DuckDB 取数)、`symbol_map.py`(映射);全部为本地库/本地文件操作,无网络
 - 存储 / Migration:`lake/` 目录结构落地(见 §3);TimescaleDB 只读(导出器 SELECT,零写)
 - Runtime / Agent Adapter:无
-- Event / Evidence:`lake/_manifests/<dataset>/<data_version>.json`(机器可读,FR7 实验链的输入);导出运行日志进 journalctl(调度模式)
+- Event / Evidence:`lake/_manifests/<dataset>/<data_version>.json` 与内容寻址 symbol-map artifact
+  (机器可读,ADR-0007 ResearchSnapshot 的输入);导出运行日志进 journalctl(调度模式)
 - 文档 / 配置:`docs/README.md` 已挂 releases 索引(0.1 收口时完成);新增调度 timer 两枚
 
 ## 2. 架构与模块边界
@@ -104,7 +105,7 @@ src/alphamill/data_bridge/
   **manifest 是发布点**——最后写(临时名 + rename),写成功前该 data_version 对 reader 不存在。
   中断留下的 staging 目录与孤儿 `.rN` 文件不被任何 manifest 引用,不影响正确性,由全量模式顺带清理。
 - **pair 目录命名**:湖内 pair 用 `BASE-QUOTE`(`/` 换 `-` 规避路径分隔符),永续加 `-PERP` 后缀区分市场类型。映射表的键、列与碰撞规则见 §4「symbol_map 键的冻结」——**不是三列、也不能由 `DISTINCT symbol` 单独推导**(F002-D010)。
-- **data_version 语义**(spec Q-003 已裁决:**按 dataset 独立**,2026-09-12 owner):`vYYYY.MM.DD`,同日重导追加 `-r2/-r3`;排序 = 日期字典序 + 序号;最新 valid 版本 = 排序最大且 `status != invalid`。每 dataset 独立演进,互不阻塞。
+- **data_version 语义**(spec Q-003/ADR-0007):`vYYYY.MM.DD`,同日重导追加 `-r2/-r3`;排序 = 日期字典序 + 序号;最新 valid 版本 = 排序最大且 `status != invalid`。每 dataset 独立演进,互不阻塞;跨 dataset 输入由 ResearchSnapshot 显式绑定,`exported_at` 不充当组合身份。
 - **manifest 契约**(架构 §4.4 + 本期扩展字段):
   ```json
   {
@@ -117,11 +118,13 @@ src/alphamill/data_bridge/
     "pairs": ["BTC-USDT", "..."],
     "caliber": {"close": "raw", "adjclose": "none_crypto"},
     "data_version": "v2026.09.12",
+    "value_digest": "sha256:...",
     "status": "valid",
     "partitions": [
-      {"path": "ohlcv_1m/exchange=binance/pair=BTC-USDT/date=2026-09-11.r1.parquet",
+      {"logical_partition_key": {"exchange": "binance", "pair": "BTC-USDT", "date": "2026-09-11"},
+       "path": "ohlcv_1m/exchange=binance/pair=BTC-USDT/date=2026-09-11.r1.parquet",
        "rows": 1440, "time_min": "2026-09-11T00:00:00Z", "time_max": "2026-09-11T23:59:00Z",
-       "bytes": 41233, "sha256": "9f2c…"}
+       "row_digest": "sha256:...", "bytes": 41233, "sha256": "9f2c…"}
     ],
     "reconcile": {"rows": "ok", "time_bounds": "ok", "row_digest": "ok"},
     "quality": {"flagged_partitions": [], "unresolved_total": 0},
@@ -138,6 +141,24 @@ src/alphamill/data_bridge/
   防止「误读别的版本」的机制不是目录比对,而是**根本不按目录读**:输入路径全部来自清单。
   这条是 NFR-002「同版本同查询同结果」的唯一技术保证,原设计只有 `rows/value_sum` 且只在导出时
   对源库比一次,证明不了以后读到的文件没被改。
+
+  **`value_digest` 是 DatasetVersion 的语义根摘要**(ADR-0007/F002-D011):每个分区先按下文唯一
+  权威编码计算 `row_digest`;manifest 合成完成后,再对以下 canonical JSON 计算 SHA-256:
+
+  ```text
+  {
+    dataset,
+    projection: [{name, logical_type}, ...],
+    partitions: [{logical_partition_key, rows, time_min, time_max, row_digest}, ...]
+  }
+  ```
+
+  `projection` 严格沿用 registry 的列顺序和逻辑类型;`partitions` 按规范化逻辑分区键排序,时间统一
+  UTC。物理 path、Parquet codec/row-group、bytes、文件 sha256、exported_at 与 source snapshot 不参与，
+  因此只改编码或搬路径不改 `value_digest`，改任一数据值、投影 schema、覆盖分区或时间边界必改。
+  reader 必须从已校验 manifest 读取并回报该字段；缺失或按上述规则重算不符时抛
+  `ManifestIntegrityError`。`value_digest` 不是新增一套行摘要算法，而是已有分区 `row_digest` 的
+  确定性聚合根。
 - **质量标记继承与裁决**(F002-D005 冻结):`ohlcv_quality_flags` 的未解决标记
   (`resolved_at IS NULL`)按 (exchange, symbol, date(time)) **落到分区级**,写进 manifest 的
   `quality.flagged_partitions`;`unresolved_total` 只是派生总数,不再是唯一信息。裁决政策:
@@ -257,11 +278,14 @@ def export_dataset(dataset: str, mode: Literal["incremental", "full"],
 @dataclass(frozen=True)
 class ReadResult:
     frame: pd.DataFrame
+    dataset: str
+    data_version: str              # 即使调用方传 None,也回报实际解析版本
+    value_digest: str              # 来自已校验 manifest 的 canonical row/value digest
     as_of: datetime | None          # None = 纯历史切片,不得用于回测/门禁判定
     as_of_fidelity: str | None      # "bitemporal" | "event_time_only";as_of=None 时为 None
     flagged: list[str]              # 被显式豁免放行的带旗分区
 
-def read(dataset: str, data_version: str | None = None,          # None=最新 valid
+def read(dataset: str, data_version: str | None = None,          # None=最新 valid,只供探索/preview 解析
          start: datetime | None = None, end: datetime | None = None,
          pairs: list[str] | None = None,
          as_of: datetime | None = None,                          # 见 §3 双时间轴
@@ -269,8 +293,14 @@ def read(dataset: str, data_version: str | None = None,          # None=最新 v
          allow_event_time_only: bool = False) -> ReadResult
 def latest_valid_version(dataset: str) -> str                    # 无 valid 版本则抛 VersionNotFoundError
 # symbol_map.py —— 映射键含 exchange 与 market_type(F002-D010)
+@dataclass(frozen=True)
+class SymbolMapRef:
+    digest: str
+    path: Path                       # digest 命名的不可变 artifact，不是 current 副本
+
 def build_symbol_map(rows: list[SymbolRow]) -> pd.DataFrame   # 纯函数;SymbolRow=(exchange, market_type, db_symbol)
-def export_symbol_map(conn=None) -> Path                      # 薄壳:查库后落 src/alphamill/data_bridge/symbol_map.csv
+def export_symbol_map(conn=None) -> SymbolMapRef              # 当前副本 + lake/_metadata/symbol_maps/<digest>.csv
+def load_symbol_map(digest: str | None = None) -> pd.DataFrame # None 仅供探索;显式 digest 可重放
 def resolve(value: str, direction: Literal["to_lake", "to_freqtrade", "to_db"],
             exchange: str, market_type: str = "spot") -> str  # 无 exchange 无法消歧,故为必填
 ```
@@ -297,11 +327,16 @@ spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC
 (Freqtrade `BTC/USDT:USDT`)。**任意两行推导出相同 `lake_pair` 即为碰撞,导出直接失败**
 (`SymbolCollisionError`),不做静默去重——碰撞意味着两个不同标的会写进同一个湖分区。
 文件入库路径沿用集成 §2.2 的唯一权威值 `src/alphamill/data_bridge/symbol_map.csv`
-(原 design 只说"写 symbol_map.csv" 未给路径)。
+(原 design 只说"写 symbol_map.csv" 未给路径)。该路径是供现有调用方读取的 current 副本，不能作为
+可复现身份：导出器同时将按五列排序、UTF-8、LF、固定表头编码的 canonical CSV 原子发布到
+`lake/_metadata/symbol_maps/<symbol_map_digest>.csv`；digest 为 canonical bytes 的 SHA-256，已有同
+digest 文件必须逐字节一致。`SymbolMapRef` 回报 digest 与不可变路径，ResearchSnapshot 只接受显式
+digest；current 文件后移不改变旧 artifact。映射内容或规范编码变化生成新 digest，不覆盖旧文件。
 
 ### Event / Trace Contract
 
-不适用(无机器事件流);manifest 即证据文件,FR7 实验链后续引用其 `data_version` 字段。
+不适用(无机器事件流);DatasetVersion manifest 与不可变 symbol-map artifact 是证据文件，FR7 实验链
+经 ADR-0007 ResearchSnapshot 引用其 `data_version`、`value_digest` 与 `symbol_map_digest`。
 
 ## 5. Runtime、Workflow 与并发
 
@@ -323,7 +358,8 @@ spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC
 
 - 无新 UI;Grafana 不感知湖(监控仍走 TimescaleDB);
 - 可观测:导出结束打印/记录 per-dataset rows、耗时、data_version、对账结论;journalctl 可查(调度模式);
-- 后续 M1 评测台报告将引用 manifest 的 data_version(本期只生产,不消费)。
+- 后续 M1 评测台经 ResearchSnapshot 引用 manifest 的 data_version/value_digest 与 symbol-map digest
+  (本期只生产这些上游证据,不组合 snapshot)。
 
 ## 7. 失败、恢复、安全与兼容
 
@@ -358,7 +394,7 @@ spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC
 | 决策 / 风险 | 结论或缓解 | 理由 | 替代方案 / 后续 |
 |---|---|---|---|
 | 导出器直写 Parquet(PyArrow)而非经 DuckDB | PyArrow 写、DuckDB 只读,职责分离 | 写路径唯一(NFR-001);DuckDB 专注查询 | 若 DuckDB COPY 更简可评估,接口不变 |
-| data_version 按 dataset 独立(spec Q-003 已裁决,2026-09-12) | 各 dataset 导出互不阻塞,演进解耦 | signals_log 与 ohlcv 节奏不同 | 放弃项:无单一全局版本号;需要「全湖时点」时由各 manifest 的 exported_at 聚合派生 |
+| data_version 按 dataset 独立(spec Q-003/ADR-0007) | 各 dataset 导出互不阻塞,演进解耦 | signals_log 与 ohlcv 节奏不同 | 无单一全湖版本号;跨 dataset 由不可变 ResearchSnapshot 绑定,不按 exported_at 猜测 |
 | DuckDB 引入为运行时依赖 | pyproject dependencies 新增 pin | 取数入口是其唯一用途 | 备选:polars scan_parquet(接口已抽象,可替换) |
 | 分区文件带 `.rN` 且由 manifest 枚举,而非 data_version 进路径 | 未变分区跨版本共享文件,不必整湖复制 | 周日全量若按版本分目录,一年 52 份 631 万行副本 | 代价:版本组成不能靠 `ls` 看出,必须读 manifest——故 `partitions` 为必填 |
 | 对账摘要在 Python 单侧实现,不做跨引擎哈希 | PG 与 DuckDB 无共同的可复现行哈希;同一函数喂两路数据则由构造保证一致 | `hashtext` 无跨引擎等价物;`sum(numeric)` 不抗抵消 | 若性能不可接受走 spec 修订,不在实现期降级 |

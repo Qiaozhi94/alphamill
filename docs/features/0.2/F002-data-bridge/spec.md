@@ -35,10 +35,10 @@ updated: 2026-09-13
 
 ### 目标
 
-- `lake/` 内出现分区化 Parquet 快照(ohlcv_1m、衍生品三表、signals_log),每次导出附 manifest(dataset/rows/data_version/对账状态);
+- `lake/` 内出现分区化 Parquet 快照(ohlcv_1m、衍生品三表、signals_log),每次导出附 manifest(dataset/rows/data_version/value_digest/对账状态);
 - 导出与 TimescaleDB 逐 dataset 对账(行数 + 时间边界 + `row_digest`,口径见 design §3 唯一权威定义),不一致的 data_version 被标记 `invalid`;
 - 提供统一 DuckDB 取数模块:按 dataset+data_version 查询,**拒绝读取 invalid 快照**;
-- `symbol_map.csv` 落地(湖内 pair ↔ Freqtrade pair,UTC 锁定),满足集成文档 §2.2 的 M1 出口标准;
+- `symbol_map.csv` 落地并按 digest 保留不可变副本(湖内 pair ↔ Freqtrade pair,UTC 锁定),满足集成文档 §2.2 的 M1 出口标准;
 - 每日 **02:00** 增量导出 + 周日 04:00 全量校验进入调度;`backup-nas.sh` 的 `lake/` 目录位激活。
 
 ### 非目标
@@ -61,7 +61,7 @@ updated: 2026-09-13
 
 **验收场景**:
 
-1. Given `TimescaleDB 有 6 个 binance 交易对的 ohlcv_1m 数据`,when `执行一次导出`,then `lake/ohlcv_1m/exchange=binance/pair=<pair>/date=<date>.parquet 按日分区生成`,`lake/_manifests/ohlcv_1m/<data_version>.json` 记录 rows/data_version/对账状态,且 DuckDB 取数模块返回的行数与库内一致。
+1. Given `TimescaleDB 有 6 个 binance 交易对的 ohlcv_1m 数据`,when `执行一次导出`,then `lake/ohlcv_1m/exchange=binance/pair=<pair>/date=<date>.parquet 按日分区生成`,`lake/_manifests/ohlcv_1m/<data_version>.json` 记录 rows/data_version/value_digest/对账状态,且 DuckDB 取数模块返回的行数与库内一致。
 2. Given `某 data_version 的 manifest 被标记 invalid(如对账失败)`,when `取数模块以该版本查询`,then `抛出明确异常拒绝读取,不返回任何行`。
 
 ### US-002:数据修订的可审计演进(Priority: P2)
@@ -84,7 +84,7 @@ updated: 2026-09-13
 - manifest 生成与读写(架构 §4.4 JSON 契约 + `status: valid|invalid` + 修订差异清单字段);
 - 导出后对账(逐分区 行数 + 时间边界 + `row_digest` vs TimescaleDB,同一 REPEATABLE READ 快照内);
 - `src/alphamill/data_bridge/reader.py`:DuckDB 只读取数模块(dataset+data_version+时间范围查询,invalid 拒绝);
-- `symbol_map.csv` 生成与加载(湖内 pair ↔ Freqtrade pair);
+- `symbol_map.csv` 生成、内容寻址不可变发布与按 digest 加载(湖内 pair ↔ Freqtrade pair);
 - 调度接入:每日 02:00 增量、周日 04:00 全量校验(systemd user timer,沿用 F001 模式);
 - `backup-nas.sh` 的 `lake/` 目录位激活(湖与 manifest 进入每日 NAS 同步)。
 
@@ -92,6 +92,7 @@ updated: 2026-09-13
 
 - 宇宙扩容 30~50 对与新 pair 质量流程(FR1.5);
 - 评测台/门禁/信号缓存对齐(FR3 与 M1 后续 feature);
+- 多 dataset `ResearchSnapshot` 的组合、身份和发布(ADR-0007;由 F007/`experiment_store` 承担);
 - Vibe-Trading local loader 对接(集成 §二,可选time-box);
 - 湖内数据的因子计算或口径加工(FR1.4 双口径在本期仅落列语义与映射,不做复权计算——crypto 无复权);
 - 撤除 TimescaleDB(阶段 B)。
@@ -111,13 +112,13 @@ updated: 2026-09-13
 
 ### Requirement: 每日增量导出与 manifest(`FR-001`,对应 FR1.2)
 
-系统应当把 TimescaleDB 中 ohlcv_1m、derivatives_funding_rates、derivatives_open_interest、derivatives_mark_index_basis、signals_log 五个 dataset 按 `lake/<dataset>/exchange=<ex>/pair=<pair>/date=<YYYY-MM-DD>.parquet` 分区导出,每次导出生成符合架构 §4.4 契约的 manifest(含 rows、data_version、对账状态)。
+系统应当把 TimescaleDB 中 ohlcv_1m、derivatives_funding_rates、derivatives_open_interest、derivatives_mark_index_basis、signals_log 五个 dataset 按 `lake/<dataset>/exchange=<ex>/pair=<pair>/date=<YYYY-MM-DD>.parquet` 分区导出,每次导出生成符合架构 §4.4 契约的 manifest(含 rows、data_version、对账状态与按 design §3 计算的 `value_digest`)。
 
 #### Scenario: 首次全量导出
 
 - GIVEN TimescaleDB 含 6 个 binance 交易对的 1m 数据
 - WHEN 执行全量导出
-- THEN 五个 dataset 的分区 Parquet 生成,manifest 记录 rows/data_version/对账=valid,且 DuckDB 可读
+- THEN 五个 dataset 的分区 Parquet 生成,manifest 记录 rows/data_version/value_digest/对账=valid,且 DuckDB 可读
 
 ### Requirement: 导出对账与失效语义(`FR-002`,对应 FR1.2/FR1.3)
 
@@ -131,7 +132,7 @@ updated: 2026-09-13
 
 ### Requirement: DuckDB 研究只读取数入口(`FR-003`,对应 FR1.3)
 
-提供统一的 DuckDB 取数模块:输入 dataset、data_version(缺省取最新 valid 版本)、可选时间范围与 pair 过滤,返回 DataFrame;模块内禁止任何写路径。
+提供统一的 DuckDB 取数模块:输入 dataset、data_version(缺省取最新 valid 版本)、可选时间范围与 pair 过滤,返回 DataFrame,并显式回报解析后的 dataset/data_version/value_digest;模块内禁止任何写路径。缺省 latest 只供探索/preview 解析,canonical 消费者必须按 ADR-0007 传入已冻结 ResearchSnapshot 中的显式版本。
 
 #### Scenario: 按版本与时间范围取数
 
@@ -141,13 +142,13 @@ updated: 2026-09-13
 
 ### Requirement: symbol 映射与时间语义(`FR-004`,对应 FR1.4)
 
-生成并随湖维护 `symbol_map.csv`(湖内 pair ↔ Freqtrade pair),所有导出数据时间列为 UTC;映射关系由取数模块显式暴露,不依赖隐式约定。
+生成并随湖维护 `symbol_map.csv`(湖内 pair ↔ Freqtrade pair),并按内容摘要保留不可变副本供 ResearchSnapshot 引用；所有导出数据时间列为 UTC,映射关系由取数模块显式暴露,不依赖隐式约定。
 
 #### Scenario: 映射查询
 
 - GIVEN symbol_map.csv 已生成
 - WHEN 以任一侧 pair 查询
-- THEN 得到另一侧的显式映射值;全部时间为 UTC
+- THEN 得到另一侧的显式映射值、稳定 symbol_map_digest 与可按 digest 重放的不可变映射;全部时间为 UTC
 
 ### Requirement: 全量校验与修订版本递增(`FR-005`,对应 FR1.2 修订政策)
 
@@ -172,7 +173,7 @@ updated: 2026-09-13
 ### 非功能需求
 
 - **NFR-001**:研究取数模块零写路径——对 lake/ 只读;任何写操作只存在于导出器;
-- **NFR-002**:可复现——同一 data_version 的快照文件不变(不可变),同版本同查询同结果;
+- **NFR-002**:可复现——同一 dataset+data_version 的快照文件不变(不可变),同版本同查询同结果;跨 dataset 可复现性由 ADR-0007 ResearchSnapshot 组合契约负责;
 - **NFR-003**:导出全量 631 万行在单机可完成(分钟级),增量导出(单日)秒级到分钟级。
 
 ## 5. 生命周期与不变量
@@ -196,8 +197,8 @@ updated: 2026-09-13
 
 - [ ] **AC-001** (`FR-001`): 全量导出后五 dataset 分区 Parquet + manifest 齐备,DuckDB 行数与库一致 — tests: `tests/integration/test_f002_export_reconcile.py`
 - [ ] **AC-002** (`FR-002`): 对账失败路径——构造不一致后 data_version 标记 invalid 且取数模块拒绝 — tests: `tests/integration/test_f002_export_reconcile.py`
-- [ ] **AC-003** (`FR-003`): 取数模块按 dataset+version+时间范围返回正确行集,invalid 拒绝 — tests: `tests/integration/test_f002_reader.py`
-- [ ] **AC-004** (`FR-004`): symbol_map.csv 生成、双向映射查询正确、时间列全 UTC — tests: `tests/unit/test_f002_symbol_map.py`
+- [ ] **AC-003** (`FR-003`): 取数模块按 dataset+version+时间范围返回正确行集并回报解析版本/value_digest;invalid 拒绝;显式版本读取不受后来 latest 变化影响 — tests: `tests/integration/test_f002_reader.py`
+- [ ] **AC-004** (`FR-004`): symbol_map.csv 生成、双向映射查询正确、时间列全 UTC；同内容得到同 symbol_map_digest，内容变化得到新 digest 且旧 digest 仍可读取 — tests: `tests/unit/test_f002_symbol_map.py`
 - [ ] **AC-005** (`FR-005`): 修订检测产生 v2+差异清单,v1 保留可读 — tests: `tests/integration/test_f002_revision.py`
 - [ ] **AC-006** (`FR-006`): 定时器安装且手动触发导出成功;backup-nas.sh 后 NAS 端 lake/ 产物齐全 — tests: `tests/integration/test_f002_schedule_backup.py`
 - [ ] **AC-007** (`FR-005`, `FR-001`): 版本物理隔离——修订产生 v2 后,v1 manifest 列出的每个分区文件字节不变,按 v1 读取返回修订前的行;并发读 v1/v2 不串版 — tests: `tests/integration/test_f002_revision.py`
@@ -207,6 +208,7 @@ updated: 2026-09-13
 - [ ] **AC-012** (`FR-002`): row_digest 规范性——同一批数据经 psycopg2 与 PyArrow 两路输入摘要相同;改写任一 double 的最低有效位摘要必变(证明未走定标丢精度);两行 +x/−x 抵消式改写摘要必变 — tests: `tests/unit/test_f002_digest.py`
 - [ ] **AC-013** (`FR-003`, `FR-004`): as-of 保真度 fail-closed——对 as_of_fidelity=event_time_only 的 dataset(ohlcv_1m)传 as_of 且未显式 allow_event_time_only 时抛 InsufficientAsOfFidelityError;显式豁免时 ReadResult.as_of_fidelity 如实回报 event_time_only — tests: `tests/integration/test_f002_reader.py`
 - [ ] **AC-014** (`FR-001`, `FR-005`): 失败重跑不漏日——构造「分区文件已 rename 但 manifest 未发布」的中断态后重跑增量,窗口起点仍由上一 valid manifest 推导,该日分区出现在新版本清单中;本轮未覆盖的 skipped 键原样继承而非被清空 — tests: `tests/integration/test_f002_export_reconcile.py`
+- [ ] **AC-015** (`FR-001`, `FR-003`): DatasetVersion `value_digest` 按 design §3 的 canonical 投影与分区摘要计算；同值数据仅改变 Parquet codec/path 时摘要不变，改任一值、投影 schema 或分区覆盖时摘要必变；缺失或重算不符时 reader fail-closed — tests: `tests/unit/test_f002_manifest.py`、`tests/integration/test_f002_reader.py`
 - [ ] **AC-010** (`FR-002`, `FR-003`): 并发改写不产伪 valid——对账期间对已导出窗口 upsert 历史行,导出仍基于同一快照;结果或为 valid 且与该快照一致,或为 invalid,不出现「对账 ok 但湖内是旧值」 — tests: `tests/integration/test_f002_export_reconcile.py`
 
 **done 时的已知限制(2026-09-13 裁决记录)**:F004(Kronos 真实推理运行时)不阻塞本 feature 收口,
@@ -219,13 +221,13 @@ updated: 2026-09-13
 ### 测试策略
 
 - 集成测试:导出→对账→取数全链路、失效拒绝、修订版本演进、调度+NAS(需要本地 TimescaleDB 在线,CI 跳过);
-- 单元测试:symbol_map 生成/加载、manifest 读写、data_version 排序;
+- 单元测试:symbol_map 内容寻址生成/按 digest 加载、manifest/value_digest 读写校验、data_version 排序;
 - 不做性能压测——631 万行全量导出的实测耗时记入验收证据即可。
 
 ### 依赖
 
 - 上游:F001(TimescaleDB 数据与调度模式)、集成文档 §1.2 导出契约、架构 §4.4 manifest 契约;signals_log dataset 的**内容质量**另依赖 Kronos 真实推理容器化——薄壳为 mock 时导出的是 `source=placeholder` 行,导出管线正确不等于内容可用于因子研究;**该项不在 F002 契约内**(见 §3 范围外);
-- 下游:M1 评测台(FR3)、FR7 manifest 实验链、Vibe local loader(可选);
+- 下游:M1 评测台(FR3)、ADR-0007 ResearchSnapshot builder、FR7 manifest 实验链、Vibe local loader(可选);
 - 新增依赖:DuckDB(pyproject 新增 pin,版本范围本地验证后落定);
 - 外部/环境:无新外部依赖;lake/ 磁盘空间(全量约 1-2GB)。
 
@@ -233,7 +235,7 @@ updated: 2026-09-13
 
 | 决策 / 风险 | 结论或缓解 | 理由 | 后续 |
 |---|---|---|---|
-| data_version 语义 | 日期版 `vYYYY.MM.DD` 起步,同日重导追加序号(`-r2`);修订递增不复用 | 简单可读;不可变与 invalid 不可逆不变量由测试锁定 | 版本号策略若不敷用,升 ADR |
+| data_version 语义 | 日期版 `vYYYY.MM.DD` 起步,同日重导追加序号(`-r2`);按 dataset 独立、修订递增不复用 | 简单可读;不可变与 invalid 不可逆不变量由测试锁定 | 跨 dataset 绑定由 ADR-0007 ResearchSnapshot,不造全湖版本号 |
 | 对账口径 | 行数 + 时间边界 + 按主键排序的 SHA-256 `row_digest`(定义见 design §3;两侧由同一 Python 函数计算) | 摘要抗抵消,抓得住行数与极值都不变的内部数值改写;行数抓缺块 | 不一致定位到分区级;**不设降级出口**,性能不可接受时走 spec 修订 |
 | 双口径 | 本期仅落列语义(close 原样)与 symbol_map;无复权计算 | crypto 无复权;集成 §1.2 已明确 | FR1.4 完整口径随评测台需求演进 |
 | 风险:DuckDB 新依赖引入版本漂移 | pin 范围入 pyproject,check_dep_pins 门禁覆盖 | dev 依赖锁定惯例(C001 教训) | 版本升级走显式改动 |
@@ -243,4 +245,4 @@ updated: 2026-09-13
 
 - [x] Q-001:导出哪些 dataset?——ohlcv_1m + 衍生品三表 + signals_log 五个(FR1.2 列举);quality_flags 不单独导出,以 manifest 质量标注继承(集成 §1.2)
 - [x] Q-002:F002 放 0.1 还是 0.2?——0.2(0.1 已收口,M1 数据桥是新能力版本)
-- [x] Q-003:data_version 全局唯一还是按 dataset 独立递增?——**裁决(2026-09-12, owner):按 dataset 独立递增**。理由:①各 dataset 导出节奏与失败域不同,全局版本号会让单 dataset 对账失败作废整批;②FR7 实验链引用 `dataset + data_version` 二元组,不需要全局时间戳;③「全局时点」可由各 manifest 的 `exported_at` 聚合派生。放弃的好处:没有单一数字能一句话描述「整个湖的状态」——需要时用 exported_at 聚合
+- [x] Q-003:data_version 全局唯一还是按 dataset 独立递增?——**裁决(2026-09-13, owner;ADR-0007 补正):按 dataset 独立递增**。各 dataset 导出节奏与失败域不同,全局版本号会让单 dataset 对账失败作废整批;跨 dataset 实验不按 `exported_at` 临时聚合,而由不可变 ResearchSnapshot 显式绑定 `(dataset,data_version,value_digest)`、cutoff 与映射/日历摘要。放弃的好处:没有单一全湖版本号;获得不耦合发布节奏的可复现引用集合

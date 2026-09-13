@@ -22,7 +22,7 @@ updated: 2026-09-13
 
 ## 1. 前置条件
 
-- [ ] T001 (`FR-002`, `IR-002`): 固定 F002 DataVersion/value-digest reader 与 FactorDef fixture contract — verify: `tests/contract/test_f007_upstream_contracts.py`
+- [ ] T001 (`DR-001`, `IR-002`, `AC-006`): 固定 F002 dataset/version/value-digest reader 与不可变 symbol-map ref，并实现 ADR-0007 ResearchSnapshot builder/reader contract；builder 只接收显式 universe/calendar artifact，验证其内容摘要并在 provenance 保留不可变引用；preview latest 必须先冻结，canonical 只收 snapshot ID — verify: `tests/contract/test_f007_upstream_contracts.py`、`tests/unit/experiment_store/test_research_snapshot.py`
 - [ ] T002 (`FR-004`, `FR-005`): 预注册 v1 方法/阈值/cohort schema 与两个正控制、白噪声、泄漏负控制 — verify: `tests/fixtures/f007/README.md`
 - [ ] T003 (`NFR-003`): 为 preview、canonical writer 和留出 reader 建立 capability 测试夹具 — verify: `tests/integration/test_f007_execution_tiers.py`
 
@@ -30,7 +30,7 @@ updated: 2026-09-13
 
 ### Phase 1：身份、隔离与最小 preview
 
-- [ ] T004 (`DR-001`, `DR-002`, `AC-006`): 实现 canonical JSON 规范化、experiment ID 与 supersedes 校验 — verify: `tests/unit/experiment_store/test_identity.py`
+- [ ] T004 (`DR-001`, `DR-002`, `AC-006`): 实现 snapshot/experiment canonical JSON 规范化、两级内容 ID 与 supersedes 校验 — verify: `tests/unit/experiment_store/test_research_snapshot.py`、`tests/unit/experiment_store/test_identity.py`
 - [ ] T005 [P] (`FR-001`, `DR-004`, `AC-001`): 实现 preview/canonical 物理根目录和 capability 边界 — verify: `tests/integration/test_f007_execution_tiers.py`
 - [ ] T006 (`IR-001`, `IR-003`, `AC-008`): 实现 preview CLI 与稳定结构化输出/错误码 — verify: `tests/integration/test_f007_cli.py`
 - [ ] T007 (`FR-003`, `FR-005`, `AC-004`): 实现最小信号质量、三档成本、breakeven 与阶段状态模型 — verify: `tests/unit/evaluation/test_cost_and_stability.py`

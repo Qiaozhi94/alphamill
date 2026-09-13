@@ -132,7 +132,8 @@ dry-run/paper 执行、监控与复盘。实盘接口和风控路径可以保留
 
 - **FR1.1 联机采集**：TimescaleDB 承担流式采集、幂等修订、连续聚合、质量标记和运营查询。
 - **FR1.2 不可变快照**：data_bridge 将 OHLCV、funding、basis、OI、Kronos 信号与必要日志导出为
-  分区 Parquet；每次导出生成含来源、时间、口径、行数、质量状态和 `data_version` 的 manifest。
+  分区 Parquet；每个 dataset 独立生成含来源、时间、口径、行数、质量状态、`data_version` 和
+  语义 `value_digest` 的 manifest。
 - **FR1.3 研究只读边界**：挖掘、评测和回测只通过 DuckDB 读取有效 Parquet 快照，不直读修订态
   TimescaleDB；失效快照必须被下游拒绝。
 - **FR1.4 双口径与时间语义**：`close_adjusted` 用于收益，`close_raw` 用于成交模拟；所有时间使用
@@ -141,6 +142,9 @@ dry-run/paper 执行、监控与复盘。实盘接口和风控路径可以保留
   保存 point-in-time 宇宙成员关系以避免幸存者偏差。历史回填约 4600 万行，是项目所有者负责的
   独立工作流，预计 1~2 周 wall-clock。
 - **FR1.6 灾备**：数据库、Parquet manifest 与实验报告每日备份至 NAS，本地保留滚动副本并定期恢复演练。
+- **FR1.7 多数据集研究快照**：多数据集实验必须先生成不可变 `ResearchSnapshot`，显式绑定每个
+  `(dataset, data_version, value_digest)`、信息 cutoff、symbol map 与 point-in-time universe/calendar
+  摘要；canonical 不得在运行时解析 latest 或按导出时间猜测全湖版本。
 
 ### FR2 AI 因子工厂
 
@@ -202,7 +206,7 @@ dry-run/paper 执行、监控与复盘。实盘接口和风控路径可以保留
 ### FR5 部署与交易执行
 
 - **FR5.1 版本化信号契约**：feather 按日分片，包含 timestamp、pair、signal、confidence、stale；
-  缓存键含 factor/portfolio、data_version、code_version 和 params_hash，旧版本只读不覆盖。
+  缓存键含 factor/portfolio、research_snapshot_id、code_version 和 params_hash，旧版本只读不覆盖。
 - **FR5.2 部署前复核**：最终确认通过不等于当前仍有效；挂载前在晚于留出窗的最近窗口复核，
   challenger 替换 champion 时重复执行。
 - **FR5.3 Freqtrade 适配**：策略模板负责读缓存、进出场和风险钩子；执行引擎不重新解释因子逻辑，
@@ -234,8 +238,8 @@ dry-run/paper 执行、监控与复盘。实盘接口和风控路径可以保留
 ### FR7 实验治理与可复现
 
 - **FR7.1 统一 manifest 与内容身份**：记录 hypothesis/factor/portfolio ID、execution tier、cohort、
-  data/code/cost model 版本、参数、窗口、随机种子、确定性开关、依赖版本、结果摘要和结论。
-  `experiment_id` 由上游 ID、cohort、规范化语义配置、数据值摘要、代码/构建摘要和种子导出；
+  research_snapshot/code/cost model 版本、参数、窗口、随机种子、确定性开关、依赖版本、结果摘要和结论。
+  `experiment_id` 由上游 ID、cohort、规范化语义配置、research_snapshot_id、代码/构建摘要和种子导出；
   execution tier、supersedes、路径、时间、主机与 Parquet 编码不参与身份。
 - **FR7.2 不可变证据链**：评测报告、毛交易摘要、留出访问、组合决策、信号缓存、部署审批和运行结果
   通过稳定 ID 关联；历史产物只增不改，语义变化生成新 ID 并以 `supersedes` 保留谱系。
@@ -280,7 +284,7 @@ dry-run/paper 执行、监控与复盘。实盘接口和风控路径可以保留
 | 里程碑 | 产品能力 | 出口标准 | 预估 |
 |---|---|---|---|
 | **M0 自包含运行基线** | quant-crypto 采集、Kronos、风控、监控和 Freqtrade 资产清算迁入；历史数据自交易所重建（原数据卷灭失，见 F001 spec §0 路线修订） | 回填完整性校验、Kronos `/health`、采集、dry-run、监控和恢复演练全绿 | 2~3 天 |
-| **M1 可信数据与证据底座** | FR1 + FR3 评测台/门禁骨架 + FR7 manifest 基础 | 任意 FactorDef 可从不可变快照以显式 preview/canonical 层级产出版本化报告；label endpoint/PIT/methodology 门可失败关闭；正控制、种子相关性矩阵、成本分解三项探针完成 | 1 周开发 + 1~2 周回填（并行） |
+| **M1 可信数据与证据底座** | FR1 + FR3 评测台/门禁骨架 + FR7 manifest 基础 | 任意 FactorDef 可从显式绑定的不可变 ResearchSnapshot 以 preview/canonical 层级产出版本化报告；label endpoint/PIT/methodology 门可失败关闭；正控制、种子相关性矩阵、成本分解三项探针完成 | 1 周开发 + 1~2 周回填（并行） |
 | **M2 AI 因子工厂** | FR2 + 自动漏斗 + 实验谱系 + FR8.1 研究控制台（先于周产能爬坡上线） | AlphaGen 冒烟通过或按 ADR-0001 降级；单次 ≥50 候选自动评测；周产能可达 ≥100 且报告有效独立数；研究控制台可浏览版本化报告与曲线（权益/回撤/分位数/IC 衰减），与 `report.json`/`curves.parquet` 对数一致（FR8.1） | 2 周 + 研究控制台约 1 周 |
 | **M3 策略到 paper 闭环** | FR4 + FR5 | 单成员/多成员 PortfolioDef 在选择期冻结并以整体通过门禁、信号缓存、决策时 parity 和部署前复核后进入 dry-run/paper；run_record 四桶、持久化 kill-switch 与启动对账通过故障注入；正控制或历史候选完成一次全链路技术验收；最终确认通过至挂载 ≤1 天 | 1~2 周 |
 | **M4 运营与学习闭环** | FR6 + FR7 + FR8.3 人审与运营操作入口 | 监控可触发生命周期动作；首份结构化复盘产生人审后的下一代假设并重新入队；周报输出完整指标体系；论题检查点开始计时；人审入队与生命周期动作经统一 API 完成并落 FR7.4 审计（FR8.3） | 持续 |

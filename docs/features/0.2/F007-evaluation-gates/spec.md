@@ -19,8 +19,8 @@ updated: 2026-09-13
 
 - **PRD 来源**：`docs/alphamill-prd.md` FR3、FR7.1~FR7.5、M1
 - **架构来源**：`docs/alphamill-architecture.md` §2.1、§4.0、§4.2、§4.5
-- **上游 Contract 来源**：F002 `DataVersion`/canonical rows digest；F004/Kronos 与人工因子产出的 `FactorDef`
-- **上游决策**：ADR-0003（门禁不降级）、ADR-0005（曲线侧车）、ADR-0006（证据边界与身份）
+- **上游 Contract 来源**：F002 `(dataset, DataVersion, value_digest)`；F004/Kronos 与人工因子产出的 `FactorDef`
+- **上游决策**：ADR-0003（门禁不降级）、ADR-0005（曲线侧车）、ADR-0006（证据边界与身份）、ADR-0007（ResearchSnapshot）
 - **功能类型**：backend / workflow / validation / data-model
 - **规格模式**：full
 - **变更类型**：ADDED
@@ -36,7 +36,7 @@ AlphaMill 已定义严格的产品门槛，但还没有可运行的统一评测�
 
 ### 目标
 
-- 同一 FactorDef、语义配置、数据值摘要、代码摘要和种子稳定得到同一 `experiment_id`；
+- 同一 FactorDef、语义配置、ResearchSnapshot、代码摘要和种子稳定得到同一 `experiment_id`；
 - preview 快速诊断但不能污染 canonical cohort、留出预算和 official population；
 - canonical 运行按五阶段生成结构化裁决、不可变报告/曲线和跨 cohort 综合报告；
 - 时间边界、统计估计器或产物发布失败时停止晋级并留下可定位证据。
@@ -99,7 +99,7 @@ AlphaMill 已定义严格的产品门槛，但还没有可运行的统一评测�
 ### 范围内
 
 - FactorDef 的 preview/canonical 运行上下文、方法论门、统计/成本评测与样本量裁决；
-- experiment/cohort/population 台账、report/curves/synthesis 不可变产物与 supersedes 谱系；
+- ResearchSnapshot、experiment/cohort/population 台账、report/curves/synthesis 不可变产物与 supersedes 谱系；
 - 为冻结 PortfolioDef 预留同一评测输入协议和五阶段字段，但本 Feature 不负责构建组合；
 - funding carry、BTC/ETH 截面动量正控制与白噪声/故意泄漏负控制。
 
@@ -113,6 +113,7 @@ AlphaMill 已定义严格的产品门槛，但还没有可运行的统一评测�
 ### 边界场景
 
 - 数据值相同但 Parquet codec/路径不同：实验身份相同，provenance/file SHA 不同。
+- preview 请求 latest：先把实际解析的 dataset versions/value digests 冻结为 ResearchSnapshot 再计算；canonical 禁止动态 latest。
 - 最大标签 horizon 大于 embargo：方法论门拒绝，不自动扩大窗口后继续。
 - 指标样本不足：输出 `UNDERPOWERED`，不把空值当作零或 PASS。
 - 同一 canonical 语义运行重试：幂等返回既有实验；语义变化必须新建 ID 并可声明 supersedes。
@@ -194,8 +195,8 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 ### 数据 / 实体需求
 
-- **DR-001**：`ExperimentContext` 应当持久化 tier、upstream ID、cohort、规范化规则/窗口/成本配置、data value digest、code/build digest、seed 与可选 supersedes。
-- **DR-002**：`experiment_id` 应当由 upstream ID、cohort、规范化规则/窗口/成本配置、data value digest、code/build digest 与 seed 导出；execution tier、supersedes、path、codec、created_at、host、duration 与 file SHA 不参与身份。
+- **DR-001**：`ResearchSnapshot` 应当按 ADR-0007 持久化 cutoff、精确 dataset/version/value-digest 成员、as-of/覆盖语义、symbol-map 与 universe/calendar 摘要；缺失或 invalid 成员不得发布。
+- **DR-002**：`ExperimentContext` 应当持久化 tier、upstream ID、cohort、规范化规则/窗口/成本配置、research_snapshot_id、code/build digest、seed 与可选 supersedes；`experiment_id` 由这些语义字段（除 tier/supersedes）导出，path、codec、created_at、host、duration 与 file SHA 不参与身份。
 - **DR-003**：`ExperimentManifest` 应当关联输入、逐阶段状态、报告、曲线、规则版本和结论；canonical 历史产物只增不改。
 - **DR-004**：`CohortLedger` 应当保存预注册试验定义、选择阶段、全部候选和计数；preview 不得出现在 official population。
 
@@ -208,7 +209,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 ### API / 接口需求
 
 - **IR-001**：CLI 应提供 preview、canonical、finalize-cohort 与 synthesis 四个显式子命令；拒绝缺失 cohort/规则版本的 canonical 请求，也拒绝在成员未收齐时 finalize。
-- **IR-002**：评测输入应只接受有效 F002 DataVersion 和可解析的 FactorDef/冻结 PortfolioDef 引用，不直接接受任意数据库查询。
+- **IR-002**：canonical 评测只接受已发布 ResearchSnapshot ID 和可解析的 FactorDef/冻结 PortfolioDef 引用；preview 请求 latest 时必须显式提供不可变 symbol-map ref 与 universe/calendar artifact，先内容寻址冻结并返回 snapshot ID；任何 tier 都不直接接受任意数据库查询。
 - **IR-003**：机器输出应使用版本化 schema，并返回 experiment_id、状态、verdict、artifact refs 和结构化 failure。
 
 ### UX 需求
@@ -219,7 +220,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 ### 非功能需求
 
 - **NFR-001**：可靠性：canonical 登记与证据发布必须幂等、原子或可检测为未完成，崩溃后不得出现半个 PASS。
-- **NFR-002**：可复现：固定语义输入跨路径/Parquet 编码重跑得到相同 experiment_id 与数值容差内相同报告。
+- **NFR-002**：可复现：固定 ResearchSnapshot 与其他语义输入跨路径/Parquet 编码重跑得到相同 snapshot/experiment ID 与数值容差内相同报告。
 - **NFR-003**：安全：Agent 与 preview 上下文没有 canonical writer、留出读取或晋级能力。
 - **NFR-004**：性能：preview 可采样/缩窗但必须显式标注近似；canonical 不因性能压力静默减少门禁或样本。
 - **NFR-005**：兼容性：产物路径和 manifest 使用 POSIX 逻辑路径/URI，Windows/WSL 物理路径只进 provenance。
@@ -250,7 +251,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 
 - **SC-001**：正控制、白噪声控制和故意泄漏控制分别得到完整证据、统计拒绝/弱证据和方法论拒绝。
 - **SC-002**：preview/canonical 隔离、canonical 幂等与 cohort finalize 经并发/故障注入验证，official population 无污染或重复，未收齐成员不能晋级。
-- **SC-003**：同语义跨路径/codec 重跑身份稳定；任一语义输入变化都会生成新 ID。
+- **SC-003**：同 ResearchSnapshot 语义跨路径/codec 重跑身份稳定；任一成员版本/value digest、cutoff、映射/日历摘要或其他实验语义变化都会生成新 ID。
 - **SC-004**：canonical cohort 可确定性重建 synthesis，拒绝者进入分母，标量与曲线侧车可互推。
 
 ### 验收清单
@@ -260,7 +261,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 - [ ] **AC-003** (`FR-003`, `FR-004`): 必需统计失败关闭；拒绝者仍进入试验分母，成员未收齐时 cohort 不能 finalize 或晋级
 - [ ] **AC-004** (`FR-005`): 三档成本、breakeven/换手/持有期和 rolling stability 完整，成本不存活者为 dead
 - [ ] **AC-005** (`FR-006`, `DR-003`, `NFR-001`): report/curves/manifest 原子发布，失败注入不产生半个 PASS
-- [ ] **AC-006** (`DR-001`, `DR-002`, `NFR-002`): 跨路径/codec 身份稳定，配置/数据值/代码/种子变化使身份变化并可 supersede
+- [ ] **AC-006** (`DR-001`, `DR-002`, `NFR-002`): ResearchSnapshot 跨路径/codec 身份稳定；动态 latest 先冻结；成员/cutoff/映射日历或实验语义变化使相应身份变化并可 supersede
 - [ ] **AC-007** (`FR-006`, `UX-002`): synthesis 只消费 canonical，输出五阶段漏斗且事实/推断/建议分栏
 - [ ] **AC-008** (`IR-001`, `IR-002`, `IR-003`): CLI/schema 契约能拒绝非法 canonical 请求并返回结构化失败
 
@@ -275,7 +276,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 
 ### 依赖
 
-- 上游 Feature / Contract：F002 有效 DataVersion、canonical rows/value digest；FactorDef schema。
+- 上游 Feature / Contract：F002 有效 `(dataset, DataVersion, value_digest)` reader；ADR-0007 ResearchSnapshot；FactorDef schema。
 - 下游消费者：F005 研究控制台、FR4 组合构建、F006 生命周期/运营入口。
 - 外部 / 环境依赖：统计基础库必须 pin；不依赖 ml4t 教学仓或 `ml4t-diagnostic` 作为运行时硬门。
 

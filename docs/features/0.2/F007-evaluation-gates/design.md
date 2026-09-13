@@ -17,7 +17,7 @@ updated: 2026-09-13
 
 - **行为契约**：`spec.md` FR-001~FR-006、DR-001~DR-004、TR-001~TR-003、IR-001~IR-003
 - **PRD / Architecture**：PRD FR3/FR7；架构 §4.2/§4.5
-- **ADR / 上游 Contract**：ADR-0003、ADR-0005、ADR-0006；F002 `DataVersion`/value digest
+- **ADR / 上游 Contract**：ADR-0003、ADR-0005、ADR-0006、ADR-0007；F002 dataset/version/value digest
 - **实现约束**：研究只读有效 Parquet；执行层级显式传参；Agent 无 canonical writer/留出能力；
   必需门失败关闭；不引入 ml4t 运行时依赖
 
@@ -38,6 +38,7 @@ updated: 2026-09-13
 ```text
 CLI
  └─ EvaluationRunner
+     ├─ ResearchSnapshotBuilder ── F002 ManifestReader
      ├─ ContextBuilder ── IdentityHasher
      ├─ MethodologyGate ── F002 SnapshotReader
      ├─ FactorEvaluator ── Statistics / Cost / Stability
@@ -50,6 +51,7 @@ SynthesisBuilder ── finalized canonical cohort manifests + curves ── syn
 模块放置：
 
 - `src/alphamill/experiment_store/identity.py`：规范化语义上下文、计算 ID、校验 supersedes；
+- `src/alphamill/experiment_store/research_snapshot.py`：冻结 dataset 版本集合、映射/日历摘要与 cutoff；
 - `src/alphamill/experiment_store/population.py`：canonical claim、registration event 与可重建索引；
 - `src/alphamill/experiment_store/synthesis.py`：只读 canonical 证据并生成综合报告；
 - `src/alphamill/validation/methodology_gate.py`：能力清单、静态检查与运行时边界检查；
@@ -72,7 +74,7 @@ bench 不读取环境变量、不决定 tier/窗口/cohort，也不写 official 
   "method_config": {"id": "method-v1", "normalized": {}},
   "window": {"selection": ["...", "..."], "label_horizons": [1, 4, 24]},
   "cost_model": {"id": "cm-v1", "normalized": {}},
-  "data": {"version": "...", "value_digest": "sha256:..."},
+  "research_snapshot_id": "snapshot_sha256:...",
   "code_build_digest": "sha256:...",
   "seed": 7,
   "supersedes": null
@@ -81,7 +83,7 @@ bench 不读取环境变量、不决定 tier/窗口/cohort，也不写 official 
 
 规范化规则：UTF-8 canonical JSON、key 排序、时间统一 UTC ISO-8601、数值使用配置 schema 的
 十进制定标格式、集合字段先去重再排序。`experiment_id` 只哈希 upstream ID、cohort、规范化
-规则/窗口/成本配置、data value digest、code/build digest 与 seed。`execution_tier` 由物理根目录
+规则/窗口/成本配置、research_snapshot_id、code/build digest 与 seed。`execution_tier` 由物理根目录
 和 capability 强制，`supersedes` 只表达谱系，二者均不参与身份。物理路径、Parquet
 codec/row-group、文件 SHA、主机、PID、开始/结束时间与 duration 仅进 provenance。
 
@@ -89,8 +91,9 @@ codec/row-group、文件 SHA、主机、PID、开始/结束时间与 duration �
 
 ```text
 reports/
+├── research_snapshots/<snapshot_id>/manifest.json
 ├── preview/<experiment_id>/<attempt_id>/{manifest.json,report.json,curves.parquet,events.jsonl}
-├── bench/<object_id>/<data_version>/<experiment_id>/{manifest.json,report.json,curves.parquet,events.jsonl,registration.json}
+├── bench/<object_id>/<research_snapshot_id>/<experiment_id>/{manifest.json,report.json,curves.parquet,events.jsonl,registration.json}
 └── cohorts/<cohort_id>/
     ├── cohort.json
     ├── events/<event_id>.json
@@ -131,10 +134,14 @@ cost/capacity、sample-size/stability、structured failure 与成员诊断 verdi
 
 ```text
 python -m alphamill.evaluation preview \
-  --factor <factor-ref> --data-version <id> --config <path> --seed <int>
+  --factor <factor-ref> --snapshot <id> --config <path> --seed <int>
+
+python -m alphamill.evaluation preview \
+  --factor <factor-ref> --latest <dataset,...> --cutoff <UTC> \
+  --symbol-map <digest> --universe-calendar <path> --config <path> --seed <int>
 
 python -m alphamill.evaluation canonical \
-  --factor <factor-ref> --data-version <id> --cohort <frozen-cohort> \
+  --factor <factor-ref> --snapshot <id> --cohort <frozen-cohort> \
   --config <path> --code-build-digest <sha256> --seed <int>
 
 python -m alphamill.evaluation finalize-cohort --cohort <cohort-id>
@@ -142,7 +149,11 @@ python -m alphamill.evaluation finalize-cohort --cohort <cohort-id>
 python -m alphamill.evaluation synthesis --cohort <cohort-id>
 ```
 
-CLI 仅解析参数和序列化结果；`canonical` 缺 cohort、code digest、data value digest 或规则版本时
+CLI 仅解析参数和序列化结果；preview 的 `--latest` 模式要求显式 symbol-map digest 和
+universe/calendar JSON，builder 将后者 canonicalize 后原子保存为
+`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`，再发布 ResearchSnapshot 并显示
+实际 ID；`--snapshot` 模式不重新选择这些输入。
+`canonical` 缺 cohort、code digest、ResearchSnapshot 或规则版本时
 返回非零。成员 canonical 成功只表示 `REGISTERED`，不输出可晋级 verdict；`finalize-cohort` 在
 成员未收齐或存在非终态 attempt 时非零。成功响应打印 experiment ID/cohort ID、tier、state、
 verdict 和 artifact URI；领域错误输出稳定 error code，不输出 PASS-like exit code。
@@ -175,11 +186,12 @@ verdict 和 artifact URI；领域错误输出稳定 error code，不输出 PASS-
 
 ## 5. Runtime、Workflow 与并发
 
-1. ContextBuilder 解析引用并从 F002 manifest 取得 value digest；IdentityHasher 生成 ID。
-2. runner 以 `<experiment_id>.claim` 原子创建取得单写权；已有完整 canonical 直接幂等返回。
-3. MethodologyGate 先跑能力/静态守卫，再构造 per-pair、label-end-aware purged splits。
-4. evaluator 依次写五阶段结果；FactorDef 的组合/执行阶段标 `NOT_APPLICABLE`，不是 PASS。
-5. publisher 在 temp 目录完成全部校验并 rename；canonical 随后写成员 registration event；
+1. preview 可由 ResearchSnapshotBuilder 解析 latest，或两种 tier 读取既有 snapshot；builder 校验每个 F002 manifest/value digest、cutoff、覆盖范围和不可变 symbol-map artifact，并把显式 universe/calendar JSON 内容寻址保存后，原子发布 snapshot。
+2. ContextBuilder 只接收 snapshot ID 并解析其他引用；IdentityHasher 生成 experiment ID。
+3. runner 以 `<experiment_id>.claim` 原子创建取得单写权；已有完整 canonical 直接幂等返回。
+4. MethodologyGate 先跑能力/静态守卫，再构造 per-pair、label-end-aware purged splits。
+5. evaluator 依次写五阶段结果；FactorDef 的组合/执行阶段标 `NOT_APPLICABLE`，不是 PASS。
+6. publisher 在 temp 目录完成全部校验并 rename；canonical 随后写成员 registration event；
    finalize-cohort 收齐承诺成员后才计算 cohort 指标与最终裁决。
 
 claim 包含 owner token 和启动时间。崩溃后只有恢复命令在确认无活进程、temp artifact 未发布且
@@ -203,7 +215,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 
 ## 7. 失败、恢复、安全与兼容
 
-- 校验与失败映射：输入/摘要不符 → `INCOMPLETE`；方法论/纯度门 → `FAIL`；统计估计器异常 →
+- 校验与失败映射：snapshot 成员/摘要/cutoff/映射日历不符 → `INCOMPLETE`；方法论/纯度门 → `FAIL`；统计估计器异常 →
   `INCOMPLETE`；证据不足 → `UNDERPOWERED`；成本不存活 → `FAIL/dead`。
 - 重启与恢复：只消费完整发布目录；temp/无 registration 的目录不可见；同 ID 重试不重复计数。
 - 权限边界：canonical writer 和留出 reader 作为显式 capability 注入；preview/Agent 构造器没有
@@ -223,7 +235,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 | `AC-003` | unit + integration | `tests/unit/evaluation/test_required_statistics.py` | 估计器异常失败关闭，拒绝者在 cohort 分母 |
 | `AC-004` | unit + golden | `tests/unit/evaluation/test_cost_and_stability.py` | 三档成本、breakeven、rolling split 与 dead 裁决 |
 | `AC-005` | integration + fault injection | `tests/integration/test_f007_atomic_publish.py` | 任一文件失败均无可见半成品/PASS |
-| `AC-006` | property + integration | `tests/unit/experiment_store/test_identity.py` | codec/path 不入身份，语义字段全部入身份 |
+| `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |
 | `AC-007` | integration + golden | `tests/integration/test_f007_synthesis.py` | 只读 canonical、五阶段漏斗、三栏输出、确定重建 |
 | `AC-008` | CLI integration | `tests/integration/test_f007_cli.py` | 非法 canonical 非零退出且 error code 稳定 |
 

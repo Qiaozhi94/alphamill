@@ -218,6 +218,7 @@ alphamill/                       # 仓库根（非 Python 资产留根，不进�
     │   ├── strategy_template.py.j2
     │   └── risk/                #   风控三件套（自 quant-crypto 迁入）
     ├── experiment_store/        # FR7：内容身份、manifest、证据索引与 append-only 台账
+    │   ├── research_snapshot.py #   ADR-0007：dataset versions/digests + cutoff/映射/日历 → snapshot_id
     │   ├── identity.py          #   规范化语义输入 → experiment_id；provenance 不入身份
     │   ├── population.py        #   preview 隔离；canonical cohort/official population 单写边界
     │   └── synthesis.py         #   canonical ledger + 曲线侧车 → synthesis_report
@@ -236,7 +237,7 @@ alphamill/                       # 仓库根（非 Python 资产留根，不进�
 ### 4.0 闭环核心对象
 
 ```text
-DataVersion + HypothesisDef → FactorDef → factor ExperimentRun
+ResearchSnapshot + HypothesisDef → FactorDef → factor ExperimentRun
 FactorDef(s) → PortfolioDef → portfolio ExperimentRun → DeploymentCandidate
 → DeploymentRun → RunRecord → AttributionReport →（人审通过）新 HypothesisDef
 ```
@@ -293,6 +294,7 @@ no-signal；任何隐式全样本统计直接被纯度门拒绝。
   "experiment_id": "...",
   "execution_tier": "preview | canonical",
   "cohort_id": "...",
+  "research_snapshot_id": "snapshot_sha256:...",
   "factor_id": "...",
   "rank_ic": {"mean": , "std": , "icir": , "positive_ratio": },
   "ic_decay": {"horizons": [1,2,4,12,24], "values": [...]},
@@ -305,7 +307,7 @@ no-signal；任何隐式全样本统计直接被纯度门拒绝。
     "funding_drag": {"settlement_hours": 8, "annualized_drag": },
     "long_short_net":     # 成本后 long_short 收益
   },
-  "cost_model_version": "cm-v1",   # 与 data_version 并列进入 FR7 manifest
+  "cost_model_version": "cm-v1",   # 与 research_snapshot_id 并列进入 FR7 manifest
   "trade_log_summary": {           # 每候选毛交易日志的等效摘要，用于重定价
     "n_trades": ,
     "gross_return_per_trade": {"p50": , "mean": },
@@ -327,18 +329,18 @@ F007 才统一计算 cohort 级校正并生成 `cohort_verdict.json`；只有其
 可以进入后续门禁，未 finalize 的 cohort 不得晋级。
 
 **重定价缓存义务（trade_log_summary）**：评测台不得只存 pass/fail。成本模型变化时，凭逐笔
-毛收益或等效摘要重定价，不重新运行生成器；`cost_model_version` 与 `data_version` 并列进入
+毛收益或等效摘要重定价，不重新运行生成器；`cost_model_version` 与 `research_snapshot_id` 并列进入
 experiment manifest（FR7.1）。
 
 **曲线级时间序列侧车（ADR-0005 呈现契约）**：评测台除标量结论外必须持久化曲线级时间序列，
 供研究控制台渲染（以 F007 spec 为准，先于 F005 开发锁定）：
 
 - 路径：与评测报告同目录写 `curves.parquet`
-  （`reports/bench/<object_id>/<data_version>/<experiment_id>/curves.parquet`，报告根 `reports/`
+  （`reports/bench/<object_id>/<research_snapshot_id>/<experiment_id>/curves.parquet`，报告根 `reports/`
   见 §三 目录树），
   与 `report.json` 在同一原子批次发布；
 - manifest 关联键：experiment manifest 增 `curves: {path, rows, columns, sha256}`，与报告、
-  `data_version`、`cost_model_version` 并列，保证曲线可从真相源确定性重放；
+  `research_snapshot_id`、`cost_model_version` 并列，保证曲线可从真相源确定性重放；
 - 最小列集：`equity_after_cost`（成本后累计权益）、`drawdown`（回撤）、
   `q1_cum`..`q5_cum`、`long_short_cum`（分位数/多空累计收益，按 bar 时间展开）、
   `rolling_ic_h1/h2/h4/h12/h24`（各 horizon 的滚动 IC）；时间轴为逐日/逐 bar UTC 时间戳。
@@ -371,20 +373,20 @@ class PortfolioDef:
 ### 4.3 信号缓存契约（与 kronos_cache 兼容）
 
 ```text
-路径：signal_cache/<portfolio_or_factor_id>/<data_version>/<code_version+params_hash>/<pair>/<YYYY-MM-DD>.feather
+路径：signal_cache/<portfolio_or_factor_id>/<research_snapshot_id>/<code_version+params_hash>/<pair>/<YYYY-MM-DD>.feather
 列：  timestamp(信号确认时刻, UTC), pair, signal_value, confidence*, stale
 约束：t 行只含 ≤t 信息；留出门审计按行校验时间戳对齐
 ```
 
 三条补充规则（与集成文档 §3.2 无前视对齐规则配套）：
 
-1. **缓存键带版本维度**：缓存键 = (portfolio_or_factor_id, data_version, code_version,
-   params_hash, pair)，不是仅 timestamp+pair。数据修订或代码/参数变化后写新版本目录，旧版本
+1. **缓存键带版本维度**：缓存键 = (portfolio_or_factor_id, research_snapshot_id, code_version,
+   params_hash, pair)，不是仅 timestamp+pair。任一输入 dataset 修订或代码/参数变化后写新版本目录，旧版本
    只读不覆盖。
 2. **混合频率陈旧策略**（4h 因子进 1h 决策）：merge_asof（backward）对齐后允许前向填充，但仅在最大陈旧度界内——因子值有效至下一个因子 K 线收盘，硬过期 = N 根决策 K 线（默认 N = 1 个因子周期，4h→1h 即 N=4）。越过界的行 `signal_value` 写 NaN（no-signal 语义），**不得当旧信号继续使用**；`stale` 列记录该行相对因子 K 线收盘的滞后根数，供审计核对。
 3. **审计覆盖 join 步骤**：无前视审计的范围显式包含 merge/join 步骤本身，不只因子计算——逐 K 线重放时对每个决策 bar 校验（信号时间戳 ≤ t 收盘）∧（陈旧度 ≤ 界），两项任一不满足即审计失败。
 
-### 4.4 Parquet 湖 manifest
+### 4.4 DatasetVersion manifest
 
 ```json
 {
@@ -395,9 +397,41 @@ class PortfolioDef:
   "pairs": ["BTC-USDT-SWAP", "..."],
   "caliber": {"close": "raw", "adjclose": "none_crypto"},
   "data_version": "v2026.09.06",
+  "value_digest": "sha256:...",
   "quality_flags_resolved": 0
 }
 ```
+
+DatasetVersion 按 dataset 独立演进，稳定引用是 `(dataset, data_version, value_digest)`；
+`value_digest` 是由 dataset 投影 schema 与按逻辑键排序的分区 `(rows, time bounds, row_digest)`
+计算的语义根摘要，不包含物理路径、codec、文件 SHA 或导出时间；具体规范以 F002 design §3 为准。
+`exported_at` 只描述写出 provenance。单 dataset reader 可以为探索解析 latest valid，但任何正式
+多数据集研究都必须先按 ADR-0007 冻结 ResearchSnapshot，不能把多个 latest 或 exported_at
+临时聚合当作可复现实验输入。
+
+#### 4.4.1 ResearchSnapshot
+
+```json
+{
+  "schema_version": 1,
+  "snapshot_id": "snapshot_sha256:...",
+  "cutoff_time": "2026-09-06T00:00:00Z",
+  "members": {
+    "ohlcv_1m": {"data_version": "v2026.09.06", "value_digest": "sha256:...", "as_of_fidelity": "event_time_only", "event_time_min": "...", "event_time_max": "..."},
+    "funding": {"data_version": "v2026.09.06-r2", "value_digest": "sha256:...", "as_of_fidelity": "bitemporal", "event_time_min": "...", "event_time_max": "..."}
+  },
+  "symbol_map_digest": "sha256:...",
+  "universe_calendar_digest": "sha256:..."
+}
+```
+
+ResearchSnapshot 位于 `reports/research_snapshots/<snapshot_id>/manifest.json`，只引用 lake manifests，
+不复制 Parquet，也不突破研究只读 lake 红线。构造器归 `experiment_store`：成员缺失/invalid、
+value digest 或覆盖范围不符、as-of 保真度不足、映射/日历摘要缺失均失败关闭。preview 请求
+latest 时也必须先发布该对象；canonical 只接受既有 snapshot ID。symbol map 由 F002 内容寻址
+保存于 `lake/_metadata/symbol_maps/<digest>.csv`；显式 universe/calendar JSON 由构造器规范化后保存于
+`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`，二者均可按 snapshot provenance
+重放，current 文件或调用方原路径不充当证据。
 
 ### 4.5 实验身份与执行上下文
 
@@ -407,14 +441,14 @@ ExperimentContext = {
   upstream_object_id,
   cohort_id,
   normalized_method_config,
-  data_value_digest,
+  research_snapshot_id,
   code_build_digest,
   seed,
   supersedes?
 }
 
 experiment_id = digest(upstream_object_id, cohort_id, normalized_method_config,
-                       data_value_digest, code_build_digest, seed)
+                       research_snapshot_id, code_build_digest, seed)
 provenance = {artifact_path, file_sha256, codec, created_at, host, duration}
 ```
 
@@ -425,8 +459,9 @@ preview 与 canonical 使用隔离命名空间；preview 不得写 official popu
 语义运行只登记一次。cohort 成员全部完成不可变登记并统一计算 cohort 级校正后才可晋级；
 语义输入变化时生成新 ID，以 `supersedes` 关联旧版本，历史产物不覆盖。
 
-数据值摘要由 F002 的 canonical rows/value digest 提供；Parquet 文件 SHA-256 只验证物理文件
-完整性，不因压缩编码差异改变实验身份。必需指标计算失败、输入摘要不一致或方法论/parity
+ResearchSnapshot 按 ADR-0007 绑定 F002 dataset manifests 与 canonical rows/value digests；
+Parquet 文件 SHA-256 只验证物理文件完整性，不因压缩编码差异改变实验身份。必需指标计算失败、
+snapshot/输入摘要不一致或方法论/parity
 检查跳过时，运行只能进入 `INCOMPLETE/FAIL`，不能晋级。
 
 ---
