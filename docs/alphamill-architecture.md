@@ -302,6 +302,16 @@ no-signal；任何隐式全样本统计直接被纯度门拒绝。
 毛收益或等效摘要重定价，不重新运行生成器；`cost_model_version` 与 `data_version` 并列进入
 experiment manifest（FR7.1）。
 
+**曲线级时间序列侧车（ADR-0005 呈现契约）**：评测台除标量结论外必须持久化曲线级时间序列，
+供研究控制台渲染（F007 spec 立项时以此为准，先于 F005 开发锁定）：
+
+- 路径：沿报告落盘目录写 `curves.parquet`（`results/<object_id>/<data_version>/curves.parquet`），
+  与 `report.json` 在同一原子批次发布；
+- manifest 关联键：experiment manifest 增 `curves: {path, rows, columns, sha256}`，与报告、
+  `data_version`、`cost_model_version` 并列，保证曲线可从真相源确定性重放；
+- 最小列集：`equity_after_cost`（成本后累计权益）、`drawdown`（回撤）、`quantile_returns`
+  （q1..q5 + long_short）、`ic_decay`（horizons [1,2,4,12,24]）；时间轴为逐日/逐 bar UTC 时间戳。
+
 #### 4.2.1 组合定义与组合门
 
 ```python
