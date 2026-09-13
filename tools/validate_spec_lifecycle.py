@@ -256,6 +256,8 @@ def check_backlog(root: pathlib.Path, feats: dict, errors: list[str]):
         r"\|\s*(F\d{3}-[^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*\[spec\]\((docs/features/[^)]+)\)\s*\|"
     )
     for line in backlog.read_text(encoding="utf-8").replace("\r\n", "\n").split("\n"):
+        if line.lstrip().startswith("## "):
+            break  # 只解析活跃索引表；「规划中」等后续小节不参与门禁双向校验
         m = row_re.match(line.strip())
         if m:
             rows.append(

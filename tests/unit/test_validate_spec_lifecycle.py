@@ -143,3 +143,19 @@ def test_backlog_unknown_feature_rejected(tmp_path: pathlib.Path) -> None:
     ok, errors = vsl.verify_repo(tmp_path)
     assert not ok
     assert any("BACKLOG 含未知 Feature: F099-ghost" in e for e in errors)
+
+
+def test_backlog_planning_section_not_parsed_by_gate(tmp_path: pathlib.Path) -> None:
+    """「规划中」小节即使行形状与活跃索引一致，也不得触发「含未知 Feature」误报。"""
+    write_feature(tmp_path, SPEC_GATE0_DRAFT)
+    planning = (
+        BACKLOG_HEADER
+        + VALID_BACKLOG_ROW
+        + "\n\n## 规划中\n\n"
+        + "| Feature | 需求 | 里程碑 | 编号状态 |\n|---|---|---|---|\n"
+        + "| F099-ghost | 任意 | M9 | [spec](docs/features/0.9/F099-ghost/spec.md) |\n"
+    )
+    (tmp_path / "BACKLOG.md").write_text(planning, encoding="utf-8")
+    ok, errors = vsl.verify_repo(tmp_path)
+    assert ok, errors
+    assert not any("F099-ghost" in e for e in errors)
