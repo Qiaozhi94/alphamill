@@ -22,3 +22,11 @@ def test_backup_uses_chunk_byte_bounds_and_archive_checksum() -> None:
     assert "StrictHostKeyChecking=no" not in script
     assert 'if ! ssh "${SSH_OPTS[@]}" "$NAS_USER@$NAS_HOST"' in script
     assert 'log "FATAL: $remote_dir 远端解包失败"' in script
+
+
+def test_backup_service_start_limit_directives_present():
+    """T019 回归：注释声称「最多 3 次」必须由显式指令支撑，否则不生效。"""
+    service = (ROOT / "deployment/alphamill-backup.service").read_text(encoding="utf-8")
+    assert "StartLimitIntervalSec=" in service
+    assert "StartLimitBurst=3" in service
+    assert "Restart=on-failure" in service and "RestartSec=15min" in service

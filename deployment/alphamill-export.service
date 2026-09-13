@@ -1,0 +1,16 @@
+[Unit]
+Description=AlphaMill daily incremental lake export (TimescaleDB -> Parquet, F002)
+# 失败重试：15 分钟后重试，最多 3 次。StartLimit* 必须显式声明才生效
+# （alphamill-backup.service 曾漏写导致注释与行为不符，F002-T019 教训）。
+StartLimitIntervalSec=45min
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/alphamill
+EnvironmentFile=%h/projects/alphamill/deployment/.env
+ExecStart=%h/projects/alphamill/.venv/bin/python -m alphamill.data_bridge.exporter --mode incremental
+# 退出码契约（design §5）：1=可重试瞬时故障；2=不可重试数据裁决（对账失败等）
+Restart=on-failure
+RestartSec=15min
+RestartPreventExitStatus=2
