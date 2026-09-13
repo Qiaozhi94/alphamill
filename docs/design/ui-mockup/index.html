@@ -26,7 +26,7 @@
   <div class="nav-item" data-view="factors">因子库 <span class="ph">F005</span></div>
   <div class="nav-item" data-view="detail">因子详情 <span class="ph">F005</span></div>
   <div class="nav-item" data-view="compare">因子对比 <span class="ph">F005</span></div>
-  <div class="nav-item" data-view="lineage">谱系与台账 <span class="ph">M3+</span></div>
+  <div class="nav-item" data-view="lineage">谱系与台账 <span class="ph">谱系 F005 / 台账 F005.1</span></div>
 
   <div class="nav-group">运营 / OPERATIONS</div>
   <div class="nav-item" data-view="strategy">策略运营 <span class="ph">M3/M4</span></div>
@@ -45,7 +45,7 @@
 <div class="notice" style="margin:14px 0 0;">
   <b>原型范围声明（ADR-0005 决策 7）：</b>本设计稿是覆盖终局的全景蓝图
   （研究 / 运营 / 平台 / 应急四面），<b>不是 F005 的范围</b>——F005 只实现研究面
-  （总览 / 漏斗 / 因子库 / 详情 / 对比）；运营面归 M3/M4 自建运营面、平台面归告警栈末端、
+  （总览 / 漏斗 / 因子库 / 详情 / 对比 / 谱系；台账只读视图为 F005.1）；运营面归 M3/M4 自建运营面、平台面归告警栈末端、
   应急面归 F006。跨面实时读数仅为蓝图占位，<b>研究控制台不渲染实时 PnL</b>。
   各页顶部 <code>ph</code> 标记给出该页归属的 feature / 里程碑。
 </div>
@@ -218,12 +218,12 @@
 <section class="view" id="view-lineage">
   <div class="view-head">
     <h1>LINEAGE</h1><span class="cn">谱系与台账</span>
-    <span class="ph">M3+ · append-only 只读呈现</span>
+    <span class="ph">谱系 F005 · 台账 F005.1 · append-only 只读</span>
   </div>
   <div class="src">SRC: GET /api/v1/lineage?hyp= · GET /api/v1/ledger · <b>experiment_store · FR7.2 证据链</b></div>
 
   <div class="panel">
-    <h3>对象谱系 <span class="aux">HypothesisDef → FactorDef → PortfolioDef → DeploymentRun</span></h3>
+    <h3>对象谱系 <span class="ph">F005</span> <span class="aux">HypothesisDef → FactorDef → PortfolioDef → DeploymentRun</span></h3>
     <div class="lineage">
       <b>H-042 日内动量衰减</b> <span class="lk">[generation g007 · manual+LLM]</span><br>
       <span class="lk">├─</span> <b>alphagen_gen042_f003</b> <span class="lk">promising · g042</span> <span class="lk">──▶ PM-007 (Top-K w=0.34)</span><br>
@@ -237,7 +237,7 @@
 
   <div class="spacer"></div>
   <div class="panel" style="padding:0;">
-    <h3 style="padding:14px 16px 0;">APPEND-ONLY 台账 <span class="aux">留出访问 / 部署审批 / 生命周期 · FR3.4 / FR7.4</span></h3>
+    <h3 style="padding:14px 16px 0;">APPEND-ONLY 台账 <span class="ph">F005.1</span> <span class="aux">留出访问 / 部署审批 / 生命周期 · FR3.4 / FR7.4</span></h3>
     <table style="margin-top:8px;"><thead><tr>
       <th>UTC 时间</th><th>类型</th><th>对象</th><th>操作者</th><th>规则版本</th><th>证据</th>
     </tr></thead><tbody id="ledger-rows"></tbody></table>
