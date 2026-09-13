@@ -16,7 +16,8 @@ updated: 2026-09-13
 ## 0. 输入与约束
 
 - **行为契约**:`spec.md`(FR-001..006 / NFR-001..003)
-- **PRD / Architecture / System Design**:`docs/alphamill-prd.md` FR1.2/1.3/1.4/1.6、M1;`docs/alphamill-architecture.md` §〇、§四、§4.4;`docs/alphamill-integration.md` §1.2(导出设计与修订政策,唯一权威)、§2.2(symbol_map M1 出口)
+- **PRD / Architecture / System Design**:`docs/alphamill-prd.md` FR1.2/1.3/1.4/1.6/1.7、M1;`docs/alphamill-architecture.md` §〇、§四、§4.4/4.4.1;`docs/alphamill-integration.md` §1.2(导出设计与修订政策,唯一权威)、§2.2(symbol_map M1 出口)
+- **决策约束**:ADR-0007 冻结 dataset 独立版本、DatasetVersion value digest 与下游 ResearchSnapshot 的所有权边界；F002 不组合 snapshot。
 - **执行环境(2026-09-12 实测钉死)**:与 F001 收口态一致——WSL2 Ubuntu 26.04 + docker-ce 29.8.0;TimescaleDB 容器 healthy(631 万行 binance 数据);pwsh 7.6.6 用户态;systemd user timers(backup/snapshot 两个先例);`.venv` Python 3.14 + pyproject 依赖管理;出网经 `BINANCE_HTTPS_PROXY`(本特性无需出网,DuckDB 为本地库)
 - **实现约束**:D4 数据红线(研究只读湖快照);取数模块零写路径;湖分区文件与 manifest 不可变(NFR-002)
 
@@ -372,10 +373,10 @@ digest；current 文件后移不改变旧 artifact。映射内容或规范编码
 
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
-| `AC-001` | integration | `tests/integration/test_f002_export_reconcile.py` | 全量导出后五 dataset 分区+manifest 齐备;DuckDB 行数=库内行数 |
+| `AC-001` | integration | `tests/integration/test_f002_export_reconcile.py` | 全量导出后五 dataset 分区+manifest 齐备，manifest 含 rows/data_version/value_digest；DuckDB 行数=库内行数 |
 | `AC-002` | integration | `tests/integration/test_f002_export_reconcile.py` | 构造对账失败 → manifest invalid |
-| `AC-003` | integration | `tests/integration/test_f002_reader.py` | 版本/时间范围/pair 过滤正确;invalid 抛 InvalidVersionError |
-| `AC-004` | unit | `tests/unit/test_f002_symbol_map.py` | 生成/双向解析/UTC 断言(靠 `build_symbol_map(db_symbols)` 的纯函数形态脱离库依赖;查库那层由 AC-001 的集成路径覆盖) |
+| `AC-003` | integration | `tests/integration/test_f002_reader.py` | 版本/时间范围/pair 过滤正确；回报解析后的 dataset/data_version/value_digest；invalid 拒绝且显式版本不受 latest 后移影响 |
+| `AC-004` | unit | `tests/unit/test_f002_symbol_map.py` | 生成/双向解析/UTC；同内容 digest 稳定、内容变化生成新 digest，旧 digest artifact 仍可读取 |
 | `AC-005` | integration | `tests/integration/test_f002_revision.py` | 修订 → v2+差异清单;v1 文件字节不变 |
 | `AC-006` | integration | `tests/integration/test_f002_schedule_backup.py` | 导出 CLI 退出码 0;NAS 端 lake/ 文件存在 |
 | `AC-007` | integration | `tests/integration/test_f002_revision.py` | 修订后 v1 每个分区文件 sha256 与字节数不变;按 v1 读回修订前的值;v1/v2 并发读不串版 |
@@ -385,6 +386,7 @@ digest；current 文件后移不改变旧 artifact。映射内容或规范编码
 | `AC-012` | unit | `tests/unit/test_f002_digest.py` | 两路输入同摘要;double 最低位改写摘要必变;+x/−x 抵消式改写摘要必变 |
 | `AC-013` | integration | `tests/integration/test_f002_reader.py` | ohlcv_1m 传 as_of 默认抛 InsufficientAsOfFidelityError;豁免后 as_of_fidelity 回报 event_time_only |
 | `AC-014` | integration | `tests/integration/test_f002_export_reconcile.py` | 孤儿 .rN + 未发布 manifest 的中断态重跑后该日进入新清单;未覆盖的 skipped 键原样继承 |
+| `AC-015` | unit + integration | `tests/unit/test_f002_manifest.py`、`tests/integration/test_f002_reader.py` | value_digest 对 codec/path 稳定；值、投影 schema 或覆盖变化时改变；缺失或重算不符时 reader fail-closed |
 | `AC-010` | integration | `tests/integration/test_f002_export_reconcile.py` | 对账期间并发 upsert 历史行,结果为 valid 且与快照一致,或 invalid;不出现伪 valid |
 
 集成测试需要本地 TimescaleDB 在线,DB 不可达时跳过(CI),本地全绿为准;单元测试无条件跑。
