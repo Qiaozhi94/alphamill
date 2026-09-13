@@ -96,7 +96,7 @@ updated: 2026-09-12
 - 湖内数据的因子计算或口径加工(FR1.4 双口径在本期仅落列语义与映射,不做复权计算——crypto 无复权);
 - 撤除 TimescaleDB(阶段 B)。
 
-- **Kronos 真实推理容器化**:F002 只保证 signals_log 的**导出管线**正确,不保证其内容来自真实模型。原 T014 曾挂在 FR-001 名下,但 FR-001 只承诺导出五个 dataset、AC-001 只核对分区与行数,容器化既无对应需求也无验收闭环(F002-Q001),故移出 F002。**正式载体已建立**:`docs/features/0.2/F004-kronos-inference-runtime/`(draft,带 FR-001/AC-001)。它是否阻塞 F002 done 记在 F004 spec §8 Q-001,待 owner 裁决。
+- **Kronos 真实推理容器化**:F002 只保证 signals_log 的**导出管线**正确,不保证其内容来自真实模型。原 T014 曾挂在 FR-001 名下,但 FR-001 只承诺导出五个 dataset、AC-001 只核对分区与行数,容器化既无对应需求也无验收闭环(F002-Q001),故移出 F002。**正式载体已建立**:`docs/features/0.2/F004-kronos-inference-runtime/`(draft,带 FR-001/AC-001)。**F004 不阻塞 F002 done**(2026-09-13 owner 裁决,F004 spec §8 Q-001);代价见 §6 限制说明。
 
 ### 边界场景
 
@@ -208,6 +208,11 @@ updated: 2026-09-12
 - [ ] **AC-013** (`FR-003`, `FR-004`): as-of 保真度 fail-closed——对 as_of_fidelity=event_time_only 的 dataset(ohlcv_1m)传 as_of 且未显式 allow_event_time_only 时抛 InsufficientAsOfFidelityError;显式豁免时 ReadResult.as_of_fidelity 如实回报 event_time_only — tests: `tests/integration/test_f002_reader.py`
 - [ ] **AC-014** (`FR-001`, `FR-005`): 失败重跑不漏日——构造「分区文件已 rename 但 manifest 未发布」的中断态后重跑增量,窗口起点仍由上一 valid manifest 推导,该日分区出现在新版本清单中;本轮未覆盖的 skipped 键原样继承而非被清空 — tests: `tests/integration/test_f002_export_reconcile.py`
 - [ ] **AC-010** (`FR-002`, `FR-003`): 并发改写不产伪 valid——对账期间对已导出窗口 upsert 历史行,导出仍基于同一快照;结果或为 valid 且与该快照一致,或为 invalid,不出现「对账 ok 但湖内是旧值」 — tests: `tests/integration/test_f002_export_reconcile.py`
+
+**done 时的已知限制(2026-09-13 裁决记录)**:F004(Kronos 真实推理运行时)不阻塞本 feature 收口,
+因此 F002 done 时湖内 `signals_log` 的内容预期仍以 `source=placeholder` 为主——**导出管线正确
+不等于内容可用于因子研究**。收口时验收证据必须如实记录该 dataset 的行数与 `source` 分布,
+不得以"五 dataset 齐备"含糊带过;F004 落地后内容自动升级,F002 无需返工。
 
 ## 7. 测试、依赖与决策
 
