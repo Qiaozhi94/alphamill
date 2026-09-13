@@ -52,3 +52,6 @@ deployment/backups/
 
 # Freqtrade dry-run 运行时数据库（本地状态，不进 git）
 freqtrade/user_data/tradesv3.sqlite*
+
+# F002 Parquet 湖（分区数据 + manifest + symbol-map artifact，NAS 备份，不进 git）
+lake/
