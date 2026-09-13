@@ -305,7 +305,8 @@ experiment manifest（FR7.1）。
 **曲线级时间序列侧车（ADR-0005 呈现契约）**：评测台除标量结论外必须持久化曲线级时间序列，
 供研究控制台渲染（F007 spec 立项时以此为准，先于 F005 开发锁定）：
 
-- 路径：沿报告落盘目录写 `curves.parquet`（`results/<object_id>/<data_version>/curves.parquet`），
+- 路径：与评测报告同目录写 `curves.parquet`
+  （`reports/bench/<object_id>/<data_version>/curves.parquet`，报告根 `reports/` 见 §三 目录树），
   与 `report.json` 在同一原子批次发布；
 - manifest 关联键：experiment manifest 增 `curves: {path, rows, columns, sha256}`，与报告、
   `data_version`、`cost_model_version` 并列，保证曲线可从真相源确定性重放；
