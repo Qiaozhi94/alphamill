@@ -18,6 +18,7 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 - `docs/decisions/`：重要决策记录（ADR）。
 - `docs/reviews/`：设计/代码评审记录；只有 `RETROSPECTIVE.md`（复盘）入库，
   `CURRENT-*` 检视过程稿与 `FIX-log.md` 本地-only（见 `.gitignore`）。
+- `docs/design/ui-mockup/`：呈现层视觉原型（终局四面全景蓝图，非契约、非 F005 范围；见 ADR-0005 决策 7）。
 - `docs/research/`：前期调研归档，本地-only（见 `.gitignore`）。
 - `BACKLOG.md`：近期功能拆分和执行跟踪入口，只列非 done Feature。
 - `conversations/`：AI 对话归档（由 conversation-archive skill 管理）。

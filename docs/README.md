@@ -23,6 +23,7 @@ updated: 2026-09-13
 | 验证门禁不降级 | `decisions/0003-validation-gate-non-degradation.md` | quant-crypto 教训制度化 |
 | 组合构建（因子→策略映射） | `decisions/0004-portfolio-construction.md` | 协同池组合的部署路径与权重/换手/敞口规则 |
 | 呈现与观测架构（真相源/投影/展示三分、自建前端路线） | `decisions/0005-presentation-observability.md` | Grafana/FreqUI/自建控制台边界、口径进视图、统一只读 API |
+| 呈现层视觉原型（非契约，设计资产） | `design/ui-mockup/`（设计稿，本地） | 终局四面全景蓝图，**非权威、非 F005 范围**；F005 spec 落地后废弃或迁入 `web/`（ADR-0005 决策 7） |
 | quant-crypto 资产清算迁移 | `features/0.1/F001-quant-crypto-migration/migration-plan.md` | 迁移清单与验收（F001 附属） |
 | 跨 Feature 长期决策 | `decisions/` | ADR 决策记录 |
 | Feature 行为与状态 | `features/<version>/Fxxx-*/spec.md` | 状态唯一真相源 |
