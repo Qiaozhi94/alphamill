@@ -72,7 +72,7 @@ src/alphamill/data_bridge/
 
   **已知缺口(不掩盖)**:`ohlcv_1m` 表没有采集时间列,`available_at` 无法重建——回补写入的历史
   K 线在湖内看不出"何时才可见"。因此 ohlcv 的 as-of 只能退化为 `event_time <= T`,该退化
-  **写进 manifest 的 `as_of_fidelity: "event_time_only"`**,由消费方自行判断可接受性;要做真正的
+  **写进 manifest 的 `as_of_fidelity: "event_time_only"`**,并由 `read()` 默认拒绝(见 §4);要做真正的
   双时间轴需给 `ohlcv_1m` 加 `ingested_at` 列,属 F001 schema 变更,不在本 feature 范围。
 
   **标签列的可用性单独处理**:`signals_log.realized_return_60m` 是事后回填的结果列,
@@ -111,6 +111,7 @@ src/alphamill/data_bridge/
     "dataset": "ohlcv_1m",
     "source": "timescaledb@alphamill",
     "source_snapshot": {"backend_xmin": 84412, "taken_at": "2026-09-12T02:00:03Z"},
+    "as_of_fidelity": "event_time_only",
     "exported_at": "2026-09-12T02:04:11Z",
     "rows": 6312924,
     "pairs": ["BTC-USDT", "..."],
@@ -203,15 +204,29 @@ src/alphamill/data_bridge/
   2. 本轮产出的每个分区按**逻辑分区键**(registry 的 `(exchange,pair[,timeframe],date)`)
      在基线里查找:命中则**整项替换**(新 `.rN` 路径 + 新 rows/边界/bytes/sha256),
      未命中则**追加**;基线中本轮没碰的项原样保留;
-  3. `rows` / `pairs` / `quality.flagged_partitions` / `skipped` / `excluded_null_event_time`
-     一律**按合成后的完整清单重算**,不是本轮增量的计数;
-  4. 原子发布:清单齐备后写 manifest(临时名 + rename)。
+  3. `rows` / `pairs` / `quality.flagged_partitions` **按合成后的完整清单重算**;
+  4. `skipped` **走与 partitions 相同的继承/替换**,不从清单反推(F002-R3-03):它记录的是
+     「本该有分区却没有」的逻辑分区键,而清单里只有**存在**的分区,不存在的东西反推不出来。
+     规则:本轮实际覆盖到的逻辑分区键(无论产出分区还是判定为空)据本轮结果从基线 `skipped`
+     中移除或加入,本轮没碰的键原样继承;
+  5. `excluded_null_event_time` **不是清单派生量**,而是在同一个 REPEATABLE READ 快照里对
+     **源表全量**执行 `count(*) WHERE event_time IS NULL` 的结果——它描述的是「这个快照里有多少行
+     因无事件时间而无法进湖」,与累计快照语义一致。Round 2 写它「按完整清单重算」是错的:
+     被排除的行根本不在任何分区里;
+  6. 原子发布:清单齐备后写 manifest(临时名 + rename)。
 
   没有这一条,"每日增量"产出的 manifest 到底是当天 delta 还是累计快照就没有定义,
   `read(dataset, data_version=昨天)` 可能只拿到一天的数据——而 spec 承诺的是快照语义。
   全量校验模式走同一算法,区别只在本轮产出覆盖全 span。
 
-- **导出窗口与增量语义**:增量导出窗口 = `[max(已有分区日期)+1, 导出日-1]`(昨日分区);**首次导出**(该 dataset 无任何已有分区)时 `max(已有分区日期)` 无定义,窗口起点取库内 `date(min(time))`,即首跑等价于一次全量;全量校验 = 全 span 重导至新 data_version 并做分区级 diff;窗口内无数据的 pair 跳过并记 skipped。
+- **导出窗口与增量语义**(F002-R3-02 修订):增量导出窗口 =
+  `[上一 valid manifest 的 partitions 中最大 date + 1, 导出日-1]`。
+  **游标只从上一 valid manifest 推导,绝不看磁盘上「已有哪些分区文件」**:一次失败可能已经把
+  `.rN` rename 进正式路径却没发布 manifest(发布点在 manifest,见上),按物理文件取 max 会直接
+  跳过那一天,而合成基线又来自更旧的 valid manifest——结果是一个**永久漏日**,且后续每次增量
+  都不会回头补。孤儿 `.rN` 不被任何 manifest 引用,重跑时写 `rN+1` 即可,无需先清理。
+  **首次导出**(无任何 valid manifest)窗口起点取库内 `date(min(event_time))`,首跑等价于一次全量;
+  全量校验 = 全 span 重导至新 data_version 并做分区级 diff;窗口内无数据的 pair 记入 `skipped`。
 - **回滚/前向兼容**:导出失败留下的半成品只存在于 `lake/_staging/`,**不覆盖任何已发布分区**(已发布的 `.rN` 永不重写);未被任何 manifest 引用的 staging 残留与孤儿 `.rN` 由全量模式清理。invalid 版本永不复用版本号。DuckDB 侧无 migration。
 
 ## 4. 接口、Contract 与 Event
@@ -225,11 +240,20 @@ DATASETS: Mapping[str, DatasetSpec]          # 只读;未登记的名字 → Unk
 # exporter.py
 def export_dataset(dataset: str, mode: Literal["incremental", "full"],
                    window_end: datetime | None = None) -> dict   # 返回 manifest 摘要
-# reader.py —— start/end 作用于 registry 声明的事件时间列(signals_log 即 latest_candle)
+# reader.py —— start/end 切 registry 声明的 event_time;as_of 另加 available_at 约束
+@dataclass(frozen=True)
+class ReadResult:
+    frame: pd.DataFrame
+    as_of: datetime | None          # None = 纯历史切片,不得用于回测/门禁判定
+    as_of_fidelity: str | None      # "bitemporal" | "event_time_only";as_of=None 时为 None
+    flagged: list[str]              # 被显式豁免放行的带旗分区
+
 def read(dataset: str, data_version: str | None = None,          # None=最新 valid
          start: datetime | None = None, end: datetime | None = None,
          pairs: list[str] | None = None,
-         allow_flagged: bool = False) -> ReadResult   # .frame: pd.DataFrame; .flagged: list[str]
+         as_of: datetime | None = None,                          # 见 §3 双时间轴
+         allow_flagged: bool = False,
+         allow_event_time_only: bool = False) -> ReadResult
 def latest_valid_version(dataset: str) -> str                    # 无 valid 版本则抛 VersionNotFoundError
 # symbol_map.py —— 映射键含 exchange 与 market_type(F002-D010)
 def build_symbol_map(rows: list[SymbolRow]) -> pd.DataFrame   # 纯函数;SymbolRow=(exchange, market_type, db_symbol)
@@ -239,9 +263,18 @@ def resolve(value: str, direction: Literal["to_lake", "to_freqtrade", "to_db"],
 ```
 
 异常契约:`DataBridgeError`(基类)/`InvalidVersionError`(拒绝读取 invalid)/
-`VersionNotFoundError`/`ManifestIntegrityError`(文件缺失、字节数或 sha256 不符、文件集合不等)/
-`FlaggedPartitionError`(带质量旗分区且未显式豁免)/`UnknownDatasetError`(不在 registry 中)。
+`VersionNotFoundError`/`ManifestIntegrityError`(**清单内**文件缺失、字节数或 sha256 不符——
+不含"目录里有本版本未引用的文件"这种情形,那是 `.rN` 共享模型下的正常状态)/
+`FlaggedPartitionError`(带质量旗分区且未显式豁免)/`UnknownDatasetError`(不在 registry 中)/
+`InsufficientAsOfFidelityError`(对 `as_of_fidelity="event_time_only"` 的 dataset 传了 `as_of`
+且未显式 `allow_event_time_only=True`)。
 取数模块对以上任一情形一律抛错,不降级为警告(D4 红线,SOP 安全降级须声明——本 feature 无降级)。
+
+**as-of 的 fail-closed 出口在接口上,不在文档里**(F002-R3-01):`ohlcv_1m` 没有采集时间列,
+它的 as-of 只能退化为 `event_time <= T`。Round 2 只在正文写了"由消费方自行判断可接受性"——
+那等于默认放行,消费方甚至不会知道自己拿到的是退化语义。现在:`as_of` 作用于该 dataset 时
+**默认抛 `InsufficientAsOfFidelityError`**,必须显式 `allow_event_time_only=True` 才放行,
+且 `ReadResult.as_of_fidelity` 把退化如实回报给调用方。
 
 **symbol_map 键的冻结**(F002-D010):库内 `DISTINCT symbol` **不足以无损推导**映射——
 同一个 `BTC/USDT` 在 spot 与 swap 上是不同的标的,Freqtrade 侧命名也不同,而 `ohlcv_1m` 与
@@ -279,7 +312,7 @@ spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC
 ## 7. 失败、恢复、安全与兼容
 
 - 校验与失败映射:对账不一致 → invalid + 非零退出;DuckDB 查询 invalid → InvalidVersionError;manifest 缺失 → VersionNotFoundError;
-- 重启与恢复:分区文件原子写(临时名+rename),重导幂等覆盖;调度失败 systemd 重试;
+- 重启与恢复:分区文件原子写(staging + rename)且**已发布的 `.rN` 永不重写**;中断后的恢复路径是**写新 `.rN` 并以新 manifest 发布**,不是「重导覆盖」(F002-R3-04——覆盖语义与 §3 的不可变模型直接冲突);调度失败按退出码 1 由 systemd 重试(见 §5);
 - 权限 / escalation / 凭据边界:库凭据走 `.env`(既有);lake/ 无密钥;取数模块不接受任何"写"参数面(签名上不存在写路径,NFR-001 由接口形状保证 + 测试断言);
 - Windows / POSIX / 版本兼容:纯 WSL2 内运行,无跨界文件交换;DuckDB/PyArrow 版本 pin 入 pyproject(check_dep_pins 覆盖);Parquet 文件格式与 DuckDB 版本解耦(列式开放格式)。
 
@@ -298,6 +331,8 @@ spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC
 | `AC-009` | integration | `tests/integration/test_f002_reader.py` | as-of 双时间轴:latest_candle=09:00/time=12:00 的信号在 as_of=10:00 必不在、as_of=13:00 必在;evaluated_at>T 时 realized_return_60m 置 NULL 不丢行 |
 | `AC-011` | integration | `tests/integration/test_f002_revision.py` | 两次增量后第二版 partitions 覆盖全部逻辑分区,rows 为累计而非单日 |
 | `AC-012` | unit | `tests/unit/test_f002_digest.py` | 两路输入同摘要;double 最低位改写摘要必变;+x/−x 抵消式改写摘要必变 |
+| `AC-013` | integration | `tests/integration/test_f002_reader.py` | ohlcv_1m 传 as_of 默认抛 InsufficientAsOfFidelityError;豁免后 as_of_fidelity 回报 event_time_only |
+| `AC-014` | integration | `tests/integration/test_f002_export_reconcile.py` | 孤儿 .rN + 未发布 manifest 的中断态重跑后该日进入新清单;未覆盖的 skipped 键原样继承 |
 | `AC-010` | integration | `tests/integration/test_f002_export_reconcile.py` | 对账期间并发 upsert 历史行,结果为 valid 且与快照一致,或 invalid;不出现伪 valid |
 
 集成测试需要本地 TimescaleDB 在线,DB 不可达时跳过(CI),本地全绿为准;单元测试无条件跑。

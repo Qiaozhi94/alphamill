@@ -205,6 +205,8 @@ updated: 2026-09-12
 - [ ] **AC-009** (`FR-004`): as-of 双时间轴无前视——`read(as_of=T)` 当且仅当 event_time ≤ T **且** available_at ≤ T 才返回该行;反例 latest_candle=09:00 / time=12:00 的信号在 as_of=10:00 必须**不在**结果内,在 as_of=13:00 必须在;realized_return_60m 在 evaluated_at > T 时置 NULL 而非丢行 — tests: `tests/integration/test_f002_reader.py`
 - [ ] **AC-011** (`FR-001`, `FR-005`): manifest 是累计完整快照——连续两次增量导出后,第二个版本的 partitions 覆盖第一个版本的全部逻辑分区(未变项原样继承、变更项替换),`rows` 等于合成后清单的总和而非单日增量;按第二个版本读取返回全 span — tests: `tests/integration/test_f002_revision.py`
 - [ ] **AC-012** (`FR-002`): row_digest 规范性——同一批数据经 psycopg2 与 PyArrow 两路输入摘要相同;改写任一 double 的最低有效位摘要必变(证明未走定标丢精度);两行 +x/−x 抵消式改写摘要必变 — tests: `tests/unit/test_f002_digest.py`
+- [ ] **AC-013** (`FR-003`, `FR-004`): as-of 保真度 fail-closed——对 as_of_fidelity=event_time_only 的 dataset(ohlcv_1m)传 as_of 且未显式 allow_event_time_only 时抛 InsufficientAsOfFidelityError;显式豁免时 ReadResult.as_of_fidelity 如实回报 event_time_only — tests: `tests/integration/test_f002_reader.py`
+- [ ] **AC-014** (`FR-001`, `FR-005`): 失败重跑不漏日——构造「分区文件已 rename 但 manifest 未发布」的中断态后重跑增量,窗口起点仍由上一 valid manifest 推导,该日分区出现在新版本清单中;本轮未覆盖的 skipped 键原样继承而非被清空 — tests: `tests/integration/test_f002_export_reconcile.py`
 - [ ] **AC-010** (`FR-002`, `FR-003`): 并发改写不产伪 valid——对账期间对已导出窗口 upsert 历史行,导出仍基于同一快照;结果或为 valid 且与该快照一致,或为 invalid,不出现「对账 ok 但湖内是旧值」 — tests: `tests/integration/test_f002_export_reconcile.py`
 
 ## 7. 测试、依赖与决策
