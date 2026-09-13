@@ -164,6 +164,8 @@ alphamill/                       # 仓库根（非 Python 资产留根，不进�
 ├── docs/                        # 本文档集
 ├── deployment/                  # docker-compose / .env 模板 / verify 脚本
 ├── monitoring/                  # Grafana/Prometheus 配置（自 quant-crypto 迁入）
+├── db/                          # 口径唯一居所（ADR-0005）：init.sql + migrations/ 版本化 SQL 视图；
+│                                #   应用账本与 runner 见 tools/apply_migrations.py（schema_migrations）
 ├── web/                         # 自建前端 SPA（ADR-0005）：构建产物由 api 服务静态托管，生产运行时无 Node
 ├── scripts/                     # 实验运行器、报告生成、verify 脚本（薄入口）
 ├── reports/                     # 实验 manifest + 归档报告（运行产物）
