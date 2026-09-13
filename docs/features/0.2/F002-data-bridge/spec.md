@@ -2,7 +2,7 @@
 kind: feature
 id: F002
 version: "0.2"
-status: ready-for-development
+status: in-progress
 gate_version: 1
 related_features: [F001]
 topics: [data-bridge, parquet, duckdb, m1]
