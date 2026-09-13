@@ -15,7 +15,6 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 - `docs/SOP.md`：开发流程与质量门约定。
 - `docs/features/`：SDD feature 规格目录，按大版本分层（0.1、0.2…）；
   `docs/features/releases/` 存放版本收口摘要。
-- `docs/decisions/`：重要决策记录（ADR）。
 - `docs/reviews/`：设计/代码评审记录；只有 `RETROSPECTIVE.md`（复盘）入库，
   `CURRENT-*` 检视过程稿与 `FIX-log.md` 本地-only（见 `.gitignore`）。
 - `docs/design/ui-mockup/`：呈现层视觉原型（终局四面全景蓝图，非契约、非 F005 范围；见 ADR-0005 决策 7）。
