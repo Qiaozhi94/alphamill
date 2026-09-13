@@ -19,11 +19,15 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 _SELF = pathlib.Path(__file__).resolve()
 
 # 历史档案（检视复盘 / 会话归档）原样保留，不参与当前规范扫描。
-_SCAN_EXEMPT_PARTS = {"docs/reviews", "conversations"}
+# 必须按目录前缀（posix 形式）比对：早期写法 `part in _SCAN_EXEMPT_PARTS for part in p.parts`
+# 对 "docs/reviews" 这种多段前缀永不命中，豁免形同虚设——`conversations` 恰好是单段路径
+# 所以一直生效，掩盖了缺陷，直到 RETROSPECTIVE 首次出现裸命令才暴露（ADR5-R4-01）。
+_SCAN_EXEMPT_DIRS = ("docs/reviews/", "conversations/")
+_TEXT_SUFFIXES = {".md", ".py", ".yml", ".yaml", ".toml", ".cfg", ".txt"}
 _BARE_COMMAND = re.compile(r"\bpython tools/verify\.py")
 
 
-def _tracked_text_files() -> list[pathlib.Path]:
+def _tracked_files() -> list[str]:
     proc = subprocess.run(
         ["git", "ls-files"],
         cwd=REPO_ROOT,
@@ -31,12 +35,16 @@ def _tracked_text_files() -> list[pathlib.Path]:
         capture_output=True,
         text=True,
     )
+    return proc.stdout.splitlines()
+
+
+def _tracked_text_files() -> list[pathlib.Path]:
     files: list[pathlib.Path] = []
-    for rel in proc.stdout.splitlines():
+    for rel in _tracked_files():
         p = pathlib.Path(rel)
-        if p.suffix not in {".md", ".py", ".yml", ".yaml", ".toml", ".cfg", ".txt"}:
+        if p.suffix not in _TEXT_SUFFIXES:
             continue
-        if any(part in _SCAN_EXEMPT_PARTS for part in p.parts):
+        if p.as_posix().startswith(_SCAN_EXEMPT_DIRS):
             continue
         if (REPO_ROOT / p).resolve() == _SELF:
             continue
@@ -53,6 +61,24 @@ def test_no_bare_python_gate_command_in_tracked_sources() -> None:
         if match:
             offenders.append(f"{p}: {match.group(0)}")
     assert offenders == [], f"门禁命令必须统一为 python3 tools/verify.py：{offenders}"
+
+
+def test_exempt_dirs_are_actually_skipped() -> None:
+    """豁免目录必须真的被跳过（ADR5-R4-01 回归门）。
+
+    先断言豁免目录下确实有被跟踪的文本文件，否则下面的"未泄漏"断言会在空集上
+    恒真——测试自证而非证伪。
+    """
+    exempt_tracked = [
+        rel
+        for rel in _tracked_files()
+        if rel.startswith(_SCAN_EXEMPT_DIRS) and pathlib.Path(rel).suffix in _TEXT_SUFFIXES
+    ]
+    assert exempt_tracked, "豁免目录下没有被跟踪的文本文件，本断言将空转，需重新选取样本"
+
+    scanned = {p.relative_to(REPO_ROOT).as_posix() for p in _tracked_text_files()}
+    leaked = sorted(rel for rel in exempt_tracked if rel in scanned)
+    assert leaked == [], f"豁免目录仍被扫描，豁免判定未按目录前缀生效：{leaked}"
 
 
 def test_python3_is_available() -> None:

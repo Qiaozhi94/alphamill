@@ -277,7 +277,7 @@
 - 日期：2026-09-13 | 基线：`2d9c556` → `e129fb7` → `2e64750` → 终态 `3f9cded`+
 - 范围：ADR-0005 全文 + 配套改动（PRD FR8/S8/里程碑、架构 §三/§4.2/§五/§七、ADR-0002、docs/README、CLAUDE.md、BACKLOG、TEMPLATE design、docs/design/ui-mockup 静态原型）
 - 结论：Critical/High/Medium/Low 全部清零；决策本身成立（三分边界、口径进视图、备选方案 B 零沉没成本、裁决不页面化红线），问题集中于**约束传播不完整**——ADR 提出的 4 个新资产位置/契约（`db/migrations/`、评测台曲线序列、前端构建期依赖、静态原型）首轮全部未落到真相源或门禁上。
-- 终态门禁（2026-09-13）：`python3 tools/verify.py`（本机经 `.venv` 解释器实跑）exit 0（109 passed / 1 skipped，ruff 全绿）；D009 门禁经检视方独立变异验证（撤 `## ` 截断 → 测试变红，恢复 → 10 passed）。首次闭环提交 `3f9cded` 的 CI（run `34748297701`）双 job 红——检视方回写复盘时用了非规范的门禁命令写法，触发 D046 命令契约门（见 ADR5-R4-01）；修正后重推，CI 绿方闭环。
+- 终态门禁（2026-09-13）：`python3 tools/verify.py`（本机经 `.venv` 解释器实跑）exit 0（109 passed / 1 skipped，ruff 全绿）；D009 门禁经检视方独立变异验证（撤 `## ` 截断 → 测试变红，恢复 → 10 passed）。首次闭环提交 `3f9cded` 的 CI（run `34748297701`）双 job 红——检视方回写复盘时用了非规范的门禁命令写法，触发 D046 命令契约门（见 ADR5-R4-01）；修正后重推，CI 绿方闭环。闭环后按检视结论修复门禁自身缺陷 ADR5-R4-02，三道变异验证：旧豁免写法→新测试红、豁免目录塞裸命令→保持绿、非豁免文件塞裸命令→红。
 - 遗留说明：闭环时工作树存在另一会话的未提交改动（ADR-0006 草稿 + PRD FR3/FR5/FR6/FR7 扩写 + 未跟踪 `uv.lock`），不属本循环文件集合，未纳入本循环提交与裁决；已核实其未回滚本循环 D005 对 M2/M4 出口标准的修复。
 
 | ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
@@ -297,6 +297,7 @@
 | ADR5-R2-03 | 曲线侧车最小列集中 `ic_decay`/`quantile_returns` 与 report.json 标量同名重复，且与「时间轴为逐日/逐 bar UTC 时间戳」的行轴口径矛盾 | Medium | 正确性 | 根因 | 修复引入 | fixed | 列名改时间展开式并写明与标量可互推 | 列集改 `q1_cum`..`q5_cum` / `long_short_cum` / `rolling_ic_h1..h24`，并补「标量是全样本汇总、侧车是其时间展开，两者口径必须可互推」 | 文档门禁 | 2 | 3 | cross-doc-contract-drift |
 | ADR5-R2-04 | ADR-0005 后续行动 ④（扩 check_dep_pins 覆盖 package-lock）无验收判据，属未执行任务 | Low | 测试覆盖 | 根因 | 流程缺陷 | fixed | 补 AC 并指定转入 tasks.md 的时点 | 后续行动 ④ 补「验收判据：对 package-lock.json 做一次变异验证（改一个依赖版本号使门禁变红），F005 立 spec 时转入其 tasks.md」 | 载体为 F005 tasks（未立项，非本轮可跑） | 2 | 3 | gate-without-teeth |
 | ADR5-R4-01 | 检视方回写复盘时把门禁命令写成解释器全路径形式，与 D046 确立的「全仓统一 `python3 tools/verify.py`」规范不符，触发命令契约门使闭环提交 CI 双红 | Medium | 正确性 | 根因 | 修复引入 | fixed | 改用 D046 规范写法，解释器信息降为括注 | 改为「`python3 tools/verify.py`（本机经 `.venv` 解释器实跑）」；复跑 test_doc_gate_command 2 passed 后重推 | tests/unit/test_doc_gate_command.py::test_no_bare_python_gate_command_in_tracked_sources | 4 | 4 | documented-command-not-runnable |
+| ADR5-R4-02 | R4-01 暴露出门禁自身缺陷：命令契约门的豁免集合用 `part in {"docs/reviews", ...}` 对 `Path.parts` 做成员判断，多段前缀永不命中，`docs/reviews` 实际从未被豁免（`conversations` 恰为单段路径而生效，长期掩盖该缺陷） | Medium | 正确性 | 根因 | 原始设计 | fixed | 改为按 posix 目录前缀匹配，并补一条锁住豁免生效的回归测试 | `_SCAN_EXEMPT_DIRS` 改带尾斜杠元组 + `as_posix().startswith()`；抽出 `_TEXT_SUFFIXES`/`_tracked_files()`；新测试先断言豁免目录有 tracked 样本（18 个）再断言未泄漏，避免空集恒真 | tests/unit/test_doc_gate_command.py::test_exempt_dirs_are_actually_skipped | 4 | 4 | gate-without-teeth |
 
 ### 循环 8 模式教训
 
