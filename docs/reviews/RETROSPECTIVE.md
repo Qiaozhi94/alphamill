@@ -268,3 +268,47 @@
 2. origin 分布：原始设计 8、修复引入 8、规格漂移 3、流程缺口 2；修复引入占 38%，说明 diff-only 复核是本循环的主要价值来源。
 3. 裁决分布：fixed 18、partial 2、carried-forward 1、rejected 0；建议命中率约 95%。partial/carried-forward 均因 owner 将最终范围收窄为 design，不冒充跨文档核对完成。
 4. 最长存活问题为 D001/D002/D006/D007 与 R2-03，均跨至 Round 3 才关闭；R3-01～04 在发现轮关闭。R3-04 连续补丁未收敛后按协议升级角色合并，owner 授权 reviewer 直接冻结不变量。
+
+---
+
+## 循环 8：ADR-0005 呈现与观测架构检视
+
+- report_type: doc-review | round: 1（full-scan）→ 2（diff-only 复核）→ 3（diff-only 封顶）| 状态: 闭环
+- 日期：2026-09-13 | 基线：`2d9c556` → `e129fb7` → 终态 `2e64750`
+- 范围：ADR-0005 全文 + 配套改动（PRD FR8/S8/里程碑、架构 §三/§4.2/§五/§七、ADR-0002、docs/README、CLAUDE.md、BACKLOG、TEMPLATE design、docs/design/ui-mockup 静态原型）
+- 结论：Critical/High/Medium/Low 全部清零；决策本身成立（三分边界、口径进视图、备选方案 B 零沉没成本、裁决不页面化红线），问题集中于**约束传播不完整**——ADR 提出的 4 个新资产位置/契约（`db/migrations/`、评测台曲线序列、前端构建期依赖、静态原型）首轮全部未落到真相源或门禁上。
+- 终态门禁（2026-09-13）：`./.venv/bin/python tools/verify.py` exit 0（109 passed / 1 skipped，ruff 全绿）；D009 门禁经检视方独立变异验证（撤 `## ` 截断 → 测试变红，恢复 → 10 passed）。
+- 遗留说明：闭环时工作树存在另一会话的未提交改动（ADR-0006 草稿 + PRD FR3/FR5/FR6/FR7 扩写 + 未跟踪 `uv.lock`），不属本循环文件集合，未纳入本循环提交与裁决；已核实其未回滚本循环 D005 对 M2/M4 出口标准的修复。
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ADR5-D001 | `db/migrations/` 未登记进架构目录树，却被 ADR 提为「口径唯一居所」 | High | 正确性 | 根因 | 契约漂移 | fixed | 架构 §三 树补 `db/` | §三 在 monitoring/ 与 web/ 之间登记 db/，注明 init.sql + migrations/ 与账本 tools/apply_migrations.py | 文档门禁（check_doc_links） | 1 | 2 | cross-doc-contract-drift |
+| ADR5-D002 | 静态原型覆盖三面，与决策 4「实时 PnL 不进控制台」矛盾且 ADR 未声明其地位 | High | 正确性 | 根因 | 契约漂移 | fixed | ADR 加小节声明蓝图地位 + 页内标注归属 | ADR 新增决策 7（终局四面全景蓝图、非契约、不参与验收、F005 只做研究面）+ index.html 范围横幅 | 文档门禁 + 检视方实物核实 ph 标记既有 | 1 | 2 | prototype-scope-creep |
+| ADR5-D003 | 「前端构建期依赖按 ADR-0002 纪律 pin」是空头引用——ADR-0002 无 Node 条目，门禁不覆盖 | High | 正确性 | 根因 | 契约漂移 | fixed | 扩 ADR-0002 + 后续行动扩 check_dep_pins | ADR-0002 新增「前端构建期工具链（Node/npm）」原样依赖行（lockfile 入库、pin 主版本、里程碑边界升级）+ ADR-0005 后续行动 ④ | 文档门禁（门禁扩展本身见 R2-04） | 1 | 2 | gate-without-teeth |
+| ADR5-D004 | 评测台曲线级时间序列契约未落进接口真相源 §4.2 | Medium | 正确性 | 根因 | 契约漂移 | fixed | §4.2 加 curves 侧车约定 | §4.2 新增侧车：路径 + manifest 键 `curves{path,rows,columns,sha256}` + 最小列集 + 时间轴口径 | 文档门禁 | 1 | 2 | cross-doc-contract-drift |
+| ADR5-D005 | PRD 里程碑表 M2/M4 范围列加了 FR8.1/FR8.3，出口标准列未同步 | Medium | 正确性 | 根因 | 契约漂移 | fixed | M2/M4 出口各补一条可验收断言 | M2 补「控制台与 report.json/curves.parquet 对数一致」；M4 补「经统一 API 完成并落 FR7.4 审计」 | 文档门禁 | 1 | 2 | scope-without-exit-criteria |
+| ADR5-D006 | `docs/design/` 新目录无所有权归属与入库处置声明 | Low | 质量 | 根因 | 原始设计 | fixed | 文档地图 + CLAUDE.md 各补一行 | docs/README 所有权矩阵新增「呈现层视觉原型（非契约，设计资产）」行；CLAUDE.md 结构清单同步 | 文档门禁 | 1 | 2 | unowned-artifact |
+| ADR5-D007 | F005/F006/F007 编号与执行时序倒置，BACKLOG 按里程碑排列时易误读 | Low | 质量 | 根因 | 原始设计 | fixed | 注明编号与执行顺序无关 | BACKLOG 规划节补「编号按分配时刻递增，与执行顺序无关（F007 先于 F005）」 | 文档门禁 | 1 | 2 | — |
+| ADR5-D008 | 决策 4 把「(M3+) 组合与台账只读视图」写进窗口为「M2 前」的 F005 | Low | 质量 | 根因 | 原始设计 | fixed | 拆为后续增量或独立条目 | 划为 F005.1；R3 进一步拆为「台账 F005.1 / 组合随 M3 规划」 | 文档门禁 | 1 | 2 | scope-without-exit-criteria |
+| ADR5-D009 | BACKLOG 新增规划表对 `check_backlog` 正则脆弱，首列若写成 Fxxx- 即误报 | Low | 质量 | 症状 | 原始设计 | fixed | 门禁加 section 感知 | `check_backlog` 在首个 `## ` 处 break，只解析活跃索引表；fail-closed（活跃表上方若插 `## ` 则报「缺少非 done Feature」） | tests/unit/test_validate_spec_lifecycle.py::test_backlog_planning_section_not_parsed_by_gate（检视方独立变异验证通过） | 1 | 2 | gate-without-teeth |
+| ADR5-D010 | CLAUDE.md `docs/decisions/` 条目重复两次 | Low | 质量 | 根因 | 原始设计 | fixed | 删重复条目 | 删除「当前结构」中无编号的重复行，保留带 0001~0005 编号版本 | 文档门禁 | 1 | 2 | — |
+| ADR5-R2-01 | D004 修复把曲线侧车路径写成 `results/`，与仓内既有报告根 `reports/` 冲突 | Medium | 正确性 | 根因 | 修复引入 | fixed | 对齐 §三 报告根 | 改为 `reports/bench/<object_id>/<data_version>/curves.parquet` 并注明报告根见 §三 | 文档门禁 + 检视方核实 `results/` 全仓无定义 | 2 | 2 | cross-doc-contract-drift |
+| ADR5-R2-02 | 「谱系」归属三处不一致：ADR 决策 4 说属 F005，原型横幅列举 F005 范围时漏掉它，原型 nav 把「谱系与台账」整页标 M3+ | Medium | 正确性 | 根因 | 修复引入 | fixed | 谱系留 F005 则横幅补列 + 原型拆两个 ph；否则 ADR 一并移入 F005.1 | 取建议 (a)：ADR 决策 4 显式「谱系归 F005 / 台账 F005.1 / 组合随 M3 规划」；横幅、nav、view-head、两个面板 h3、BACKLOG 五处同步 | 文档门禁 | 2 | 3 | partial-symmetric-fix |
+| ADR5-R2-03 | 曲线侧车最小列集中 `ic_decay`/`quantile_returns` 与 report.json 标量同名重复，且与「时间轴为逐日/逐 bar UTC 时间戳」的行轴口径矛盾 | Medium | 正确性 | 根因 | 修复引入 | fixed | 列名改时间展开式并写明与标量可互推 | 列集改 `q1_cum`..`q5_cum` / `long_short_cum` / `rolling_ic_h1..h24`，并补「标量是全样本汇总、侧车是其时间展开，两者口径必须可互推」 | 文档门禁 | 2 | 3 | cross-doc-contract-drift |
+| ADR5-R2-04 | ADR-0005 后续行动 ④（扩 check_dep_pins 覆盖 package-lock）无验收判据，属未执行任务 | Low | 测试覆盖 | 根因 | 流程缺陷 | fixed | 补 AC 并指定转入 tasks.md 的时点 | 后续行动 ④ 补「验收判据：对 package-lock.json 做一次变异验证（改一个依赖版本号使门禁变红），F005 立 spec 时转入其 tasks.md」 | 载体为 F005 tasks（未立项，非本轮可跑） | 2 | 3 | gate-without-teeth |
+
+### 循环 8 模式教训
+
+1. **本循环的支配模式是 `cross-doc-contract-drift`（4 条，含 2 条修复引入）**：ADR 是"提出新契约"的文档，但契约真正生效的位置在架构 §三目录树、§4.2 接口契约、ADR-0002 依赖表和 `tools/` 门禁里。ADR 自己写下"先于 F005 开发锁定"并不构成锁定——**写进 ADR 的约束传播条款，必须在同一次提交内落到被传播的那份文档上**，否则它只是一条待办。
+2. **`origin` 分布：原始设计 5、契约漂移 5、修复引入 3、流程缺陷 1。** 修复引入占 21%（3/14），全部由 diff-only 复核抓出，且 R2-01 是修复方自审发现——第 2/3 轮的价值再次被验证：R2-02/R2-03 在第 1 轮物理上不存在。
+3. **`partial-symmetric-fix` 再次出现（R2-02）**，与循环 7 同模式：D008 拆分"组合与台账"时只拆了台账，"谱系"被并列结构误带走，三处表述各说各话。教训同循环 7——**拆分一个并列短语时，必须枚举该短语在全仓的每一处出现并逐个裁定归属**，而不是只改提出问题的那一处。
+4. **`gate-without-teeth`（3 条）**：D003 引用了不存在的 ADR-0002 条款、D009 的门禁对新表格形状脆弱、R2-04 的后续行动无 AC。三者共同指向同一判据——**声称"有纪律约束"时，先问"哪个脚本会因为违反它而变红"**；答不出来的就是待办，应按未执行任务建 AC，而不是当成已完成的约束。
+5. **最长存活：D001~D010 均跨 2 轮关闭，R2-02/R2-03 跨至第 3 轮**；无条目超过封顶轮。
+6. **检视方独立核对抓到的实质点**：D002 的修复声明称"各页 ph 标记给出归属"——实物 grep 证实为改前既有而非事后编造（声明为真）；D009 的门禁做了变异验证（撤 break → 红）。两次核对都通过，说明本循环修复方声明可信度高，但核对本身不可省略：循环 7 的历史教训正是"纯文字转述连续 4 轮为假"。
+
+### 循环 8 裁决分布与建议命中率
+
+- fixed 14 / partial 0 / rejected 0 / carried-forward 0 / tracked 0（14 条全部接纳并关闭）。
+- 建议命中率约 93%（13/14 实质采纳检视方 `suggested_fix`）；唯一分歧为 R2-02——检视方给出 (a)/(b) 二选一，修复方取 (a) 并在执行中进一步拆出「组合只读视图随 M3 规划」，比原建议更细。
+- 全接纳率 100% 需警惕"检视在凑数"的反向信号；本循环的对冲证据是：3 条为修复引入（非首轮凑数可得）、1 条（D003）在修复后仍被降级为待办（R2-04），说明发现具备实质性而非形式化。
+- 协议偏差 1 项（已追认）：R2-02 占两笔 commit（`9509933` + `2e64750`），修复方主动声明，两笔均限于 R2-02 文件集合，不影响 bisect 定位。
