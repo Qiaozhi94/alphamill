@@ -92,4 +92,6 @@
 - 后续行动：① 立 F005 研究控制台 spec（引用本 ADR，版本归属 0.2）；② 评测台（F007）spec
   落曲线序列契约；③ 现有 Grafana 两板随需瘦身为视图渲染（口径逐步下沉 `db/migrations/`）；
   ④ F005 立项时扩展 `tools/check_dep_pins.py` 覆盖前端构建期依赖（Node 主版本 +
-  `package-lock.json` 完整性），使「按 ADR-0002 纪律 pin」成为可机器校验的门禁。
+  `package-lock.json` 完整性），使「按 ADR-0002 纪律 pin」成为可机器校验的门禁；验收判据：
+  对 `package-lock.json` 做一次变异验证（改一个依赖版本号使门禁变红），F005 立 spec 时
+  转入其 tasks.md。
