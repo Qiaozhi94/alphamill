@@ -227,12 +227,16 @@ src/alphamill/data_bridge/
   都不会回头补。孤儿 `.rN` 不被任何 manifest 引用,重跑时写 `rN+1` 即可,无需先清理。
   **首次导出**(无任何 valid manifest)窗口起点取库内 `date(min(event_time))`,首跑等价于一次全量;
   全量校验 = 全 span 重导至新 data_version 并做分区级 diff;窗口内无数据的 pair 记入 `skipped`。
-- **回滚/前向兼容**(F002-R3-04 修订):导出失败留下的半成品有**两种形态**——①还在
-  `lake/_staging/` 里没 rename 出去的;②**已 rename 进正式路径、但所属 manifest 未发布(或发布为
-  invalid)的孤儿 `.rN`**。两者都**不覆盖任何已发布分区**(已发布的 `.rN` 永不重写),也都不被任何
-  valid manifest 引用,因此对 reader 不可见、对增量游标无影响(游标只认 manifest,见上)。
-  重跑直接写 `rN+1`,无需先清理;两类残留由全量模式回收。invalid 版本永不复用版本号。
-  DuckDB 侧无 migration。
+- **回滚/前向兼容**(F002-R3-04 修订):导出失败产物按引用状态分为**三种形态**——①还在
+  `lake/_staging/` 里没 rename 出去的临时文件;②已 rename 进正式路径、但**不被任何 manifest
+  引用**的孤儿 `.rN`;③被 `status: invalid` manifest 引用的失败版本分区。三者都**不覆盖任何
+  已发布 valid 分区**(已发布的 `.rN` 永不重写),对 reader 不可见、对增量游标无影响(游标只认
+  valid manifest,见上)。重跑直接写 `rN+1`,无需先清理。
+
+  **回收边界冻结**:全量模式只回收① staging 临时文件与②无任何 manifest 引用的孤儿 `.rN`;
+  ③ invalid manifest 及其引用 `.rN` **作为完整失败审计证据一并保留**,不得只删分区使 manifest
+  的 `partitions` / `sha256` 失效。invalid 版本永不复用版本号;未来若需 retention,必须以独立
+  规格同时删除 manifest 与其全部引用文件,本 feature 不提供该降级。DuckDB 侧无 migration。
 
   (Round 3 这里写的是「半成品**只**存在于 `lake/_staging/`」,与同节 R3-02 段落自己描述的
   「一次失败可能已经把 `.rN` rename 进正式路径」直接矛盾——同一个修复只改了对称两句中的一句,
@@ -310,7 +314,10 @@ spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC
   退出码分层是让这两条同时成立的唯一方式。重试对账失败毫无意义:同一份数据重算必然同样失败,
   修复路径是产出新版本。
 - 重试:可重试故障由 systemd `Restart=on-failure` + `RestartSec=15min` 重试;**次数上限必须显式写 `StartLimitIntervalSec` + `StartLimitBurst=3`**——`alphamill-backup.service` 的注释写了「最多 3 次」却没写这两个指令,实际不生效,F002 的两个 unit 不重复该疏漏(并顺手给 backup.service 补上,列为 T019)。对账失败(退出码 2)不重试——直接 invalid(修复=新版本)。
-- 不可回滚副作用边界:invalid 标记与新版本创建均不可逆,但旧版本永在(不可变)。最坏情况 = 多一个**废 manifest 加若干孤儿 `.rN` 文件**(不是「废版本目录」——共享 `.rN` 模型下版本不占独立目录),占盘而已,无破坏性,由全量模式回收。
+- 不可回滚副作用边界:invalid 标记与新版本创建均不可逆,但旧版本永在(不可变)。失败最多留下
+  ①可由全量模式回收的 staging/无引用孤儿文件,以及②**必须与引用 `.rN` 一并保留的 invalid
+  manifest 审计证据**;共享 `.rN` 模型下版本不占独立目录。保留项只增加磁盘占用,不进入 reader
+  或增量游标;其 retention 不在本 feature 内隐式执行。
 
 ## 6. UI 与可观测性
 

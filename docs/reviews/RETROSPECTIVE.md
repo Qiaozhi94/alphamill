@@ -229,3 +229,41 @@
 - AC-002 缺口裁决与落地（2026-09-12，owner 决策后由检视人实施）：采纳「编排内降级证据 + 真实推理独立命令」。F001 spec §6 增「验收修订」条目（不静默改写原文），AC-002 改为编排内契约（source 与 model_enabled 双向 fail-closed，声称 real 却回 placeholder 判红），新增 AC-006 承载真实推理证据（复跑命令与前置条件写进 spec §6/§7）；design §8 同步两行。编号用 AC-006 而非 AC-002a/b——`validate_spec_lifecycle.py` 的 `AC_RE` 只接受纯数字编号，字母后缀会被**静默忽略**而不是报错，这类看不见的失效本身值得记住（另发现该校验器把 AC 行内所有反引号内容都当作 tests 路径，描述里的 /health、source 等不能加反引号）。容器化真实推理（compose 可选 profile `kronos-real`）落 F002 T014，锚到 FR-001——F002 T007 要把 signals_log 导出进湖，薄壳为 mock 时导出的全是 placeholder 行、对因子研究无价值，这是真实的 F002 利害关系而非硬塞。结果：`ALPHAMILL_INTEGRATION=1` 从长期 1 failed 变为 7 passed 1 skipped，skip 项带可执行命令而非沉默跳过；两道新断言各做一次变异验证（假实例声称 real 却回 placeholder → AC-002 红；KRONOS_REQUIRE_REAL_MODEL=1 指向 mock → AC-006 红）。
 - 收尾轮（2026-09-12，owner 要求「跑一下真实推理并处理掉那两个问题」）：① **AC-006 真实推理实跑通过**——既有 :8002 实例 3 passed（BTC/USDT，source=kronos，Kronos-base，256 行上下文，CPU 单次 7.2s）；另按 spec 文档命令从零起 :8003 复现，同样 3 passed（ETH/USDT，CPU 单次 3.4s）。② 实跑过程中发现 **C501**——我上一轮写进 spec 的那条 AC-006 命令**自己没跑过**，缺 DB 环境导致 /health 500；这是「文档化的命令从未被执行」的典型，已修并配契约测试。③ C402/C403 一并关闭，不再转 F002。三道新门禁各做一次变异验证。
 - 模式教训补记 #22 **documented-command-never-run**：把一条命令写进规格并不等于验证过它。C501 的根因是我在拆分 AC-002 时凭既有实例的行为推断命令形态，而那个实例带着 DB_HOST 覆盖启动。**凡是写进验收文档的命令，必须在干净环境里从零跑一遍**——这一轮的证据正是：同一条命令，在既有实例上"验证通过"，从零执行却直接 500。
+
+## 循环 7：F002 数据桥需求设计检视
+
+- report_type: doc-review | round: 1（full-scan）→ 2（修复覆盖 >30%，一次性 full-scan）→ 3（diff-only 封顶与 owner 角色合并）| 状态: 闭环候选
+- 日期：2026-09-12 → 2026-09-13 | 基线：`6491224` → 终态工作树基于 `a99a1c9`
+- 范围：F002 需求设计三件套起步；owner 后续明确收窄为 `docs/features/0.2/F002-data-bridge/design.md`，spec/tasks/integration/F004 与 ADR-0005 工作区改动不纳入最终裁决。
+- 结论：设计范围内 Critical/High/Medium/Low 全部清零；本地 `tools/verify.py` 101 passed、8 个环境依赖项 skipped、ruff 全绿；最终 CI 由闭环提交触发并由 reviewer 观测。
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F002-D001 | data_version 无物理隔离会覆盖旧快照 | Critical | 正确性 | 根因 | 原始设计 | fixed | 版本化寻址或完整文件集 | `.rN` 不覆盖 + manifest 累计完整清单 | AC-007（计划）+ 文档门禁 | 1 | 3 | immutable-version-without-versioned-storage |
+| F002-D002 | manifest 未绑定文件身份与摘要 | High | 正确性 | 根因 | 原始设计 | fixed | 记录路径/行数/边界/字节/sha256 | reader 只按清单读取并逐项验完整性 | AC-008（计划）+ 文档门禁 | 1 | 3 | manifest-without-artifact-identity |
+| F002-D003 | 对账真相源与弱降级契约漂移 | High | 正确性 | 根因 | 规格漂移 | carried-forward | 删除弱摘要与降级 | design 已冻结 canonical row_digest；tasks 最终核对按 owner 范围排除 | — | 1 | — | cross-doc-contract-drift |
+| F002-D004 | 时间截断不能替代一致性快照 | High | 正确性 | 根因 | 原始设计 | fixed | 同一 REPEATABLE READ 事务 | 导出与源摘要共享快照并记录 xmin | AC-010（计划）+ 文档门禁 | 1 | 2 | cutoff-without-snapshot-isolation |
+| F002-D005 | 质量旗只有总数且无裁决行为 | High | 正确性 | 根因 | 原始设计 | fixed | 分区级旗标并 fail-closed | 默认拒绝，显式 allow_flagged 才放行 | 文档门禁 | 1 | 2 | quality-signal-without-gate-policy |
+| F002-D006 | signals_log 事件时间含糊导致前视 | High | 正确性 | 根因 | 原始设计 | fixed | 区分事件与可得时间 | latest_candle/time 双轴 + 标签按 evaluated_at 掩码 | AC-009（计划）+ 文档门禁 | 1 | 3 | ambiguous-event-time |
+| F002-D007 | 异构 dataset 无受控 registry | Medium | 正确性 | 根因 | 原始设计 | fixed | 枚举投影/类型/键/过滤列 | 五个 dataset 契约完整登记 | AC-012（计划）+ 文档门禁 | 1 | 3 | generic-api-without-schema-registry |
+| F002-D008 | 调度时间跨文档不一致 | Medium | 正确性 | 症状 | 规格漂移 | fixed | owner 统一时点 | design 固定每日 02:00、周日 04:00 | 文档门禁 | 1 | 2 | cross-doc-contract-drift |
+| F002-D009 | 非零退出与不重试策略冲突 | Medium | 正确性 | 根因 | 原始设计 | fixed | 分层退出码 | 0/1/2 + RestartPreventExitStatus=2 | 文档门禁 | 1 | 2 | retry-policy-exit-code-conflict |
+| F002-D010 | symbol_map 键与格式有损 | Medium | 正确性 | 根因 | 规格漂移 | partial | 冻结三元键与五列映射 | design 已修；跨文档核对按 owner 最终范围排除 | design §4 | 1 | — | lossy-symbol-canonicalization |
+| F002-Q001 | Kronos 容器化无正式需求载体 | Medium | 质量 | 根因 | 流程缺口 | fixed | 建独立 Feature 并裁决阻塞关系 | F004 已建立，owner 于 `4883061` 裁决不阻塞 F002 | 生命周期门禁 | 1 | 3 | task-outside-feature-contract |
+| F002-Q002 | T009 捆绑四类动作 | Low | 质量 | 症状 | 流程缺口 | fixed | 拆为单一可验证任务 | 拆为 T009/T017/T018/T019 | 文档门禁 | 1 | 2 | bundled-task-breaks-bisectability |
+| F002-R2-01 | as-of 把未来生成信号倒灌历史 | Critical | 正确性 | 根因 | 修复引入 | fixed | event_time 与 available_at 同时约束 | 双时间轴 + 标签可用性掩码 | AC-009（计划） | 2 | 3 | bitemporal-availability-loss |
+| F002-R2-02 | 目录余项判错与共享 `.rN` 冲突 | High | 正确性 | 根因 | 修复引入 | fixed | reader 不扫描目录 | 输入路径仅取 manifest partitions | AC-008（计划） | 2 | 3 | integrity-check-conflicts-with-version-sharing |
+| F002-R2-03 | 增量 manifest 未形成完整快照 | High | 正确性 | 根因 | 原始设计 | fixed | 继承、替换、重算、原子发布 | 累计清单 + manifest-only 游标 + 附属状态来源 | AC-011/AC-014（计划） | 2 | 3 | incremental-manifest-without-cumulative-state |
+| F002-R2-04 | row_digest 输入与顺序不 canonical | High | 正确性 | 根因 | 修复引入 | fixed | 完整投影、无损编码和稳定排序 | IEEE 位模式、规范 JSON、全行字节排序 | AC-012（计划） | 2 | 3 | canonical-digest-without-canonical-schema |
+| F002-R2-Q01 | 新方案未对称传播到旧恢复文字 | Low | 质量 | 症状 | 修复引入 | partial | 清理覆盖/全集读取等旧句 | design 残余由 R3-04 关闭；tasks 最终核对按范围排除 | design diff + 门禁 | 2 | — | partial-symmetric-fix |
+| F002-R3-01 | as-of 未进入 API 且 OHLCV 默认放行 | High | 正确性 | 根因 | 修复引入 | fixed | 接口承载 fidelity 并默认拒绝退化 | read/ReadResult/异常/manifest 已同步 | AC-013（计划）+ 门禁 | 3 | 3 | safety-contract-not-enforced-by-interface |
+| F002-R3-02 | 物理文件推进游标会永久漏日 | High | 正确性 | 根因 | 修复引入 | fixed | 游标只认上一 valid manifest | manifest-only 游标与孤儿重跑已冻结 | AC-014（计划）+ 门禁 | 3 | 3 | cursor-derived-from-unpublished-state |
+| F002-R3-03 | 累计附属状态不能从清单反推 | High | 正确性 | 根因 | 修复引入 | fixed | skipped 继承/替换，null 独立计数 | 两类状态来源已拆开定义 | AC-011/AC-014（计划）+ 门禁 | 3 | 3 | cumulative-metadata-without-reconstructible-state |
+| F002-R3-04 | invalid 引用文件留存与回收冲突 | Medium | 正确性 | 症状 | 修复引入 | fixed | owner 冻结完整保留或 tombstone | 审计优先：invalid manifest 与引用 `.rN` 一并保留 | AC-014（计划）+ 门禁 | 3 | 3 | partial-symmetric-fix |
+
+### 循环 7 模式教训
+
+1. `partial-symmetric-fix` 连续跨轮出现：新增不变量后必须扫描其全部正向断言，而不只搜索已废弃关键词。R3-04 最终用“引用状态三分法”替代继续补句子。
+2. origin 分布：原始设计 8、修复引入 8、规格漂移 3、流程缺口 2；修复引入占 38%，说明 diff-only 复核是本循环的主要价值来源。
+3. 裁决分布：fixed 18、partial 2、carried-forward 1、rejected 0；建议命中率约 95%。partial/carried-forward 均因 owner 将最终范围收窄为 design，不冒充跨文档核对完成。
+4. 最长存活问题为 D001/D002/D006/D007 与 R2-03，均跨至 Round 3 才关闭；R3-01～04 在发现轮关闭。R3-04 连续补丁未收敛后按协议升级角色合并，owner 授权 reviewer 直接冻结不变量。
