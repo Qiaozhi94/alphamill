@@ -25,7 +25,7 @@ updated: 2026-09-13
 ## 1. 前置条件
 
 - F001 已 done:TimescaleDB 数据就绪(631 万行 binance)、`lake/` 目录位与 NAS 通道已预留、调度先例(backup/snapshot timer)成立。
-- 设计待确认问题:DQ-003 留待实现期观察,不阻塞开工(见 design §10)。
+- 设计问题 DQ-001~003 已全部裁决；实现期仅观察 DQ-003 预先定义的升级条件，不阻塞开工(见 design §10)。
 
 ## 2. 实现任务
 
@@ -33,8 +33,8 @@ updated: 2026-09-13
 
 - [ ] T001 [P] (`FR-001`): pyproject 新增 `pyarrow`/`duckdb` 依赖 pin(版本范围本地验证后落定),`.venv` 安装验证 — verify: `.venv/bin/python -c "import pyarrow, duckdb"` 退出码 0
 - [ ] T015 (`FR-001`): `src/alphamill/data_bridge/registry.py`——dataset 只读白名单(design §3 表:源表/主键/事件时间列/分区键/数值列/允许过滤列),未登记名字抛 `UnknownDatasetError` — verify: `tests/unit/test_f002_registry.py`(五个 dataset 齐备 + 未知名字判红 + signals_log 事件时间列为 latest_candle)
-- [ ] T016 (`FR-002`): `src/alphamill/data_bridge/digest.py`——`canonical_row_bytes()` 与流式 SHA-256 `row_digest`(design §3 规范编码),**同一函数同时喂 psycopg2 游标与 PyArrow batch** — verify: `tests/unit/test_f002_digest.py`(同数据两路输入摘要相同;单行单列改写摘要必变;两行 +x/-x 抵消式改写摘要必变——这正是 sum 口径抓不住的)
-- [ ] T002 (`FR-001`): `src/alphamill/data_bridge/manifest.py`——manifest 契约读写(架构 §4.4 字段 + status/reconcile/revision_diff/**partitions/quality/source_snapshot/value_digest** 扩展)、data_version 排序与最新 valid 解析、**partitions 完整性校验(只按清单逐项验存在/字节数/sha256,不扫目录、不要求目录全集相等,任一不符抛 ManifestIntegrityError)**、按 design §3 从 registry 投影与排序后的分区 row_digest 计算/校验 DatasetVersion `value_digest`、**增量合成算法(继承上一 valid 清单 → 按逻辑分区键替换/追加 → 重算累计量与 value_digest)** — verify: `tests/unit/test_f002_manifest.py`(AC-015)
+- [ ] T016 (`FR-002`, `AC-012`): `src/alphamill/data_bridge/digest.py`——`canonical_row_bytes()` 与流式 SHA-256 `row_digest`(design §3 规范编码),**同一函数同时喂 psycopg2 游标与 PyArrow batch** — verify: `tests/unit/test_f002_digest.py`(同数据两路输入摘要相同;单行单列改写摘要必变;两行 +x/-x 抵消式改写摘要必变——这正是 sum 口径抓不住的)
+- [ ] T002 (`FR-001`, `AC-011`, `AC-015`): `src/alphamill/data_bridge/manifest.py`——manifest 契约读写(架构 §4.4 字段 + status/reconcile/revision_diff/**partitions/quality/source_snapshot/value_digest** 扩展)、data_version 排序与最新 valid 解析、**partitions 完整性校验(只按清单逐项验存在/字节数/sha256,不扫目录、不要求目录全集相等,任一不符抛 ManifestIntegrityError)**、按 design §3 从 registry 投影与排序后的分区 row_digest 计算/校验 DatasetVersion `value_digest`、**增量合成算法(继承上一 valid 清单 → 按逻辑分区键替换/追加 → 重算累计量与 value_digest)** — verify: `tests/unit/test_f002_manifest.py`
 - [ ] T003 (`FR-001`): `src/alphamill/data_bridge/exporter.py`——ohlcv_1m 全量导出:**单个 REPEATABLE READ 只读事务**内查询 → 按 `exchange/pair/date` 写 `date=YYYY-MM-DD.rN.parquet`(写入后永不覆盖,内容变化写 rN+1)→ 先落 `lake/_staging/` 再 rename → **最后写 manifest 作为原子发布点**,含 partitions 清单与 source_snapshot;**增量游标只从上一 valid manifest 推导,不看磁盘分区**(design §3,防孤儿 .rN 造成永久漏日) — verify: 手动执行一次,`lake/ohlcv_1m/` 分区文件与 `_manifests/ohlcv_1m/<version>.json` 齐备
 - [ ] T004 (`FR-002`): 对账器——逐分区 `rows` + `time_min/time_max` + `row_digest`(design §3 唯一权威口径:规范编码 + 按编码字节序排序的流式 SHA-256,两侧调 `digest.py` 同一函数),不一致标记 invalid。**无降级分支**——不得退回 numeric/弱口径,性能不可接受走 spec 修订 — verify: `tests/integration/test_f002_export_reconcile.py`(AC-001/AC-002/AC-010)
 - [ ] T005 [P] (`FR-004`): `src/alphamill/data_bridge/symbol_map.py`——映射键 **(exchange, market_type, db_symbol)**,五列 canonical csv current 副本落 `src/alphamill/data_bridge/symbol_map.csv`(集成 §2.2 权威路径)，内容寻址副本原子发布到 `lake/_metadata/symbol_maps/<digest>.csv` 并支持按 digest 加载；spot/perp 格式按 design §4 冻结，**lake_pair 碰撞直接抛 `SymbolCollisionError`** — verify: `tests/unit/test_f002_symbol_map.py`(AC-004 + 碰撞判红 + 同 symbol 跨 spot/perp 不混淆 + 旧 digest 可重放)
@@ -44,7 +44,7 @@ updated: 2026-09-13
 - [ ] T006 (`FR-003`): `src/alphamill/data_bridge/reader.py`——DuckDB 只读取数(dataset+data_version+时间范围+pair 过滤),`ReadResult` 必须回报实际 dataset/data_version/value_digest 供 ADR-0007 snapshot builder 冻结;**返回数据前先跑 manifest 完整性校验**;`as_of=T` 同时施加 `event_time <= T` **与** `available_at <= T`(双时间轴,design §3);对 `as_of_fidelity=event_time_only` 的 dataset 默认抛 `InsufficientAsOfFidelityError`,`allow_event_time_only=True` 才放行且 `ReadResult` 如实回报;`realized_return_60m` 在 `evaluated_at > T` 时置 NULL 而非丢行;带质量旗分区默认抛 `FlaggedPartitionError`,`allow_flagged=True` 显式豁免并回报清单;invalid/缺失版本抛错;显式版本读取不受 latest 后移影响 — verify: `tests/integration/test_f002_reader.py`(AC-003/AC-008/AC-009/AC-013)
 - [ ] T007 (`FR-001`): 导出器扩展至衍生品三表与 signals_log(signals_log 无 exchange 维度,按日分区) — verify: AC-001 测试覆盖五 dataset
 - [ ] T020 (`FR-001`, `AC-014`): 中断恢复用例——构造「分区已 rename、manifest 未发布」的孤儿态,重跑增量确认不漏日且 skipped 继承正确 — verify: `tests/integration/test_f002_export_reconcile.py`
-- [ ] T008 [P] (`FR-005`): 全量校验模式——库内 vs 既有快照的分区级 diff,修订时递增 data_version 并登记 revision_diff,旧版本原样保留 — verify: `tests/integration/test_f002_revision.py`(AC-005)
+- [ ] T008 [P] (`FR-005`, `AC-005`, `AC-007`): 全量校验模式——库内 vs 既有快照的分区级 diff,修订时递增 data_version 并登记 revision_diff,旧版本原样保留并验证 v1/v2 并发读取不串版 — verify: `tests/integration/test_f002_revision.py`
 
 ### Phase 3:运维化
 
