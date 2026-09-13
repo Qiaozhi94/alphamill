@@ -314,3 +314,24 @@
 - 建议命中率约 93%（13/14 实质采纳检视方 `suggested_fix`）；唯一分歧为 R2-02——检视方给出 (a)/(b) 二选一，修复方取 (a) 并在执行中进一步拆出「组合只读视图随 M3 规划」，比原建议更细。
 - 全接纳率 100% 需警惕"检视在凑数"的反向信号；本循环的对冲证据是：3 条为修复引入（非首轮凑数可得）、1 条（D003）在修复后仍被降级为待办（R2-04），说明发现具备实质性而非形式化。
 - 协议偏差 1 项（已追认）：R2-02 占两笔 commit（`9509933` + `2e64750`），修复方主动声明，两笔均限于 R2-02 文件集合，不影响 bisect 定位。
+
+---
+
+## 循环 9：ADR-0007 后 F002 三件套追踪补齐
+
+- report_type: doc-review | round: 1（定向核对）→ 2（diff-only 复核）| 状态: 闭环
+- 日期：2026-09-13 | 基线：`0405865` → `ba3cc8e`
+- 范围：`docs/features/0.2/F002-data-bridge/{spec,design,tasks}.md`；只补 ADR 来源、验收映射与任务追踪，不改变 F002 产品范围。
+- 结论：三项 Medium 全部修复，Critical/High/Low 为 0；spec/design/tasks 的 AC 集合均为 AC-001..015；本地 `python3 tools/verify.py`（经项目 `.venv` 解释器实跑）103 passed / 8 skipped；源文档提交 `ba3cc8e` 的 CI run `34763002847` 双 job 全绿（py3.11 / py3.13）。
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F002-RS-01 | ADR-0007 已生效但 spec 仍声明无新 ADR | Medium | 正确性 | 根因 | 规格漂移 | fixed | spec 来源区显式引用 ADR-0007 | spec 引用 ADR-0007 并保留导出细节权威边界 | 文档链接/生命周期门禁 + ADR 关键词定向检查 | 1 | 2 | cross-doc-contract-drift |
+| F002-RS-02 | design 验收映射未同步新增摘要与映射契约 | Medium | 测试覆盖 | 根因 | 规格漂移 | fixed | 补 AC-015 并更新 AC-003/AC-004 关键断言 | 补 ADR 输入约束、AC-015，并扩写 AC-001/003/004 | AC 集合差异检查 + 文档门禁 | 1 | 2 | cross-doc-contract-drift |
+| F002-RS-03 | tasks 缺 AC-007/011/012 显式追踪且前置条件仍称 DQ-003 待确认 | Medium | 测试覆盖 | 根因 | 规格漂移 | fixed | 对应任务补 AC 引用并更新 DQ-003 状态 | T016/T002/T008 补 AC 引用；DQ-003 改为已裁决 | AC 集合差异检查 + 文档门禁 | 1 | 2 | cross-doc-contract-drift |
+
+### 循环 9 模式教训
+
+1. 三项均为 `cross-doc-contract-drift`：新增 ADR/AC 时应在同一批次检查来源区、design 验收映射和 tasks 显式 ID 三个落点。
+2. origin 分布为规格漂移 3；三项均跨一轮修复，第二轮 diff-only 未产生新问题。
+3. 裁决分布：fixed 3、partial/rejected/tracked 0；建议命中率 100%，修复严格限定为追踪补齐，没有借机扩大 F002 范围。
