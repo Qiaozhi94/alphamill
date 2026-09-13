@@ -20,7 +20,7 @@ updated: 2026-09-13
 - **PRD 来源**:`docs/alphamill-prd.md` FR1.2(不可变快照)、FR1.3(研究只读边界)、FR1.4(双口径与时间语义)、FR1.6(灾备,湖部分);里程碑 M1
 - **架构来源**:`docs/alphamill-architecture.md` §〇(存储三件套分工)、§四 data_bridge(质量门·对账·manifest)、§4.4(Parquet 湖 manifest 契约)
 - **系统设计 / Research / Contract 来源**:`docs/alphamill-integration.md` §一(TimescaleDB → Parquet 湖,导出设计/修订政策/宇宙扩容)、§2.2(symbol_map.csv M1 出口标准)
-- **上游决策**:无新 ADR;导出设计以 `docs/alphamill-integration.md` §1.2 为唯一权威
+- **上游决策**:ADR-0007(dataset 独立版本与 ResearchSnapshot 绑定);F002 导出细节仍以 `docs/alphamill-integration.md` §1.2 为权威
 - **基座来源**:F001(已 done)——TimescaleDB 631 万行数据、`lake/` NAS 备份目录位、`backup-nas.sh` 分块校验通道
 - **功能类型**:backend / data-model
 - **规格模式**:full
