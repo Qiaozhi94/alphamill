@@ -1,6 +1,6 @@
 # AlphaMill — 系统架构设计
 
-> 版本：v0.1 | 日期：2026-09-07 | 配套：[alphamill-prd.md](./alphamill-prd.md)
+> 版本：v0.1 | 日期：2026-09-13 | 配套：[alphamill-prd.md](./alphamill-prd.md)
 
 ---
 
@@ -164,6 +164,7 @@ alphamill/                       # 仓库根（非 Python 资产留根，不进�
 ├── docs/                        # 本文档集
 ├── deployment/                  # docker-compose / .env 模板 / verify 脚本
 ├── monitoring/                  # Grafana/Prometheus 配置（自 quant-crypto 迁入）
+├── web/                         # 自建前端 SPA（ADR-0005）：构建产物由 api 服务静态托管，生产运行时无 Node
 ├── scripts/                     # 实验运行器、报告生成、verify 脚本（薄入口）
 ├── reports/                     # 实验 manifest + 归档报告（运行产物）
 └── src/alphamill/               # 唯一 Python 包
@@ -202,6 +203,7 @@ alphamill/                       # 仓库根（非 Python 资产留根，不进�
     │   └── risk/                #   风控三件套（自 quant-crypto 迁入）
     ├── experiment_store/        # FR7：manifest、证据索引与 append-only 台账
     ├── lifecycle/               # FR6：监控事件、归因与状态动作
+    ├── api/                     # 统一人类界面后端（ADR-0005）：领域只读端点；F006 写路径唯一入口与审计咽喉
     ├── kronos_service/          # Kronos 推理服务薄壳（自 quant-crypto 迁入）
     └── vibe_bridge/             # FR3.7/FR6.4：可选第二实现与 Agent 适配器
         ├── local_loader_config/ #   local loader 指向 Parquet 湖
@@ -360,7 +362,7 @@ class PortfolioDef:
 | `independent_cross_backtest.py`（独立重放器） | **迁入**为无前视审计器（FR3.6） |
 | `validate_low_frequency_*_holdout.py` 门禁脚本 | **参数化迁移**到 `src/alphamill/validation/`，落实 FR3.4/FR3.5 |
 | 风控三件套 + Freqtrade dry-run | **迁入**（FR5），策略模板化 |
-| Grafana / Prometheus / 日报 | **迁入**，新增实验台账看板（FR6） |
+| Grafana / Prometheus / 日报 | **迁入**；实验谱系与评测浏览归自建研究控制台（ADR-0005），Grafana 逐步退守平台观测与告警 |
 | Kronos 信号服务 + 缓存 | 薄壳迁入 `src/alphamill/kronos_service/`；模型代码上游 clone + pin |
 | `discover_okx_swap_universe.py` | **复用**做宇宙扩容到 30~50 对（FR1.5） |
 
@@ -391,8 +393,9 @@ flowchart LR
         subgraph DOCKER["docker-compose（自 quant-crypto 迁入）"]
             TS[(TimescaleDB)]
             FTD[Freqtrade dry-run]
-            GRAF[Grafana]
+            GRAF[Grafana<br/>退守平台观测与告警]
             PROM[Prometheus]
+            API[统一呈现后端<br/>只读 API + SPA 托管<br/>F005+ · ADR-0005]
         end
         subgraph NIGHT["夜间批处理（宿主机/独立容器）"]
             EXPORT[data_bridge 导出]
@@ -412,12 +415,16 @@ flowchart LR
     GATES --> LEDGER
     PORT --> LEDGER
     FTD --> LEDGER
+    TS -.->|口径视图| API
+    LEDGER -.-> API
+    FTD -.->|REST 代理| API
     LEDGER -.-> AGENT
     KRN -.->|信号| MINE
 ```
 
 节奏：白天 Freqtrade dry-run/paper 与监控在线；夜间跑「导出 → 挖掘 → 评测 → 门禁 →
-组合构建」批处理。人工审查晋级、部署和复盘产生的新假设。GPU 占用按时段表调度（见 7.1）。
+组合构建」批处理。人工审查晋级、部署和复盘产生的新假设（白天经统一呈现后端浏览批处理
+产出，研究控制台先行，ADR-0005；Grafana 逐步退守平台观测与告警）。GPU 占用按时段表调度（见 7.1）。
 
 ### 7.1 单卡 GPU 时段调度（RTX 4060 Laptop 8GB）
 

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ALPHAMILL /// UI 交互设计稿（终局自建版）</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">ALPHAMILL<em>///</em>淘沙 <small>CONSOLE REV 0.1-DESIGN</small></div>
+  <div class="top-cell">ENV <b>DRY-RUN</b></div>
+  <div class="top-cell">DATA_VERSION <b>v2026.09.12</b></div>
+  <div class="top-cell">COST_MODEL <b>cm-v1</b></div>
+  <div class="top-cell"><span class="mock">MOCKUP·假数据</span></div>
+  <div class="top-cell" style="margin-left:auto; border-right:none;">UTC <b id="clock">--:--:--</b></div>
+</header>
+
+<nav id="nav">
+  <div class="nav-group">总览 / OVERVIEW</div>
+  <div class="nav-item active" data-view="overview">全域总览 <span class="ph">F005</span></div>
+
+  <div class="nav-group">研究 / RESEARCH</div>
+  <div class="nav-item" data-view="funnel">实验漏斗 <span class="ph">F005</span></div>
+  <div class="nav-item" data-view="factors">因子库 <span class="ph">F005</span></div>
+  <div class="nav-item" data-view="detail">因子详情 <span class="ph">F005</span></div>
+  <div class="nav-item" data-view="compare">因子对比 <span class="ph">F005</span></div>
+  <div class="nav-item" data-view="lineage">谱系与台账 <span class="ph">M3+</span></div>
+
+  <div class="nav-group">运营 / OPERATIONS</div>
+  <div class="nav-item" data-view="strategy">策略运营 <span class="ph">M3/M4</span></div>
+  <div class="nav-item" data-view="signals">信号质量 <span class="ph">M3/M4</span></div>
+
+  <div class="nav-group">平台 / PLATFORM</div>
+  <div class="nav-item" data-view="platform">数据与服务健康 <span class="ph">最后</span></div>
+
+  <div class="nav-group">操作 / OPS</div>
+  <div class="nav-item" data-view="ops">应急操作与审计 <span class="ph">F006</span></div>
+</nav>
+
+<main>
+
+<!-- ═══ 0 全域总览 ═══ -->
+<section class="view active" id="view-overview">
+  <div class="view-head">
+    <h1>OVERVIEW</h1><span class="cn">全域总览</span>
+    <span class="ph">F005 · 研究控制台入口</span>
+  </div>
+  <div class="src">SRC: GET /api/v1/overview · <b>数字全部可追溯 manifest；实时运营读数经运营视图（口径单点）</b></div>
+
+  <div class="pipe">
+    <div class="step"><div class="st">01 采集 COLLECT</div><div class="sv pos">RUNNING · lag 0.8s</div></div>
+    <div class="step"><div class="st">02 快照 EXPORT</div><div class="sv">v2026.09.12 · 02:00</div></div>
+    <div class="step"><div class="st">03 评测 BENCH</div><div class="sv">B-20260912 · 124 候选</div></div>
+    <div class="step"><div class="st">04 门禁 GATES</div><div class="sv">verify PASS · 0 阻塞</div></div>
+    <div class="step"><div class="st">05 部署 DEPLOY</div><div class="sv">DRY-RUN · champion PM-007</div></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="grid g4">
+    <div class="panel"><h3>CHAMPION 累计 PnL <span class="aux">PM-007 · dry-run</span></h3>
+      <div class="big pos">+6.42<small> %</small></div><div class="sub">自 2026-08-28 · 成本后 · 口径 v_strategy_pnl_daily</div></div>
+    <div class="panel"><h3>今日 PnL</h3>
+      <div class="big neg">-0.31<small> %</small></div><div class="sub">更新延迟 42s · SRC 运营视图</div></div>
+    <div class="panel"><h3>昨夜批次 B-20260912</h3>
+      <div class="big">124<small> 候选</small></div><div class="sub">promising 9 · weak 51 · dead 64（cost_negative 17）</div></div>
+    <div class="panel"><h3>风控三件套</h3>
+      <div class="big" style="font-size:20px; line-height:1.5;">CB <span class="pos">ARMED</span> · CG <span class="pos">ARMED</span><br>DD <span class="pos">ARMED</span></div>
+      <div class="sub">触发 0 次 · 24h</div></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="grid g2">
+    <div class="panel"><h3>漏斗概览 <a class="aux" data-goto="funnel">进入漏斗 &gt;&gt;&gt;</a></h3><div id="ov-funnel"></div></div>
+    <div class="panel"><h3>最近批次 <a class="aux" data-goto="funnel">全部 &gt;&gt;&gt;</a></h3><div id="ov-batches"></div></div>
+  </div>
+
+  <div class="notice">
+    <b>设计稿边界说明（FR8）：</b>本页聚合研究（版本态）与运营（实时态）读数，但两者口径分列、来源分置；
+    研究数字可追溯 manifest，运营数字来自运营视图。门禁裁决不出现在任何页面（FR8.4）。
+  </div>
+</section>
+
+<!-- ═══ 1 实验漏斗 ═══ -->
+<section class="view" id="view-funnel">
+  <div class="view-head">
+    <h1>FUNNEL</h1><span class="cn">实验漏斗</span>
+    <span class="ph">F005 · M2 周产能 ≥100 的审查载体</span>
+  </div>
+  <div class="src">SRC: GET /api/v1/funnel · <b>v_funnel_status（experiment_store 投影）</b></div>
+
+  <div class="grid g4">
+    <div class="panel"><h3>本周候选产能</h3><div class="big">128</div><div class="sub">目标 ≥100 · FR2 出口</div></div>
+    <div class="panel"><h3>有效独立数</h3><div class="big">23</div><div class="sub">OOS PnL 聚类估计 · FR3.3</div></div>
+    <div class="panel"><h3>cost_negative 比例</h3><div class="big neg">13.7<small> %</small></div><div class="sub">无论 IC 多高一律 dead · FR3.2</div></div>
+    <div class="panel"><h3>来源多样性</h3><div class="big">5<small> 生成器</small></div><div class="sub">alphagen/kronos/gp/expr/manual</div></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="grid g2">
+    <div class="panel"><h3>生命周期状态分布 <span class="aux">FR6.2</span></h3><div id="funnel-stages"></div></div>
+    <div class="panel"><h3>评测批次 INDEX</h3><div id="funnel-batches"></div></div>
+  </div>
+</section>
+
+<!-- ═══ 2 因子库 ═══ -->
+<section class="view" id="view-factors">
+  <div class="view-head">
+    <h1>FACTORS</h1><span class="cn">因子库</span>
+    <span class="ph">F005 · 只读 · 版本态产物</span>
+  </div>
+  <div class="src">SRC: GET /api/v1/factors?verdict=&amp;generator=&amp;data_version= · <b>v_factor_metrics 投影表</b></div>
+
+  <div class="filters">
+    <label>verdict</label>
+    <select id="f-verdict"><option value="">ALL</option><option>promising</option><option>weak</option><option>dead</option><option>decayed</option></select>
+    <label>generator</label>
+    <select id="f-gen"><option value="">ALL</option><option>alphagen</option><option>kronos</option><option>genetic</option><option>expression</option><option>manual</option></select>
+    <label>data_version</label>
+    <select id="f-dv"><option value="">ALL</option><option>v2026.09.12</option><option>v2026.09.05</option></select>
+    <label>search</label>
+    <input type="text" id="f-q" placeholder="factor_id / hypothesis" style="width:220px">
+    <span class="badge dim">勾选行 &gt; 加入对比</span>
+  </div>
+
+  <div class="panel" style="padding:0;">
+    <table id="factor-table">
+      <thead><tr>
+        <th style="width:26px;">CMP</th><th>FACTOR_ID</th><th>HYPOTHESIS</th><th>GEN</th><th>SCOPE</th>
+        <th class="num">RANK_IC</th><th class="num">ICIR</th><th class="num">POS%</th>
+        <th>COST</th><th>VERDICT</th><th>DATA_VER</th>
+      </tr></thead>
+      <tbody id="factor-rows"></tbody>
+    </table>
+  </div>
+  <div class="sub" style="padding-top:8px;">点击行 → 因子详情 · 表格数字与 Grafana/任何前端同源（口径唯一居所：版本化视图）</div>
+</section>
+
+<!-- ═══ 3 因子详情 ═══ -->
+<section class="view" id="view-detail">
+  <div class="view-head">
+    <h1 id="d-id">FACTOR</h1>
+    <span class="badge" id="d-verdict">—</span>
+    <span class="ph">F005 · 单因子证据页</span>
+  </div>
+  <div class="src">SRC: GET /api/v1/factors/{id} · <b>报告文件 + manifest 直出（真相源），非投影聚合</b></div>
+
+  <div class="grid g6">
+    <div class="panel"><h3>RANK_IC MEAN</h3><div class="big" id="d-ric">—</div><div class="sub" id="d-ric-sub"></div></div>
+    <div class="panel"><h3>ICIR</h3><div class="big" id="d-icir">—</div><div class="sub" id="d-icir-sub"></div></div>
+    <div class="panel"><h3>IC POSITIVE</h3><div class="big" id="d-pos">—</div><div class="sub">占比</div></div>
+    <div class="panel"><h3>COST 后多空收益</h3><div class="big" id="d-net">—</div><div class="sub">taker+滑点+资金费 · cm-v1</div></div>
+    <div class="panel"><h3>换手 / 周期</h3><div class="big" id="d-to">—</div><div class="sub" id="d-hold"></div></div>
+    <div class="panel"><h3>毛交易样本</h3><div class="big" id="d-ntr">—</div><div class="sub" id="d-pow"></div></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="grid g2">
+    <div class="panel">
+      <h3>成本后多空累计收益 <span class="aux">窗口=选择期</span></h3>
+      <div class="chart-box"><div id="d-equity"></div><div class="chart-meta"><span>EQUITY · 逐日</span><span id="d-eq-range"></span></div></div>
+      <div class="legend"><span><i style="background:var(--fg)"></i>long_short net</span><span><i style="background:var(--red)"></i>drawdown</span></div>
+    </div>
+    <div class="panel">
+      <h3>IC 衰减 / 分位数 <span class="aux">horizons [1,2,4,12,24]h · q1-q5</span></h3>
+      <div class="chart-box"><div id="d-icbars"></div><div class="chart-meta"><span>IC DECAY</span><span>BY HORIZON</span></div></div>
+      <div class="chart-box" style="margin-top:1px;"><div id="d-qbars"></div><div class="chart-meta"><span>QUANTILE RETURN</span><span>Q1→Q5 · LONG_SHORT</span></div></div>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="two-col">
+    <div class="panel">
+      <h3>成本分解 <span class="aux">cm-v1 · FR3.2</span></h3>
+      <dl class="kv" id="d-cost"></dl>
+    </div>
+    <div class="panel">
+      <h3>MANIFEST 证据链 <span class="aux">FR7.1/7.2 · 不可变</span></h3>
+      <dl class="kv" id="d-manifest"></dl>
+      <div class="spacer"></div>
+      <button class="btn" disabled title="F006 交付后启用：写路径唯一经 /api/v1 · 落 FR7.4 审计">[ F006 ] 送入人审队列</button>
+      <span class="sub" style="display:inline-block; margin-left:10px;">写路径未启用 · 设计占位</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 4 因子对比 ═══ -->
+<section class="view" id="view-compare">
+  <div class="view-head">
+    <h1>COMPARE</h1><span class="cn">因子对比</span>
+    <span class="ph">F005 · 最多 4 条叠加</span>
+  </div>
+  <div class="src">SRC: GET /api/v1/factors/compare?ids= · <b>同一窗口、同一 data_version 下对齐</b></div>
+  <div class="chips" id="cmp-chips"></div>
+  <div class="panel">
+    <h3>成本后累计收益叠加 <span class="aux">选择期窗口对齐</span></h3>
+    <div class="chart-box"><div id="cmp-chart"></div><div class="chart-meta"><span>OVERLAY EQUITY</span><span id="cmp-count">0 SELECTED</span></div></div>
+    <div class="legend" id="cmp-legend"></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="panel" style="padding:0;"><table id="cmp-table">
+    <thead><tr><th>METRIC</th><th id="cmp-h0">—</th><th id="cmp-h1">—</th><th id="cmp-h2">—</th><th id="cmp-h3">—</th></tr></thead>
+    <tbody id="cmp-rows"></tbody>
+  </table></div>
+</section>
+
+<!-- ═══ 5 谱系与台账 ═══ -->
+<section class="view" id="view-lineage">
+  <div class="view-head">
+    <h1>LINEAGE</h1><span class="cn">谱系与台账</span>
+    <span class="ph">M3+ · append-only 只读呈现</span>
+  </div>
+  <div class="src">SRC: GET /api/v1/lineage?hyp= · GET /api/v1/ledger · <b>experiment_store · FR7.2 证据链</b></div>
+
+  <div class="panel">
+    <h3>对象谱系 <span class="aux">HypothesisDef → FactorDef → PortfolioDef → DeploymentRun</span></h3>
+    <div class="lineage">
+      <b>H-042 日内动量衰减</b> <span class="lk">[generation g007 · manual+LLM]</span><br>
+      <span class="lk">├─</span> <b>alphagen_gen042_f003</b> <span class="lk">promising · g042</span> <span class="lk">──▶ PM-007 (Top-K w=0.34)</span><br>
+      <span class="lk">├─</span> <b>alphagen_gen042_f001</b> <span class="lk">weak · 未入组</span><br>
+      <span class="lk">└─</span> <b>expr_mom_break_v2</b> <span class="lk">dead · cost_negative</span><br>
+      <b>H-031 资金费率套利</b> <span class="lk">[generation g005 · manual]</span><br>
+      <span class="lk">├─</span> <b>manual_funding_carry</b> <span class="lk">promising</span> <span class="lk">──▶ PM-009 (单成员)</span><br>
+      <span class="lk">└─</span> <b>kronos_rev_v2</b> <span class="lk">decayed · 2026-09-02 降权</span>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="panel" style="padding:0;">
+    <h3 style="padding:14px 16px 0;">APPEND-ONLY 台账 <span class="aux">留出访问 / 部署审批 / 生命周期 · FR3.4 / FR7.4</span></h3>
+    <table style="margin-top:8px;"><thead><tr>
+      <th>UTC 时间</th><th>类型</th><th>对象</th><th>操作者</th><th>规则版本</th><th>证据</th>
+    </tr></thead><tbody id="ledger-rows"></tbody></table>
+  </div>
+</section>
+
+<!-- ═══ 6 策略运营 ═══ -->
+<section class="view" id="view-strategy">
+  <div class="view-head">
+    <h1>STRATEGY OPS</h1><span class="cn">策略运营</span>
+    <span class="ph">M3/M4 自建 · 现阶段 Grafana 板2 承载</span>
+  </div>
+  <div class="src">SRC: GET /api/v1/ops/* · <b>运营视图（TSDB 口径单点）+ Freqtrade REST 代理；Grafana 同读此视图，对数 diff=0</b></div>
+
+  <div class="grid g6">
+    <div class="panel"><h3>今日 PnL</h3><div class="big neg">-0.31%</div><div class="sub">成本后</div></div>
+    <div class="panel"><h3>累计 PnL</h3><div class="big pos">+6.42%</div><div class="sub">16 个交易日</div></div>
+    <div class="panel"><h3>胜率</h3><div class="big">57.8%</div><div class="sub">n=83 平仓</div></div>
+    <div class="panel"><h3>最大回撤</h3><div class="big neg">-1.94%</div><div class="sub">08-31</div></div>
+    <div class="panel"><h3>持仓</h3><div class="big">4</div><div class="sub">净敞口 +0.12</div></div>
+    <div class="panel"><h3>SNAPSHOT LAG</h3><div class="big">42<small>s</small></div><div class="sub pos">正常</div></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="panel">
+    <h3>累计收益曲线（dry-run）<span class="aux">CHAMPION PM-007</span></h3>
+    <div class="chart-box"><div id="st-equity"></div><div class="chart-meta"><span>PNL HISTORY · 逐日</span><span>REALIZED + UNREALIZED</span></div></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="two-col">
+    <div class="panel" style="padding:0;">
+      <h3 style="padding:14px 16px 0;">当前持仓</h3>
+      <table style="margin-top:8px;"><thead><tr>
+        <th>PAIR</th><th>方向</th><th class="num">入场价</th><th class="num">现价</th><th class="num">未实现</th><th>组合版本</th>
+      </tr></thead><tbody id="pos-rows"></tbody></table>
+    </div>
+    <div class="panel" style="padding:0;">
+      <h3 style="padding:14px 16px 0;">近期平仓 <span class="aux">执行回流 FR5.6</span></h3>
+      <table style="margin-top:8px;"><thead><tr>
+        <th>PAIR</th><th>方向</th><th class="num">PnL%</th><th>原因</th><th class="num">持仓时长</th>
+      </tr></thead><tbody id="trade-rows"></tbody></table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 7 信号质量 ═══ -->
+<section class="view" id="view-signals">
+  <div class="view-head">
+    <h1>SIGNALS</h1><span class="cn">信号质量</span>
+    <span class="ph">M3/M4 · 业务实时态（alpha 源头健康）</span>
+  </div>
+  <div class="src">SRC: GET /api/v1/ops/signals · <b>Kronos Rolling IC / predicted vs realized · FR6.1</b></div>
+
+  <div class="grid g4">
+    <div class="panel"><h3>ROLLING IC (7D)</h3><div class="big pos">0.038</div><div class="sub">阈值线 0.015 · 低于触发降权</div></div>
+    <div class="panel"><h3>评估信号 (7D)</h3><div class="big">1,842</div><div class="sub">覆盖率 96.4%</div></div>
+    <div class="panel"><h3>STALE 信号</h3><div class="big">7</div><div class="sub">越过陈旧界 N=4 · NaN 化</div></div>
+    <div class="panel"><h3>KRONOS 实例</h3><div class="big" style="font-size:18px; line-height:1.6;">REAL · CPU<br><span class="pos">HEALTHY</span></div><div class="sub">1.76s/次 · 1.76s</div></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="grid g2">
+    <div class="panel"><h3>KRONOS ROLLING IC <span class="aux">7d 窗口逐日</span></h3>
+      <div class="chart-box"><div id="sg-ic"></div><div class="chart-meta"><span>ROLLING IC</span><span>THRESHOLD 0.015</span></div></div></div>
+    <div class="panel"><h3>PREDICTED vs REALIZED 60M <span class="aux">散点 · 最近 48h</span></h3>
+      <div class="chart-box"><div id="sg-scatter"></div><div class="chart-meta"><span>PRED</span><span>REALIZED</span></div></div></div>
+  </div>
+</section>
+
+<!-- ═══ 8 平台健康 ═══ -->
+<section class="view" id="view-platform">
+  <div class="view-head">
+    <h1>PLATFORM</h1><span class="cn">数据与服务健康</span>
+    <span class="ph">自建次序最后 · 告警永不自建</span>
+  </div>
+  <div class="src">SRC: GET /api/v1/platform/* · <b>现由 Grafana 板1 承载（quant-overview）· ADR-0005 降级路线末端</b></div>
+
+  <div class="grid g4">
+    <div class="panel"><h3>K 线延迟</h3><div class="big pos">0.8<small>s</small></div><div class="sub">阈值 120s</div></div>
+    <div class="panel"><h3>缺失 1M K 线 (24H)</h3><div class="big">0</div><div class="sub">50 pairs</div></div>
+    <div class="panel"><h3>异常 1M 波动</h3><div class="big">2</div><div class="sub">已标记 · 质量旗</div></div>
+    <div class="panel"><h3>快照导出</h3><div class="big pos">OK</div><div class="sub">02:00 · 631 万行/日增</div></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="panel" style="padding:0;">
+    <h3 style="padding:14px 16px 0;">服务矩阵</h3>
+    <table style="margin-top:8px;"><thead><tr>
+      <th>服务</th><th>状态</th><th class="num">延迟</th><th>备注</th>
+    </tr></thead><tbody id="svc-rows"></tbody></table>
+  </div>
+
+  <div class="notice">
+    <b>GPU 时段调度（架构 §7.1）：</b>当前 07:00–22:00 → Kronos 常驻 ≤3GB；夜槽 22:00–06:30 → AlphaGen 训练 ≤6GB 独占；
+    碰撞走单槽 FIFO，队列赢，绝不并行赌 OOM。
+  </div>
+</section>
+
+<!-- ═══ 9 应急操作 ═══ -->
+<section class="view" id="view-ops">
+  <div class="view-head">
+    <h1>OPS</h1><span class="cn">应急操作与审计</span>
+    <span class="ph">F006 · 写路径唯一入口 + FR7.4 审计</span>
+  </div>
+  <div class="src">SRC: POST /api/v1/ops/* · <b>前端不直写 DB；全部动作落 append-only 台账</b></div>
+
+  <div class="notice">
+    <b>边界（FR8.4 / 决策 5）：</b>门禁与统计裁决保持 CLI（tools/verify.py），页面只呈现结果；
+    下列应急操作来自 Freqtrade REST 代理（freqtrade_bridge 契约），二次确认 + 操作者留痕。
+  </div>
+
+  <div class="grid g3">
+    <div class="panel"><h3>FREQTRADE 控制</h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn" disabled>START</button><button class="btn" disabled>STOP</button>
+        <button class="btn" disabled>RELOAD</button>
+      </div>
+      <div class="sub">当前 RUNNING · dry-run</div></div>
+    <div class="panel"><h3>手动干预</h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn danger" disabled>FORCEENTER</button>
+        <button class="btn danger" disabled>FORCEEXIT</button>
+      </div>
+      <div class="sub">T017 双路径已验证 · UI 为应急通道</div></div>
+    <div class="panel"><h3>生命周期动作 <span class="aux">FR6.2</span></h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn danger" disabled>降权</button>
+        <button class="btn danger" disabled>暂停</button>
+        <button class="btn danger" disabled>下线</button>
+      </div>
+      <div class="sub">恢复必须重新验证（不得自动复活）</div></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="panel" style="padding:0;">
+    <h3 style="padding:14px 16px 0;">操作审计（预览）</h3>
+    <table style="margin-top:8px;"><thead><tr>
+      <th>UTC 时间</th><th>动作</th><th>对象</th><th>操作者</th><th>证据链</th>
+    </tr></thead><tbody id="audit-rows"></tbody></table>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="panel"><h3>门禁裁决呈现（只读）</h3>
+    <div class="kv">
+      <dt>LAST VERIFY</dt><dd><span class="pos">PASS</span> · 2026-09-12 18:04 UTC · 26 项检查 · <span class="muted">python3 tools/verify.py（CLI 唯一入口）</span></dd>
+      <dt>AC-006</dt><dd><span class="muted">真实模型冒烟 · KRONOS_REQUIRE_REAL_MODEL=1 · 命令见 spec §6</span></dd>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <span><b>ALPHAMILL UI 设计稿</b> · 终局自建版 · 零依赖单页</span>
+  <span class="sep">|</span>
+  <span>红=告警/负值 绿=仅正收益 · 无圆角 · 口径不进前端</span>
+  <span class="sep">|</span>
+  <span>研究=版本态证据 运营=实时态读数 平台=基础设施</span>
+  <span class="sep">|</span>
+  <span>全部数字为占位假数据</span>
+  <span style="margin-left:auto;" class="sep">ADR-0005 /// FR8</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

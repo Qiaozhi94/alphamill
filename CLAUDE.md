@@ -9,7 +9,7 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 - `docs/alphamill-architecture.md`：四平面架构与接口契约（架构真相源），随实现迭代。
 - `docs/alphamill-research-factor-mining.md`：因子挖掘/ML 选型调研证据（决策已提炼至 ADR-0001）。
 - `docs/alphamill-integration.md`：数据桥 / Vibe-Trading / Freqtrade 集成操作细节（依赖策略见 ADR-0002）。
-- `docs/decisions/`：ADR——0001 挖掘引擎选型 / 0002 依赖管理策略 / 0003 验证门禁不降级 / 0004 组合构建（因子→策略映射）。
+- `docs/decisions/`：ADR——0001 挖掘引擎选型 / 0002 依赖管理策略 / 0003 验证门禁不降级 / 0004 组合构建（因子→策略映射） / 0005 呈现与观测架构（真相源/投影/展示三分与自建前端路线）。
 - `docs/features/0.1/F001-quant-crypto-migration/migration-plan.md`：quant-crypto 资产清算迁移操作手册（F001 附属）。
 - `docs/README.md`：文档所有权地图（唯一入口，两次点击可达任何权威文档）。
 - `docs/SOP.md`：开发流程与质量门约定。
@@ -30,6 +30,7 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
   vibe-trading-ai（可选第二实现/Agent，pip pin，零源码改动）、AlphaGen 核心 vendor（RL 挖掘主引擎）、
   Kronos（上游 clone + pin；GPU 推理薄壳为本仓 `src/alphamill/kronos_service/`）
 - 数据栈：TimescaleDB（联机运营库，自 quant-crypto 迁入）→ data_bridge → Parquet 湖（不可变快照）
+- 呈现栈（规划，ADR-0005）：`src/alphamill/api/` 统一只读 API + `web/` SPA（构建期 Node pin，生产运行时无 Node）；Grafana 逐步退守平台观测与告警，FreqUI 降为应急操作面板
 - 测试/质量：pytest + ruff（check + format），唯一入口 `python3 tools/verify.py`
 - 平台：Windows 11 宿主 + WSL2（Ubuntu 26.04，docker-ce，非 Docker Desktop）；GPU 经 WSL 直通（未就绪时 Kronos 冒烟 CPU 回退，见 F001 design §0 执行环境）；docker-compose 自 quant-crypto 迁入
 
@@ -46,4 +47,5 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 
 ## 当前活跃 Feature
 
-- F001 quant-crypto 资产清算迁移（v0.1, draft）→ `docs/features/0.1/F001-quant-crypto-migration/`
+- F002 数据桥（v0.2, draft）→ `docs/features/0.2/F002-data-bridge/`
+- F004 Kronos 推理运行时（v0.2, draft）→ `docs/features/0.2/F004-kronos-inference-runtime/`

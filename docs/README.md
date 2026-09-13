@@ -2,7 +2,7 @@
 topics: [docs, index, ownership]
 doc_kind: guide
 created: 2026-09-06
-updated: 2026-09-07
+updated: 2026-09-13
 ---
 
 # AlphaMill 文档地图
@@ -15,20 +15,21 @@ updated: 2026-09-07
 
 | 信息 | 唯一拥有者 | 说明 |
 |---|---|---|
-| 产品目标、范围和路线 | `alphamill-prd.md` | 产品真相源（指标体系 / G1-G7 / FR1-FR7 / 里程碑 M0-M4） |
+| 产品目标、范围和路线 | `alphamill-prd.md` | 产品真相源（指标体系 / G1-G7 / FR1-FR8 / 里程碑 M0-M4） |
 | 全局模块、进程与运行时边界 | `alphamill-architecture.md` | AI 控制面 + 证据与治理面 + 策略与执行面 + 数据面 + 闭环主循环 |
 | 字段、表、数据契约（HypothesisDef / FactorDef / PortfolioDef / 评测台 / 信号缓存 / manifest） | `alphamill-architecture.md` §四 | 接口契约真源 |
 | 因子挖掘主引擎选型（含降级阶梯） | `decisions/0001-factor-mining-engine.md` | 选型决策（证据：`alphamill-research-factor-mining.md`） |
 | 外部依赖管理策略（vendor/fork/原样） | `decisions/0002-external-dependency-policy.md` | 依赖策略（操作细节：`alphamill-integration.md`） |
 | 验证门禁不降级 | `decisions/0003-validation-gate-non-degradation.md` | quant-crypto 教训制度化 |
 | 组合构建（因子→策略映射） | `decisions/0004-portfolio-construction.md` | 协同池组合的部署路径与权重/换手/敞口规则 |
+| 呈现与观测架构（真相源/投影/展示三分、自建前端路线） | `decisions/0005-presentation-observability.md` | Grafana/FreqUI/自建控制台边界、口径进视图、统一只读 API |
 | quant-crypto 资产清算迁移 | `features/0.1/F001-quant-crypto-migration/migration-plan.md` | 迁移清单与验收（F001 附属） |
 | 跨 Feature 长期决策 | `decisions/` | ADR 决策记录 |
 | Feature 行为与状态 | `features/<version>/Fxxx-*/spec.md` | 状态唯一真相源 |
 | Feature 实现方案 | `features/<version>/Fxxx-*/design.md` | 技术设计 |
 | 开发、验收和检视纪律 | `SOP.md` | 开发流程约定 |
 | 当前 active Feature 与强提醒 | `../CLAUDE.md` | 自动加载入口 |
-| 非 done Feature 派生索引 | `../BACKLOG.md` | 活跃 feature 索引(当前为空,0.1 已收口) |
+| 非 done Feature 派生索引 | `../BACKLOG.md` | 活跃 feature 索引（当前 F002/F004） |
 | 版本收口摘要 | `features/releases/0.1.md` | 0.1 收口于 2026-09-12 |
 | 缺陷和过程教训 | `reviews/RETROSPECTIVE.md` | 检视复盘 |
 

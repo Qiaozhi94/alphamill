@@ -63,6 +63,9 @@ updated: YYYY-MM-DD
 
 描述页面/交互状态、loading/empty/error、日志、诊断、指标和运维可见性。
 
+呈现层边界与工具分工见 ADR-0005（`docs/decisions/0005-presentation-observability.md`）：
+不新增口径载体，指标口径进版本化视图；控制台不渲染实时运营数据；门禁裁决不页面化。
+
 不适用时写：`不适用：<理由>`。
 
 ## 7. 失败、恢复、安全与兼容
