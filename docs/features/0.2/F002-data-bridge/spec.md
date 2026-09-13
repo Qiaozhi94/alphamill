@@ -2,13 +2,13 @@
 kind: feature
 id: F002
 version: "0.2"
-status: draft
+status: ready-for-development
 gate_version: 1
 related_features: [F001]
 topics: [data-bridge, parquet, duckdb, m1]
 doc_kind: spec
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-09-13
 ---
 
 # F002：数据桥——Parquet 湖导出与 DuckDB 研究取数层
