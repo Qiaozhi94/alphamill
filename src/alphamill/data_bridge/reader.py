@@ -27,7 +27,6 @@ from alphamill.data_bridge.errors import (
     FlaggedPartitionError,
     InsufficientAsOfFidelityError,
     InvalidVersionError,
-    VersionNotFoundError,
 )
 
 FilterValue = Any
@@ -70,11 +69,12 @@ def _partition_covers(key_date: str, start: dt.datetime | None, end: dt.datetime
     day = dt.date.fromisoformat(key_date)
     if start is not None and day < start.date():
         return False
-    if end is not None and day > end.date():
+    if end is None:
+        return True
+    if day > end.date():
         return False
-    if end is not None and day == end.date() and end.time() == dt.time.min:
-        return False  # end 恰为当日 00:00：该日分区全部行 >= end
-    return True
+    # end 恰为当日 00:00：该日分区全部行 >= end
+    return not (day == end.date() and end.time() == dt.time.min)
 
 
 def _empty_frame(spec: registry.DatasetSpec) -> pd.DataFrame:
@@ -87,9 +87,7 @@ def _selected_flagged(manifest: dict[str, Any], selected: list[dict[str, Any]]) 
     hits = []
     for partition in selected:
         key = partition["logical_partition_key"]
-        label = "/".join(
-            str(key[name]) for name in ("exchange", "pair", "date") if name in key
-        )
+        label = "/".join(str(key[name]) for name in ("exchange", "pair", "date") if name in key)
         if label in flagged:
             hits.append(label)
     return sorted(set(hits))
@@ -143,9 +141,7 @@ def read(
 
     flagged_hits = _selected_flagged(manifest, selected)
     if flagged_hits and not allow_flagged:
-        raise FlaggedPartitionError(
-            f"查询命中带未解决质量旗的分区且未显式豁免: {flagged_hits}"
-        )
+        raise FlaggedPartitionError(f"查询命中带未解决质量旗的分区且未显式豁免: {flagged_hits}")
 
     frame = _query(spec, root, selected, start_dt, end_dt, as_of_dt, pairs)
     if as_of_dt is not None:
@@ -196,11 +192,12 @@ def _query(
         params.extend(db_symbols)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     order_cols = [
-        name for name in (spec.event_time, "symbol", "exchange", "timeframe")
+        name
+        for name in (spec.event_time, "symbol", "exchange", "timeframe")
         if name in {c.name for c in spec.projection}
     ]
     sql = (
-        f"SELECT * FROM read_parquet(?::VARCHAR[]) {where} "
+        f"SELECT * FROM read_parquet(?::VARCHAR[], hive_partitioning=false) {where} "
         f"ORDER BY {', '.join(order_cols)}"
     )
     con = duckdb.connect(":memory:")

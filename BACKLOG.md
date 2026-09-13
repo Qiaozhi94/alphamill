@@ -5,7 +5,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 
 | Feature | 版本 | 状态 | 链接 |
 |---|---|---|---|
-| F002-data-bridge | 0.2 | in-progress | [spec](docs/features/0.2/F002-data-bridge/spec.md) |
+| F002-data-bridge | 0.2 | review | [spec](docs/features/0.2/F002-data-bridge/spec.md) |
 | F004-kronos-inference-runtime | 0.2 | draft | [spec](docs/features/0.2/F004-kronos-inference-runtime/spec.md) |
 | F007-evaluation-gates | 0.2 | draft | [spec](docs/features/0.2/F007-evaluation-gates/spec.md) |
 

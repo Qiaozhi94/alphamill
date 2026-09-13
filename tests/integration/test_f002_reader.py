@@ -7,9 +7,9 @@
 from __future__ import annotations
 
 import datetime as dt
-import json
 
 import pytest
+from conftest import D1, D3, D4, seed_f002_data
 
 from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge.errors import (
@@ -19,8 +19,6 @@ from alphamill.data_bridge.errors import (
 )
 from alphamill.data_bridge.exporter import export_dataset
 from alphamill.data_bridge.reader import read
-
-from conftest import D1, D2, D3, D4, seed_f002_data
 
 pytestmark = pytest.mark.integration
 
@@ -32,8 +30,7 @@ def exported(f002_conn, f002_lake):
 
     export_symbol_map_for(f002_conn, f002_lake)
     for dataset in ("ohlcv_1m", "signals_log"):
-        summary = export_dataset(dataset, mode="full", window_end=f"{D4}T00:00:00Z",
-                                 conn=f002_conn)
+        summary = export_dataset(dataset, mode="full", window_end=f"{D4}T00:00:00Z", conn=f002_conn)
         assert summary["status"] == "valid", (dataset, summary)
     return f002_lake
 
@@ -43,9 +40,15 @@ def test_ac003_read_by_version_time_pairs_reports_identity(exported):
     lake = exported
     version = mf.latest_valid_version(lake, "ohlcv_1m")
 
-    result = read("ohlcv_1m", data_version=version,
-                  start=f"{D1}T00:00:00Z", end=f"{D1}T00:03:00Z",
-                  pairs=["BTC-USDT"], lake_root=lake, allow_flagged=True)
+    result = read(
+        "ohlcv_1m",
+        data_version=version,
+        start=f"{D1}T00:00:00Z",
+        end=f"{D1}T00:03:00Z",
+        pairs=["BTC-USDT"],
+        lake_root=lake,
+        allow_flagged=True,
+    )
     manifest = mf.load_manifest(lake, "ohlcv_1m", version)
     assert len(result.frame) == 3  # BTC D1 00:00..00:02
     assert set(result.frame["symbol"]) == {"BTC/USDT"}
@@ -55,8 +58,13 @@ def test_ac003_read_by_version_time_pairs_reports_identity(exported):
     assert result.as_of is None and result.as_of_fidelity is None
 
     # pair 过滤排除另一 pair
-    both = read("ohlcv_1m", start=f"{D1}T00:00:00Z", end=f"{D1}T00:01:00Z",
-                lake_root=lake, allow_flagged=True)
+    both = read(
+        "ohlcv_1m",
+        start=f"{D1}T00:00:00Z",
+        end=f"{D1}T00:01:00Z",
+        lake_root=lake,
+        allow_flagged=True,
+    )
     assert len(both.frame) == 2
 
 
@@ -73,11 +81,14 @@ def test_ac003_explicit_version_immune_to_latest_shift(exported, f002_conn):
             (dt.datetime.fromisoformat(f"{D4}T00:00:00+00:00"),),
         )
     f002_conn.commit()
-    v2_summary = export_dataset("ohlcv_1m", mode="incremental",
-                                window_end="2026-09-05T00:00:00Z", conn=f002_conn)
+    v2_summary = export_dataset(
+        "ohlcv_1m", mode="incremental", window_end="2026-09-05T00:00:00Z", conn=f002_conn
+    )
     assert v2_summary["data_version"] not in (None, v1)
 
-    assert len(read("ohlcv_1m", data_version=v1, lake_root=lake, allow_flagged=True).frame) == v1_rows
+    assert (
+        len(read("ohlcv_1m", data_version=v1, lake_root=lake, allow_flagged=True).frame) == v1_rows
+    )
     latest = read("ohlcv_1m", lake_root=lake, allow_flagged=True)
     assert latest.data_version == v2_summary["data_version"]
     assert len(latest.frame) == v1_rows + 1
@@ -150,8 +161,9 @@ def test_ac013_as_of_on_ohlcv_fail_closed(exported):
     with pytest.raises(InsufficientAsOfFidelityError):
         read("ohlcv_1m", as_of=as_of, lake_root=lake, allow_flagged=True)
 
-    result = read("ohlcv_1m", as_of=as_of, lake_root=lake,
-                  allow_flagged=True, allow_event_time_only=True)
+    result = read(
+        "ohlcv_1m", as_of=as_of, lake_root=lake, allow_flagged=True, allow_event_time_only=True
+    )
     assert result.as_of_fidelity == "event_time_only"
     assert len(result.frame) == 10  # D1 全部 10 行（BTC+ETH 各 5），event_time<=T 全可见
 
@@ -165,8 +177,13 @@ def test_flagged_partition_default_refusal(exported):
     with pytest.raises(FlaggedPartitionError, match="BTC-USDT"):
         read("ohlcv_1m", start=f"{D1}T00:00:00Z", end=f"{D1}T00:01:00Z", lake_root=lake)
 
-    allowed = read("ohlcv_1m", start=f"{D1}T00:00:00Z", end=f"{D1}T00:01:00Z",
-                   lake_root=lake, allow_flagged=True)
+    allowed = read(
+        "ohlcv_1m",
+        start=f"{D1}T00:00:00Z",
+        end=f"{D1}T00:01:00Z",
+        lake_root=lake,
+        allow_flagged=True,
+    )
     assert allowed.flagged == [f"binance/BTC-USDT/{D1}"]
     assert len(allowed.frame) == 2
 

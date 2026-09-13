@@ -11,7 +11,8 @@ numeric/弱口径，性能不可接受走 spec 修订。
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+import datetime as dt
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,7 @@ from alphamill.data_bridge.manifest import iso_utc
 
 def partition_time_bounds(day: str) -> tuple[datetime, datetime]:
     """逻辑分区日期 → [day 00:00, day+1 00:00) UTC 时间窗。"""
-    start = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    start = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=UTC)
     return start, start + timedelta(days=1)
 
 
@@ -65,30 +66,22 @@ def fetch_cell_rows(conn, spec: registry.DatasetSpec, key: dict[str, str]) -> li
         return [list(row) for row in cur.fetchall()]
 
 
-def source_partition_stats(
-    conn, spec: registry.DatasetSpec, key: dict[str, str]
-) -> dict[str, Any]:
+def source_partition_stats(conn, spec: registry.DatasetSpec, key: dict[str, str]) -> dict[str, Any]:
     rows = fetch_cell_rows(conn, spec, key)
     return _stats_from_values(rows, spec)
 
 
-def lake_partition_stats(
-    path: Path, spec: registry.DatasetSpec
-) -> dict[str, Any]:
+def lake_partition_stats(path: Path, spec: registry.DatasetSpec) -> dict[str, Any]:
     import pyarrow.parquet as pq
 
     table = pq.read_table(path)
     return _stats_from_values(digest_mod.iter_row_values(table), spec)
 
 
-def _stats_from_values(
-    rows: Any, spec: registry.DatasetSpec
-) -> dict[str, Any]:
+def _stats_from_values(rows: Any, spec: registry.DatasetSpec) -> dict[str, Any]:
     materialized = list(rows)  # 源侧为列表、湖侧为生成器，统一物化
     row_digest = digest_mod.row_digest(materialized, spec.projection)
-    event_idx = next(
-        i for i, col in enumerate(spec.projection) if col.name == spec.event_time
-    )
+    event_idx = next(i for i, col in enumerate(spec.projection) if col.name == spec.event_time)
     times = [row[event_idx] for row in materialized]
     return {
         "rows": len(materialized),
@@ -107,3 +100,40 @@ def compare(source: dict[str, Any], lake: dict[str, Any]) -> dict[str, str]:
         else "mismatch",
         "row_digest": "ok" if source["row_digest"] == lake["row_digest"] else "mismatch",
     }
+
+
+def begin_snapshot_tx(conn) -> tuple[str, str]:
+    """进入 REPEATABLE READ 只读事务，返回 (xmin, taken_at)（F002-D004）。
+
+    导出查询与源侧对账必须共享同一快照；xmin 写入 manifest `source_snapshot`
+    使任何一次导出可事后追溯它看到的库时点。
+    """
+    conn.rollback()
+    with conn.cursor() as cur:
+        cur.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        cur.execute("SELECT txid_current_snapshot(), current_timestamp")
+        snapshot, taken_at = cur.fetchone()
+    return snapshot.split(":")[0], iso_utc(taken_at)
+
+
+def table_span(conn, spec: registry.DatasetSpec) -> tuple[str, str] | None:
+    """源表 event_time 的全库 UTC 日期跨度（首跑窗口起点用）。"""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT min({spec.event_time}), max({spec.event_time}) "
+            f"FROM {spec.source_table} WHERE {spec.event_time} IS NOT NULL"
+        )
+        row = cur.fetchone()
+    if row is None or row[0] is None:
+        return None
+    return (
+        row[0].astimezone(dt.UTC).date().isoformat(),
+        row[1].astimezone(dt.UTC).date().isoformat(),
+    )
+
+
+def count_null_event_time(conn, spec: registry.DatasetSpec) -> int:
+    """源表全量 event_time IS NULL 计数（同一快照内，manifest 排除行数）。"""
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT count(*) FROM {spec.source_table} WHERE {spec.event_time} IS NULL")
+        return int(cur.fetchone()[0])

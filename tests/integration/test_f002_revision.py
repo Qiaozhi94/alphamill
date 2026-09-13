@@ -12,12 +12,11 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
+from conftest import D1, D2, D3, D4, seed_f002_data
 
 from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge.exporter import export_dataset
 from alphamill.data_bridge.reader import read
-
-from conftest import D1, D2, D3, D4, seed_f002_data
 
 pytestmark = pytest.mark.integration
 
@@ -46,8 +45,11 @@ def _delete_ohlcv(conn, day: str, symbol: str) -> None:
     with conn.cursor() as cur:
         cur.execute(
             "DELETE FROM ohlcv_1m WHERE symbol=%s AND time >= %s AND time < %s",
-            (symbol, dt.datetime.fromisoformat(f"{day}T00:00:00+00:00"),
-             dt.datetime.fromisoformat(f"{day}T23:59:59+00:00")),
+            (
+                symbol,
+                dt.datetime.fromisoformat(f"{day}T00:00:00+00:00"),
+                dt.datetime.fromisoformat(f"{day}T23:59:59+00:00"),
+            ),
         )
     conn.commit()
 
@@ -62,13 +64,15 @@ def test_ac011_two_incrementals_build_cumulative_manifest(exported, f002_conn):
     v1_keys = {mf.canonical_key(p["logical_partition_key"]) for p in m1["partitions"]}
 
     _insert_ohlcv(f002_conn, D2, "BTC/USDT", 2)
-    v2 = export_dataset("ohlcv_1m", mode="incremental", window_end=f"{D3}T00:00:00Z",
-                        conn=f002_conn)
+    v2 = export_dataset(
+        "ohlcv_1m", mode="incremental", window_end=f"{D3}T00:00:00Z", conn=f002_conn
+    )
     assert v2["status"] == "valid"
 
     _insert_ohlcv(f002_conn, D3, "ETH/USDT", 2)
-    v3 = export_dataset("ohlcv_1m", mode="incremental", window_end=f"{D4}T00:00:00Z",
-                        conn=f002_conn)
+    v3 = export_dataset(
+        "ohlcv_1m", mode="incremental", window_end=f"{D4}T00:00:00Z", conn=f002_conn
+    )
     assert v3["status"] == "valid"
 
     m2 = mf.load_manifest(lake, "ohlcv_1m", v2["data_version"])
@@ -117,19 +121,33 @@ def test_ac005_ac007_revision_bumps_version_keeps_v1(exported, f002_conn):
     assert changed and all(d["pair"] == "BTC-USDT" and d["date"] == D1 for d in changed)
 
     # v1 manifest 与其引用的每个分区文件字节不变
-    assert (lake / "_manifests" / "ohlcv_1m" / f"{v1['data_version']}.json").read_bytes() == m1_bytes
+    assert (
+        lake / "_manifests" / "ohlcv_1m" / f"{v1['data_version']}.json"
+    ).read_bytes() == m1_bytes
     for partition in m1["partitions"]:
         path = lake / partition["path"]
         assert mf.file_sha256(path) == partition["sha256"]
         assert path.stat().st_size == partition["bytes"]
 
     # 并发读 v1/v2：各回各值，不串版
-    r1 = read("ohlcv_1m", data_version=v1["data_version"],
-              start=f"{D1}T00:00:00Z", end=f"{D1}T00:01:00Z",
-              pairs=["BTC-USDT"], lake_root=lake, allow_flagged=True)
-    r2 = read("ohlcv_1m", data_version=v2["data_version"],
-              start=f"{D1}T00:00:00Z", end=f"{D1}T00:01:00Z",
-              pairs=["BTC-USDT"], lake_root=lake, allow_flagged=True)
+    r1 = read(
+        "ohlcv_1m",
+        data_version=v1["data_version"],
+        start=f"{D1}T00:00:00Z",
+        end=f"{D1}T00:01:00Z",
+        pairs=["BTC-USDT"],
+        lake_root=lake,
+        allow_flagged=True,
+    )
+    r2 = read(
+        "ohlcv_1m",
+        data_version=v2["data_version"],
+        start=f"{D1}T00:00:00Z",
+        end=f"{D1}T00:01:00Z",
+        pairs=["BTC-USDT"],
+        lake_root=lake,
+        allow_flagged=True,
+    )
     assert float(r1.frame.iloc[0]["close"]) == 100.0, "v1 必须读回修订前的值"
     assert float(r2.frame.iloc[0]["close"]) == 999.0
     assert r1.data_version == v1["data_version"] and r2.data_version == v2["data_version"]

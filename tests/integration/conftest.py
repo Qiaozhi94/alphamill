@@ -33,8 +33,20 @@ def pytest_configure() -> None:
 
 
 def _docker_psql(db: str, sql_file: Path | None = None, command: str | None = None) -> None:
-    cmd = ["docker", "exec", "-i", CONTAINER, "psql", "-U", "quant", "-d", db,
-           "-v", "ON_ERROR_STOP=1", "-q"]
+    cmd = [
+        "docker",
+        "exec",
+        "-i",
+        CONTAINER,
+        "psql",
+        "-U",
+        "quant",
+        "-d",
+        db,
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-q",
+    ]
     if sql_file is not None:
         with sql_file.open("rb") as fh:
             subprocess.run(cmd, input=fh.read(), check=True)
@@ -50,7 +62,7 @@ def f002_db():
     （ALPHAMILL_INTEGRATION=1 下判红）。quant 角色为超级用户，可自建库。
     """
     try:
-        _docker_psql("postgres", command=f"SELECT 1")
+        _docker_psql("postgres", command="SELECT 1")
     except Exception as exc:  # docker/容器不可达
         if os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "true", "yes"}:
             pytest.fail(f"ALPHAMILL_INTEGRATION=1 但 docker/DB 不可达: {exc}")
@@ -103,9 +115,14 @@ def seed_f002_data(conn) -> None:
 
     with conn.cursor() as cur:
         # 模块级库在测试间复用：先清场再播种
-        for table in ("ohlcv_1m", "signals_log", "derivatives_funding_rates",
-                      "derivatives_open_interest", "derivatives_mark_index_basis",
-                      "ohlcv_quality_flags"):
+        for table in (
+            "ohlcv_1m",
+            "signals_log",
+            "derivatives_funding_rates",
+            "derivatives_open_interest",
+            "derivatives_mark_index_basis",
+            "ohlcv_quality_flags",
+        ):
             cur.execute(f"DELETE FROM {table}")
         # ohlcv_1m: close 基准 100.0，便于 AC-010 修订对照
         for minute in range(5):
@@ -132,7 +149,8 @@ def seed_f002_data(conn) -> None:
         for hour in (0, 1):
             cur.execute(
                 "INSERT INTO derivatives_open_interest (time, exchange, symbol, timeframe,"
-                " open_interest, open_interest_value, base_volume, quote_volume, metadata, ingested_at)"
+                " open_interest, open_interest_value, base_volume, quote_volume,"
+                " metadata, ingested_at)"
                 " VALUES (%s,'binanceusdm','BTC/USDT','1h',10,1000,1,100,'{}'::jsonb,%s)",
                 (ts(D1, hour), ts(D4, 0)),
             )

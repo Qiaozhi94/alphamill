@@ -64,14 +64,15 @@ def test_perp_with_explicit_settle_derives_same_ft_pair():
 def test_collision_fails_loudly():
     with pytest.raises(SymbolCollisionError, match="碰撞"):
         sm.build_symbol_map(
-            [sm.SymbolRow("binance", "spot", "BTC/USDT"),
-             sm.SymbolRow("okx", "spot", "BTC/USDT"),
-             sm.SymbolRow("binance", "perp", "BTC/USDT")]
+            [
+                sm.SymbolRow("binance", "spot", "BTC/USDT"),
+                sm.SymbolRow("okx", "spot", "BTC/USDT"),
+                sm.SymbolRow("binance", "perp", "BTC/USDT"),
+            ]
         )
     # 同一 lake_pair 但 market_type 不同不碰撞（键含 market_type）
     ok = sm.build_symbol_map(
-        [sm.SymbolRow("binance", "spot", "BTC/USDT"),
-         sm.SymbolRow("binance", "perp", "BTC/USDT")]
+        [sm.SymbolRow("binance", "spot", "BTC/USDT"), sm.SymbolRow("binance", "perp", "BTC/USDT")]
     )
     assert len(ok) == 2
 
@@ -91,12 +92,14 @@ def test_canonical_bytes_digest_stable_and_content_sensitive():
 
 def test_export_publishes_immutable_artifact_and_replays(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHAMILL_SYMBOL_MAP_CURRENT", str(tmp_path / "current" / "symbol_map.csv"))
-    conn = _FakeConn({
-        "ohlcv_1m": [("binance", "BTC/USDT"), ("binance", "ETH/USDT")],
-        "derivatives_funding_rates": [("binanceusdm", "BTC/USDT")],
-        "derivatives_open_interest": [],
-        "derivatives_mark_index_basis": [],
-    })
+    conn = _FakeConn(
+        {
+            "ohlcv_1m": [("binance", "BTC/USDT"), ("binance", "ETH/USDT")],
+            "derivatives_funding_rates": [("binanceusdm", "BTC/USDT")],
+            "derivatives_open_interest": [],
+            "derivatives_mark_index_basis": [],
+        }
+    )
     ref = sm.export_symbol_map(conn=conn, lake_root=tmp_path)
     assert ref.path.name == f"{ref.digest}.csv"
     assert ref.path.is_file()
@@ -113,12 +116,14 @@ def test_export_publishes_immutable_artifact_and_replays(tmp_path, monkeypatch):
     assert isinstance(loaded, pd.DataFrame)
     assert len(loaded) == 3
 
-    conn2 = _FakeConn({
-        "ohlcv_1m": [("binance", "BTC/USDT")],
-        "derivatives_funding_rates": [],
-        "derivatives_open_interest": [],
-        "derivatives_mark_index_basis": [],
-    })
+    conn2 = _FakeConn(
+        {
+            "ohlcv_1m": [("binance", "BTC/USDT")],
+            "derivatives_funding_rates": [],
+            "derivatives_open_interest": [],
+            "derivatives_mark_index_basis": [],
+        }
+    )
     ref_v2 = sm.export_symbol_map(conn=conn2, lake_root=tmp_path)
     assert ref_v2.digest != ref.digest
     assert sm.load_symbol_map(ref.digest, lake_root=tmp_path).shape[0] == 3
@@ -129,23 +134,29 @@ def test_export_publishes_immutable_artifact_and_replays(tmp_path, monkeypatch):
 
 def test_resolve_directions_and_missing(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHAMILL_SYMBOL_MAP_CURRENT", str(tmp_path / "current" / "symbol_map.csv"))
-    conn = _FakeConn({
-        "ohlcv_1m": [("binance", "BTC/USDT")],
-        "derivatives_funding_rates": [("binanceusdm", "BTC/USDT")],
-        "derivatives_open_interest": [],
-        "derivatives_mark_index_basis": [],
-    })
+    conn = _FakeConn(
+        {
+            "ohlcv_1m": [("binance", "BTC/USDT")],
+            "derivatives_funding_rates": [("binanceusdm", "BTC/USDT")],
+            "derivatives_open_interest": [],
+            "derivatives_mark_index_basis": [],
+        }
+    )
     sm.export_symbol_map(conn=conn, lake_root=tmp_path)
 
     assert sm.resolve("BTC/USDT", "to_lake", exchange="binance") == "BTC-USDT"
     assert sm.resolve("BTC-USDT", "to_db", exchange="binance") == "BTC/USDT"
-    assert sm.resolve("BTC/USDT", "to_freqtrade", exchange="binanceusdm",
-                      market_type="perp") == "BTC/USDT:USDT"
+    assert (
+        sm.resolve("BTC/USDT", "to_freqtrade", exchange="binanceusdm", market_type="perp")
+        == "BTC/USDT:USDT"
+    )
     # 同名 db_symbol 跨 spot/perp 不混淆：exchange+market_type 消歧
     with pytest.raises(SymbolNotFoundError):
         sm.resolve("BTC-USDT-PERP", "to_db", exchange="binance")  # spot 侧无此 lake_pair
-    assert sm.resolve("BTC-USDT-PERP", "to_db", exchange="binanceusdm",
-                      market_type="perp") == "BTC/USDT"
+    assert (
+        sm.resolve("BTC-USDT-PERP", "to_db", exchange="binanceusdm", market_type="perp")
+        == "BTC/USDT"
+    )
 
     with pytest.raises(DataBridgeError, match="方向"):
         sm.resolve("x", "sideways", exchange="binance")
@@ -153,16 +164,19 @@ def test_resolve_directions_and_missing(tmp_path, monkeypatch):
 
 def test_to_db_symbols_for_reader(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHAMILL_SYMBOL_MAP_CURRENT", str(tmp_path / "current" / "symbol_map.csv"))
-    conn = _FakeConn({
-        "ohlcv_1m": [("binance", "BTC/USDT"), ("binance", "ETH/USDT")],
-        "derivatives_funding_rates": [],
-        "derivatives_open_interest": [],
-        "derivatives_mark_index_basis": [],
-    })
+    conn = _FakeConn(
+        {
+            "ohlcv_1m": [("binance", "BTC/USDT"), ("binance", "ETH/USDT")],
+            "derivatives_funding_rates": [],
+            "derivatives_open_interest": [],
+            "derivatives_mark_index_basis": [],
+        }
+    )
     sm.export_symbol_map(conn=conn, lake_root=tmp_path)
     assert sorted(sm.to_db_symbols(["BTC-USDT"], "spot", lake_root=tmp_path)) == ["BTC/USDT"]
     assert sm.to_db_symbols(["BTC-USDT", "ETH-USDT"], "spot", lake_root=tmp_path) == [
-        "BTC/USDT", "ETH/USDT"
+        "BTC/USDT",
+        "ETH/USDT",
     ]
     with pytest.raises(SymbolNotFoundError):
         sm.to_db_symbols(["SOL-USDT"], "spot", lake_root=tmp_path)

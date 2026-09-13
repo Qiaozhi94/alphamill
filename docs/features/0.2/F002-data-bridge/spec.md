@@ -2,13 +2,13 @@
 kind: feature
 id: F002
 version: "0.2"
-status: in-progress
+status: review
 gate_version: 1
 related_features: [F001]
 topics: [data-bridge, parquet, duckdb, m1]
 doc_kind: spec
 created: 2026-09-12
-updated: 2026-09-13
+updated: 2026-09-14
 ---
 
 # F002：数据桥——Parquet 湖导出与 DuckDB 研究取数层
@@ -195,26 +195,57 @@ updated: 2026-09-13
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`): 全量导出后五 dataset 分区 Parquet + manifest 齐备,DuckDB 行数与库一致 — tests: `tests/integration/test_f002_export_reconcile.py`
-- [ ] **AC-002** (`FR-002`): 对账失败路径——构造不一致后 data_version 标记 invalid 且取数模块拒绝 — tests: `tests/integration/test_f002_export_reconcile.py`
-- [ ] **AC-003** (`FR-003`): 取数模块按 dataset+version+时间范围返回正确行集并回报解析版本/value_digest;invalid 拒绝;显式版本读取不受后来 latest 变化影响 — tests: `tests/integration/test_f002_reader.py`
-- [ ] **AC-004** (`FR-004`): symbol_map.csv 生成、双向映射查询正确、时间列全 UTC；同内容得到同 symbol_map_digest，内容变化得到新 digest 且旧 digest 仍可读取 — tests: `tests/unit/test_f002_symbol_map.py`
-- [ ] **AC-005** (`FR-005`): 修订检测产生 v2+差异清单,v1 保留可读 — tests: `tests/integration/test_f002_revision.py`
-- [ ] **AC-006** (`FR-006`): 定时器安装且手动触发导出成功;backup-nas.sh 后 NAS 端 lake/ 产物齐全 — tests: `tests/integration/test_f002_schedule_backup.py`
-- [ ] **AC-007** (`FR-005`, `FR-001`): 版本物理隔离——修订产生 v2 后,v1 manifest 列出的每个分区文件字节不变,按 v1 读取返回修订前的行;并发读 v1/v2 不串版 — tests: `tests/integration/test_f002_revision.py`
-- [ ] **AC-008** (`FR-003`, `FR-001`): manifest 完整性 fail-closed——删清单内文件 / 改一字节,两种情形读取均抛 ManifestIntegrityError;而目录中存在**本版本未引用**的 .rN 文件(其他版本的合法分区)时必须正常返回,reader 全程不扫描目录 — tests: `tests/integration/test_f002_reader.py`
-- [ ] **AC-009** (`FR-004`): as-of 双时间轴无前视——`read(as_of=T)` 当且仅当 event_time ≤ T **且** available_at ≤ T 才返回该行;反例 latest_candle=09:00 / time=12:00 的信号在 as_of=10:00 必须**不在**结果内,在 as_of=13:00 必须在;realized_return_60m 在 evaluated_at > T 时置 NULL 而非丢行 — tests: `tests/integration/test_f002_reader.py`
-- [ ] **AC-011** (`FR-001`, `FR-005`): manifest 是累计完整快照——连续两次增量导出后,第二个版本的 partitions 覆盖第一个版本的全部逻辑分区(未变项原样继承、变更项替换),`rows` 等于合成后清单的总和而非单日增量;按第二个版本读取返回全 span — tests: `tests/integration/test_f002_revision.py`
-- [ ] **AC-012** (`FR-002`): row_digest 规范性——同一批数据经 psycopg2 与 PyArrow 两路输入摘要相同;改写任一 double 的最低有效位摘要必变(证明未走定标丢精度);两行 +x/−x 抵消式改写摘要必变 — tests: `tests/unit/test_f002_digest.py`
-- [ ] **AC-013** (`FR-003`, `FR-004`): as-of 保真度 fail-closed——对 as_of_fidelity=event_time_only 的 dataset(ohlcv_1m)传 as_of 且未显式 allow_event_time_only 时抛 InsufficientAsOfFidelityError;显式豁免时 ReadResult.as_of_fidelity 如实回报 event_time_only — tests: `tests/integration/test_f002_reader.py`
-- [ ] **AC-014** (`FR-001`, `FR-005`): 失败重跑不漏日——构造「分区文件已 rename 但 manifest 未发布」的中断态后重跑增量,窗口起点仍由上一 valid manifest 推导,该日分区出现在新版本清单中;本轮未覆盖的 skipped 键原样继承而非被清空 — tests: `tests/integration/test_f002_export_reconcile.py`
-- [ ] **AC-015** (`FR-001`, `FR-003`): DatasetVersion `value_digest` 按 design §3 的 canonical 投影与分区摘要计算；同值数据仅改变 Parquet codec/path 时摘要不变，改任一值、投影 schema 或分区覆盖时摘要必变；缺失或重算不符时 reader fail-closed — tests: `tests/unit/test_f002_manifest.py`、`tests/integration/test_f002_reader.py`
-- [ ] **AC-010** (`FR-002`, `FR-003`): 并发改写不产伪 valid——对账期间对已导出窗口 upsert 历史行,导出仍基于同一快照;结果或为 valid 且与该快照一致,或为 invalid,不出现「对账 ok 但湖内是旧值」 — tests: `tests/integration/test_f002_export_reconcile.py`
+- [x] **AC-001** (`FR-001`): 全量导出后五 dataset 分区 Parquet + manifest 齐备,DuckDB 行数与库一致 — tests: `tests/integration/test_f002_export_reconcile.py`
+- [x] **AC-002** (`FR-002`): 对账失败路径——构造不一致后 data_version 标记 invalid 且取数模块拒绝 — tests: `tests/integration/test_f002_export_reconcile.py`
+- [x] **AC-003** (`FR-003`): 取数模块按 dataset+version+时间范围返回正确行集并回报解析版本/value_digest;invalid 拒绝;显式版本读取不受后来 latest 变化影响 — tests: `tests/integration/test_f002_reader.py`
+- [x] **AC-004** (`FR-004`): symbol_map.csv 生成、双向映射查询正确、时间列全 UTC；同内容得到同 symbol_map_digest，内容变化得到新 digest 且旧 digest 仍可读取 — tests: `tests/unit/test_f002_symbol_map.py`
+- [x] **AC-005** (`FR-005`): 修订检测产生 v2+差异清单,v1 保留可读 — tests: `tests/integration/test_f002_revision.py`
+- [x] **AC-006** (`FR-006`): 定时器安装且手动触发导出成功;backup-nas.sh 后 NAS 端 lake/ 产物齐全 — tests: `tests/integration/test_f002_schedule_backup.py`
+- [x] **AC-007** (`FR-005`, `FR-001`): 版本物理隔离——修订产生 v2 后,v1 manifest 列出的每个分区文件字节不变,按 v1 读取返回修订前的行;并发读 v1/v2 不串版 — tests: `tests/integration/test_f002_revision.py`
+- [x] **AC-008** (`FR-003`, `FR-001`): manifest 完整性 fail-closed——删清单内文件 / 改一字节,两种情形读取均抛 ManifestIntegrityError;而目录中存在**本版本未引用**的 .rN 文件(其他版本的合法分区)时必须正常返回,reader 全程不扫描目录 — tests: `tests/integration/test_f002_reader.py`
+- [x] **AC-009** (`FR-004`): as-of 双时间轴无前视——read(as_of=T) 当且仅当事件时间与可用时间均不晚于 T 才返回该行;反例 latest_candle=09:00 / time=12:00 的信号在 as_of=10:00 必须**不在**结果内,在 as_of=13:00 必须在;realized_return_60m 在 evaluated_at > T 时置 NULL 而非丢行 — tests: `tests/integration/test_f002_reader.py`
+- [x] **AC-011** (`FR-001`, `FR-005`): manifest 是累计完整快照——连续两次增量导出后,第二个版本的 partitions 覆盖第一个版本的全部逻辑分区(未变项原样继承、变更项替换),rows 等于合成后清单的总和而非单日增量;按第二个版本读取返回全 span — tests: `tests/integration/test_f002_revision.py`
+- [x] **AC-012** (`FR-002`): row_digest 规范性——同一批数据经 psycopg2 与 PyArrow 两路输入摘要相同;改写任一 double 的最低有效位摘要必变(证明未走定标丢精度);两行 +x/−x 抵消式改写摘要必变 — tests: `tests/unit/test_f002_digest.py`
+- [x] **AC-013** (`FR-003`, `FR-004`): as-of 保真度 fail-closed——对 as_of_fidelity=event_time_only 的 dataset(ohlcv_1m)传 as_of 且未显式 allow_event_time_only 时抛 InsufficientAsOfFidelityError;显式豁免时 ReadResult.as_of_fidelity 如实回报 event_time_only — tests: `tests/integration/test_f002_reader.py`
+- [x] **AC-014** (`FR-001`, `FR-005`): 失败重跑不漏日——构造「分区文件已 rename 但 manifest 未发布」的中断态后重跑增量,窗口起点仍由上一 valid manifest 推导,该日分区出现在新版本清单中;本轮未覆盖的 skipped 键原样继承而非被清空 — tests: `tests/integration/test_f002_export_reconcile.py`
+- [x] **AC-015** (`FR-001`, `FR-003`): DatasetVersion value_digest 按 design §3 的 canonical 投影与分区摘要计算；同值数据仅改变 Parquet codec/path 时摘要不变，改任一值、投影 schema 或分区覆盖时摘要必变；缺失或重算不符时 reader fail-closed — tests: `tests/unit/test_f002_manifest.py`、`tests/integration/test_f002_reader.py`
+- [x] **AC-010** (`FR-002`, `FR-003`): 并发改写不产伪 valid——对账期间对已导出窗口 upsert 历史行,导出仍基于同一快照;结果或为 valid 且与该快照一致,或为 invalid,不出现「对账 ok 但湖内是旧值」 — tests: `tests/integration/test_f002_export_reconcile.py`
 
 **done 时的已知限制(2026-09-13 裁决记录)**:F004(Kronos 真实推理运行时)不阻塞本 feature 收口,
 因此 F002 done 时湖内 `signals_log` 的内容预期仍以 `source=placeholder` 为主——**导出管线正确
 不等于内容可用于因子研究**。收口时验收证据必须如实记录该 dataset 的行数与 `source` 分布,
 不得以"五 dataset 齐备"含糊带过;F004 落地后内容自动升级,F002 无需返工。
+
+### 验收证据(2026-09-14 实测,WSL2 Ubuntu + docker-ce + TimescaleDB 631 万行生产库)
+
+- **端到端(AC-001/AC-002/AC-003)**:`lake/` 五 dataset 全量导出全部 `valid`,对账三项全 ok——
+  ohlcv_1m 6,331,981 行/4,398 分区/184.5s(含逐分区 row_digest 对账);funding 13,152/4,386;
+  OI 744/36;basis 空表合法空快照;signals_log 2,040/3 分区/skipped 3(源数据生成器停机缺口)。
+  reader 对真实湖读取行数与库内 `time < '2026-09-13'` 行数精确相等;对账失败路径经
+  `tests/integration/test_f002_export_reconcile.py` 注入不一致后版本以 `invalid` 发布且 reader 拒绝。
+- **修订演进(AC-005/AC-007/AC-011)**:`test_f002_revision.py` 全绿——UPDATE 历史行产生 v2+
+  revision_diff(changed),v1 manifest 及其引用分区文件字节不变,按 v1 读回修订前值,并发读不串版;
+  连续两次增量的 manifest 为累计完整快照(未变分区跨版本共享同一物理文件)。
+- **失效与完整性(AC-008/AC-002)**:删清单内文件/改一字节均抛 `ManifestIntegrityError`;
+  目录中存在本版本未引用的 `.rN` 正常返回(reader 不扫目录)。
+- **as-of 双时间轴(AC-009/AC-013)**:`latest_candle=09:00/time=12:00` 的信号在 as_of=10:00
+  不在结果内、as_of=13:00 在;`evaluated_at > T` 时 `realized_return_60m` 置 NULL 不丢行;
+  ohlcv_1m 传 as_of 默认抛 `InsufficientAsOfFidelityError`,显式豁免后如实回报 `event_time_only`。
+- **摘要规范性(AC-012/AC-015)**:`test_f002_digest.py`/`test_f002_manifest.py` 全绿——psycopg2
+  与 PyArrow 两路输入同摘要;double 最低有效位改写与 ±x 抵消式改写摘要必变;value_digest 对
+  path/codec 稳定、对值/投影/覆盖变化必变;reader 重算不符 fail-closed。
+- **中断恢复(AC-014)**:构造「分区已 rename、manifest 未发布」孤儿态后重跑,窗口起点由上一
+  valid manifest 推导,该日以 `.r2` 进入新版本清单,skipped 键正确继承。
+- **调度与灾备(AC-006/FR-006)**:`alphamill-export.timer`(每日 02:00)与
+  `alphamill-fullexport.timer`(周日 04:00)已安装启用,手动触发 `alphamill-export.service`
+  退出码 0,journalctl 可查摘要;`backup-nas.sh` 真实跑通,NAS 端
+  `/volume1/alphamill-backups/lake/` 8,823 个分区文件与本地精确一致,`_manifests/` 与
+  `_metadata/symbol_maps/<digest>.csv` 齐备。附带修复:F001 遗留的 NAS known_hosts 缺失
+  (曾致 backup.service 无效重试 89 次,T019 的 StartLimit 回补同时使重试上限真正生效)。
+- **信号内容限制证据(如上裁决记录要求)**:湖内 signals_log `data_version=v2026.09.13` 共
+  2,040 行,`source` 分布 = `{placeholder: 100%}`——内容不可用于因子研究,待 F004 落地升级。
+- **全量导出耗时**:ohlcv_1m 单 dataset 184.5s,五 dataset 合计 3m48s(NFR-003 分钟级达成;
+  增量导出秒级,journalctl no-op 运行 1.4s 实证)。
 
 ## 7. 测试、依赖与决策
 

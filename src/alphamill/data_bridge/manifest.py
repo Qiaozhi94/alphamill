@@ -18,7 +18,7 @@ import hashlib
 import json
 import os
 import re
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -61,8 +61,8 @@ def canonical_key(key: dict[str, str]) -> str:
 
 def iso_utc(value: datetime) -> str:
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def file_sha256(path: Path) -> str:
@@ -209,8 +209,10 @@ def partition_diff(
         entry = dict(partition["logical_partition_key"])
         if key not in baseline_by_key:
             diff.append({**entry, "reason": "added"})
-        elif any(partition[f] != baseline_by_key[key].get(f) for f in
-                 ("rows", "time_min", "time_max", "row_digest")):
+        elif any(
+            partition[f] != baseline_by_key[key].get(f)
+            for f in ("rows", "time_min", "time_max", "row_digest")
+        ):
             diff.append({**entry, "reason": "changed"})
     for key, partition in baseline_by_key.items():
         if key not in current_by_key:

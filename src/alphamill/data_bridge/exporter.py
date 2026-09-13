@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -36,37 +35,6 @@ logger = logging.getLogger(__name__)
 PostExportHook = Any
 
 
-def _begin_snapshot_tx(conn) -> tuple[str, str]:
-    """进入 REPEATABLE READ 只读事务，返回 (xmin, taken_at)（F002-D004）。"""
-    conn.rollback()
-    with conn.cursor() as cur:
-        cur.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
-        cur.execute("SELECT txid_current_snapshot(), current_timestamp")
-        snapshot, taken_at = cur.fetchone()
-    return snapshot.split(":")[0], mf.iso_utc(taken_at)
-
-
-def _table_span(conn, spec: registry.DatasetSpec) -> tuple[str, str] | None:
-    with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT min({spec.event_time}), max({spec.event_time}) "
-            f"FROM {spec.source_table} WHERE {spec.event_time} IS NOT NULL"
-        )
-        row = cur.fetchone()
-    if row is None or row[0] is None:
-        return None
-    return (
-        row[0].astimezone(dt.UTC).date().isoformat(),
-        row[1].astimezone(dt.UTC).date().isoformat(),
-    )
-
-
-def _count_null_event_time(conn, spec: registry.DatasetSpec) -> int:
-    with conn.cursor() as cur:
-        cur.execute(f"SELECT count(*) FROM {spec.source_table} WHERE {spec.event_time} IS NULL")
-        return int(cur.fetchone()[0])
-
-
 def _baseline(root: Path, dataset: str) -> tuple[str | None, dict[str, Any] | None]:
     try:
         version = mf.latest_valid_version(root, dataset)
@@ -76,18 +44,22 @@ def _baseline(root: Path, dataset: str) -> tuple[str | None, dict[str, Any] | No
 
 
 def _resolve_window(
-    conn, spec: registry.DatasetSpec, mode: str, window_end: Any,
+    conn,
+    spec: registry.DatasetSpec,
+    mode: str,
+    window_end: Any,
     baseline_partitions: list[dict[str, Any]],
 ) -> tuple[dt.date, dt.date]:
     """窗口 = [start, end)：分区日期 date ∈ [start, end)。end 缺省 = 今日。"""
-    end = partitions.as_date(window_end) if window_end is not None else dt.datetime.now(dt.UTC).date()
-    span = _table_span(conn, spec)
+    end = (
+        partitions.as_date(window_end) if window_end is not None else dt.datetime.now(dt.UTC).date()
+    )
+    span = reconcile.table_span(conn, spec)
     if mode == "full":
         return (dt.date.fromisoformat(span[0]) if span else end), end
     if baseline_partitions:
         start = max(
-            dt.date.fromisoformat(p["logical_partition_key"]["date"])
-            for p in baseline_partitions
+            dt.date.fromisoformat(p["logical_partition_key"]["date"]) for p in baseline_partitions
         ) + dt.timedelta(days=1)
     else:
         start = dt.date.fromisoformat(span[0]) if span else end
@@ -95,7 +67,8 @@ def _resolve_window(
 
 
 def _reconcile_key(
-    spec: registry.DatasetSpec, entry: dict[str, Any],
+    spec: registry.DatasetSpec,
+    entry: dict[str, Any],
     lake_pairs: dict[tuple[str, str], str],
 ) -> dict[str, str]:
     """从 manifest 条目重建对账查询键；db_symbol 由同事务的 pair 映射求逆。"""
@@ -113,14 +86,17 @@ def _reconcile_key(
 
 
 def _reconcile_partitions(
-    conn, spec: registry.DatasetSpec, root: Path,
-    produced: list[dict[str, Any]], written: list[bool],
+    conn,
+    spec: registry.DatasetSpec,
+    root: Path,
+    produced: list[dict[str, Any]],
+    written: list[bool],
     lake_pairs: dict[tuple[str, str], str],
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """逐新写分区与源库对账（同一事务）；继承分区跳过（不可变且读取前会再验）。"""
     report: dict[str, Any] = {"rows": "ok", "time_bounds": "ok", "row_digest": "ok"}
     failures: list[dict[str, Any]] = []
-    for entry, is_written in zip(produced, written):
+    for entry, is_written in zip(produced, written, strict=True):
         if not is_written:
             continue
         key = _reconcile_key(spec, entry, lake_pairs)
@@ -137,34 +113,21 @@ def _reconcile_partitions(
     return report, failures
 
 
-def _cleanup_orphans(root: Path) -> int:
-    """全量模式回收：staging 与无任何 manifest 引用的孤儿 `.rN`；invalid 审计证据保留。"""
-    referenced: set[str] = set()
-    for dataset in registry.DATASETS:
-        for version in mf.list_versions(root, dataset):
-            manifest = mf.load_manifest(root, dataset, version)
-            referenced.update(p["path"] for p in manifest.get("partitions", []))
-    removed = 0
-    for dataset in registry.DATASETS:
-        dataset_dir = root / dataset
-        if not dataset_dir.is_dir():
-            continue
-        for file in dataset_dir.rglob("*.parquet"):
-            if file.relative_to(root).as_posix() not in referenced:
-                file.unlink()
-                removed += 1
-    staging = root / "_staging"
-    if staging.is_dir():
-        shutil.rmtree(staging, ignore_errors=True)
-    return removed
-
-
 def _summary(
-    spec: registry.DatasetSpec, mode: str, data_version: str | None,
-    baseline_version: str | None, merged: list[dict[str, Any]],
-    failures: list[dict[str, Any]], skipped: list[dict[str, str]],
-    reconcile_field: dict[str, Any], *, excluded: int, started: float,
-    no_op: bool, reason: str | None, revision_diff: list[dict[str, Any]],
+    spec: registry.DatasetSpec,
+    mode: str,
+    data_version: str | None,
+    baseline_version: str | None,
+    merged: list[dict[str, Any]],
+    failures: list[dict[str, Any]],
+    skipped: list[dict[str, str]],
+    reconcile_field: dict[str, Any],
+    *,
+    excluded: int,
+    started: float,
+    no_op: bool,
+    reason: str | None,
+    revision_diff: list[dict[str, Any]],
 ) -> dict[str, Any]:
     return {
         "dataset": spec.name,
@@ -213,37 +176,59 @@ def export_dataset(
 
 
 def _export_one(
-    conn, spec: registry.DatasetSpec, mode: str, window_end: Any,
-    root: Path, post_export_hook: PostExportHook, started: float,
+    conn,
+    spec: registry.DatasetSpec,
+    mode: str,
+    window_end: Any,
+    root: Path,
+    post_export_hook: PostExportHook,
+    started: float,
 ) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
     baseline_version, baseline = _baseline(root, spec.name)
     baseline_partitions = baseline["partitions"] if baseline else []
 
-    xmin, taken_at = _begin_snapshot_tx(conn)
+    xmin, taken_at = reconcile.begin_snapshot_tx(conn)
     start, end = _resolve_window(conn, spec, mode, window_end, baseline_partitions)
     ok_reconcile = {"rows": "ok", "time_bounds": "ok", "row_digest": "ok"}
-    if start >= end:
+    if start >= end and baseline is not None:
+        # 窗口为空且已有基线：无新内容可发布（首次导出即使是空表也要发布合法空快照）
         conn.rollback()
-        return _summary(spec, mode, None, baseline_version, [], [], [], ok_reconcile,
-                        excluded=0, started=started, no_op=True,
-                        reason="window-empty", revision_diff=[])
+        return _summary(
+            spec,
+            mode,
+            None,
+            baseline_version,
+            [],
+            [],
+            [],
+            ok_reconcile,
+            excluded=0,
+            started=started,
+            no_op=True,
+            reason="window-empty",
+            revision_diff=[],
+        )
 
     data_version = mf.next_data_version(root, spec.name, dt.datetime.now(dt.UTC).date())
     lake_pairs = partitions.lake_pairs_map(conn)
-    excluded_null = _count_null_event_time(conn, spec)
+    excluded_null = reconcile.count_null_event_time(conn, spec)
     flagged, flagged_total = (
-        partitions.quality_flags(conn, lake_pairs)
-        if spec.source_table == "ohlcv_1m" else ([], 0)
+        partitions.quality_flags(conn, lake_pairs) if spec.source_table == "ohlcv_1m" else ([], 0)
     )
 
     produced, produced_keys, written = partitions.produce_partitions(
         root, spec, conn, start, end, baseline_partitions, lake_pairs
     )
-    window_dates = partitions.date_span(
-        start.isoformat(), (end - dt.timedelta(days=1)).isoformat()
+    window_dates = partitions.date_span(start.isoformat(), (end - dt.timedelta(days=1)).isoformat())
+    empty_keys = partitions.empty_cell_keys(
+        spec,
+        mode,
+        produced_keys,
+        window_dates,
+        baseline_partitions=baseline_partitions,
+        baseline_skipped=baseline["skipped"] if baseline else [],
     )
-    empty_keys = partitions.empty_cell_keys(spec, mode, produced_keys, window_dates)
     skipped = mf.synthesize_skipped(
         baseline["skipped"] if baseline else [], produced_keys, empty_keys
     )
@@ -258,18 +243,34 @@ def _export_one(
     merged = mf.synthesize_partitions(baseline_partitions, produced)
     value_digest = mf.compute_value_digest(spec, merged)
     baseline_quality = (baseline or {}).get("quality", {})
-    content_changed = bool(failures) or baseline is None or (
-        value_digest != baseline.get("value_digest")
-        or skipped != baseline.get("skipped", [])
-        or flagged != baseline_quality.get("flagged_partitions", [])
-        or excluded_null != baseline.get("excluded_null_event_time", 0)
+    content_changed = (
+        bool(failures)
+        or baseline is None
+        or (
+            value_digest != baseline.get("value_digest")
+            or skipped != baseline.get("skipped", [])
+            or flagged != baseline_quality.get("flagged_partitions", [])
+            or excluded_null != baseline.get("excluded_null_event_time", 0)
+        )
     )
     if not content_changed:
         conn.rollback()
         partitions.remove_staging(root, spec.name)
-        return _summary(spec, mode, None, baseline_version, merged, [], skipped,
-                        reconcile_field, excluded=excluded_null, started=started,
-                        no_op=True, reason="content-unchanged", revision_diff=[])
+        return _summary(
+            spec,
+            mode,
+            None,
+            baseline_version,
+            merged,
+            [],
+            skipped,
+            reconcile_field,
+            excluded=excluded_null,
+            started=started,
+            no_op=True,
+            reason="content-unchanged",
+            revision_diff=[],
+        )
 
     manifest = {
         "dataset": spec.name,
@@ -278,10 +279,13 @@ def _export_one(
         "as_of_fidelity": spec.as_of_fidelity,
         "exported_at": mf.iso_utc(dt.datetime.now(dt.UTC)),
         "rows": sum(p["rows"] for p in merged),
-        "pairs": sorted({
-            p["logical_partition_key"]["pair"]
-            for p in merged if "pair" in p["logical_partition_key"]
-        }),
+        "pairs": sorted(
+            {
+                p["logical_partition_key"]["pair"]
+                for p in merged
+                if "pair" in p["logical_partition_key"]
+            }
+        ),
         "caliber": {"close": "raw", "adjclose": "none_crypto"},
         "data_version": data_version,
         "value_digest": value_digest,
@@ -297,14 +301,26 @@ def _export_one(
     if failures:
         logger.error("对账失败（%s/%s）: %s", spec.name, data_version, failures)
     if mode == "full":
-        removed = _cleanup_orphans(root)
+        removed = partitions.cleanup_orphans(root)
         logger.info("全量模式回收孤儿/staging 文件 %d 个", removed)
     else:
         partitions.remove_staging(root, spec.name)
     conn.rollback()
-    return _summary(spec, mode, data_version, baseline_version, merged, failures,
-                    skipped, reconcile_field, excluded=excluded_null, started=started,
-                    no_op=False, reason=None, revision_diff=manifest["revision_diff"])
+    return _summary(
+        spec,
+        mode,
+        data_version,
+        baseline_version,
+        merged,
+        failures,
+        skipped,
+        reconcile_field,
+        excluded=excluded_null,
+        started=started,
+        no_op=False,
+        reason=None,
+        revision_diff=manifest["revision_diff"],
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

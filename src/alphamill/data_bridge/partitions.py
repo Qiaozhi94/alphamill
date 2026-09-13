@@ -65,7 +65,7 @@ def dim_of(logical_key: dict[str, str]) -> Dim:
 
 
 def dim_logical_key(dim: Dim, day: str) -> dict[str, str]:
-    key = {name: value for name, value in zip(_DIM_NAMES, dim) if value is not None}
+    key = {name: value for name, value in zip(_DIM_NAMES, dim, strict=False) if value is not None}
     key["date"] = day
     return key
 
@@ -220,9 +220,7 @@ def produce_partitions(
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[bool]]:
     """导出窗口内全部单元格 → (produced 条目, 产出逻辑键, 是否新写文件)。"""
     cells = discover_cells(conn, spec, start, end)
-    baseline_by_key = {
-        mf.canonical_key(p["logical_partition_key"]): p for p in baseline_partitions
-    }
+    baseline_by_key = {mf.canonical_key(p["logical_partition_key"]): p for p in baseline_partitions}
     produced: list[dict[str, Any]] = []
     produced_keys: list[dict[str, str]] = []
     written: list[bool] = []
@@ -250,13 +248,16 @@ def empty_cell_keys(
     mode: str,
     present_keys: list[dict[str, str]],
     window_dates: list[str],
+    baseline_partitions: list[dict[str, Any]] | None = None,
+    baseline_skipped: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     """本轮空单元格（本该有分区却没有）的完整逻辑键。
 
     - full：每个有数据的维度只在自己「首个数据日 ~ 末个数据日」的活跃跨度内
       判缺——跨度外的日期不属于「本该有」，否则新 pair 的历史之前全是空洞；
-    - incremental：本轮窗口日期判缺（窗口短，天然有界；基线维度的继承由
-      manifest.synthesize_skipped 负责，不在此重复枚举）。
+    - incremental：**基线维度 ∪ 本轮维度** × 窗口日期判缺（spec 边界场景：
+      「导出窗口内某 pair 无新数据 → 跳过该分区且 manifest 记录 skipped」）。
+      基线 skipped 键的继承/移除由 manifest.synthesize_skipped 负责。
     """
     present_by_dim: dict[Dim, set[str]] = defaultdict(set)
     for key in present_keys:
@@ -275,9 +276,14 @@ def empty_cell_keys(
                 if day not in dates:
                     empty.append(dim_logical_key(dim, day))
     else:
-        for dim, dates in sorted(present_by_dim.items(), key=repr):
+        universe = set(present_by_dim)
+        for part in baseline_partitions or []:
+            universe.add(dim_of(part["logical_partition_key"]))
+        for key in baseline_skipped or []:
+            universe.add(dim_of(key))
+        for dim in sorted(universe, key=repr):
             for day in window_dates:
-                if day not in dates:
+                if day not in present_by_dim[dim]:
                     empty.append(dim_logical_key(dim, day))
     return sorted(empty, key=mf.canonical_key)
 
@@ -288,3 +294,31 @@ def remove_staging(root: Path, dataset: str) -> None:
         import shutil
 
         shutil.rmtree(staging, ignore_errors=True)
+
+
+def cleanup_orphans(root: Path) -> int:
+    """全量模式回收：staging 与无任何 manifest 引用的孤儿 `.rN`（design §3 回收边界）。
+
+    invalid manifest 及其引用 `.rN` 作为完整失败审计证据一并保留，不得只删分区
+    使 manifest 的 partitions/sha256 失效。
+    """
+    import shutil
+
+    referenced: set[str] = set()
+    for dataset in registry.DATASETS:
+        for version in mf.list_versions(root, dataset):
+            manifest = mf.load_manifest(root, dataset, version)
+            referenced.update(p["path"] for p in manifest.get("partitions", []))
+    removed = 0
+    for dataset in registry.DATASETS:
+        dataset_dir = root / dataset
+        if not dataset_dir.is_dir():
+            continue
+        for file in dataset_dir.rglob("*.parquet"):
+            if file.relative_to(root).as_posix() not in referenced:
+                file.unlink()
+                removed += 1
+    staging = root / "_staging"
+    if staging.is_dir():
+        shutil.rmtree(staging, ignore_errors=True)
+    return removed

@@ -47,6 +47,6 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 
 ## 当前活跃 Feature
 
-- F002 数据桥（v0.2, ready-for-development）→ `docs/features/0.2/F002-data-bridge/`
+- F002 数据桥（v0.2, review）→ `docs/features/0.2/F002-data-bridge/`
 - F004 Kronos 推理运行时（v0.2, draft）→ `docs/features/0.2/F004-kronos-inference-runtime/`
 - F007 统一评测台与证据门禁（v0.2, draft）→ `docs/features/0.2/F007-evaluation-gates/`

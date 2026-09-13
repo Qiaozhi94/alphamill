@@ -10,25 +10,25 @@ import datetime as dt
 
 import psycopg2
 import pytest
+from conftest import D1, D2, D3, D4, seed_f002_data
 
 from alphamill.data_bridge import manifest as mf
-from alphamill.data_bridge import paths, reconcile, registry
+from alphamill.data_bridge import reconcile, registry
 from alphamill.data_bridge.errors import InvalidVersionError, VersionNotFoundError
 from alphamill.data_bridge.exporter import export_dataset
 from alphamill.data_bridge.reader import read
 
-from conftest import D1, D2, D3, D4, seed_f002_data
-
 pytestmark = pytest.mark.integration
 INTEGRATION_REQUIRED = __import__("os").getenv("ALPHAMILL_INTEGRATION", "").lower() in {
-    "1", "true", "yes"
+    "1",
+    "true",
+    "yes",
 }
 
 UTC = dt.UTC
 
 
 def _require_or_skip(available: bool, reason: str) -> None:
-    import os
 
     if available:
         return
@@ -83,8 +83,11 @@ def test_ac001_full_export_all_datasets_reconciles(seeded, f002_conn):
     flagged_result = read("ohlcv_1m", lake_root=lake, allow_flagged=True)
     assert flagged_result.flagged == [f"binance/BTC-USDT/{D1}"]
 
-    basis = mf.load_manifest(lake, "derivatives_mark_index_basis",
-                             mf.latest_valid_version(lake, "derivatives_mark_index_basis"))
+    basis = mf.load_manifest(
+        lake,
+        "derivatives_mark_index_basis",
+        mf.latest_valid_version(lake, "derivatives_mark_index_basis"),
+    )
     assert basis["partitions"] == [] and basis["rows"] == 0
 
     ohlcv = mf.load_manifest(lake, "ohlcv_1m", mf.latest_valid_version(lake, "ohlcv_1m"))
@@ -143,26 +146,37 @@ def test_ac010_concurrent_upsert_no_false_valid(seeded, f002_conn):
 
     try:
         summary = export_dataset(
-            "ohlcv_1m", mode="full", window_end=f"{D4}T00:00:00Z",
-            conn=f002_conn, post_export_hook=concurrent_upsert,
+            "ohlcv_1m",
+            mode="full",
+            window_end=f"{D4}T00:00:00Z",
+            conn=f002_conn,
+            post_export_hook=concurrent_upsert,
         )
         assert summary["status"] == "valid"
         assert summary["reconcile"]["row_digest"] == "ok"
 
-        result = read("ohlcv_1m", start=f"{D1}T00:00:00Z", end=f"{D1}T00:01:00Z",
-                      pairs=["BTC-USDT"], lake_root=lake, allow_flagged=True)
+        result = read(
+            "ohlcv_1m",
+            start=f"{D1}T00:00:00Z",
+            end=f"{D1}T00:01:00Z",
+            pairs=["BTC-USDT"],
+            lake_root=lake,
+            allow_flagged=True,
+        )
         assert len(result.frame) == 1
         lake_close = float(result.frame.iloc[0]["close"])
         assert lake_close == 100.0, "湖内必须与导出快照一致（REPEATABLE READ），不是并发新值"
-        assert _db_count(
-            f002_conn,
-            "SELECT count(*) FROM ohlcv_1m WHERE close = 555.0 AND time = %s", target,
-        ) == 1, "并发 upsert 必须已落在源库（证明竞态真实发生）"
+        assert (
+            _db_count(
+                f002_conn,
+                "SELECT count(*) FROM ohlcv_1m WHERE close = 555.0 AND time = %s",
+                target,
+            )
+            == 1
+        ), "并发 upsert 必须已落在源库（证明竞态真实发生）"
     finally:
         with upsert_conn.cursor() as cur:
-            cur.execute(
-                "UPDATE ohlcv_1m SET close = 100.0 WHERE close = 555.0"
-            )
+            cur.execute("UPDATE ohlcv_1m SET close = 100.0 WHERE close = 555.0")
         upsert_conn.commit()
         upsert_conn.close()
 
@@ -200,35 +214,50 @@ def test_ac014_interrupted_run_resumes_without_hole(seeded, f002_conn):
         raise RuntimeError("模拟进程中断：分区已 rename，manifest 未发布")
 
     with pytest.raises(RuntimeError):
-        export_dataset("ohlcv_1m", mode="incremental", window_end=f"{D3}T00:00:00Z",
-                       conn=f002_conn, post_export_hook=crash_after_rename)
+        export_dataset(
+            "ohlcv_1m",
+            mode="incremental",
+            window_end=f"{D3}T00:00:00Z",
+            conn=f002_conn,
+            post_export_hook=crash_after_rename,
+        )
     # 中断态：D2 的 .r1 文件已在正式路径，但无任何新 manifest
     assert mf.list_versions(lake, "ohlcv_1m") == [v1["data_version"]]
-    orphans = list((lake / "ohlcv_1m" / f"exchange=binance/pair=BTC-USDT").glob(f"date={D2}.*"))
+    orphans = list((lake / "ohlcv_1m" / "exchange=binance/pair=BTC-USDT").glob(f"date={D2}.*"))
     assert len(orphans) == 1
 
     # 重跑：窗口起点必须仍由 v1 推导（D1+1=D2），孤儿 .r1 不计入游标
-    v2 = export_dataset("ohlcv_1m", mode="incremental", window_end=f"{D3}T00:00:00Z",
-                        conn=f002_conn)
+    v2 = export_dataset(
+        "ohlcv_1m", mode="incremental", window_end=f"{D3}T00:00:00Z", conn=f002_conn
+    )
     assert v2["status"] == "valid"
     manifest = mf.load_manifest(lake, "ohlcv_1m", v2["data_version"])
     keys = [p["logical_partition_key"] for p in manifest["partitions"]]
-    assert {"exchange": "binance", "pair": "BTC-USDT", "date": D2} in keys, \
+    assert {"exchange": "binance", "pair": "BTC-USDT", "date": D2} in keys, (
         "中断当天必须回到新版本清单（防永久漏日）"
-    d2_entry = next(p for p in manifest["partitions"]
-                    if p["logical_partition_key"]["date"] == D2)
+    )
+    d2_entry = next(p for p in manifest["partitions"] if p["logical_partition_key"]["date"] == D2)
     assert d2_entry["path"].endswith(f"date={D2}.r2.parquet"), "重跑写 rN+1，不覆盖孤儿"
     # ETH 本轮无数据 → skipped 登记完整逻辑键
     assert {"exchange": "binance", "pair": "ETH-USDT", "date": D2} in manifest["skipped"]
 
-    result = read("ohlcv_1m", data_version=v2["data_version"],
-                  start=f"{D2}T00:00:00Z", end=f"{D2}T00:02:00Z", lake_root=lake)
+    result = read(
+        "ohlcv_1m",
+        data_version=v2["data_version"],
+        start=f"{D2}T00:00:00Z",
+        end=f"{D2}T00:02:00Z",
+        lake_root=lake,
+    )
     assert len(result.frame) == 2
 
     with f002_conn.cursor() as cur:
-        cur.execute("DELETE FROM ohlcv_1m WHERE symbol='BTC/USDT' AND time >= %s AND time < %s",
-                    (dt.datetime.fromisoformat(f"{D2}T00:00:00+00:00"),
-                     dt.datetime.fromisoformat(f"{D3}T00:00:00+00:00")))
+        cur.execute(
+            "DELETE FROM ohlcv_1m WHERE symbol='BTC/USDT' AND time >= %s AND time < %s",
+            (
+                dt.datetime.fromisoformat(f"{D2}T00:00:00+00:00"),
+                dt.datetime.fromisoformat(f"{D3}T00:00:00+00:00"),
+            ),
+        )
     f002_conn.commit()
 
 

@@ -27,7 +27,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from alphamill.data_bridge.registry import Column, DOUBLE, JSONB, TEXT, TIMESTAMPTZ
+from alphamill.data_bridge.registry import DOUBLE, JSONB, TEXT, TIMESTAMPTZ, Column
 
 DIGEST_PREFIX = "sha256:"
 
@@ -82,18 +82,17 @@ def canonical_field(value: Any, logical_type: str) -> bytes:
 
 def canonical_row_bytes(values: Sequence[Any], projection: Sequence[Column]) -> bytes:
     if len(values) != len(projection):
-        raise ValueError(
-            f"行值列数 {len(values)} 与投影列数 {len(projection)} 不一致"
-        )
+        raise ValueError(f"行值列数 {len(values)} 与投影列数 {len(projection)} 不一致")
     return b"".join(
-        canonical_field(value, col.logical_type) for value, col in zip(values, projection)
+        canonical_field(value, col.logical_type)
+        for value, col in zip(values, projection, strict=True)
     )
 
 
 def iter_row_values(table: Any) -> Iterator[list[Any]]:
     """PyArrow Table → 逐行 Python 值（湖侧输入路径；与 psycopg2 同一编码函数）。"""
     columns = [table.column(i).to_pylist() for i in range(table.num_columns)]
-    for row in zip(*columns):
+    for row in zip(*columns, strict=True):
         yield list(row)
 
 

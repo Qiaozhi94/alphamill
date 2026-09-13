@@ -8,22 +8,60 @@ from alphamill.data_bridge.errors import UnknownDatasetError
 EXPECTED_PROJECTIONS = {
     "ohlcv_1m": ["time", "exchange", "symbol", "open", "high", "low", "close", "volume"],
     "derivatives_funding_rates": [
-        "time", "exchange", "symbol", "funding_rate", "next_funding_time",
-        "mark_price", "index_price", "metadata", "ingested_at",
+        "time",
+        "exchange",
+        "symbol",
+        "funding_rate",
+        "next_funding_time",
+        "mark_price",
+        "index_price",
+        "metadata",
+        "ingested_at",
     ],
     "derivatives_open_interest": [
-        "time", "exchange", "symbol", "timeframe", "open_interest",
-        "open_interest_value", "base_volume", "quote_volume", "metadata", "ingested_at",
+        "time",
+        "exchange",
+        "symbol",
+        "timeframe",
+        "open_interest",
+        "open_interest_value",
+        "base_volume",
+        "quote_volume",
+        "metadata",
+        "ingested_at",
     ],
     "derivatives_mark_index_basis": [
-        "time", "exchange", "symbol", "timeframe", "mark_open", "mark_high",
-        "mark_low", "mark_close", "index_open", "index_high", "index_low",
-        "index_close", "basis_close", "basis_pct", "metadata", "ingested_at",
+        "time",
+        "exchange",
+        "symbol",
+        "timeframe",
+        "mark_open",
+        "mark_high",
+        "mark_low",
+        "mark_close",
+        "index_open",
+        "index_high",
+        "index_low",
+        "index_close",
+        "basis_close",
+        "basis_pct",
+        "metadata",
+        "ingested_at",
     ],
     "signals_log": [
-        "time", "exchange", "symbol", "source", "signal_type", "confidence",
-        "metadata", "latest_candle", "expected_return", "volatility",
-        "direction_prob", "realized_return_60m", "evaluated_at",
+        "time",
+        "exchange",
+        "symbol",
+        "source",
+        "signal_type",
+        "confidence",
+        "metadata",
+        "latest_candle",
+        "expected_return",
+        "volatility",
+        "direction_prob",
+        "realized_return_60m",
+        "evaluated_at",
     ],
 }
 
@@ -91,8 +129,9 @@ def test_partition_keys_and_market_type():
 
 
 def test_filterable_columns_whitelist():
-    assert registry.FILTERABLE_COLUMNS == frozenset(
-        {"event_time", "available_at", "exchange", "symbol", "timeframe"}
+    assert (
+        frozenset({"event_time", "available_at", "exchange", "symbol", "timeframe"})
+        == registry.FILTERABLE_COLUMNS
     )
 
 

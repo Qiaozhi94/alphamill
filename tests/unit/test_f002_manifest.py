@@ -3,7 +3,7 @@
 
 import json
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -45,6 +45,7 @@ def _write_partition_file(root, partition: dict, content: bytes | None = None) -
 
 # ---------- data_version 语义 ----------
 
+
 def test_version_parse_sort_and_next():
     assert mf.parse_data_version("v2026.09.12") == (date(2026, 9, 12), 1)
     assert mf.parse_data_version("v2026.09.12-r3") == (date(2026, 9, 12), 3)
@@ -58,9 +59,17 @@ def test_version_parse_sort_and_next():
 def test_next_version_never_reuses_including_invalid(tmp_path):
     root = tmp_path
     for version in ("v2026.09.12", "v2026.09.12-r2"):
-        mf.publish_manifest(root, {"dataset": "ohlcv_1m", "data_version": version,
-                                   "status": "invalid" if version.endswith("r2") else "valid",
-                                   "rows": 0, "value_digest": "", "partitions": []})
+        mf.publish_manifest(
+            root,
+            {
+                "dataset": "ohlcv_1m",
+                "data_version": version,
+                "status": "invalid" if version.endswith("r2") else "valid",
+                "rows": 0,
+                "value_digest": "",
+                "partitions": [],
+            },
+        )
     day = date(2026, 9, 12)
     assert mf.next_data_version(root, "ohlcv_1m", day) == "v2026.09.12-r3"
     assert mf.next_data_version(root, "ohlcv_1m", date(2026, 9, 13)) == "v2026.09.13"
@@ -68,11 +77,16 @@ def test_next_version_never_reuses_including_invalid(tmp_path):
 
 # ---------- load / publish / latest ----------
 
+
 def _minimal_manifest(version: str, partitions: list | None = None, status: str = "valid") -> dict:
     return {
-        "dataset": "ohlcv_1m", "source": mf.SOURCE_TAG,
-        "data_version": version, "status": status, "rows": 2,
-        "value_digest": "sha256:deadbeef", "partitions": json.loads(json.dumps(partitions or [])),
+        "dataset": "ohlcv_1m",
+        "source": mf.SOURCE_TAG,
+        "data_version": version,
+        "status": status,
+        "rows": 2,
+        "value_digest": "sha256:deadbeef",
+        "partitions": json.loads(json.dumps(partitions or [])),
         "reconcile": {"rows": "ok", "time_bounds": "ok", "row_digest": "ok"},
     }
 
@@ -115,6 +129,7 @@ def test_latest_valid_skips_invalid_and_raises_when_none(tmp_path):
 
 # ---------- 完整性（AC-008 的单测面） ----------
 
+
 def test_integrity_missing_file_and_byte_flip(tmp_path):
     partition = _partition("BTC-USDT", "2026-09-11", 2, "aa")
     _write_partition_file(tmp_path, partition)
@@ -148,10 +163,20 @@ def test_integrity_size_mismatch_but_not_unreferenced_files(tmp_path):
 
 # ---------- value_digest（AC-015 单测面） ----------
 
+
 def test_value_digest_stable_across_physical_metadata():
     base = [_partition("BTC-USDT", "2026-09-11", 2, "aa")]
-    moved = [_partition("BTC-USDT", "2026-09-11", 2, "aa",
-                        path="somewhere/else.r9.parquet", bytes=999, sha256="ff")]
+    moved = [
+        _partition(
+            "BTC-USDT",
+            "2026-09-11",
+            2,
+            "aa",
+            path="somewhere/else.r9.parquet",
+            bytes=999,
+            sha256="ff",
+        )
+    ]
     assert mf.compute_value_digest(SPEC, base) == mf.compute_value_digest(SPEC, moved)
 
 
@@ -180,18 +205,22 @@ def test_verify_value_digest_fail_closed(tmp_path):
     with pytest.raises(ManifestIntegrityError, match="重算不符"):
         mf.verify_value_digest(SPEC, manifest)
 
-    manifest["value_digest"] = mf.compute_value_digest(
-        SPEC, manifest["partitions"])
+    manifest["value_digest"] = mf.compute_value_digest(SPEC, manifest["partitions"])
     assert mf.verify_value_digest(SPEC, manifest) == manifest["value_digest"]
 
 
 # ---------- 增量合成（AC-011 单测面） ----------
 
+
 def test_synthesis_inherits_replaces_appends():
-    baseline = [_partition("BTC-USDT", "2026-09-11", 2, "aa"),
-                _partition("ETH-USDT", "2026-09-11", 3, "bb")]
-    produced = [_partition("BTC-USDT", "2026-09-11", 4, "cc"),
-                _partition("SOL-USDT", "2026-09-12", 5, "dd")]
+    baseline = [
+        _partition("BTC-USDT", "2026-09-11", 2, "aa"),
+        _partition("ETH-USDT", "2026-09-11", 3, "bb"),
+    ]
+    produced = [
+        _partition("BTC-USDT", "2026-09-11", 4, "cc"),
+        _partition("SOL-USDT", "2026-09-12", 5, "dd"),
+    ]
     merged = mf.synthesize_partitions(baseline, produced)
     by_pair = {p["logical_partition_key"]["pair"]: p for p in merged}
     assert by_pair["BTC-USDT"]["row_digest"] == "sha256:cc"  # 整项替换
@@ -203,8 +232,10 @@ def test_synthesis_inherits_replaces_appends():
 def test_skipped_inheritance_and_replacement():
     baseline = [{"exchange": "binance", "pair": "DOGE-USDT", "date": "2026-09-10"}]
     produced_keys = [{"exchange": "binance", "pair": "BTC-USDT", "date": "2026-09-11"}]
-    empty_keys = [{"exchange": "binance", "pair": "DOGE-USDT", "date": "2026-09-11"},
-                  {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-11"}]
+    empty_keys = [
+        {"exchange": "binance", "pair": "DOGE-USDT", "date": "2026-09-11"},
+        {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-11"},
+    ]
     skipped = mf.synthesize_skipped(baseline, produced_keys, empty_keys)
     keys = [mf.canonical_key(s) for s in skipped]
     # 基线 DOGE-09-10 本轮未被触碰 → 原样继承；DOGE-09-11 判定为空 → 按本轮加入
@@ -218,11 +249,15 @@ def test_skipped_inheritance_and_replacement():
 
 
 def test_partition_diff_added_changed_removed():
-    baseline = [_partition("BTC-USDT", "2026-09-11", 2, "aa"),
-                _partition("ETH-USDT", "2026-09-11", 3, "bb")]
-    current = [_partition("BTC-USDT", "2026-09-11", 2, "aa"),  # 未变
-               _partition("ETH-USDT", "2026-09-11", 4, "bd"),   # 修订
-               _partition("SOL-USDT", "2026-09-11", 1, "ee")]   # 新增
+    baseline = [
+        _partition("BTC-USDT", "2026-09-11", 2, "aa"),
+        _partition("ETH-USDT", "2026-09-11", 3, "bb"),
+    ]
+    current = [
+        _partition("BTC-USDT", "2026-09-11", 2, "aa"),  # 未变
+        _partition("ETH-USDT", "2026-09-11", 4, "bd"),  # 修订
+        _partition("SOL-USDT", "2026-09-11", 1, "ee"),
+    ]  # 新增
     diff = mf.partition_diff(baseline, current)
     reasons = {(d["pair"], d["reason"]) for d in diff}
     assert reasons == {("ETH-USDT", "changed"), ("SOL-USDT", "added")}
@@ -234,6 +269,7 @@ def test_partition_diff_added_changed_removed():
 
 # ---------- 发布与导出 ----------
 
+
 def test_publish_manifest_is_atomic_and_sorted_stable(tmp_path):
     manifest = _minimal_manifest("v2026.09.12")
     path = mf.publish_manifest(tmp_path, manifest)
@@ -244,6 +280,6 @@ def test_publish_manifest_is_atomic_and_sorted_stable(tmp_path):
 
 
 def test_iso_utc_formatting():
-    aware = datetime(2026, 9, 12, 2, 0, 3, tzinfo=timezone.utc)
+    aware = datetime(2026, 9, 12, 2, 0, 3, tzinfo=UTC)
     assert mf.iso_utc(aware) == "2026-09-12T02:00:03Z"
     assert mf.iso_utc(datetime(2026, 9, 12, 2, 0, 3)).endswith("Z")

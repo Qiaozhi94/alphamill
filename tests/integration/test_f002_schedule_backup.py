@@ -16,11 +16,10 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import D4, F002_DB, seed_f002_data
 
 from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge import registry
-
-from conftest import F002_DB, D4, seed_f002_data
 
 pytestmark = pytest.mark.integration
 
@@ -31,19 +30,33 @@ def test_cli_incremental_run_exit_zero_and_artifacts(f002_conn, f002_lake, tmp_p
     f002_conn.close()
 
     env = os.environ.copy()
-    env.update({
-        "DB_NAME": F002_DB,
-        "ALPHAMILL_LAKE_DIR": str(f002_lake),
-        "ALPHAMILL_SYMBOL_MAP_CURRENT": str(tmp_path / "symbol_map.csv"),
-    })
+    env.update(
+        {
+            "DB_NAME": F002_DB,
+            "ALPHAMILL_LAKE_DIR": str(f002_lake),
+            "ALPHAMILL_SYMBOL_MAP_CURRENT": str(tmp_path / "symbol_map.csv"),
+        }
+    )
     if env.get("DB_HOST") in ("", "timescaledb"):
         env["DB_HOST"] = "127.0.0.1"
 
     proc = subprocess.run(
-        [sys.executable, "-m", "alphamill.data_bridge.exporter",
-         "--dataset", "ohlcv_1m", "--dataset", "signals_log",
-         "--mode", "full", f"--window-end={D4}T00:00:00Z"],
-        env=env, capture_output=True, text=True, timeout=300,
+        [
+            sys.executable,
+            "-m",
+            "alphamill.data_bridge.exporter",
+            "--dataset",
+            "ohlcv_1m",
+            "--dataset",
+            "signals_log",
+            "--mode",
+            "full",
+            f"--window-end={D4}T00:00:00Z",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
     )
     assert proc.returncode == 0, f"stdout={proc.stdout}\nstderr={proc.stderr}"
     # stdout 逐 dataset 打印一行 JSON 摘要（journalctl 可查）

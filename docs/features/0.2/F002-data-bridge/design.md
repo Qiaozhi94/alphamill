@@ -403,6 +403,13 @@ digest；current 文件后移不改变旧 artifact。映射内容或规范编码
 | 导出与源侧对账共享一个 REPEATABLE READ 事务 | upsert 回补可在窗口终点前改写历史行 | 只读+时间截断不等于快照隔离 | 长事务会拖住 vacuum,全量模式需观察膨胀,必要时分 dataset 事务 |
 | 带质量旗分区仍为 valid,但 reader 默认拒绝 | 一个坏分区不该废掉整天可用数据;默认放行又会静默污染研究 | 质量标记描述源数据瑕疵,不是导出错误 | `allow_flagged=True` 显式豁免并回报清单 |
 | 残余风险:湖文件被误删/误改 | manifest 的 per-partition sha256 + 字节数在**每次读取前**校验;reader 只按清单读、不扫目录(目录余项是其他版本的合法分区) | 不可变 + 完整性校验 + 灾备三重 | 单盘故障场景由 F001 灾备覆盖 |
+| 实现期:空 dataset(如 basis)首次导出 | 发布合法空快照(partitions 空、rows=0);有基线且无变化时 no-op 不发布 | AC-001 要求五 dataset manifest 齐备;FR-005「发现修订才递增」 | 空表无分区可导,空快照供 ResearchSnapshot 引用 |
+| 实现期:skipped/revision_diff 键形状 | 登记完整逻辑分区键(含 exchange/timeframe);design §3 示例只画了单交易所 ohlcv 情形 | 键不完整会使跨交易所扩容后 skipped 不可归位;合成规则原文即称「逻辑分区键」 | 无 |
+| 实现期:增量 skipped 判定宇宙 | 基线维度 ∪ 本轮维度 × 窗口日期;full 模式按各维度自身活跃跨度判缺 | spec 边界场景「窗口内某 pair 无新数据 → 记 skipped」要求基线 pair 入宇宙;跨度过大判定会产生 pair 上线前的伪空洞 | 无 |
+| 实现期:jsonb 在 Parquet 中的存储 | canonical JSON 文本(UTF-8 string),两侧经同一 canonicalization 编码 | pyspsycopg2 产出 dict、Arrow 读回 string,统一文本表示保证摘要等价 | 消费端自行 json.loads |
+| 实现期:DuckDB 读关闭 hive_partitioning | read_parquet(..., hive_partitioning=false) | 湖目录形似 hive 分区,DuckDB 会自动注入 pair/date 幽灵列破坏投影 schema | 无 |
+| 实现期:模块拆分 | 在冻结六模块外新增 errors.py/paths.py/partitions.py/cli.py;exporter 编排与文件层操作分离 | SOP 350 行硬上限;异常与路径约定本就是独立关注点 | 契约名与签名不受影响 |
+| 实现期:调度进程环境注入 | service 单元以 EnvironmentFile 加载 deployment/.env | systemd user 进程不继承用户 shell 环境,02:00 首跑实证必需 | 无 |
 
 ## 10. 待确认设计问题
 

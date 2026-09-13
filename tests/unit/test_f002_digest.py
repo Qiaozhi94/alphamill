@@ -74,13 +74,17 @@ def test_lowest_mantissa_bit_rewrite_changes_digest():
 def test_cancellation_rewrite_changes_digest():
     # 两行 +x/−x 抵消式改写：sum(round(col,10)) 不变，位模式摘要必变
     base = digest.row_digest(
-        [[T0, "binance", "BTC/USDT", 100.0, -100.0, {}],
-         [T0, "binance", "ETH/USDT", 200.0, -200.0, {}]],
+        [
+            [T0, "binance", "BTC/USDT", 100.0, -100.0, {}],
+            [T0, "binance", "ETH/USDT", 200.0, -200.0, {}],
+        ],
         PROJECTION,
     )
     rewritten = digest.row_digest(
-        [[T0, "binance", "BTC/USDT", 100.5, -100.5, {}],
-         [T0, "binance", "ETH/USDT", 200.5, -200.5, {}]],
+        [
+            [T0, "binance", "BTC/USDT", 100.5, -100.5, {}],
+            [T0, "binance", "ETH/USDT", 200.5, -200.5, {}],
+        ],
         PROJECTION,
     )
     assert base != rewritten
