@@ -10,9 +10,13 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "ccxt>=4.4,<5",
+  # F002 数据桥：Parquet 湖（写 PyArrow / 读 DuckDB）。运行时依赖同样锁范围，
+  # 是否在范围内由 check_dep_pins 门禁强制（F002 spec 决策表：版本漂移显式改动）。
+  "duckdb>=1.5,<2",
   "fastapi>=0.115,<1",
   "pandas>=2.2,<3",
   "psycopg2-binary>=2.9,<3",
+  "pyarrow>=25,<26",
   "pydantic>=2.10,<3",
   "uvicorn>=0.34,<1",
 ]

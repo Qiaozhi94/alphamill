@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""dev 依赖 pin 一致性检查（CURRENT-code.md C001 回归门）。
+"""依赖 pin 一致性检查（CURRENT-code.md C001 回归门；F002 起含运行时依赖）。
 
-校验 [project.optional-dependencies].dev 中每个依赖的已安装版本是否落在
+校验 [project].dependencies 与 dev extras 中每个依赖的已安装版本是否落在
 声明的版本范围内。手写最小版本比较器（仅支持 >=/<=/==/!=/>/< 与逗号组合的
 简单 specifier，按点分段整数比较），不引入第三方依赖；语义化版本的
 pre-release/dev 后缀等复杂场景超出本门禁目标，不做处理。
@@ -63,12 +63,20 @@ def parse_pin(pin: str) -> tuple[str, str]:
     return m.group(1), m.group(2)
 
 
-def declared_dev_pins(root: pathlib.Path) -> dict[str, str]:
+def declared_pins(root: pathlib.Path) -> dict[str, str]:
+    """运行时 [project].dependencies 与 dev extras 的 pin 一并校验。
+
+    F002 起运行时依赖（duckdb/pyarrow 等）同样声明版本范围（spec 决策表：
+    「pin 范围入 pyproject，check_dep_pins 门禁覆盖」），故两者合并且同名
+    声明以后写者为准。
+    """
     with (root / "pyproject.toml").open("rb") as f:
         data = tomllib.load(f)
-    dev = data.get("project", {}).get("optional-dependencies", {}).get("dev", [])
+    project = data.get("project", {})
+    entries = list(project.get("dependencies", []))
+    entries += project.get("optional-dependencies", {}).get("dev", [])
     pins: dict[str, str] = {}
-    for entry in dev:
+    for entry in entries:
         name, spec = parse_pin(entry)
         pins[name] = spec
     return pins
@@ -80,7 +88,7 @@ def check(
 ) -> list[str]:
     version_of = importlib.metadata.version if installed_version is None else installed_version
     failures: list[str] = []
-    for name, spec in declared_dev_pins(root).items():
+    for name, spec in declared_pins(root).items():
         try:
             ver = version_of(name)
         except importlib.metadata.PackageNotFoundError:
@@ -94,7 +102,7 @@ def check(
 def main() -> int:
     failures = check()
     if not failures:
-        print("check_dep_pins: 全部 dev 依赖版本在声明范围内")
+        print("check_dep_pins: 全部依赖版本在声明范围内（runtime + dev）")
         return 0
     print("check_dep_pins: 失败", file=sys.stderr)
     for e in failures:

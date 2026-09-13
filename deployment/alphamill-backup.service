@@ -1,5 +1,9 @@
 [Unit]
 Description=AlphaMill daily NAS backup (pg_dump + reports/lake rsync)
+# 失败重试：15 分钟后重试，最多 3 次。StartLimit* 必须显式声明才生效
+# （F002-T019 回补：此前仅注释声称「最多 3 次」而指令缺失，实际不生效）。
+StartLimitIntervalSec=45min
+StartLimitBurst=3
 
 [Service]
 Type=oneshot

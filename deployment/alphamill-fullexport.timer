@@ -1,0 +1,9 @@
+[Unit]
+Description=Run AlphaMill full-verify export every Sunday at 04:00 (NAS 备份之后的低峰校验)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
