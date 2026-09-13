@@ -23,6 +23,7 @@ updated: 2026-09-13
 | 验证门禁不降级 | `decisions/0003-validation-gate-non-degradation.md` | quant-crypto 教训制度化 |
 | 组合构建（因子→策略映射） | `decisions/0004-portfolio-construction.md` | 协同池组合的部署路径与权重/换手/敞口规则 |
 | 呈现与观测架构（真相源/投影/展示三分、自建前端路线） | `decisions/0005-presentation-observability.md` | Grafana/FreqUI/自建控制台边界、口径进视图、统一只读 API |
+| 证据边界与实验身份 | `decisions/0006-evidence-boundary-and-experiment-identity.md` | 四平面之上的横向 seam、preview/canonical、内容寻址与失败关闭 |
 | 呈现层视觉原型（非契约，设计资产） | `design/ui-mockup/`（设计稿，本地） | 终局四面全景蓝图，**非权威、非 F005 范围**；F005 spec 落地后废弃或迁入 `web/`（ADR-0005 决策 7） |
 | quant-crypto 资产清算迁移 | `features/0.1/F001-quant-crypto-migration/migration-plan.md` | 迁移清单与验收（F001 附属） |
 | 跨 Feature 长期决策 | `decisions/` | ADR 决策记录 |
@@ -30,7 +31,7 @@ updated: 2026-09-13
 | Feature 实现方案 | `features/<version>/Fxxx-*/design.md` | 技术设计 |
 | 开发、验收和检视纪律 | `SOP.md` | 开发流程约定 |
 | 当前 active Feature 与强提醒 | `../CLAUDE.md` | 自动加载入口 |
-| 非 done Feature 派生索引 | `../BACKLOG.md` | 活跃 feature 索引（当前 F002/F004） |
+| 非 done Feature 派生索引 | `../BACKLOG.md` | 活跃 feature 索引（当前 F002/F004/F007） |
 | 版本收口摘要 | `features/releases/0.1.md` | 0.1 收口于 2026-09-12 |
 | 缺陷和过程教训 | `reviews/RETROSPECTIVE.md` | 检视复盘 |
 

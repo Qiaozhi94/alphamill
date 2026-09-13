@@ -28,6 +28,16 @@ quant-crypto 的最终 90 天留出门连续拦下全部候选（低频 Ridge/HG
    成本后 Sharpe 为排序主键。
 5. **实盘前置条件**：只有达到可信样本量、通过最终确认和部署前复核的候选才有资格另行申请
    live；Agent 无审批或下单权。
+6. **方法论门随能力单调增强**：切分以 label endpoint（结果可知时刻）而非信号时刻为边界，
+   使用每个 pair 的 point-in-time 可交易日历，embargo 不短于全部标签的最大 horizon，拟合型
+   变换只在训练折拟合。每次新增标签、变换、join 或跨 pair 算子，都必须新增对应静态/运行时
+   守卫及“守卫覆盖新增能力”的元测试；不支持的能力默认拒绝。
+7. **统计门失败关闭**：canonical cohort 至少报告 BH-FDR、block bootstrap、按有效独立数校正的
+   deflated significance 与最小 track-record length；PBO/Reality Check 可作为条件诊断。任一必需
+   输入或估计器失败时输出 `INCOMPLETE/FAIL`，不得把 warning、`null` 或跳过解释为通过。
+
+preview/canonical 的隔离、实验身份与 cohort 计数规则由 ADR-0006 统一拥有；本 ADR 只拥有门禁
+标准不降级及留出纪律。
 
 ## 留出期使用预算
 
@@ -40,6 +50,10 @@ quant-crypto 的最终 90 天留出门连续拦下全部候选（低频 Ridge/HG
    manifest 同为可复现要件。预算消耗以台账为准，不支持事后补记。
 3. **永久隔离的最终确认窗**：一段独立数据片段，开发期任何候选（含评测台/选择期/复盘循环）
    均不得接触，仅在候选晋升 paper 前使用一次——最终确认窗上的判定为终局判定。
+
+只有 `execution_tier=canonical` 的预注册运行可以写上述预算台账；preview 不计入 official
+population，也没有访问留出或最终确认窗的能力。preview 候选拟晋级时必须以冻结上下文重新
+运行 canonical，不能通过改标签复用探索结论。
 
 ## 样本量门槛的功效论证
 

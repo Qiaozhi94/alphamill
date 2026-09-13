@@ -33,6 +33,10 @@ AlphaMill 按四个平面组织。AI 控制面提出候选和建议，证据与�
 台账，策略与执行面负责组合构建与已批准策略的版本化执行，数据面提供可复现输入。外部
 工具必须接在稳定契约之后，不能成为跨层捷径。
 
+四平面之上有两条**横向 seam**，不增加新的平面：`Evidence Boundary` 约束 preview/canonical、
+实验身份、方法论与晋级；`Lifecycle Feedback` 把运行事实、结构化归因、人审动作和下一代假设
+串成闭环。跨 cohort 的 `synthesis_report` 归证据与治理面，控制台只是它的只读渲染器。
+
 ```text
 ┌─ AI 控制面 ───────────────────────────────────────────────────────────────┐
 │ 假设注册 → 多生成器/协同池 → 失败与线上归因 → 人审的新假设队列          │
@@ -77,12 +81,15 @@ flowchart TB
     end
 
     subgraph EVIDENCE["证据与治理面（确定性裁决）"]
+        METHOD["方法论门<br/>label endpoint · PIT · train-only fit"]
         PURITY["AST 纯度门"]
         BENCH["因子评测<br/>IC/收益 · 成本 · 去重 · 多重检验"]
         SELECT["选择期筛选"]
         GATE["冻结组合的 90 天留出<br/>→ 永久隔离最终确认"]
-        LEDGER["实验与留出台账<br/>不可变证据链"]
-        PURITY --> BENCH --> SELECT
+        LEDGER["canonical cohort/population<br/>实验与留出台账"]
+        SYNTH["synthesis_report<br/>漏斗 · 五阶段损失 · 约束"]
+        METHOD --> PURITY --> BENCH --> SELECT
+        LEDGER --> SYNTH
         LEDGER -.-> PURITY
         LEDGER -.-> BENCH
         LEDGER -.-> GATE
@@ -108,7 +115,7 @@ flowchart TB
         LAKE -.-> DDB
     end
 
-    GEN --> PURITY
+    GEN -->|"显式 preview/canonical 上下文"| METHOD
     SELECT --> BUILD --> GATE
     GATE --> RECHECK
     DDB -->|"只读快照"| GEN
@@ -116,6 +123,7 @@ flowchart TB
     DDB -->|"只读快照"| GATE
     MON -->|"报告与事件"| POST
     MON --> LEDGER
+    SYNTH -->|"事实/推断/建议"| POST
     GATE -->|"FAIL/UNDERPOWERED"| POST
     RECHECK -->|"失效"| POST
 ```
@@ -125,7 +133,9 @@ flowchart TB
 ```mermaid
 flowchart LR
     A[HypothesisDef] --> B[FactorDef / meta-factor]
-    B --> C{纯度门}
+    B --> Z{方法论/PIT 门}
+    Z -->|拒绝| X[证据库]
+    Z --> C{纯度门}
     C -->|拒绝| X[证据库]
     C --> D[统一评测与成本门]
     D --> E{去重/多重检验}
@@ -142,9 +152,12 @@ flowchart LR
     R -->|失效| X
     R --> S[版本化信号缓存]
     S --> J[dry-run / paper]
-    J --> M[绩效归因与衰减监控]
+    J --> K[RunRecord<br/>intended/attempted/accepted/failed]
+    K --> M[绩效归因与衰减监控]
     M -->|降权/下线| N[decayed / disabled]
-    M -->|复盘| A
+    M --> Q[事实/推断/建议]
+    Q -->|确定性规则或人审动作| N
+    Q -->|人审通过| A
     X -->|AI/人工复盘后| A
 ```
 
@@ -191,6 +204,7 @@ alphamill/                       # 仓库根（非 Python 资产留根，不进�
     │   │   └── multipletest.py  #   多重检验校正
     │   └── registry/            # FR2.5：因子注册表（sqlite/parquet）
     ├── validation/              # FR3：从 quant-crypto 迁移 + 参数化
+    │   ├── methodology_gate.py #   label endpoint/PIT/最大 horizon/train-only fit 静态与运行时门
     │   ├── selection_gate.py
     │   ├── holdout_gate.py      #   样本量三级裁决：<30 UNDERPOWERED / 30~69 临时 PASS / ≥69 可信（PRD FR3.5）
     │   └── no_lookahead_audit.py
@@ -203,7 +217,10 @@ alphamill/                       # 仓库根（非 Python 资产留根，不进�
     ├── freqtrade_bridge/        # FR5.3：策略模板 + 配置生成
     │   ├── strategy_template.py.j2
     │   └── risk/                #   风控三件套（自 quant-crypto 迁入）
-    ├── experiment_store/        # FR7：manifest、证据索引与 append-only 台账
+    ├── experiment_store/        # FR7：内容身份、manifest、证据索引与 append-only 台账
+    │   ├── identity.py          #   规范化语义输入 → experiment_id；provenance 不入身份
+    │   ├── population.py        #   preview 隔离；canonical cohort/official population 单写边界
+    │   └── synthesis.py         #   canonical ledger + 曲线侧车 → synthesis_report
     ├── lifecycle/               # FR6：监控事件、归因与状态动作
     ├── api/                     # 统一人类界面后端（ADR-0005）：领域只读端点；F006 写路径唯一入口与审计咽喉
     ├── kronos_service/          # Kronos 推理服务薄壳（自 quant-crypto 迁入）
@@ -219,15 +236,18 @@ alphamill/                       # 仓库根（非 Python 资产留根，不进�
 ### 4.0 闭环核心对象
 
 ```text
-HypothesisDef ─1:N→ FactorDef ─N:M→ PortfolioDef ─1:N→ DeploymentRun
-      │                 │                 │                    │
-      └─────────────────┴──── ExperimentManifest ──────────────┘
+DataVersion + HypothesisDef → FactorDef → factor ExperimentRun
+FactorDef(s) → PortfolioDef → portfolio ExperimentRun → DeploymentCandidate
+→ DeploymentRun → RunRecord → AttributionReport →（人审通过）新 HypothesisDef
 ```
 
 - `HypothesisDef` 拥有经济动机、来源、generation、数据依赖、预期持有期和成本敏感性；
 - `FactorDef` 拥有可执行定义和版本，不承载评测结论；
 - `PortfolioDef` 拥有成员、权重、估计窗口、约束和组合门报告；
+- `ExperimentRun` 拥有显式 execution tier、cohort、冻结规则和内容寻址 ID；
 - `DeploymentRun` 固定引用 portfolio、信号缓存和审批版本；
+- `RunRecord` 保存 intended/attempted/accepted/failed 四桶及执行事实；
+- `AttributionReport` 区分事实、推断与建议，经规则或人审才触发生命周期/新假设动作；
 - `ExperimentManifest` 是各对象和所有证据之间的不可变索引，不把结果复制回定义对象。
 
 ### 4.1 因子定义（FactorDef）
@@ -270,6 +290,9 @@ no-signal；任何隐式全样本统计直接被纯度门拒绝。
 成本进选择回路：taker 费 + 滑点为硬过滤字段（cost.hard_filter=true）；资金费率按永续 8h 结算计入持有成本
 输出 report.json：
 {
+  "experiment_id": "...",
+  "execution_tier": "preview | canonical",
+  "cohort_id": "...",
   "factor_id": "...",
   "rank_ic": {"mean": , "std": , "icir": , "positive_ratio": },
   "ic_decay": {"horizons": [1,2,4,12,24], "values": [...]},
@@ -290,7 +313,8 @@ no-signal；任何隐式全样本统计直接被纯度门拒绝。
     "holding_period_hours": {"p50": , "p90": }
   },
   "cost_verdict": "cost_ok | cost_negative",
-  "verdict": "promising | weak | dead"
+  "failure": {"stage": null, "owner": null, "mechanism": null},
+  "verdict": "promising | weak | dead | underpowered | incomplete"
 }
 ```
 
@@ -298,15 +322,20 @@ no-signal；任何隐式全样本统计直接被纯度门拒绝。
 `dead`（PRD FR3.2）。交易费、滑点或资金费率任一项使成本后收益不为正，都不允许候选以
 `promising` 或 `weak` 身份流入门禁。成本参数由 dry-run 实际成交校准。
 
+这里的 `verdict` 是成员诊断标签，不是可晋级裁决。canonical cohort 的全部承诺成员登记后，
+F007 才统一计算 cohort 级校正并生成 `cohort_verdict.json`；只有其中的 `promotion_verdict`
+可以进入后续门禁，未 finalize 的 cohort 不得晋级。
+
 **重定价缓存义务（trade_log_summary）**：评测台不得只存 pass/fail。成本模型变化时，凭逐笔
 毛收益或等效摘要重定价，不重新运行生成器；`cost_model_version` 与 `data_version` 并列进入
 experiment manifest（FR7.1）。
 
 **曲线级时间序列侧车（ADR-0005 呈现契约）**：评测台除标量结论外必须持久化曲线级时间序列，
-供研究控制台渲染（F007 spec 立项时以此为准，先于 F005 开发锁定）：
+供研究控制台渲染（以 F007 spec 为准，先于 F005 开发锁定）：
 
 - 路径：与评测报告同目录写 `curves.parquet`
-  （`reports/bench/<object_id>/<data_version>/curves.parquet`，报告根 `reports/` 见 §三 目录树），
+  （`reports/bench/<object_id>/<data_version>/<experiment_id>/curves.parquet`，报告根 `reports/`
+  见 §三 目录树），
   与 `report.json` 在同一原子批次发布；
 - manifest 关联键：experiment manifest 增 `curves: {path, rows, columns, sha256}`，与报告、
   `data_version`、`cost_model_version` 并列，保证曲线可从真相源确定性重放；
@@ -315,6 +344,11 @@ experiment manifest（FR7.1）。
   `rolling_ic_h1/h2/h4/h12/h24`（各 horizon 的滚动 IC）；时间轴为逐日/逐 bar UTC 时间戳。
   `report.json` 的 `quantile_returns`/`ic_decay` 是全样本标量汇总，侧车是其时间展开，
   两者口径必须可互推（如侧车末日累计值对齐标量分组收益）。
+
+**综合报告契约**：F007 从 canonical experiment ledger 与曲线侧车生成不可变
+`synthesis_report.json`，至少包含 cohort 漏斗、有效独立数、信号质量/组合转换/成本容量/
+时序稳定/执行实现五阶段损失、最大约束，以及分栏的事实/推断/建议。它是证据与治理产物；
+F005 不重新计算口径，只渲染该报告。
 
 #### 4.2.1 组合定义与组合门
 
@@ -364,6 +398,36 @@ class PortfolioDef:
   "quality_flags_resolved": 0
 }
 ```
+
+### 4.5 实验身份与执行上下文
+
+```text
+ExperimentContext = {
+  execution_tier: preview | canonical,
+  upstream_object_id,
+  cohort_id,
+  normalized_method_config,
+  data_value_digest,
+  code_build_digest,
+  seed,
+  supersedes?
+}
+
+experiment_id = digest(upstream_object_id, cohort_id, normalized_method_config,
+                       data_value_digest, code_build_digest, seed)
+provenance = {artifact_path, file_sha256, codec, created_at, host, duration}
+```
+
+`execution_tier` 必须由调用方显式构造并沿调用链传递，不读取环境变量或进程全局默认值。
+它与 `supersedes` 不参与 `experiment_id`：前者由命名空间/capability 强制，后者只是谱系关系；
+preview 与 canonical 使用隔离命名空间；preview 不得写 official population、留出访问台账或
+晋级结论。canonical 在执行前冻结 cohort、选择阶段、窗口和规则版本，并用幂等键保证同一
+语义运行只登记一次。cohort 成员全部完成不可变登记并统一计算 cohort 级校正后才可晋级；
+语义输入变化时生成新 ID，以 `supersedes` 关联旧版本，历史产物不覆盖。
+
+数据值摘要由 F002 的 canonical rows/value digest 提供；Parquet 文件 SHA-256 只验证物理文件
+完整性，不因压缩编码差异改变实验身份。必需指标计算失败、输入摘要不一致或方法论/parity
+检查跳过时，运行只能进入 `INCOMPLETE/FAIL`，不能晋级。
 
 ---
 
