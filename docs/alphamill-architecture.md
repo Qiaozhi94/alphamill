@@ -310,8 +310,11 @@ experiment manifest（FR7.1）。
   与 `report.json` 在同一原子批次发布；
 - manifest 关联键：experiment manifest 增 `curves: {path, rows, columns, sha256}`，与报告、
   `data_version`、`cost_model_version` 并列，保证曲线可从真相源确定性重放；
-- 最小列集：`equity_after_cost`（成本后累计权益）、`drawdown`（回撤）、`quantile_returns`
-  （q1..q5 + long_short）、`ic_decay`（horizons [1,2,4,12,24]）；时间轴为逐日/逐 bar UTC 时间戳。
+- 最小列集：`equity_after_cost`（成本后累计权益）、`drawdown`（回撤）、
+  `q1_cum`..`q5_cum`、`long_short_cum`（分位数/多空累计收益，按 bar 时间展开）、
+  `rolling_ic_h1/h2/h4/h12/h24`（各 horizon 的滚动 IC）；时间轴为逐日/逐 bar UTC 时间戳。
+  `report.json` 的 `quantile_returns`/`ic_decay` 是全样本标量汇总，侧车是其时间展开，
+  两者口径必须可互推（如侧车末日累计值对齐标量分组收益）。
 
 #### 4.2.1 组合定义与组合门
 
