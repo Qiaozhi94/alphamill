@@ -411,3 +411,45 @@
 - 全接纳率 96% 需警惕"检视在凑数"的反向信号；本循环的对冲证据是：8 条为修改引入（首轮
   物理上不存在）、1 条第 2 轮被误报已修复后在第 3 轮才真正关闭、1 条转 tracked 而非硬关，
   说明发现具备实质性而非形式化。
+
+---
+
+## 循环 11：F004 Kronos 真实推理运行时设计检视
+
+- report_type: doc-review | round: 1（full-scan）→ 2（修复覆盖 52%，一次性 full-scan）→ 3/4（diff-only）| 状态: 闭环
+- 日期：2026-09-14～2026-09-15 | 基线：`bc314f0` → `c5100a0`
+- 范围：`docs/features/0.2/F004-kronos-inference-runtime/{spec,design,tasks}.md` 及必要的 F001/F002 契约勘正；不含 UI mockup 与非 F004 PRD 改动。
+- 结论：14 条 finding 全部 fixed，Critical/High/Medium/Low 开放项均为 0；本地 `python3 tools/verify.py`（经项目 `.venv` 解释器实跑）`194 passed, 23 skipped`，图谱风险分 0.0；最终 CI 由本总结提交触发。
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F004-D001 | 真实 profile 未接入 `signals_log` 的生产消费者 | High | 正确性 | 根因 | 规格漂移 | fixed | 接线并验收 `signals_log.source=kronos`，或删除自动升级承诺 | 删除自动升级承诺，将消费者路由排除并同步勘正 F002 限制说明 | 文档生命周期 + 链接门 | 1 | 2 | cross-feature-contract-drift |
+| F004-D002 | 失败关闭与串行推理没有实现路径 | High | 正确性 | 根因 | 初始设计 | fixed | 增启动预检、eager load/readiness、推理锁和对应测试 | 增加启动预检、eager load、readiness、非零退出、进程级锁及 AC-002 | 文档生命周期 + 链接门 | 1 | 2 | fail-closed-contract-unimplemented |
+| F004-D003 | 一条命令复现缺 compose 定位与数据前置条件 | High | 正确性 | 根因 | 初始设计 | fixed | 固定 compose 文件并补数据准备前置 | compose 命令固定 `-f`，并补齐 DB 迁移和至少 30 根闭合 K 线前置 | 文档生命周期 + 链接门 | 1 | 2 | incomplete-reproduction-contract |
+| F004-D004 | AC-001 的现有测试可绕过 compose 假绿 | High | 测试覆盖 | 根因 | 流程缺陷 | fixed | 新增 F004 专属静态与容器门禁 | AC-001/002 改由 F004 专属静态、运行时与容器门证明，F001 冒烟只验证 HTTP | 文档生命周期 + 链接门 | 1 | 2 | test-does-not-prove-deployment |
+| F004-D005 | real 镜像依赖清单漏掉上游直接依赖 | High | 正确性 | 根因 | 规格漂移 | fixed | 补齐 `huggingface_hub`、`tqdm` 并锁定 CPU wheel 来源 | 锁定已验证的 torch CPU wheel 与四项最小推理依赖版本 | 文档生命周期 + 链接门 | 1 | 2 | upstream-dependency-drift |
+| F004-D006 | 验收环境违反执行机取证纪律 | High | 正确性 | 根因 | 规格漂移 | fixed | 指定执行机及 hostname/device 证据要求 | 指定 qiaozhi-lt 执行集成并记录 hostname/device，开发机只跑静态和单元门 | 文档生命周期 + 链接门 | 1 | 2 | wrong-evidence-machine |
+| F004-D007 | NFR-001 的构建隔离机制与判据未定义 | Medium | 测试覆盖 | 根因 | 初始设计 | fixed | 固定 target 并改用稳定可断言判据 | 固定 mock/real target，判据改为默认镜像无 torch 且不启用或构建 real | 文档生命周期 + 链接门 | 1 | 2 | unverifiable-nonfunctional-requirement |
+| F004-D008 | 资产挂载契约缺 tokenizer 路径与只读约束 | Medium | 正确性 | 根因 | 初始设计 | fixed | 补全路径、只读性和端口两侧契约 | 补齐只读挂载、模型/tokenizer 路径、开关、设备及 8002:8001 映射 | 文档生命周期 + 链接门 | 1 | 2 | incomplete-runtime-mount-contract |
+| F004-D009 | PRD 来源把 FR3 误写为信号生产 | Medium | 正确性 | 根因 | 规格漂移 | fixed | 改正 PRD 来源与 FR3 关系 | 来源改指 M0、FR1.2、FR5，FR3 明确为下游评测关系 | 文档生命周期 + 链接门 | 1 | 2 | requirement-source-mismatch |
+| F004-D010 | 任务依赖图断链且收口任务混合两个动作 | Medium | 质量 | 根因 | 初始设计 | fixed | 串完整 DAG 并拆分收口动作 | 重构三阶段 DAG，拆开证据回写与状态同步，最终门统一为 verify.py | 文档生命周期 + 链接门 | 1 | 2 | task-graph-gap |
+| F004-D011 | real 服务契约遗漏数据库依赖与网络接入 | High | 正确性 | 根因 | 初始设计 | fixed | 补齐 DB_*、TimescaleDB healthy dependency、alphamill 网络及正反门禁 | design/spec/T004-T006 同步完整运行链与静态、容器断言 | 文档生命周期 + 链接门 | 2 | 3 | incomplete-runtime-wiring |
+| F004-D012 | 应用启动钩子和配套文档没有任务所有者 | Medium | 质量 | 根因 | 修复引入 | fixed | 校正影响面并明确 `server.py`/VENDORED 所有者 | 校正 HTTP 契约与实现影响面，T001 明列 server.py，并新增 VENDORED.md 回写任务 | 文档生命周期 + 链接门 | 2 | 3 | implementation-artifact-unowned |
+| F004-D013 | 实现任务引用的测试门在执行顺序中尚不存在 | Medium | 测试覆盖 | 根因 | 修复引入 | fixed | 测试先红后实现，或将测试创建并入对应任务 | T001-T004 改为任务内测试先红后实现转绿，T005 收窄为门禁补全与变异验证 | 文档生命周期 + 链接门 | 2 | 3 | test-created-after-implementation |
+| F004-D014 | 文档回写任务声称依赖实测通过但排在实测任务之前 | Medium | 质量 | 根因 | 修复引入 | fixed | 重排依赖或把需实测通过的回写移至实测后 | VENDORED 回写与实测拆为独立分支，实测后并行回写 F001 命令与 F004 证据，最终门禁汇合全部分支 | 文档生命周期 + 链接门 | 3 | 4 | task-graph-order-contradiction |
+
+所有 finding 的 `disposition_reason` 均为 `—`：本循环没有 rejected 或 partial 裁决。
+
+### 循环 11 模式教训
+
+1. **没有重复的精确 `pattern_tag`，但 14 条问题集中在三类传播断点**：运行时契约没有同步到 compose/test（D004/D007/D008/D011）、跨 feature 承诺没有同步消费者（D001/D009）、任务图没有同步实现与取证顺序（D010/D012-D014）。设计三件套检视应固定走「行为承诺 → 实现所有者 → 测试门 → 执行/证据任务」四跳核对。
+2. **origin 分布：初始设计 6、规格漂移 4、修复引入 3、流程缺陷 1。** 修复引入占 21%（3/14），均由后续 diff-only 捕获；这再次证明修复后独立复核不能省略。
+3. **所有 finding 的存活轮数均为 1（`resolved_round - first_seen_round`）**。最长存活没有超过一轮；Round 2 因修复覆盖 52% 按协议一次性升级 full-scan，后续恢复 diff-only，未发生无限重读。
+4. **任务 DAG 是本循环最易自伤的编辑面**：D010 的重构解决断链，却在后续补所有者和测试顺序时引出 D012-D014。以后新增或重排任务后，必须同时验证编号连续、所有任务可达、无环、文字前提与箭头一致。
+
+### 循环 11 裁决分布与建议命中率
+
+- fixed 14 / partial 0 / rejected 0 / tracked 0（14 条全部接纳并关闭）。
+- 建议命中率 100%（14/14 实质采纳 `suggested_fix`）；D001、D014 都从检视给出的备选方案中选择了边界更小的一项。
+- 全接纳率 100% 需警惕检视意见是否过度保守；对冲证据是 7 条 High 中包含可复现的 DB/compose 断链和测试假绿，3 条修复引入只在后续轮次出现，并非首轮形式化凑数。
+- 提交纪律有两项透明偏差：D001、D003 各有补遗提交；tasks.md 是共享编辑面，D010/D013 提交承载了其他 finding 的任务级同步。偏差已在 FIX-log 逐条声明，未影响 diff 归属核对。
