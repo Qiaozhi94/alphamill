@@ -50,7 +50,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 **为什么是这个优先级**：F001 已用独立命令留档证据，不阻塞 M1 开工；F002 的 signals_log dataset 要有研究价值需要可复现的真实信号源（消费者接线见 §3 范围外）。
 
-**独立测试**：新 clone + 权重就位 + DB 已迁移且目标 exchange/symbol 有 ≥30 根已闭合 1m K 线后，`docker compose -f deployment/docker-compose.yml --profile kronos-real up -d` 再跑 AC-006 命令全绿。
+**独立测试**：新 clone + 权重就位 + DB 已迁移且目标 exchange/symbol 有 ≥30 根已闭合 1m K 线后，`docker compose -f deployment/docker-compose.yml --profile kronos-real up -d` 再跑 AC-006 命令全绿；容器集成验收在执行机 `qiaozhi-lt` 取证（记录 hostname + `device=cpu`），开发机只跑静态与单元门禁（见 §7）。
 
 **验收场景**：
 
@@ -133,7 +133,8 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 - **静态编排契约（单元，CI 常绿）**：`tests/unit/test_f004_compose_profile_contract.py`——Dockerfile mock/real 目标与依赖 pin、compose real 服务的 profile/挂载/端口/环境、默认配置不含 real 服务；
 - **薄壳运行时契约（单元，CI 常绿）**：`tests/unit/test_f004_kronos_runtime_contract.py`——缺资产启动失败关闭、模型加载至多一次、推理互斥；
 - **容器集成（执行机）**：`tests/integration/test_f004_real_profile.py`——构建 real 目标并拉起 profile，校验容器身份（compose 托管 + real 目标 + 只读挂载 + 8002:8001）与 `source=kronos`；缺资产场景非零退出；默认镜像 `import torch` 判红；开关语义与 F001 冒烟一致（未设 `ALPHAMILL_INTEGRATION` 时 skip、设了不可达判红）；
-- F001 的 `test_f001_kronos_smoke.py` 保留 HTTP 契约职责（`source` 与 `model_enabled` 自洽、两方向判红），不再单独承担部署形态证明。
+- F001 的 `test_f001_kronos_smoke.py` 保留 HTTP 契约职责（`source` 与 `model_enabled` 自洽、两方向判红），不再单独承担部署形态证明；
+- **取证纪律**：容器与集成证据必须在执行机 `qiaozhi-lt` 采集并记录 hostname 与 `device=cpu`（SOP §3、架构 §7.1）；开发机只跑静态与单元门禁，开发机 skip 不算证据。
 
 ### 依赖
 

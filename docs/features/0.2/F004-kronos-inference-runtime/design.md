@@ -17,7 +17,7 @@ updated: 2026-09-12
 
 - **行为契约**：`spec.md`（FR-001 / NFR-001）
 - **上游 Contract**：F001 冻结的 Kronos HTTP API（`GET /health`、`GET /predict/{symbol:path}`、`POST /predict_batch`），零改动
-- **执行环境**：与 F001 收口态一致（WSL2 + docker-ce；本机无独立显卡，CPU 推理实测 3.4–7.2s/次）
+- **执行环境**：容器集成与验收在执行机 `qiaozhi-lt`（Win11 + WSL2 + docker-ce，RTX 4060 Laptop 8GB）取证，证据记录 hostname 与 `device=cpu`（本 feature 不做 GPU 直通；CPU 推理实测 3.4–7.2s/次）；开发机 `qiaozhi-gp`/`gp-wsl` 只跑静态编排断言与单元门禁（SOP §3、架构 §7.1）
 - **实现约束**：`vendor/Kronos`（pin `67b630e`）与 `models/`（391MB + 16MB）不入库，由 F001 既有流程获取；`/predict` 数据前置为目标 exchange/symbol 至少 30 根已闭合 1m K 线（F001 回填产物，DB 已迁移）
 
 ## 1. 技术概要与影响面
@@ -73,6 +73,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 
 - 容器集成测试遵循 F001 冒烟同款开关语义：未设 `ALPHAMILL_INTEGRATION` 时 skip；设了开关而服务/容器不可达时判红，不得以 skip 代替证据。
 - 每道新门禁（静态契约、容器集成）做一次变异验证：改 target、删依赖 pin、放开 `:ro` 必须判红。
+- 集成/容器证据必须在执行机 `qiaozhi-lt` 采集并记录 hostname 与 `device=cpu`（SOP §3、架构 §7.1）；开发机只跑静态与单元门禁，开发机 skip 不算证据。
 
 ## 9. 已确认决策与残余风险
 
