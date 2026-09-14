@@ -168,3 +168,17 @@ def test_default_exports_all_datasets(monkeypatch):
             "signals_log",
         ]
     )
+
+
+def test_allow_shrink_flag_is_forwarded_to_exporter(monkeypatch):
+    """F002-R3-02：CLI 的人工确认开关必须真的传到导出器，缺省为 False。"""
+    seen: list[bool] = []
+
+    def fake(dataset, mode="incremental", window_end=None, allow_shrink=False, **kwargs):
+        seen.append(allow_shrink)
+        return _ok_summary()
+
+    _patch_export(monkeypatch, fake)
+    assert cli.main(["--dataset", "ohlcv_1m"]) == 0
+    assert cli.main(["--dataset", "ohlcv_1m", "--mode", "full", "--allow-shrink"]) == 0
+    assert seen == [False, True]

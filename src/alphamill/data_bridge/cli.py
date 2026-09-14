@@ -47,6 +47,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="ISO_DATETIME",
         help="窗口开区间上界（UTC ISO8601）；缺省为今日 00:00 UTC，即导到「昨天」",
     )
+    parser.add_argument(
+        "--allow-shrink",
+        action="store_true",
+        help="full 模式人工确认：源库收缩确属有意，放行空结果/大幅收缩的新版本"
+        "（窗口传错导致的截断不在确认范围内，仍然拒绝）",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="调试日志")
     return parser.parse_args(argv)
 
@@ -94,7 +100,12 @@ def main(argv: list[str] | None = None) -> int:
 
     for dataset in datasets:
         try:
-            summary = export_dataset(dataset, mode=args.mode, window_end=args.window_end)
+            summary = export_dataset(
+                dataset,
+                mode=args.mode,
+                window_end=args.window_end,
+                allow_shrink=args.allow_shrink,
+            )
         except psycopg2.Error as exc:
             print(f"FATAL: {dataset}: 瞬时故障（可重试）: {exc}", file=sys.stderr)
             exit_code = max(exit_code, EXIT_TRANSIENT)

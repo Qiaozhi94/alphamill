@@ -85,3 +85,28 @@ def test_export_failure_is_not_masked_by_session_reset(monkeypatch, tmp_path):
     monkeypatch.setattr(exporter, "_export_one", boom)
     with pytest.raises(RuntimeError, match="真正失败原因"):
         exporter.export_dataset("ohlcv_1m", conn=_BrokenConn(), lake_root=tmp_path)
+
+
+def test_shrink_guard_can_be_confirmed_but_window_truncation_never_is():
+    """F002-R3-02：--allow-shrink 是源库收缩的人工确认通道，窗口传错不在确认范围内。"""
+    baseline = [_partition(pair) for pair in ("BTC-USDT", "ETH-USDT", "SOL-USDT", "XRP-USDT")]
+    survivor = [_partition("BTC-USDT")]
+    end = dt.date(2026, 9, 15)
+
+    # 未确认：空结果与腰斩（4 → 1）都拒绝
+    with pytest.raises(exporter.DataBridgeError, match="空快照"):
+        exporter._guard_full_shrink(baseline, [], end)
+    with pytest.raises(exporter.DataBridgeError, match="大幅降至"):
+        exporter._guard_full_shrink(baseline, survivor, end)
+
+    # 已确认：同样的两种情形放行
+    exporter._guard_full_shrink(baseline, [], end, allow_shrink=True)
+    exporter._guard_full_shrink(baseline, survivor, end, allow_shrink=True)
+
+    # 窗口截断（基线最新日期 >= window_end）即使确认也必须拒绝
+    with pytest.raises(exporter.DataBridgeError, match="截断已有基线"):
+        exporter._guard_full_shrink(baseline, [_partition("BTC-USDT")], dt.date(2026, 9, 14))
+    with pytest.raises(exporter.DataBridgeError, match="截断已有基线"):
+        exporter._guard_full_shrink(
+            baseline, [_partition("BTC-USDT")], dt.date(2026, 9, 14), allow_shrink=True
+        )

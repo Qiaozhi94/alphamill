@@ -256,7 +256,11 @@ src/alphamill/data_bridge/
   全量校验 = 全 span 重导至新 data_version 并做分区级 diff;窗口内无数据的 pair 记入 `skipped`。
   为避免源表瞬时不可见或错误窗口把有效快照静默清空，全量已有非空基线时若结果为空、窗口上界
   截断基线最新日期，或分区数下降超过一半，导出直接拒绝发布并要求人工确认；小范围源库删除
-  仍按当前源库组成新版本并在 `revision_diff` 标记 `removed`。
+  仍按当前源库组成新版本并在 `revision_diff` 标记 `removed`。**人工确认有执行通道**
+  (F002-R3-02):CLI `--allow-shrink` → `export_dataset(allow_shrink=True)` 放行空结果与大幅
+  收缩,并在 manifest 写 `shrink_confirmed: true` 留痕;窗口上界传错导致的截断不属于"源库收缩",
+  `--allow-shrink` 不对它开口子。没有这条通道,一次合法的大规模删除会让周日全量导出以退出码 2
+  永久失败(`RestartPreventExitStatus=2` 不重试)。
 - **回滚/前向兼容**(F002-R3-04 修订):导出失败产物按引用状态分为**三种形态**——①还在
   `lake/_staging/` 里没 rename 出去的临时文件;②已 rename 进正式路径、但**不被任何 manifest
   引用**的孤儿 `.rN`;③被 `status: invalid` manifest 引用的失败版本分区。三者都**不覆盖任何

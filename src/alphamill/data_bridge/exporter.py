@@ -114,25 +114,39 @@ def _merge_partitions(
 
 
 def _guard_full_shrink(
-    baseline: list[dict[str, Any]], current: list[dict[str, Any]], end: dt.date
+    baseline: list[dict[str, Any]],
+    current: list[dict[str, Any]],
+    end: dt.date,
+    *,
+    allow_shrink: bool = False,
 ) -> None:
-    """阻止全量导出因空库/错误窗口意外发布大幅缩水快照。"""
+    """阻止全量导出因空库/错误窗口意外发布大幅缩水快照。
+
+    `allow_shrink=True` 是「源库收缩确属有意」的人工确认通道（CLI `--allow-shrink`），
+    放行空结果与大幅收缩，并由调用方在 manifest 记 `shrink_confirmed`（F002-R3-02）。
+    窗口截断不在确认范围内——那是 `--window-end` 传错，不是源库收缩，任何情况下都拒绝。
+    """
     if not baseline:
         return
-    if not current:
-        raise DataBridgeError("full 导出得到空快照且已有非空基线，拒绝发布；请确认源表清空是否有意")
     baseline_dates = [
         dt.date.fromisoformat(partition["logical_partition_key"]["date"]) for partition in baseline
     ]
     if max(baseline_dates) >= end:
         raise DataBridgeError(
             f"full window_end={end.isoformat()} 会截断已有基线，拒绝发布；"
-            "请扩大窗口或明确处理历史快照"
+            "请扩大窗口或明确处理历史快照（窗口错误不可用 --allow-shrink 绕过）"
+        )
+    if allow_shrink:
+        return
+    if not current:
+        raise DataBridgeError(
+            "full 导出得到空快照且已有非空基线，拒绝发布；"
+            "确认源表清空确属有意后用 --allow-shrink 重跑"
         )
     if len(current) * 2 < len(baseline):
         raise DataBridgeError(
             f"full 导出分区数从 {len(baseline)} 大幅降至 {len(current)}，拒绝发布；"
-            "请确认源表收缩是否有意"
+            "确认源表收缩确属有意后用 --allow-shrink 重跑"
         )
 
 
@@ -143,12 +157,14 @@ def export_dataset(
     conn=None,
     lake_root: Path | None = None,
     post_export_hook: PostExportHook = None,
+    allow_shrink: bool = False,
 ) -> dict[str, Any]:
     """导出单个 dataset（design §4 契约）；返回 manifest 摘要 dict。
 
     mode: incremental（默认，窗口 = 上一 valid manifest 最大日期 +1 ~ window_end）
           | full（全 span 重导 + 分区级 diff，仅在内容变化时发布新版本）。
     window_end: 窗口开区间上界；缺省为今日 00:00 UTC，即导到昨天。
+    allow_shrink: full 模式下确认源库收缩确属有意（见 _guard_full_shrink）。
     """
     if mode not in ("incremental", "full"):
         raise ValueError(f"未知 mode: {mode!r}")
@@ -158,7 +174,9 @@ def export_dataset(
     conn = conn if conn is not None else db_connect()
     started = time.monotonic()
     try:
-        return _export_one(conn, spec, mode, window_end, root, post_export_hook, started)
+        return _export_one(
+            conn, spec, mode, window_end, root, post_export_hook, started, allow_shrink
+        )
     finally:
         reconcile.reset_snapshot_session(conn)
         if own_conn:
@@ -173,6 +191,7 @@ def _export_one(
     root: Path,
     post_export_hook: PostExportHook,
     started: float,
+    allow_shrink: bool = False,
 ) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
     baseline_version, baseline = _baseline(root, spec.name)
@@ -243,7 +262,7 @@ def _export_one(
     )
     merged = _merge_partitions(mode, baseline_partitions, produced)
     if mode == "full":
-        _guard_full_shrink(baseline_partitions, merged, end)
+        _guard_full_shrink(baseline_partitions, merged, end, allow_shrink=allow_shrink)
     value_digest = mf.compute_value_digest(spec, merged)
     content_changed = (
         bool(failures)
@@ -278,6 +297,8 @@ def _export_one(
         "source": mf.SOURCE_TAG,
         "source_snapshot": {"backend_xmin": int(xmin), "taken_at": taken_at},
         "symbol_map_digest": symbol_map_ref.digest,
+        # 人工确认过的源库收缩留痕，使「为什么这一版分区变少了」事后可查（F002-R3-02）。
+        "shrink_confirmed": bool(allow_shrink and mode == "full"),
         "as_of_fidelity": spec.as_of_fidelity,
         "exported_at": mf.iso_utc(dt.datetime.now(dt.UTC)),
         "rows": sum(p["rows"] for p in merged),
