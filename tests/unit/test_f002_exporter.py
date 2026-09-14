@@ -2,6 +2,7 @@
 
 import datetime as dt
 
+import psycopg2
 import pytest
 
 from alphamill.data_bridge import exporter, registry
@@ -66,3 +67,21 @@ def test_quality_flag_count_change_is_not_a_noop():
         2,
         0,
     )
+
+
+def test_export_failure_is_not_masked_by_session_reset(monkeypatch, tmp_path):
+    """F002-R3-04：导出失败时，finally 的会话恢复不得覆盖原始异常。"""
+
+    class _BrokenConn:
+        def rollback(self):
+            raise psycopg2.OperationalError("server closed the connection unexpectedly")
+
+        def set_session(self, **kwargs):  # pragma: no cover - rollback 先抛
+            raise AssertionError("rollback 失败后不应继续 set_session")
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("导出过程中的真正失败原因")
+
+    monkeypatch.setattr(exporter, "_export_one", boom)
+    with pytest.raises(RuntimeError, match="真正失败原因"):
+        exporter.export_dataset("ohlcv_1m", conn=_BrokenConn(), lake_root=tmp_path)

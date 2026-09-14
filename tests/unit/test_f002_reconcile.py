@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime
 
+import psycopg2
+
 from alphamill.data_bridge import reconcile
 
 
@@ -54,3 +56,18 @@ def test_snapshot_transaction_sets_and_restores_session_defaults():
         "readonly": False,
         "autocommit": False,
     }
+
+
+class _BrokenConn:
+    """连接已断开：任何清理调用都抛 psycopg2 错误。"""
+
+    def rollback(self):
+        raise psycopg2.OperationalError("server closed the connection unexpectedly")
+
+    def set_session(self, **kwargs):  # pragma: no cover - rollback 先抛
+        raise AssertionError("rollback 失败后不应继续 set_session")
+
+
+def test_session_reset_does_not_raise_when_connection_is_already_dead():
+    """F002-R3-04：finally 里的清理不得用二次异常取代真正的失败原因。"""
+    reconcile.reset_snapshot_session(_BrokenConn())

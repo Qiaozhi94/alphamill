@@ -12,13 +12,18 @@ numeric/弱口径，性能不可接受走 spec 修订。
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import psycopg2
+
 from alphamill.data_bridge import digest as digest_mod
 from alphamill.data_bridge import registry
 from alphamill.data_bridge.manifest import iso_utc
+
+logger = logging.getLogger(__name__)
 
 
 def partition_time_bounds(day: str) -> tuple[datetime, datetime]:
@@ -118,9 +123,17 @@ def begin_snapshot_tx(conn) -> tuple[str, str]:
 
 
 def reset_snapshot_session(conn) -> None:
-    """恢复导出连接默认会话属性，避免只读快照污染调用方后续写事务。"""
-    conn.rollback()
-    conn.set_session(isolation_level="READ COMMITTED", readonly=False, autocommit=False)
+    """恢复导出连接默认会话属性，避免只读快照污染调用方后续写事务。
+
+    本函数只在 `finally` 里做清理：连接已断开时重置必然失败，若让它抛出，
+    异常会取代真正的导出失败原因（F002-R3-04）。故吞掉 psycopg2 错误并降级
+    为警告——失败的只是"恢复默认值"，连接随后要么被关闭、要么由调用方重建。
+    """
+    try:
+        conn.rollback()
+        conn.set_session(isolation_level="READ COMMITTED", readonly=False, autocommit=False)
+    except psycopg2.Error as exc:
+        logger.warning("导出后恢复连接会话属性失败（连接可能已断开）: %s", exc)
 
 
 def table_span(conn, spec: registry.DatasetSpec) -> tuple[str, str] | None:
