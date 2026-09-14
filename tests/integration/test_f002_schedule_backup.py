@@ -87,6 +87,11 @@ def test_real_deployment_lake_layout_matches_contract():
         pytest.fail(f"真实 lake/ 不存在: {real_lake}")
     for dataset in registry.DATASETS:
         manifests = real_lake / "_manifests" / dataset
-        if manifests.is_dir():
-            versions = list(manifests.glob("*.json"))
-            assert versions == sorted(versions)  # 文件名即版本，可排序审计
+        if not manifests.is_dir():
+            continue
+        # 「文件名即版本」才是可排序审计的前提：逐个解析，非法文件名即判红。
+        # 不能断言 glob 的返回顺序——Path.glob 走 os.scandir，目录枚举顺序不保证有序。
+        stems = [path.stem for path in manifests.glob("*.json")]
+        for stem in stems:
+            mf.parse_data_version(stem)
+        assert len(set(stems)) == len(stems), f"{dataset} 存在重名 manifest"
