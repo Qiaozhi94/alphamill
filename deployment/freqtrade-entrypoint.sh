@@ -4,7 +4,7 @@ set -euo pipefail
 template="${FREQTRADE_CONFIG_TEMPLATE:-/freqtrade/user_data/config.json}"
 rendered="${FREQTRADE_CONFIG_RENDERED:-/tmp/alphamill-freqtrade-config.json}"
 
-python - "$template" "$rendered" <<'PY'
+python3 - "$template" "$rendered" <<'PY'
 import json
 import os
 import re

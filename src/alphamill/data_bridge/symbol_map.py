@@ -6,8 +6,8 @@
 `BTC/USDT[:USDT] → BTC-USDT-PERP`（Freqtrade `BTC/USDT:USDT`）。任意两行推导
 出相同 lake_pair 即为碰撞，导出直接失败（`SymbolCollisionError`）。
 
-current 副本（集成 §2.2 权威路径 `src/alphamill/data_bridge/symbol_map.csv`）
-不是可复现身份：canonical CSV（五列排序、UTF-8、LF、固定表头）原子发布到
+current 副本位于湖元数据目录，不改写源码树；它不是可复现身份：canonical CSV
+（五列排序、UTF-8、LF、固定表头）原子发布到
 `lake/_metadata/symbol_maps/<digest>.csv`，digest 为 canonical bytes 的
 SHA-256；已有同 digest 文件必须逐字节一致。ResearchSnapshot 只引用显式 digest。
 """
@@ -15,9 +15,11 @@ SHA-256；已有同 digest 文件必须逐字节一致。ResearchSnapshot 只引
 from __future__ import annotations
 
 import csv
+import errno
 import hashlib
 import io
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,24 +34,25 @@ from alphamill.data_bridge.errors import (
 
 COLUMNS = ("exchange", "market_type", "db_symbol", "lake_pair", "freqtrade_pair")
 MARKET_TYPES = ("spot", "perp")
+_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
-_DEFAULT_CURRENT_CSV = Path(__file__).resolve().parent / "symbol_map.csv"
-
-# 供 pair-car（有 pair 分区维度的）dataset 使用的 DISTINCT 查询；signals_log 无 pair 维度不参与。
+# 只有 registry 显式允许的源表参与映射；signals_log 可混合 spot/perp，不能套用单一
+# DatasetSpec.market_type，因此由 pair 分区源表提供全局 universe。
 _DISTINCT_SQL = """
 SELECT DISTINCT exchange, symbol FROM {table}
 """
 
 
-def current_csv_path() -> Path:
-    """current 副本路径；集成 §2.2 权威值 `src/alphamill/data_bridge/symbol_map.csv`。
+def current_csv_path(lake_root: Path | None = None) -> Path:
+    """current 副本路径；默认位于 `lake/_metadata/symbol_map.csv`。
 
     环境变量 ALPHAMILL_SYMBOL_MAP_CURRENT 仅供测试/多环境覆盖。
     """
     override = os.getenv("ALPHAMILL_SYMBOL_MAP_CURRENT", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return _DEFAULT_CURRENT_CSV
+    root = Path(lake_root) if lake_root is not None else paths.lake_root()
+    return root / "_metadata" / "symbol_map.csv"
 
 
 @dataclass(frozen=True)
@@ -129,13 +132,43 @@ def _atomic_write(path: Path, payload: bytes) -> None:
     os.replace(tmp, path)
 
 
+def _atomic_create(path: Path, payload: bytes) -> None:
+    """原子创建不可变 artifact；不支持 hard-link 时退回 O_EXCL，绝不覆盖。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}-{id(payload)}")
+    tmp.write_bytes(payload)
+    try:
+        try:
+            os.link(tmp, path)
+        except FileExistsError:
+            raise
+        except OSError as exc:
+            # 某些跨文件系统/网络文件系统不支持 link；O_EXCL 保留 no-overwrite 语义。
+            if exc.errno not in {
+                errno.EXDEV,
+                errno.EPERM,
+                errno.EOPNOTSUPP,
+                errno.ENOTSUP,
+            }:
+                raise
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            with os.fdopen(fd, "wb") as target:
+                target.write(payload)
+                target.flush()
+                os.fsync(target.fileno())
+    except FileExistsError:
+        raise
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def _rows_from_conn(conn) -> list[SymbolRow]:
-    """从各 pair-car 源表取 DISTINCT (exchange, symbol)，market_type 按 registry。"""
+    """从各 dataset 源表取 DISTINCT (exchange, symbol)，market_type 按 registry。"""
     from alphamill.data_bridge import registry
 
     rows: dict[tuple[str, str, str], SymbolRow] = {}
     for spec in registry.DATASETS.values():
-        if not registry.pair_partitioned(spec):
+        if not spec.symbol_map_enabled:
             continue
         with conn.cursor() as cur:
             cur.execute(_DISTINCT_SQL.format(table=spec.source_table))
@@ -150,34 +183,51 @@ def export_symbol_map(conn=None, lake_root: Path | None = None) -> SymbolMapRef:
     """刷新 current 副本并按 digest 原子发布不可变 artifact。"""
     from alphamill.data_bridge.collector.db_writer import db_connect
 
-    if conn is None:
-        conn = db_connect()
-    root = lake_root or paths.lake_root()
-    frame = build_symbol_map(_rows_from_conn(conn))
-    payload = canonical_csv_bytes(frame)
-    digest = content_digest(payload)
+    own_conn = conn is None
+    conn = conn if conn is not None else db_connect()
+    try:
+        root = lake_root or paths.lake_root()
+        frame = build_symbol_map(_rows_from_conn(conn))
+        payload = canonical_csv_bytes(frame)
+        digest = content_digest(payload)
 
-    _atomic_write(current_csv_path(), payload)
-    artifact = paths.symbol_maps_dir(root) / f"{digest}.csv"
-    if artifact.is_file() and artifact.read_bytes() != payload:
-        raise DataBridgeError(f"同 digest artifact 内容不一致: {artifact}")
-    if not artifact.is_file():
-        _atomic_write(artifact, payload)
-    return SymbolMapRef(digest=digest, path=artifact)
+        artifact = paths.symbol_maps_dir(root) / f"{digest}.csv"
+        if artifact.is_file() and artifact.read_bytes() != payload:
+            raise DataBridgeError(f"同 digest artifact 内容不一致: {artifact}")
+        if not artifact.is_file():
+            try:
+                _atomic_create(artifact, payload)
+            except FileExistsError:
+                if artifact.read_bytes() != payload:
+                    raise DataBridgeError(f"同 digest artifact 内容不一致: {artifact}") from None
+        _atomic_write(current_csv_path(root), payload)
+        return SymbolMapRef(digest=digest, path=artifact)
+    finally:
+        if own_conn:
+            conn.close()
 
 
 def load_symbol_map(digest: str | None = None, lake_root: Path | None = None) -> pd.DataFrame:
     """显式 digest → 不可变 artifact（可重放）；None → current 副本（仅供探索）。"""
     if digest is None:
-        source = current_csv_path()
+        source = current_csv_path(lake_root)
     else:
+        if not _DIGEST_RE.fullmatch(digest):
+            raise DataBridgeError(f"非法 symbol_map digest: {digest!r}")
         source = paths.symbol_maps_dir(lake_root or paths.lake_root()) / f"{digest}.csv"
     if not source.is_file():
         raise DataBridgeError(f"symbol_map 不存在: {source}")
-    frame = pd.read_csv(source, dtype=str, keep_default_na=False)
+    payload = source.read_bytes()
+    if digest is not None and content_digest(payload) != digest:
+        raise DataBridgeError(f"symbol_map digest 校验失败: {source}")
+    frame = pd.read_csv(io.BytesIO(payload), dtype=str, keep_default_na=False)
     missing = [col for col in COLUMNS if col not in frame.columns]
     if missing:
         raise DataBridgeError(f"symbol_map 缺少列 {missing}: {source}")
+    if tuple(frame.columns) != COLUMNS:
+        raise DataBridgeError(f"symbol_map 列顺序或列集合非法: {source}")
+    if digest is not None and canonical_csv_bytes(frame) != payload:
+        raise DataBridgeError(f"symbol_map 不是 canonical CSV: {source}")
     return frame.sort_values(list(COLUMNS), kind="stable").reset_index(drop=True)
 
 
@@ -213,9 +263,14 @@ def resolve(
     return str(matched.iloc[0][dst_col])
 
 
-def to_db_symbols(pairs: list[str], market_type: str, lake_root: Path | None = None) -> list[str]:
+def to_db_symbols(
+    pairs: list[str],
+    market_type: str,
+    lake_root: Path | None = None,
+    digest: str | None = None,
+) -> list[str]:
     """湖内 pair 集合 → 去重后的 db symbol 集合（reader 行级过滤用）。"""
-    frame = load_symbol_map(lake_root=lake_root)
+    frame = load_symbol_map(digest=digest, lake_root=lake_root)
     matched = frame[(frame["market_type"] == market_type) & (frame["lake_pair"].isin(pairs))]
     missing = sorted(set(pairs) - set(matched["lake_pair"]))
     if missing:

@@ -37,7 +37,21 @@ def main() -> int:
         ([sys.executable, "tools/check_doc_links.py"], "文档相对链接检查"),
         ([sys.executable, "tools/check_dep_pins.py"], "dev 依赖版本在 pin 范围内"),
         ([sys.executable, "tools/check_secrets.py"], "密钥模式扫描"),
-        ([sys.executable, "-m", "pytest", "-q"], "pytest"),
+        # 显式限定两个测试目录和 collection root，避免仓库内工具生成的不可读
+        # symlink（如 .codegraph）被 pytest 当作 collection root 探查。
+        (
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "--confcutdir=tests",
+                "--rootdir=tests",
+                "tests/unit",
+                "tests/integration",
+            ],
+            "pytest",
+        ),
         ([sys.executable, "-m", "ruff", "check", "."], "ruff check"),
         ([sys.executable, "-m", "ruff", "format", "--check", "."], "ruff format check"),
     ]

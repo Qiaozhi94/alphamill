@@ -75,15 +75,18 @@ def test_cli_incremental_run_exit_zero_and_artifacts(f002_conn, f002_lake, tmp_p
     assert any((f002_lake / "_metadata" / "symbol_maps").glob("*.csv"))
 
 
-def test_real_deployment_lake_layout_matches_contract(f002_lake):
+def test_real_deployment_lake_layout_matches_contract():
     """真实 lake/ 布局检查（部署态冒烟）：目录位存在或为空即可，不允许半成品结构。"""
-    real_lake = Path(os.environ.get("ALPHAMILL_LAKE_DIR", ""))
-    if not real_lake or real_lake == f002_lake:
-        pytest.skip("未指向真实 lake/（本用例仅在有真实湖时运行）")
+    configured = os.environ.get("ALPHAMILL_REAL_LAKE_DIR", "").strip()
+    if not configured:
+        if os.environ.get("ALPHAMILL_INTEGRATION") == "1":
+            pytest.fail("ALPHAMILL_INTEGRATION=1 时必须设置 ALPHAMILL_REAL_LAKE_DIR")
+        pytest.skip("未设置 ALPHAMILL_REAL_LAKE_DIR（本用例仅在有真实湖时运行）")
+    real_lake = Path(configured).expanduser().resolve()
     if not real_lake.is_dir():
         pytest.fail(f"真实 lake/ 不存在: {real_lake}")
     for dataset in registry.DATASETS:
         manifests = real_lake / "_manifests" / dataset
         if manifests.is_dir():
             versions = list(manifests.glob("*.json"))
-            assert versions == sorted(versions) or True  # 文件名即版本，可排序审计
+            assert versions == sorted(versions)  # 文件名即版本，可排序审计

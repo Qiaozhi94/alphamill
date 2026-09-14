@@ -72,10 +72,11 @@ Vibe-Trading 的 `local` loader 通过 `local:` 前缀符号读取本地文件�
 ```
 
 `src/alphamill/vibe_bridge/local_loader_config/` 维护 Vibe 专属读取配置；三方符号翻译的唯一真源为
-`src/alphamill/data_bridge/symbol_map.csv`。
+湖元数据中的 `lake/_metadata/symbol_map.csv`（current 副本），历史可复现读取使用
+`lake/_metadata/symbol_maps/<symbol_map_digest>.csv`。
 
 **M1 出口标准（契约前置）**：M1 冻结 Parquet 分区与 pair 命名时，同时产出符号映射初版
-（`src/alphamill/data_bridge/symbol_map.csv`）并锁定 UTC；Vibe 列只在适配器启用时填写，不影响
+（`lake/_metadata/symbol_map.csv`）并锁定 UTC；Vibe 列只在适配器启用时填写，不影响
 AlphaMill ↔ Freqtrade 的强制映射：
 
 映射键为 **(exchange, market_type, db_symbol)**——同一个 `BTC/USDT` 在现货与永续上是不同标的，
@@ -89,7 +90,7 @@ AlphaMill ↔ Freqtrade 的强制映射：
 时间戳约定：全链路 UTC，K 线按交易所原始 UTC 边界切分。任意两行推导出相同 `lake_pair` 即为碰撞，
 导出直接失败（`SymbolCollisionError`），不做静默去重。
 
-契约三条：① 三方命名只经此映射表互译，禁止散落硬编码；② 无法直映的 pair 必须在初版中显式登记翻译规则，不留空；③ 映射表进 git，命名变更走评审，保证历史实验可复现。
+契约三条：① 三方命名只经此映射表互译，禁止散落硬编码；② 无法直映的 pair 必须在初版中显式登记翻译规则，不留空；③ canonical 映射随湖元数据和 digest artifact 保存，命名变更走评审，保证历史实验可复现。
 
 ### 2.3 第二意见回测流程（FR3.7）
 

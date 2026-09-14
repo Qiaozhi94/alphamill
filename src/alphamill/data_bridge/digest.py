@@ -24,6 +24,7 @@ import json
 import math
 import struct
 from collections.abc import Iterable, Iterator, Sequence
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -51,10 +52,14 @@ def encode_double(value: float) -> bytes:
     return struct.pack(">Q", bits)
 
 
-def canonical_json_text(value: Any) -> str:
+def canonical_json_text(value: Any, *, parse_text: bool = True) -> str:
     """jsonb 规范化：键按 Unicode 码点排序、无空白、非 ASCII 原样。"""
-    if isinstance(value, str):
-        value = json.loads(value)
+    if isinstance(value, str) and parse_text:
+        # psycopg2 对 JSONB 标量字符串返回 Python str，而 Arrow 路径保存的是
+        # canonical JSON 文本；两者都必须落到同一个 JSON 值。无法解析时，按
+        # JSONB 的字符串标量处理，而不是让合法数据在导出时抛 JSONDecodeError。
+        with suppress(json.JSONDecodeError):
+            value = json.loads(value)
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
@@ -74,7 +79,7 @@ def canonical_field(value: Any, logical_type: str) -> bytes:
     elif logical_type == TEXT:
         body = _encode_text(value)
     elif logical_type == JSONB:
-        body = _encode_text(canonical_json_text(value))
+        body = _encode_text(canonical_json_text(value, parse_text=False))
     else:
         raise ValueError(f"未知逻辑类型: {logical_type!r}")
     return _NOT_NULL + body
@@ -89,11 +94,18 @@ def canonical_row_bytes(values: Sequence[Any], projection: Sequence[Column]) -> 
     )
 
 
-def iter_row_values(table: Any) -> Iterator[list[Any]]:
+def iter_row_values(table: Any, projection: Sequence[Column] | None = None) -> Iterator[list[Any]]:
     """PyArrow Table → 逐行 Python 值（湖侧输入路径；与 psycopg2 同一编码函数）。"""
     columns = [table.column(i).to_pylist() for i in range(table.num_columns)]
     for row in zip(*columns, strict=True):
-        yield list(row)
+        values = list(row)
+        if projection is not None:
+            if len(projection) != len(values):
+                raise ValueError("Arrow 列数与 registry 投影列数不一致")
+            for index, col in enumerate(projection):
+                if col.logical_type == JSONB and values[index] is not None:
+                    values[index] = json.loads(values[index])
+        yield values
 
 
 def row_digest(rows: Iterable[Sequence[Any]], projection: Sequence[Column]) -> str:

@@ -40,6 +40,8 @@ class DatasetSpec:
     - `partition_keys`：逻辑分区键成分；`pair` 指经 symbol_map 换算的湖内
       pair，`date` 指 event_time 的 UTC 日期。
     - `market_type`：symbol_map 消歧用（lake pair 过滤 → db symbol）。
+    - `symbol_map_enabled`：是否将该源表的 symbol 纳入全局映射；无 pair 分区的
+      混合来源不能仅凭 registry 的单一 market_type 推导映射，默认不参与。
     - `deferred_labels`：事后回填的结果列 → 其可用时间列。`read(as_of=T)`
       时可用时间 > T 的标签置 NULL 而非丢行（design §3）。
     """
@@ -54,6 +56,7 @@ class DatasetSpec:
     as_of_fidelity: str
     market_type: str
     deferred_labels: dict[str, str] = field(default_factory=dict)
+    symbol_map_enabled: bool = True
 
 
 _OHLCV_PROJECTION = (
@@ -183,6 +186,7 @@ _DATASETS: dict[str, DatasetSpec] = {
         as_of_fidelity=AS_OF_BITEMPORAL,
         market_type="spot",
         deferred_labels={"realized_return_60m": "evaluated_at"},
+        symbol_map_enabled=False,
     ),
 }
 

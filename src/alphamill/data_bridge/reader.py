@@ -9,7 +9,7 @@
 - 事后回填标签（`realized_return_60m`）在其可用时间（`evaluated_at`）晚于 T
   时**置 NULL 而非丢行**——丢行会让样本集随 T 变化；
 - 带未解决质量旗的分区默认拒绝，`allow_flagged=True` 显式豁免并随附清单；
-- 时间过滤语义：`start` 含、`end` 含（半开区间 [start, end)）。
+- 时间过滤语义：`start` 含、`end` 不含（半开区间 [start, end)）。
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ class ReadResult:
     as_of: dt.datetime | None  # None = 纯历史切片，不得用于回测/门禁判定
     as_of_fidelity: str | None  # "bitemporal" | "event_time_only"；as_of=None 时为 None
     flagged: list[str]  # 被显式豁免放行的带旗分区
+    symbol_map_digest: str | None  # 该版本绑定的不可变映射（旧 manifest 可能为空）
 
 
 def latest_valid_version(dataset: str, lake_root: Path | None = None) -> str:
@@ -107,13 +108,12 @@ def read(
     spec = registry.require_dataset(dataset)
     root = Path(lake_root) if lake_root is not None else paths.lake_root()
 
-    version = data_version or mf.latest_valid_version(root, spec.name)
+    version = mf.latest_valid_version(root, spec.name) if data_version is None else data_version
     manifest = mf.load_manifest(root, spec.name, version)
     if manifest["status"] == "invalid":
         raise InvalidVersionError(
             f"{dataset}/{version} 已标记 invalid（对账或完整性失败），拒绝读取"
         )
-    mf.validate_manifest_integrity(root, manifest)
     value_digest = mf.verify_value_digest(spec, manifest)
 
     start_dt = _utc(start, "start") if start is not None else None
@@ -139,11 +139,21 @@ def read(
             continue
         selected.append(partition)
 
+    mf.validate_manifest_integrity(root, manifest, selected)
     flagged_hits = _selected_flagged(manifest, selected)
     if flagged_hits and not allow_flagged:
         raise FlaggedPartitionError(f"查询命中带未解决质量旗的分区且未显式豁免: {flagged_hits}")
 
-    frame = _query(spec, root, selected, start_dt, end_dt, as_of_dt, pairs)
+    frame = _query(
+        spec,
+        root,
+        selected,
+        start_dt,
+        end_dt,
+        as_of_dt,
+        pairs,
+        manifest.get("symbol_map_digest"),
+    )
     if as_of_dt is not None:
         _nullify_deferred_labels(spec, frame, as_of_dt)
     return ReadResult(
@@ -154,6 +164,7 @@ def read(
         as_of=as_of_dt,
         as_of_fidelity=as_of_fidelity,
         flagged=flagged_hits,
+        symbol_map_digest=manifest.get("symbol_map_digest"),
     )
 
 
@@ -165,8 +176,9 @@ def _query(
     end_dt: dt.datetime | None,
     as_of_dt: dt.datetime | None,
     pairs: list[str] | None,
+    symbol_map_digest: str | None,
 ) -> pd.DataFrame:
-    if not selected:
+    if not selected or pairs == []:
         return _empty_frame(spec)
     import duckdb
 
@@ -186,7 +198,9 @@ def _query(
             clauses.append(f"{spec.available_at} <= CAST(? AS TIMESTAMPTZ)")
             params.append(as_of_dt)
     if pairs is not None and not registry.pair_partitioned(spec):
-        db_symbols = symbol_map.to_db_symbols(pairs, spec.market_type)
+        db_symbols = symbol_map.to_db_symbols(
+            pairs, spec.market_type, lake_root=root, digest=symbol_map_digest
+        )
         placeholders = ", ".join("?" for _ in db_symbols)
         clauses.append(f"symbol IN ({placeholders})")
         params.extend(db_symbols)

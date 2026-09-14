@@ -42,13 +42,14 @@ def _insert_ohlcv(conn, day: str, symbol: str, count: int) -> None:
 
 
 def _delete_ohlcv(conn, day: str, symbol: str) -> None:
+    start = dt.datetime.fromisoformat(f"{day}T00:00:00+00:00")
     with conn.cursor() as cur:
         cur.execute(
             "DELETE FROM ohlcv_1m WHERE symbol=%s AND time >= %s AND time < %s",
             (
                 symbol,
-                dt.datetime.fromisoformat(f"{day}T00:00:00+00:00"),
-                dt.datetime.fromisoformat(f"{day}T23:59:59+00:00"),
+                start,
+                start + dt.timedelta(days=1),
             ),
         )
     conn.commit()
@@ -152,3 +153,29 @@ def test_ac005_ac007_revision_bumps_version_keeps_v1(exported, f002_conn):
     assert float(r2.frame.iloc[0]["close"]) == 999.0
     assert r1.data_version == v1["data_version"] and r2.data_version == v2["data_version"]
     assert r1.value_digest != r2.value_digest
+
+
+def test_full_export_removes_source_partition_and_records_removed(exported, f002_conn):
+    """全量重导反映源库删除，且 revision_diff 保留 removed 审计项。"""
+    lake = exported
+    v1 = export_dataset("ohlcv_1m", mode="full", window_end=f"{D4}T00:00:00Z", conn=f002_conn)
+    before = mf.load_manifest(lake, "ohlcv_1m", v1["data_version"])
+    assert any(
+        p["logical_partition_key"]["pair"] == "ETH-USDT"
+        and p["logical_partition_key"]["date"] == D1
+        for p in before["partitions"]
+    )
+
+    _delete_ohlcv(f002_conn, D1, "ETH/USDT")
+    v2 = export_dataset("ohlcv_1m", mode="full", window_end=f"{D4}T00:00:00Z", conn=f002_conn)
+    assert v2["status"] == "valid"
+    after = mf.load_manifest(lake, "ohlcv_1m", v2["data_version"])
+    assert not any(
+        p["logical_partition_key"]["pair"] == "ETH-USDT"
+        and p["logical_partition_key"]["date"] == D1
+        for p in after["partitions"]
+    )
+    assert any(
+        item["reason"] == "removed" and item["pair"] == "ETH-USDT" and item["date"] == D1
+        for item in after["revision_diff"]
+    )

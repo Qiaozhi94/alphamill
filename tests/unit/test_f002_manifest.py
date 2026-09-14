@@ -11,6 +11,7 @@ from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge import paths
 from alphamill.data_bridge.errors import (
     ManifestIntegrityError,
+    UnknownDatasetError,
     VersionNotFoundError,
 )
 from alphamill.data_bridge.registry import DOUBLE, Column, require_dataset
@@ -54,6 +55,12 @@ def test_version_parse_sort_and_next():
     assert mf.data_version_sort_key("v2026.09.12-r2") > mf.data_version_sort_key("v2026.09.12")
     with pytest.raises(VersionNotFoundError):
         mf.parse_data_version("2026.09.12")
+    with pytest.raises(VersionNotFoundError):
+        mf.parse_data_version("v2026.09.12-r0")
+    with pytest.raises(VersionNotFoundError):
+        mf.parse_data_version("v2026.09.12-r01")
+    with pytest.raises(VersionNotFoundError):
+        mf.parse_data_version("v2026.09.12\n")
 
 
 def test_next_version_never_reuses_including_invalid(tmp_path):
@@ -66,7 +73,7 @@ def test_next_version_never_reuses_including_invalid(tmp_path):
                 "data_version": version,
                 "status": "invalid" if version.endswith("r2") else "valid",
                 "rows": 0,
-                "value_digest": "",
+                "value_digest": "sha256:" + "0" * 64,
                 "partitions": [],
             },
         )
@@ -79,14 +86,15 @@ def test_next_version_never_reuses_including_invalid(tmp_path):
 
 
 def _minimal_manifest(version: str, partitions: list | None = None, status: str = "valid") -> dict:
+    partitions = json.loads(json.dumps(partitions or []))
     return {
         "dataset": "ohlcv_1m",
         "source": mf.SOURCE_TAG,
         "data_version": version,
         "status": status,
-        "rows": 2,
-        "value_digest": "sha256:deadbeef",
-        "partitions": json.loads(json.dumps(partitions or [])),
+        "rows": sum(partition["rows"] for partition in partitions),
+        "value_digest": "sha256:" + "d" * 64,
+        "partitions": partitions,
         "reconcile": {"rows": "ok", "time_bounds": "ok", "row_digest": "ok"},
     }
 
@@ -98,6 +106,10 @@ def test_load_missing_and_corrupt_manifest(tmp_path):
     path.parent.mkdir(parents=True)
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(ManifestIntegrityError, match="损坏"):
+        mf.load_manifest(tmp_path, "ohlcv_1m", "v2026.09.12")
+
+    path.write_bytes(b"[]")
+    with pytest.raises(ManifestIntegrityError, match="顶层"):
         mf.load_manifest(tmp_path, "ohlcv_1m", "v2026.09.12")
 
 
@@ -112,9 +124,61 @@ def test_load_rejects_identity_mismatch_and_missing_fields(tmp_path):
         mf.load_manifest(tmp_path, "ohlcv_1m", "v2026.09.12")
 
     incomplete = {"dataset": "ohlcv_1m", "data_version": "v2026.09.13"}
-    mf.publish_manifest(tmp_path, incomplete)
+    path = paths.manifest_path(tmp_path, "ohlcv_1m", "v2026.09.13")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(incomplete), encoding="utf-8")
     with pytest.raises(ManifestIntegrityError, match="必填字段"):
         mf.load_manifest(tmp_path, "ohlcv_1m", "v2026.09.13")
+
+
+def test_manifest_version_and_status_are_fail_closed(tmp_path):
+    with pytest.raises(VersionNotFoundError):
+        mf.load_manifest(tmp_path, "ohlcv_1m", "../outside")
+    with pytest.raises(VersionNotFoundError):
+        mf.load_manifest(tmp_path, "ohlcv_1m", "v2026.02.30")
+
+    manifest = _minimal_manifest("v2026.09.13", status="published")
+    path = paths.manifest_path(tmp_path, "ohlcv_1m", "v2026.09.13")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ManifestIntegrityError, match="status"):
+        mf.load_manifest(tmp_path, "ohlcv_1m", "v2026.09.13")
+
+
+def test_manifest_dataset_is_validated_before_path_resolution(tmp_path):
+    outside = tmp_path.parent / "outside-manifests"
+    path = outside / "_manifests" / "ohlcv_1m" / "v2026.09.13.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{}", encoding="utf-8")
+    with pytest.raises(UnknownDatasetError, match="未知 dataset"):
+        mf.load_manifest(tmp_path, "../outside-manifests", "v2026.09.13")
+
+
+def test_manifest_partition_shape_and_path_are_fail_closed(tmp_path):
+    outside = tmp_path.parent / "outside.parquet"
+    outside.write_bytes(b"not-a-lake-file")
+    partition = _partition("BTC-USDT", "2026-09-11", 2, "aa")
+    partition["path"] = "../outside.parquet"
+    manifest = _minimal_manifest("v2026.09.13", [partition])
+    with pytest.raises(ManifestIntegrityError, match="path"):
+        mf.validate_manifest_integrity(tmp_path, manifest)
+
+    incomplete = _partition("BTC-USDT", "2026-09-11", 2, "aa")
+    incomplete.pop("sha256")
+    with pytest.raises(ManifestIntegrityError, match="字段不完整"):
+        mf.validate_manifest_integrity(tmp_path, _minimal_manifest("v2026.09.13", [incomplete]))
+
+    swapped = _partition("BTC-USDT", "2026-09-11", 2, "aa")
+    swapped["path"] = swapped["path"].replace("BTC-USDT", "ETH-USDT")
+    with pytest.raises(ManifestIntegrityError, match="逻辑键"):
+        mf.validate_manifest_integrity(tmp_path, _minimal_manifest("v2026.09.13", [swapped]))
+
+
+def test_published_manifest_cannot_be_overwritten(tmp_path):
+    manifest = _minimal_manifest("v2026.09.13")
+    mf.publish_manifest(tmp_path, manifest)
+    with pytest.raises(ManifestIntegrityError, match="不可覆盖"):
+        mf.publish_manifest(tmp_path, manifest)
 
 
 def test_latest_valid_skips_invalid_and_raises_when_none(tmp_path):
@@ -159,6 +223,27 @@ def test_integrity_size_mismatch_but_not_unreferenced_files(tmp_path):
     (tmp_path / partition["path"]).write_bytes(b"short")
     with pytest.raises(ManifestIntegrityError, match="字节数"):
         mf.validate_manifest_integrity(tmp_path, manifest)
+
+
+def test_integrity_can_validate_only_reader_selected_partitions(tmp_path):
+    selected = _partition("BTC-USDT", "2026-09-11", 2, "aa")
+    unselected = _partition("ETH-USDT", "2026-09-11", 3, "bb")
+    _write_partition_file(tmp_path, selected)
+    manifest = _minimal_manifest("v2026.09.12", [selected, unselected])
+
+    mf.validate_manifest_integrity(tmp_path, manifest, [selected])
+
+
+def test_manifest_publish_falls_back_when_hard_links_are_unavailable(tmp_path, monkeypatch):
+    manifest = _minimal_manifest("v2026.09.13")
+
+    def unsupported_link(*_args):
+        raise OSError(18, "cross-device link")
+
+    monkeypatch.setattr(mf.os, "link", unsupported_link)
+    path = mf.publish_manifest(tmp_path, manifest)
+    assert path.is_file()
+    assert json.loads(path.read_text(encoding="utf-8")) == manifest
 
 
 # ---------- value_digest（AC-015 单测面） ----------

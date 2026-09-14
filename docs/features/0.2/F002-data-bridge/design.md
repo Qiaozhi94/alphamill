@@ -40,6 +40,8 @@ src/alphamill/data_bridge/
 ├── collector/        # F001 已有(采集,直写 TimescaleDB)——不变
 ├── exporter.py       # 新增:TimescaleDB → 分区 Parquet + manifest(唯一写湖的模块)
 ├── manifest.py       # 新增:manifest 契约读写、data_version 排序、invalid 标记
+├── manifest_validation.py # 新增:manifest 结构与 artifact 路径 fail-closed 校验
+├── export_summary.py  # 新增:导出摘要构造（不接触数据库/湖文件）
 ├── reader.py         # 新增:DuckDB 只读取数(唯一合法研究入口)
 └── symbol_map.py     # 新增:symbol_map.csv 生成与双向查询
 ```
@@ -102,11 +104,12 @@ src/alphamill/data_bridge/
   一年 52 份副本;而修订实际只涉及少数分区。代价是"哪些文件属于哪个版本"不能靠 `ls` 看出来,
   必须读 manifest——这正是 `partitions` 清单成为强制字段的原因。
 
-  **原子发布**:分区文件先写到 `lake/_staging/<dataset>/<data_version>/` 再 rename 进正式路径;
-  **manifest 是发布点**——最后写(临时名 + rename),写成功前该 data_version 对 reader 不存在。
+  **原子发布**:分区文件先写到 `lake/_staging/<dataset>/current/` 再 rename 进正式路径;
+  **manifest 是发布点**——最后写临时文件并用同目录 hard-link 原子创建正式名，绝不覆盖已有
+  `data_version`;写成功前该版本对 reader 不存在。
   中断留下的 staging 目录与孤儿 `.rN` 文件不被任何 manifest 引用,不影响正确性,由全量模式顺带清理。
 - **pair 目录命名**:湖内 pair 用 `BASE-QUOTE`(`/` 换 `-` 规避路径分隔符),永续加 `-PERP` 后缀区分市场类型。映射表的键、列与碰撞规则见 §4「symbol_map 键的冻结」——**不是三列、也不能由 `DISTINCT symbol` 单独推导**(F002-D010)。
-- **data_version 语义**(spec Q-003/ADR-0007):`vYYYY.MM.DD`,同日重导追加 `-r2/-r3`;排序 = 日期字典序 + 序号;最新 valid 版本 = 排序最大且 `status != invalid`。每 dataset 独立演进,互不阻塞;跨 dataset 输入由 ResearchSnapshot 显式绑定,`exported_at` 不充当组合身份。
+- **data_version 语义**(spec Q-003/ADR-0007):`vYYYY.MM.DD`,同日重导追加 `-r2/-r3`;排序 = 日期字典序 + 序号;最新 valid 版本 = 排序最大且 `status == valid`。每 dataset 独立演进,互不阻塞;跨 dataset 输入由 ResearchSnapshot 显式绑定,`exported_at` 不充当组合身份。
 - **manifest 契约**(架构 §4.4 + 本期扩展字段):
   ```json
   {
@@ -222,10 +225,11 @@ src/alphamill/data_bridge/
 
 - **manifest 合成算法**(F002-R2-03 冻结;**每个 manifest 都是累计完整快照,不是一日 delta**):
 
-  1. 读上一个 valid manifest(无则空清单),把它的 `partitions` **全量继承**为基线;
+  1. 读上一个 valid manifest(无则空清单);增量把它的 `partitions` **全量继承**为基线,
+     full 仅把基线用于复用未变分区文件;
   2. 本轮产出的每个分区按**逻辑分区键**(registry 的 `(exchange,pair[,timeframe],date)`)
      在基线里查找:命中则**整项替换**(新 `.rN` 路径 + 新 rows/边界/bytes/sha256),
-     未命中则**追加**;基线中本轮没碰的项原样保留;
+     未命中则**追加**;增量基线中本轮没碰的项原样保留,full 不保留源库已删除的分区;
   3. `rows` / `pairs` / `quality.flagged_partitions` **按合成后的完整清单重算**;
   4. `skipped` **走与 partitions 相同的继承/替换**,不从清单反推(F002-R3-03):它记录的是
      「本该有分区却没有」的逻辑分区键,而清单里只有**存在**的分区,不存在的东西反推不出来。
@@ -235,7 +239,8 @@ src/alphamill/data_bridge/
      **源表全量**执行 `count(*) WHERE event_time IS NULL` 的结果——它描述的是「这个快照里有多少行
      因无事件时间而无法进湖」,与累计快照语义一致。Round 2 写它「按完整清单重算」是错的:
      被排除的行根本不在任何分区里;
-  6. 原子发布:清单齐备后写 manifest(临时名 + rename)。
+  6. 原子发布:清单齐备后写 manifest 临时文件，再优先用同目录 hard-link、在文件系统不支持时用
+     `O_EXCL` 创建正式名，绝不覆盖已有版本。
 
   没有这一条,"每日增量"产出的 manifest 到底是当天 delta 还是累计快照就没有定义,
   `read(dataset, data_version=昨天)` 可能只拿到一天的数据——而 spec 承诺的是快照语义。
@@ -249,6 +254,9 @@ src/alphamill/data_bridge/
   都不会回头补。孤儿 `.rN` 不被任何 manifest 引用,重跑时写 `rN+1` 即可,无需先清理。
   **首次导出**(无任何 valid manifest)窗口起点取库内 `date(min(event_time))`,首跑等价于一次全量;
   全量校验 = 全 span 重导至新 data_version 并做分区级 diff;窗口内无数据的 pair 记入 `skipped`。
+  为避免源表瞬时不可见或错误窗口把有效快照静默清空，全量已有非空基线时若结果为空、窗口上界
+  截断基线最新日期，或分区数下降超过一半，导出直接拒绝发布并要求人工确认；小范围源库删除
+  仍按当前源库组成新版本并在 `revision_diff` 标记 `removed`。
 - **回滚/前向兼容**(F002-R3-04 修订):导出失败产物按引用状态分为**三种形态**——①还在
   `lake/_staging/` 里没 rename 出去的临时文件;②已 rename 进正式路径、但**不被任何 manifest
   引用**的孤儿 `.rN`;③被 `status: invalid` manifest 引用的失败版本分区。三者都**不覆盖任何
@@ -285,6 +293,7 @@ class ReadResult:
     as_of: datetime | None          # None = 纯历史切片,不得用于回测/门禁判定
     as_of_fidelity: str | None      # "bitemporal" | "event_time_only";as_of=None 时为 None
     flagged: list[str]              # 被显式豁免放行的带旗分区
+    symbol_map_digest: str | None    # 版本绑定的不可变映射;旧 manifest 可能为空
 
 def read(dataset: str, data_version: str | None = None,          # None=最新 valid,只供探索/preview 解析
          start: datetime | None = None, end: datetime | None = None,
@@ -327,8 +336,8 @@ csv 五列:`exchange,market_type,db_symbol,lake_pair,freqtrade_pair`;格式冻�
 spot `BTC/USDT → BTC-USDT`(Freqtrade `BTC/USDT`)、perp `BTC/USDT:USDT → BTC-USDT-PERP`
 (Freqtrade `BTC/USDT:USDT`)。**任意两行推导出相同 `lake_pair` 即为碰撞,导出直接失败**
 (`SymbolCollisionError`),不做静默去重——碰撞意味着两个不同标的会写进同一个湖分区。
-文件入库路径沿用集成 §2.2 的唯一权威值 `src/alphamill/data_bridge/symbol_map.csv`
-(原 design 只说"写 symbol_map.csv" 未给路径)。该路径是供现有调用方读取的 current 副本，不能作为
+current 文件不写入源码树，统一落在集成 §2.2 约定的湖元数据路径
+`lake/_metadata/symbol_map.csv`（原 design 只说"写 symbol_map.csv" 未给路径）。该文件不能作为
 可复现身份：导出器同时将按五列排序、UTF-8、LF、固定表头编码的 canonical CSV 原子发布到
 `lake/_metadata/symbol_maps/<symbol_map_digest>.csv`；digest 为 canonical bytes 的 SHA-256，已有同
 digest 文件必须逐字节一致。`SymbolMapRef` 回报 digest 与不可变路径，ResearchSnapshot 只接受显式

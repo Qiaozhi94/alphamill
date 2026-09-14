@@ -105,6 +105,8 @@ updated: 2026-09-14
 - 对账不一致:该 data_version 整体标记 `invalid`,消费端拒绝;修复后以新 data_version 重新导出,不复用污染版本号;
 - 磁盘空间:湖按日分区单文件,单 pair 单日 1m 约 1440 行(<200KB),全量重导不产生写放大;
 - 导出窗口内某 pair 无新数据:跳过该分区且 manifest 记录 skipped,不算失败。
+- 全量导出已有非空基线时，若源结果为空、窗口上界截断既有最新日期或分区数下降超过一半，
+  必须拒绝发布并要求人工确认；已确认的小范围源库删除仍发布并在 `revision_diff` 记录 `removed`。
 
 ## 4. 需求
 
@@ -216,7 +218,14 @@ updated: 2026-09-14
 不等于内容可用于因子研究**。收口时验收证据必须如实记录该 dataset 的行数与 `source` 分布,
 不得以"五 dataset 齐备"含糊带过;F004 落地后内容自动升级,F002 无需返工。
 
-### 验收证据(2026-09-14 实测,WSL2 Ubuntu + docker-ce + TimescaleDB 631 万行生产库)
+### 历史验收证据(2026-09-14 实测,WSL2 Ubuntu + docker-ce + TimescaleDB 631 万行生产库)
+
+本节数字来自上述具备 Docker/TimescaleDB 的验收环境，保留为历史证据；不能替代当前工作树的
+可复核结果。本轮修复在 `/home/georg/projects/alphamill`、分支 `main`、HEAD `569359b` 的
+本地环境执行 `python3 tools/verify.py`：`188 passed, 25 skipped`，其中 F002 真实数据库用例因
+当前用户无 Docker socket 权限而 skip，PowerShell 用例因本机未安装 PowerShell 7 而 skip。故本轮
+已复核单元/门禁，AC-001/005/006 等真实数据库/部署证据仍以具备服务的环境重新执行为准，不在此处
+虚构“本机全链路已复跑”。
 
 - **端到端(AC-001/AC-002/AC-003)**:`lake/` 五 dataset 全量导出全部 `valid`,对账三项全 ok——
   ohlcv_1m 6,331,981 行/4,398 分区/184.5s(含逐分区 row_digest 对账);funding 13,152/4,386;

@@ -66,6 +66,32 @@ def test_exit_1_on_transient_db_errors(monkeypatch, error):
     assert cli.main([]) == 1
 
 
+def test_exit_1_on_transient_io_error(monkeypatch):
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    _patch_export(monkeypatch, boom)
+    assert cli.main([]) == 1
+
+
+def test_exit_1_on_symbol_map_io_error(monkeypatch):
+    import alphamill.data_bridge.cli as cli_mod
+
+    def boom():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cli_mod, "_refresh_symbol_map", boom)
+    assert cli.main([]) == 1
+
+
+def test_exit_2_on_invalid_window_value(monkeypatch):
+    def boom(*a, **k):
+        raise ValueError("window-end 非法")
+
+    _patch_export(monkeypatch, boom)
+    assert cli.main([]) == 2
+
+
 def test_exit_1_beats_0_but_2_beats_1(monkeypatch):
     import alphamill.data_bridge.cli as cli_mod
     import alphamill.data_bridge.exporter as exporter_mod

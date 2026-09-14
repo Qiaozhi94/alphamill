@@ -16,10 +16,7 @@ import sys
 import psycopg2
 
 from alphamill.data_bridge import registry
-from alphamill.data_bridge.errors import (
-    DataBridgeError,
-    UnknownDatasetError,
-)
+from alphamill.data_bridge.errors import DataBridgeError
 
 EXIT_OK = 0
 EXIT_TRANSIENT = 1
@@ -48,7 +45,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--window-end",
         default=None,
         metavar="ISO_DATETIME",
-        help="窗口开区间上界（UTC ISO8601）；缺省导到「昨天」",
+        help="窗口开区间上界（UTC ISO8601）；缺省为今日 00:00 UTC，即导到「昨天」",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="调试日志")
     return parser.parse_args(argv)
@@ -85,7 +82,13 @@ def main(argv: list[str] | None = None) -> int:
     except psycopg2.Error as exc:
         print(f"FATAL: 瞬时故障（可重试）: {exc}", file=sys.stderr)
         return EXIT_TRANSIENT
-    except UnknownDatasetError as exc:
+    except OSError as exc:
+        print(f"FATAL: 瞬时故障（可重试）: {exc}", file=sys.stderr)
+        return EXIT_TRANSIENT
+    except ValueError as exc:
+        print(f"FATAL: {exc}", file=sys.stderr)
+        return EXIT_FATAL
+    except DataBridgeError as exc:
         print(f"FATAL: {exc}", file=sys.stderr)
         return EXIT_FATAL
 
@@ -96,7 +99,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"FATAL: {dataset}: 瞬时故障（可重试）: {exc}", file=sys.stderr)
             exit_code = max(exit_code, EXIT_TRANSIENT)
             continue
-        except (OSError, DataBridgeError) as exc:
+        except OSError as exc:
+            print(f"FATAL: {dataset}: 瞬时故障（可重试）: {exc}", file=sys.stderr)
+            exit_code = max(exit_code, EXIT_TRANSIENT)
+            continue
+        except ValueError as exc:
+            print(f"FATAL: {dataset}: {exc}", file=sys.stderr)
+            exit_code = max(exit_code, EXIT_FATAL)
+            continue
+        except DataBridgeError as exc:
             print(f"FATAL: {dataset}: {exc}", file=sys.stderr)
             exit_code = max(exit_code, EXIT_FATAL)
             continue

@@ -75,7 +75,7 @@ def lake_partition_stats(path: Path, spec: registry.DatasetSpec) -> dict[str, An
     import pyarrow.parquet as pq
 
     table = pq.read_table(path)
-    return _stats_from_values(digest_mod.iter_row_values(table), spec)
+    return _stats_from_values(digest_mod.iter_row_values(table, spec.projection), spec)
 
 
 def _stats_from_values(rows: Any, spec: registry.DatasetSpec) -> dict[str, Any]:
@@ -109,11 +109,18 @@ def begin_snapshot_tx(conn) -> tuple[str, str]:
     使任何一次导出可事后追溯它看到的库时点。
     """
     conn.rollback()
+    conn.set_session(isolation_level="REPEATABLE READ", readonly=True, autocommit=False)
     with conn.cursor() as cur:
-        cur.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        cur.execute("BEGIN")
         cur.execute("SELECT txid_current_snapshot(), current_timestamp")
         snapshot, taken_at = cur.fetchone()
     return snapshot.split(":")[0], iso_utc(taken_at)
+
+
+def reset_snapshot_session(conn) -> None:
+    """恢复导出连接默认会话属性，避免只读快照污染调用方后续写事务。"""
+    conn.rollback()
+    conn.set_session(isolation_level="READ COMMITTED", readonly=False, autocommit=False)
 
 
 def table_span(conn, spec: registry.DatasetSpec) -> tuple[str, str] | None:

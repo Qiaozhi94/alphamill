@@ -8,8 +8,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import hashlib
-import logging
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -20,10 +18,8 @@ import pyarrow.parquet as pq
 
 from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge import paths, reconcile, registry, symbol_map
-from alphamill.data_bridge.digest import canonical_json_text, canonical_row_bytes
-from alphamill.data_bridge.errors import DataBridgeError
-
-logger = logging.getLogger(__name__)
+from alphamill.data_bridge.digest import canonical_json_text, canonical_row_bytes, row_digest
+from alphamill.data_bridge.errors import DataBridgeError, SymbolCollisionError
 
 _PARQUET_RE = re.compile(r"^date=(\d{4}-\d{2}-\d{2})\.r(\d+)\.parquet$")
 _DIM_NAMES = ("exchange", "pair", "timeframe")
@@ -41,6 +37,8 @@ Dim = tuple[str | None, ...]  # 按 _DIM_NAMES 顺序的维度键；signals_log 
 def as_date(value: Any) -> dt.date:
     """窗口上界 → UTC 日期；接受 date、datetime（含 ISO 字符串，naive 视为 UTC）。"""
     if isinstance(value, dt.datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dt.UTC)
         return value.astimezone(dt.UTC).date()
     if isinstance(value, dt.date):
         return value
@@ -70,15 +68,19 @@ def dim_logical_key(dim: Dim, day: str) -> dict[str, str]:
     return key
 
 
-def lake_pairs_map(conn) -> dict[tuple[str, str], str]:
-    """(exchange, db_symbol) → lake pair；按内容推导并显式做碰撞检查。"""
-    seen: dict[str, tuple[str, str]] = {}
-    out: dict[tuple[str, str], str] = {}
+def lake_pairs_map(conn, market_type: str | None = None) -> dict[tuple[str, str, str], str]:
+    """(exchange, market_type, db_symbol) → lake pair；按三元键保留市场语义。"""
+    seen: dict[str, tuple[str, str, str]] = {}
+    out: dict[tuple[str, str, str], str] = {}
     for row in symbol_map._rows_from_conn(conn):
+        if market_type is not None and row.market_type != market_type:
+            continue
         lake_pair, _ = symbol_map.derive_pairs(row.db_symbol, row.market_type)
-        key = (row.exchange, row.db_symbol)
+        key = (row.exchange, row.market_type, row.db_symbol)
         if lake_pair in seen:
-            raise DataBridgeError(f"lake_pair 碰撞: {lake_pair!r}（{seen[lake_pair]} 与 {key}）")
+            raise SymbolCollisionError(
+                f"lake_pair 碰撞: {lake_pair!r}（{seen[lake_pair]} 与 {key}）"
+            )
         seen[lake_pair] = key
         out[key] = lake_pair
     return out
@@ -93,7 +95,9 @@ def rows_to_table(rows: list[list[Any]], spec: registry.DatasetSpec) -> pa.Table
     for idx, col in enumerate(spec.projection):
         values = [row[idx] for row in rows]
         if col.logical_type == registry.JSONB:
-            values = [None if v is None else canonical_json_text(v) for v in values]
+            values = [
+                None if v is None else canonical_json_text(v, parse_text=False) for v in values
+            ]
         arrays.append(pa.array(values, type=_ARROW_TYPES[col.logical_type]))
     return pa.Table.from_arrays(arrays, schema=arrow_schema(spec))
 
@@ -101,16 +105,21 @@ def rows_to_table(rows: list[list[Any]], spec: registry.DatasetSpec) -> pa.Table
 def discover_cells(
     conn, spec: registry.DatasetSpec, start: dt.date, end: dt.date
 ) -> dict[tuple, int]:
-    """窗口内 (exchange, symbol[, timeframe], date_iso) → 行数（单一聚合查询）。"""
-    group_cols = ["exchange", "symbol"]
-    if registry.timeframe_partitioned(spec):
+    """窗口内逻辑分区维度 + date_iso → 行数（单一聚合查询）。"""
+    group_cols: list[str] = []
+    if "exchange" in spec.partition_keys:
+        group_cols.append("exchange")
+    if "pair" in spec.partition_keys:
+        group_cols.append("symbol")
+    if "timeframe" in spec.partition_keys:
         group_cols.append("timeframe")
     utc_date = f"({spec.event_time} AT TIME ZONE 'UTC')::date"
+    selected_cols = [*group_cols, f"{utc_date} AS d", "count(*)"]
     sql = (
-        f"SELECT {', '.join(group_cols)}, {utc_date} AS d, count(*) "
+        f"SELECT {', '.join(selected_cols)} "
         f"FROM {spec.source_table} WHERE {spec.event_time} IS NOT NULL "
         f"AND {spec.event_time} >= %s AND {spec.event_time} < %s "
-        f"GROUP BY {', '.join(group_cols)}, d"
+        f"GROUP BY {', '.join([*group_cols, 'd'])}"
     )
     start_ts = dt.datetime.combine(start, dt.time.min, tzinfo=dt.UTC)
     end_ts = dt.datetime.combine(end, dt.time.min, tzinfo=dt.UTC)
@@ -123,7 +132,7 @@ def discover_cells(
     return cells
 
 
-def quality_flags(conn, lake_pairs: dict[tuple[str, str], str]) -> tuple[list[str], int]:
+def quality_flags(conn, lake_pairs: dict[tuple[str, str, str], str]) -> tuple[list[str], int]:
     """ohlcv 未解决质量标记 → 分区级键串与总数（design §3 质量裁决表）。"""
     with conn.cursor() as cur:
         cur.execute(
@@ -135,20 +144,15 @@ def quality_flags(conn, lake_pairs: dict[tuple[str, str], str]) -> tuple[list[st
     total = 0
     for exchange, symbol, day, count in rows:
         total += int(count)
-        lake_pair = lake_pairs.get((exchange, symbol))
+        lake_pair = lake_pairs.get((exchange, "spot", symbol))
         if lake_pair is None:
-            logger.warning("质量标记无法映射 lake pair，跳过分区标注: %s %s", exchange, symbol)
-            continue
+            raise DataBridgeError(f"质量标记无法映射 lake pair: {exchange} {symbol}")
         flagged.append(f"{exchange}/{lake_pair}/{day.isoformat()}")
     return sorted(flagged), total
 
 
 def row_digest_of_rows(rows: list[list[Any]], spec: registry.DatasetSpec) -> str:
-    encoded = sorted(canonical_row_bytes(row, spec.projection) for row in rows)
-    hasher = hashlib.sha256()
-    for chunk in encoded:
-        hasher.update(chunk)
-    return f"sha256:{hasher.hexdigest()}"
+    return row_digest(rows, spec.projection)
 
 
 def write_partition(
@@ -216,7 +220,7 @@ def produce_partitions(
     start: dt.date,
     end: dt.date,
     baseline_partitions: list[dict[str, Any]],
-    lake_pairs: dict[tuple[str, str], str],
+    lake_pairs: dict[tuple[str, str, str], str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[bool]]:
     """导出窗口内全部单元格 → (produced 条目, 产出逻辑键, 是否新写文件)。"""
     cells = discover_cells(conn, spec, start, end)
@@ -225,11 +229,14 @@ def produce_partitions(
     produced_keys: list[dict[str, str]] = []
     written: list[bool] = []
     for cell in sorted(cells):
-        lake_pair = lake_pairs.get((cell[0], cell[1]))
-        if lake_pair is None:
-            raise DataBridgeError(f"symbol 无法映射 lake pair: {(cell[0], cell[1])}")
+        if registry.pair_partitioned(spec):
+            lake_pair = lake_pairs.get((cell[0], spec.market_type, cell[1]))
+            if lake_pair is None:
+                raise DataBridgeError(f"symbol 无法映射 lake pair: {(cell[0], cell[1])}")
+        else:
+            lake_pair = ""
         logical = cell_logical_key(spec, cell, lake_pair)
-        key = {**logical, "db_symbol": cell[1]}
+        key = {**logical, "db_symbol": cell[1]} if registry.pair_partitioned(spec) else logical
         rows = reconcile.fetch_cell_rows(conn, spec, key)
         row_digest = row_digest_of_rows(rows, spec)
         inherited = baseline_by_key.get(mf.canonical_key(logical))
@@ -265,9 +272,10 @@ def empty_cell_keys(
 
     empty: list[dict[str, str]] = []
     if not registry.pair_partitioned(spec):
-        dates = sorted(present_by_dim.get((), set()))
+        non_pair_dim = dim_of({})
+        dates = sorted(present_by_dim.get(non_pair_dim, set()))
         check = date_span(dates[0], dates[-1]) if mode == "full" and dates else window_dates
-        present = present_by_dim.get((), set())
+        present = present_by_dim.get(non_pair_dim, set())
         return [{"date": day} for day in check if day not in present]
 
     if mode == "full":

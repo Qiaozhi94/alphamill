@@ -50,7 +50,7 @@ def test_two_input_routes_same_digest():
             "metadata": pa.array([digest.canonical_json_text(r[5]) for r in rows], pa.string()),
         }
     )
-    via_arrow = digest.row_digest(digest.iter_row_values(table), PROJECTION)
+    via_arrow = digest.row_digest(digest.iter_row_values(table, PROJECTION), PROJECTION)
     assert plain == via_arrow
     assert plain.startswith("sha256:")
 
@@ -114,6 +114,10 @@ def test_text_and_jsonb_canonical_encoding():
     non_null = digest.canonical_field("x", TEXT)
     assert non_null.startswith(b"\x01")
     assert non_null != digest.canonical_field(0.0, DOUBLE)  # 0x01+payload 互异
+    # psycopg2 对 JSONB 字符串标量给出 Python str，不能误当成 JSON 源文本解析。
+    assert digest.canonical_json_text("plain text") == '"plain text"'
+    assert digest.canonical_json_text("true", parse_text=False) == '"true"'
+    assert digest.canonical_json_text('"true"') == '"true"'
 
 
 def test_naive_and_aware_timestamps_encode_equal():

@@ -259,7 +259,3 @@ def test_ac014_interrupted_run_resumes_without_hole(seeded, f002_conn):
             ),
         )
     f002_conn.commit()
-
-
-def _conn_kwargs_shim():  # 供上文使用前定义顺序无碍
-    return _conn_kwargs()

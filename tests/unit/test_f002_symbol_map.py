@@ -77,6 +77,19 @@ def test_collision_fails_loudly():
     assert len(ok) == 2
 
 
+def test_runtime_pair_map_keeps_market_type_in_lookup_key(monkeypatch):
+    from alphamill.data_bridge import partitions
+
+    rows = [
+        sm.SymbolRow("binance", "spot", "BTC/USDT"),
+        sm.SymbolRow("binance", "perp", "BTC/USDT"),
+    ]
+    monkeypatch.setattr(sm, "_rows_from_conn", lambda _conn: rows)
+    pairs = partitions.lake_pairs_map(object())
+    assert pairs[("binance", "spot", "BTC/USDT")] == "BTC-USDT"
+    assert pairs[("binance", "perp", "BTC/USDT")] == "BTC-USDT-PERP"
+
+
 def test_canonical_bytes_digest_stable_and_content_sensitive():
     frame = sm.build_symbol_map(ROWS)
     first = sm.canonical_csv_bytes(frame)
@@ -90,6 +103,12 @@ def test_canonical_bytes_digest_stable_and_content_sensitive():
     assert sm.content_digest(first) != sm.content_digest(sm.canonical_csv_bytes(changed))
 
 
+def test_default_current_map_is_lake_local_not_in_source_tree(tmp_path, monkeypatch):
+    monkeypatch.delenv("ALPHAMILL_SYMBOL_MAP_CURRENT", raising=False)
+    monkeypatch.setenv("ALPHAMILL_LAKE_DIR", str(tmp_path))
+    assert sm.current_csv_path() == tmp_path / "_metadata" / "symbol_map.csv"
+
+
 def test_export_publishes_immutable_artifact_and_replays(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHAMILL_SYMBOL_MAP_CURRENT", str(tmp_path / "current" / "symbol_map.csv"))
     conn = _FakeConn(
@@ -98,13 +117,15 @@ def test_export_publishes_immutable_artifact_and_replays(tmp_path, monkeypatch):
             "derivatives_funding_rates": [("binanceusdm", "BTC/USDT")],
             "derivatives_open_interest": [],
             "derivatives_mark_index_basis": [],
+            "signals_log": [],
         }
     )
     ref = sm.export_symbol_map(conn=conn, lake_root=tmp_path)
     assert ref.path.name == f"{ref.digest}.csv"
     assert ref.path.is_file()
-    # conn=None 走 db_connect 的路径不在此测（需要真实库）；查询覆盖四个 pair-car 表
+    # conn=None 走 db_connect 的路径不在此测；signals_log 不参与全局映射推导。
     assert sum("FROM " in sql for sql in conn.executed) == 4
+    assert all("FROM signals_log" not in sql for sql in conn.executed)
 
     # 同内容再导出：同 digest、逐字节一致，不产生第二个文件
     ref_again = sm.export_symbol_map(conn=conn, lake_root=tmp_path)
@@ -122,6 +143,7 @@ def test_export_publishes_immutable_artifact_and_replays(tmp_path, monkeypatch):
             "derivatives_funding_rates": [],
             "derivatives_open_interest": [],
             "derivatives_mark_index_basis": [],
+            "signals_log": [],
         }
     )
     ref_v2 = sm.export_symbol_map(conn=conn2, lake_root=tmp_path)
@@ -129,7 +151,45 @@ def test_export_publishes_immutable_artifact_and_replays(tmp_path, monkeypatch):
     assert sm.load_symbol_map(ref.digest, lake_root=tmp_path).shape[0] == 3
 
     with pytest.raises(DataBridgeError, match="不存在"):
-        sm.load_symbol_map("sha256:absent", lake_root=tmp_path)
+        sm.load_symbol_map("sha256:" + "0" * 64, lake_root=tmp_path)
+
+    ref.path.write_bytes(ref.path.read_bytes() + b"\n")
+    with pytest.raises(DataBridgeError, match="digest 校验"):
+        sm.load_symbol_map(ref.digest, lake_root=tmp_path)
+
+
+def test_artifact_creation_does_not_overwrite_existing_digest_file(tmp_path):
+    target = tmp_path / "artifact.csv"
+    target.write_bytes(b"original")
+    with pytest.raises(FileExistsError):
+        sm._atomic_create(target, b"replacement")
+    assert target.read_bytes() == b"original"
+
+
+def test_artifact_creation_falls_back_when_hard_links_are_unavailable(tmp_path, monkeypatch):
+    target = tmp_path / "artifact.csv"
+
+    def unsupported_link(*_args):
+        raise OSError(18, "cross-device link")
+
+    monkeypatch.setattr(sm.os, "link", unsupported_link)
+    sm._atomic_create(target, b"payload")
+    assert target.read_bytes() == b"payload"
+
+
+def test_signals_log_symbols_do_not_assume_spot_market_type():
+    conn = _FakeConn(
+        {
+            "ohlcv_1m": [("binance", "BTC/USDT")],
+            "derivatives_funding_rates": [],
+            "derivatives_open_interest": [],
+            "derivatives_mark_index_basis": [],
+            "signals_log": [("binanceusdm", "BTC/USDT")],
+        }
+    )
+    frame = sm.build_symbol_map(sm._rows_from_conn(conn))
+    assert len(frame) == 1
+    assert frame.iloc[0]["lake_pair"] == "BTC-USDT"
 
 
 def test_resolve_directions_and_missing(tmp_path, monkeypatch):
@@ -140,6 +200,7 @@ def test_resolve_directions_and_missing(tmp_path, monkeypatch):
             "derivatives_funding_rates": [("binanceusdm", "BTC/USDT")],
             "derivatives_open_interest": [],
             "derivatives_mark_index_basis": [],
+            "signals_log": [],
         }
     )
     sm.export_symbol_map(conn=conn, lake_root=tmp_path)
@@ -170,6 +231,7 @@ def test_to_db_symbols_for_reader(tmp_path, monkeypatch):
             "derivatives_funding_rates": [],
             "derivatives_open_interest": [],
             "derivatives_mark_index_basis": [],
+            "signals_log": [],
         }
     )
     sm.export_symbol_map(conn=conn, lake_root=tmp_path)
