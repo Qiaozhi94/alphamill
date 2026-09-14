@@ -8,7 +8,7 @@ related_features: [F001, F002]
 topics: [kronos, inference, deployment]
 doc_kind: spec
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-09-14
 ---
 
 # F004：Kronos 真实推理运行时（编排内可复现）
@@ -17,8 +17,8 @@ updated: 2026-09-12
 
 ## 0. 来源与意图
 
-- **PRD 来源**：`docs/alphamill-prd.md` FR3（信号生产）与 M1 运行基座
-- **架构来源**：`docs/alphamill-architecture.md` §七（部署拓扑）
+- **PRD 来源**：`docs/alphamill-prd.md` M0（自包含运行基线：Kronos 服务在编排内健康）、FR1.2（`signals_log` 进入不可变快照）与 FR5（运行链：信号服务的运行时载体）；FR3（证据评测与验证）仅为下游关系——F004 为评测提供可复现的真实 Kronos 信号源，不实现评测本身
+- **架构来源**：`docs/alphamill-architecture.md` §七（部署拓扑）、§7.1（机器边界）
 - **上游来源**：F001 AC-006（真实推理证据，当前靠仓外手工实例）、F002 检视 F002-Q001（容器化不在数据桥契约内，需独立载体）
 - **功能类型**：backend / infra
 - **规格模式**：lite
