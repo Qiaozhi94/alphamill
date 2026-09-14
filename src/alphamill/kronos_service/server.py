@@ -1,14 +1,18 @@
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 try:  # Package import is used by the host service; fallback keeps the legacy CLI usable.
+    from . import kronos_real
     from .db_adapter import healthcheck, latest_ohlcv
     from .generator import generate_placeholder_signal
     from .kronos_real import real_signal
 except ImportError:  # pragma: no cover - direct script compatibility only.
+    import kronos_real
+
     from db_adapter import healthcheck, latest_ohlcv
     from generator import generate_placeholder_signal
     from kronos_real import real_signal
@@ -44,7 +48,15 @@ class BatchPredictResponse(BaseModel):
     errors: dict[str, str]
 
 
-app = FastAPI(title="Kronos Signal Service", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # real 模式：启动预检 + eager load，先于接收流量；失败即非零退出，不退回
+    # mock（F004 FR-001）。mock 模式下钩子为 no-op，默认编排行为不变（NFR-001）。
+    kronos_real.real_mode_startup()
+    yield
+
+
+app = FastAPI(title="Kronos Signal Service", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/health")

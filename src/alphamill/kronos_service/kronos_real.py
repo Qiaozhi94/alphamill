@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,9 @@ try:  # Package import is used by the host service; fallback keeps the legacy CL
     from .generator import clamp
 except ImportError:  # pragma: no cover - direct script compatibility only.
     from generator import clamp
+
+# 上游 from_pretrained 认的权重文件名（Kronos / Tokenizer 目录内二选一）。
+WEIGHT_FILE_NAMES = ("model.safetensors", "pytorch_model.bin")
 
 
 @dataclass
@@ -41,6 +45,33 @@ class KronosRealSignal:
         self._torch = None
         self._device = "cpu"
         self._load_error: str | None = None
+        # 进程级锁：模型加载至多一次 + 推理互斥（spec FR-001 串行推理不变式）。
+        self._lock = threading.Lock()
+
+    def preflight(self) -> list[str]:
+        """启动预检：返回缺失资产的路径清单，空清单即通过（design §5）。
+
+        校验 vendor clone（以 `model/kronos.py` 存在为准）、模型与分词器目录及
+        必需文件（config.json + 权重文件）。
+        """
+        missing: list[str] = []
+        kronos_module = Path(self.kronos_root) / "model" / "kronos.py"
+        if not kronos_module.is_file():
+            missing.append(str(kronos_module))
+        for asset_dir in (Path(self.model_path), Path(self.tokenizer_path)):
+            if not asset_dir.is_dir():
+                missing.append(str(asset_dir))
+                continue
+            if not (asset_dir / "config.json").is_file():
+                missing.append(str(asset_dir / "config.json"))
+            if not any((asset_dir / name).is_file() for name in WEIGHT_FILE_NAMES):
+                missing.append(str(asset_dir / WEIGHT_FILE_NAMES[0]))
+        return missing
+
+    def eager_load(self) -> None:
+        """启动期一次性加载模型，先于接收流量（design §5）。"""
+        with self._lock:
+            self._load_predictor()
 
     def status(self) -> ModelStatus:
         available = self._dependencies_available()
@@ -119,6 +150,7 @@ class KronosRealSignal:
             return False
 
     def _load_predictor(self):
+        """加载 Kronos + Tokenizer（调用方须已持有 self._lock，保证至多一次）。"""
         if not self.enabled:
             raise RuntimeError("KRONOS_USE_REAL_MODEL is not enabled")
         if self._predictor is not None:
@@ -164,3 +196,28 @@ class KronosRealSignal:
 
 
 real_signal = KronosRealSignal()
+
+
+def real_mode_startup(signal: KronosRealSignal | None = None) -> None:
+    """real 模式启动钩子（server lifespan 调用）：预检 → eager load，先于接收流量。
+
+    预检或加载任一失败即打印缺失路径/错误并以非零码退出——失败关闭，绝不退回
+    mock（spec FR-001 / design §7：退回会让 AC-006 假绿）。mock 模式为 no-op，
+    默认编排行为不变（NFR-001）。
+    """
+    signal = signal if signal is not None else real_signal
+    if not signal.enabled:
+        return
+
+    missing = signal.preflight()
+    if missing:
+        for path in missing:
+            print(f"[kronos-real] missing asset: {path}", file=sys.stderr)
+        raise SystemExit(
+            f"[kronos-real] preflight failed: {len(missing)} asset(s) missing, refusing to start"
+        )
+    try:
+        signal.eager_load()
+    except Exception as exc:
+        print(f"[kronos-real] model load failed: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
