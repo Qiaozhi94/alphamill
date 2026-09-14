@@ -8,13 +8,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
 
 from alphamill.kronos_service import kronos_real, server
 
@@ -172,16 +172,25 @@ def test_predictor_loads_once_and_inference_serializes(monkeypatch) -> None:
     assert fake.max_active == 1, f"predictor 峰值并发 {fake.max_active}"
 
 
+def _drive_lifespan() -> None:
+    """直接驱动 server 的 lifespan（不经 TestClient——CI 不装 httpx；HTTP 层
+    由容器集成测试覆盖）。"""
+    asyncio.run(_consume_lifespan())
+
+
+async def _consume_lifespan() -> None:
+    async with server.lifespan(server.app):
+        pass
+
+
 def test_server_lifespan_invokes_startup_hook_in_real_mode(monkeypatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(server, "healthcheck", lambda: {"total_rows": 1})
     monkeypatch.setattr(server.real_signal, "enabled", True)
     monkeypatch.setattr(kronos_real, "real_mode_startup", lambda: calls.append("startup"))
 
-    with TestClient(server.app) as client:
-        assert calls == ["startup"]
-        assert client.get("/health").status_code == 200
-    assert calls == ["startup"]  # 关停阶段不重复触发
+    _drive_lifespan()
+    assert calls == ["startup"]  # 启动恰好一次，关停阶段不重复触发
 
 
 def test_server_lifespan_skips_startup_in_mock_mode(monkeypatch) -> None:
@@ -198,5 +207,5 @@ def test_server_lifespan_skips_startup_in_mock_mode(monkeypatch) -> None:
     monkeypatch.setattr(kronos_real.KronosRealSignal, "preflight", _boom)
     monkeypatch.setattr(kronos_real.KronosRealSignal, "eager_load", _boom)
 
-    with TestClient(server.app) as client:
-        assert client.get("/health").status_code == 200
+    _drive_lifespan()
+    assert server.health()["status"] == "ok"
