@@ -61,3 +61,43 @@ def assert_real_dockerfile_contract(dockerfile: str) -> None:
 
 def test_dockerfile_targets_pin_real_dependencies() -> None:
     assert_real_dockerfile_contract(DOCKERFILE_PATH.read_text(encoding="utf-8"))
+
+
+def assert_compose_real_service_contract(compose: str) -> None:
+    """compose 双服务契约：kronos-signal 显式 mock；kronos-signal-real 全量接线。"""
+    mock_block = _service_block(compose, "kronos-signal")
+    assert "target: mock" in mock_block, (
+        "kronos-signal 必须显式 target: mock（无 target 的默认构建会取最后一个 stage=real）"
+    )
+
+    real_block = _service_block(compose, "kronos-signal-real")
+    # profile 与构建目标
+    assert "profiles: [kronos-real]" in real_block, "real 服务必须挂在 kronos-real profile 下"
+    assert "target: real" in real_block
+    # 只读挂载（vendor clone + 权重，容器不写宿主资产）
+    assert "../vendor/Kronos:/app/vendor/Kronos:ro" in real_block
+    assert "../models:/app/models:ro" in real_block
+    # KRONOS_* 运行时环境（design §2）
+    assert 'KRONOS_USE_REAL_MODEL: "true"' in real_block
+    assert "KRONOS_REPO_PATH: /app/vendor/Kronos" in real_block
+    assert "KRONOS_MODEL_PATH: /app/models/Kronos-base" in real_block
+    assert "KRONOS_TOKENIZER_PATH: /app/models/Kronos-Tokenizer-base" in real_block
+    assert "KRONOS_DEVICE: cpu" in real_block
+    # DB 接线与 mock 服务同约定
+    assert "DB_HOST: timescaledb" in real_block
+    assert "DB_PORT: 5432" in real_block
+    assert "DB_USER: ${DB_USER:-quant}" in real_block
+    assert "DB_PASSWORD: ${DB_PASSWORD:-change-me}" in real_block
+    assert "DB_NAME: ${DB_NAME:-quant}" in real_block
+    # 依赖、网络、端口、失败语义与 readiness
+    assert "timescaledb: {condition: service_healthy}" in real_block
+    assert "networks: [alphamill]" in real_block
+    assert '- "8002:8001"' in real_block
+    assert 'restart: "no"' in real_block, "real 服务失败不得自动重启（失败态保持可见）"
+    assert "model_loaded') is True" in real_block and "device') == 'cpu'" in real_block, (
+        "healthcheck 必须以 /health 的 model_loaded=true（且 device=cpu）为通过条件"
+    )
+
+
+def test_compose_real_service_contract() -> None:
+    assert_compose_real_service_contract(COMPOSE_PATH.read_text(encoding="utf-8"))

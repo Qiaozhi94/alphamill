@@ -51,6 +51,8 @@ services:
     build:
       context: ..
       dockerfile: deployment/kronos-service.Dockerfile
+      # 必须显式钉住 mock：无 target 的默认构建会取 Dockerfile 最后一个 stage（real）。
+      target: mock
     container_name: quant-kronos-signal
     restart: unless-stopped
     ports:
@@ -65,6 +67,48 @@ services:
       KRONOS_MODEL: ${KRONOS_MODEL:-models/Kronos-base}
       KRONOS_TOKENIZER: ${KRONOS_TOKENIZER:-models/Kronos-Tokenizer-base}
       KRONOS_DEVICE: ${KRONOS_DEVICE:-cpu}
+    depends_on:
+      timescaledb: {condition: service_healthy}
+    networks: [alphamill]
+
+  # 真实 Kronos 推理实例（F004）：非默认，--profile kronos-real 启用；
+  # 启动预检缺资产即失败退出（restart: "no" 保持失败态可见，不退回 mock）。
+  kronos-signal-real:
+    build:
+      context: ..
+      dockerfile: deployment/kronos-service.Dockerfile
+      target: real
+    container_name: quant-kronos-signal-real
+    profiles: [kronos-real]
+    restart: "no"
+    ports:
+      - "8002:8001"
+    environment:
+      DB_HOST: timescaledb
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-quant}
+      DB_PASSWORD: ${DB_PASSWORD:-change-me}
+      DB_NAME: ${DB_NAME:-quant}
+      KRONOS_USE_REAL_MODEL: "true"
+      KRONOS_REPO_PATH: /app/vendor/Kronos
+      KRONOS_MODEL_PATH: /app/models/Kronos-base
+      KRONOS_TOKENIZER_PATH: /app/models/Kronos-Tokenizer-base
+      KRONOS_DEVICE: cpu
+    volumes:
+      - ../vendor/Kronos:/app/vendor/Kronos:ro
+      - ../models:/app/models:ro
+    # readiness：模型 eager load 完成后 /health 才可达，以 model_loaded=true（且
+    # device=cpu）为通过条件（design §5）。
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import json,urllib.request; h=json.load(urllib.request.urlopen('http://127.0.0.1:8001/health')); assert h.get('model_loaded') is True and h.get('device') == 'cpu', h\"",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 5m
     depends_on:
       timescaledb: {condition: service_healthy}
     networks: [alphamill]
