@@ -2,7 +2,7 @@
 topics: [docs, index, ownership]
 doc_kind: guide
 created: 2026-09-06
-updated: 2026-09-13
+updated: 2026-09-15
 ---
 
 # AlphaMill 文档地图
@@ -25,6 +25,7 @@ updated: 2026-09-13
 | 呈现与观测架构（真相源/投影/展示三分、自建前端路线） | `decisions/0005-presentation-observability.md` | Grafana/FreqUI/自建控制台边界、口径进视图、统一只读 API |
 | 证据边界与实验身份 | `decisions/0006-evidence-boundary-and-experiment-identity.md` | 四平面之上的横向 seam、preview/canonical、内容寻址与失败关闭 |
 | 研究快照与多数据集版本绑定 | `decisions/0007-research-snapshot-binding.md` | dataset 独立版本 + ResearchSnapshot 引用集合；canonical 禁止动态 latest |
+| 北极星与指标口径（在跑组合持续盈利；产能=分母与能力标定） | `decisions/0008-north-star-sustained-profitability.md` | 结果/护栏/分母三层职责划界；PRD §2.3 指标体系的口径依据 |
 | 呈现层视觉原型（非契约，设计资产） | `design/ui-mockup/`（设计稿，本地） | 终局四面全景蓝图，**非权威、非 F005 范围**；F005 spec 落地后废弃或迁入 `web/`（ADR-0005 决策 7） |
 | quant-crypto 资产清算迁移 | `features/0.1/F001-quant-crypto-migration/migration-plan.md` | 迁移清单与验收（F001 附属） |
 | 跨 Feature 长期决策 | `decisions/` | ADR 决策记录 |
