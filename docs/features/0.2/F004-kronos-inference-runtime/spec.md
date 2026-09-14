@@ -39,7 +39,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 ### 非目标
 
 - 不改 Kronos 上游代码与 HTTP API 契约（F001 已冻结）；
-- 不做 GPU 直通与性能优化（本机无独立显卡，CPU 推理即可满足验收）；
+- 不做 GPU 推理与性能优化（Kronos 常驻推理的目标机是执行机（当前 `qiaozhi-lt` 的 RTX 4060，架构 §7.1）；本 feature 的编排与契约验收在 CPU 推理上即成立，GPU 直通留给执行机落地时处理）；
 - 不把真实推理设为默认启动项——torch 与权重会让只做数据桥的开发者付出无谓代价。
 
 ## 2. 用户场景

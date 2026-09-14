@@ -32,7 +32,8 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 - 数据栈：TimescaleDB（联机运营库，自 quant-crypto 迁入）→ data_bridge → Parquet 湖（不可变快照）
 - 呈现栈（规划，ADR-0005）：`src/alphamill/api/` 统一只读 API + `web/` SPA（构建期 Node pin，生产运行时无 Node）；Grafana 逐步退守平台观测与告警，FreqUI 降为应急操作面板
 - 测试/质量：pytest + ruff（check + format），唯一入口 `python3 tools/verify.py`
-- 平台：Windows 11 宿主 + WSL2（Ubuntu 26.04，docker-ce，非 Docker Desktop）；GPU 经 WSL 直通（未就绪时 Kronos 冒烟 CPU 回退，见 F001 design §0 执行环境）；docker-compose 自 quant-crypto 迁入
+- 平台：Windows 11 宿主 + WSL2（Ubuntu 26.04，docker-ce，非 Docker Desktop）；docker-compose 自 quant-crypto 迁入
+- 机器边界（架构 §7.1，事实源 env-manager `data/fleet.json`）：开发机 `qiaozhi-gp`/`gp-wsl`（AMD iGPU，**无 NVIDIA**）只跑编码/单元测试/`tools/verify.py`；集成与 GPU 证据一律在执行机取。执行机同一时刻只有一台，承载全部运营与批处理（TimescaleDB/采集/导出/dry-run/监控/Kronos 常驻/挖掘训练）——当前 `qiaozhi-lt`（Win11+WSL2，RTX 4060 Laptop 8GB），成熟后整体迁移至 `qiaozhi-lab`（原生 Ubuntu 26.04，RTX 5070 Ti 16GB，Blackwell sm_120）；开发机上的 skip 不算证据
 
 ## 开发约定
 

@@ -504,7 +504,7 @@ Vibe-Trading 是 FR3.7 第二实现复核和 FR6.4 AI 复盘的一种可替换�
 
 ```mermaid
 flowchart LR
-    subgraph HOST["现有单机（RTX 4060 Laptop）"]
+    subgraph HOST["执行机（当前 qiaozhi-lt · RTX 4060 Laptop 8GB；迁移目标 qiaozhi-lab · RTX 5070 Ti 16GB）"]
         subgraph DOCKER["docker-compose（自 quant-crypto 迁入）"]
             TS[(TimescaleDB)]
             FTD[Freqtrade dry-run]
@@ -523,8 +523,12 @@ flowchart LR
         LEDGER[(experiment_store)]
         KRN[Kronos 推理服务<br/>GPU 常驻]
     end
+    subgraph DEV["开发机 qiaozhi-gp/gp-wsl（AMD iGPU，无 NVIDIA）"]
+        CODE[编码 · 单元测试 · tools/verify.py]
+    end
     TS --> EXPORT --> LAKE[(Parquet 湖)]
     LAKE --> MINE --> BENCHX --> GATES --> PORT --> FTD
+    CODE -.->|git push| HOST
     LAKE -.-> AGENT
     BENCHX --> LEDGER
     GATES --> LEDGER
@@ -541,7 +545,25 @@ flowchart LR
 组合构建」批处理。人工审查晋级、部署和复盘产生的新假设（白天经统一呈现后端浏览批处理
 产出，研究控制台先行，ADR-0005；Grafana 逐步退守平台观测与告警）。GPU 占用按时段表调度（见 7.1）。
 
-### 7.1 单卡 GPU 时段调度（RTX 4060 Laptop 8GB）
+### 7.1 机器边界与单卡 GPU 时段调度
+
+**两类机器，职责不重叠**（事实源：env-manager `data/fleet.json`）：
+
+| 角色 | 主机 | 平台与 GPU | 职责 |
+|---|---|---|---|
+| 开发机 | `qiaozhi-gp` / `gp-wsl` | Legion Go，AMD Ryzen Z2 + Radeon 780M iGPU（**无 NVIDIA**），Win11 + WSL2 Ubuntu 26.04 | 编码、单元测试、`python3 tools/verify.py` 门禁；不承载 GPU 负载，不作为集成/性能证据来源 |
+| 执行机（当前） | `qiaozhi-lt` | Windows 11 笔记本 + WSL2，RTX 4060 Laptop 8GB | 全部联机运营与批处理：TimescaleDB + 采集 + 导出 + Parquet 湖 + dry-run + 监控 + Kronos 常驻 + 挖掘训练 + 评测门禁 |
+| 执行机（最终） | `qiaozhi-lab` | **原生 Ubuntu 26.04**（与 Windows 侧 `qiaozhi-ws` 双系统互斥），Intel Ultra 7 265K 20 核 / 45GB RAM / 1.1TB `/data`，RTX 5070 Ti 16GB（Blackwell sm_120），CUDA 13.1/13.2 | 迁移完成后接管上述全部职责 |
+
+**执行机迁移路线**：先在 `qiaozhi-lt` 上把全链路跑通跑熟，成熟后**整体迁移**到 `qiaozhi-lab`。迁移是一次性搬迁，不是双机并行——同一时刻只有一台执行机在跑。注意这不只是换卡：
+
+- **平台变了**：Windows 11 + WSL2 → 原生 Ubuntu，docker 编排、路径、开机自启、备份通道都要重新落地；
+- **架构变了**：Blackwell sm_120 需要 CUDA 12.8+ 的 torch 构建，默认 wheel 不一定含该架构，依赖 pin 必须显式选择；
+- **预算变了**：显存 8GB → 16GB，本节 VRAM 预算与时段表必须**重新标定**，"训练窗口内卸载 Kronos"等约束可能放宽，但放宽须经一次显式重标，不得默认继承。
+
+迁移后重跑一遍全链路验收（迁移动作本身按独立 Feature 立项）。
+
+**单卡 GPU 时段调度（当前执行机 `qiaozhi-lt`，RTX 4060 Laptop 8GB）**
 
 三个 GPU 负载（Kronos 常驻推理 / AlphaGen 夜间训练 / Vibe MC）共用一张卡，采用**时段表 + 单槽队列**，不做 OOM 赌博：
 
@@ -552,4 +574,4 @@ flowchart LR
 | 周末白天 | 可选第二实现（置换/Bootstrap） | ≤2GB | 与 Kronos 常驻共存（3+2 ≤ 8GB），仅在需要时复核 |
 | 任意 | 碰撞规则：单槽 FIFO 队列 | — | 时段表之外或与在跑任务撞车的任务一律排队，**队列赢，绝不并行赌 OOM** |
 
-VRAM 预算为硬上限：任务启动前自检可用显存，低于预算即进队列等待，不允许挤占时段或互相抢卡。
+VRAM 预算为硬上限：任务启动前自检可用显存，低于预算即进队列等待，不允许挤占时段或互相抢卡。预算值与时段表随执行机走，迁移后按上文重标。

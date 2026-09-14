@@ -6,8 +6,10 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 | Feature | 版本 | 状态 | 链接 |
 |---|---|---|---|
 | F002-data-bridge | 0.2 | review | [spec](docs/features/0.2/F002-data-bridge/spec.md) |
+| F003-alphagen-vendor | 0.2 | draft | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
 | F004-kronos-inference-runtime | 0.2 | draft | [spec](docs/features/0.2/F004-kronos-inference-runtime/spec.md) |
 | F007-evaluation-gates | 0.2 | draft | [spec](docs/features/0.2/F007-evaluation-gates/spec.md) |
+| F008-universe-expansion | 0.2 | draft | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
 
 > 规则：feature 状态变更（spec frontmatter）时必须同步本表；`done` 的 Feature 移出本表，
 > 交付记录进入 `docs/features/releases/<version>.md`。
@@ -24,5 +26,4 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 | Feature | 需求 | 里程碑窗口 | 编号状态 | 关键约束 |
 |---|---|---|---|---|
 | 研究控制台 | FR8.1/8.2/8.4 | M2 前（评测台落地后立项） | F005（ADR-0005 预留） | 只读；渲染对象仅限研究版本态产物（含谱系 F005；台账只读视图为 F005.1 增量，组合只读视图随 M3 规划）；实时 PnL 不进控制台；版本归属 0.2 |
-| AlphaGen vendor | FR2.2 | M2 | F003（F001 spec 预留） | ADR-0001 选型与 vendor 卫生规则 |
 | 运营操作入口 | FR8.3 | M3/M4 | F006（架构文档预留） | 写路径唯一经 `alphamill/api/` 并落 FR7.4 审计 |
