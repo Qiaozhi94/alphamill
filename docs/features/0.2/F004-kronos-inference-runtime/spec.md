@@ -60,7 +60,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### 范围内
 
-- `deployment/kronos-service.Dockerfile` 增加 torch CPU wheel + einops + safetensors + huggingface_hub + tqdm 的可选构建目标（版本与 wheel 来源在 design 锁定）；
+- `deployment/kronos-service.Dockerfile` 拆 `mock`（保持现状、不含 torch）与 `real` 两个构建目标，compose 两个服务各自显式声明 target；real 目标含 torch CPU wheel + einops + safetensors + huggingface_hub + tqdm（版本与 wheel 来源在 design 锁定）；
 - compose 增 `kronos-real` profile：挂载 `vendor/Kronos` 与 `models/`，`KRONOS_USE_REAL_MODEL=true`；
 - F001 AC-006 的复跑命令改为 compose 形态并回写 F001 spec §6。
 
@@ -104,7 +104,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### 非功能需求
 
-- **NFR-001**：默认 `docker compose up` 的行为与镜像体积不受本 feature 影响（profile 未启用时不构建 torch 层）。
+- **NFR-001**：默认 `docker compose -f deployment/docker-compose.yml up` 的行为与镜像不受本 feature 影响——默认镜像（`mock` 构建目标）不含 torch，profile 未启用时不启动、不构建 real 服务。
 
 ## 5. 生命周期与不变量
 
@@ -123,7 +123,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `NFR-001`): `--profile kronos-real` 拉起的实例由目标 compose 服务与 real 构建目标产生（容器身份、只读挂载、8002:8001 成立），model_enabled=true 且 /predict 返回 source=kronos；不带该 profile 时默认编排行为与镜像层不变 — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/integration/test_f004_real_profile.py`
+- [ ] **AC-001** (`FR-001`, `NFR-001`): `--profile kronos-real` 拉起的实例由目标 compose 服务与 real 构建目标产生（容器身份、只读挂载、8002:8001 成立），model_enabled=true 且 /predict 返回 source=kronos；不带该 profile 时默认编排不启用也不构建 real 服务、默认镜像不含 torch — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/integration/test_f004_real_profile.py`
 - [ ] **AC-002** (`FR-001`): 失败关闭与串行推理——vendor/权重/分词器缺失或加载失败时 real 实例启动即非零退出并打印缺失路径（不退回 mock）；并发 `/predict` 下模型加载至多一次且推理互斥 — tests: `tests/unit/test_f004_kronos_runtime_contract.py`、`tests/integration/test_f004_real_profile.py`
 
 ## 7. 测试、依赖与决策

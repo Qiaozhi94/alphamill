@@ -22,7 +22,7 @@ updated: 2026-09-12
 
 ## 1. 技术概要与影响面
 
-给 `kronos-service.Dockerfile` 增一个包含 torch/cpu 的构建目标，compose 用 `profiles: [kronos-real]` 挂一个额外服务，默认 `up` 不触发其构建。薄壳做三处最小改造：real 模式启动预检、模型 eager load 与进程级推理锁（§5）。
+给 `kronos-service.Dockerfile` 拆出 `mock`（保持现状、不含 torch）与 `real` 两个构建目标；compose 两个服务各自显式声明 target，`kronos-signal-real` 用 `profiles: [kronos-real]`，默认 `up` 不启用也不构建该服务。薄壳做三处最小改造：real 模式启动预检、模型 eager load 与进程级推理锁（§5）。
 
 - 后端 / API：无变更（同一份 `kronos_service`）
 - 存储 / Migration：无
@@ -59,7 +59,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 ## 7. 失败、恢复、安全与兼容
 
 - 权重、分词器或 vendor 缺失/加载失败 → **启动期**即非零退出并打印缺失路径，**不退回 mock**（退回会让 AC-006 假绿）；`restart: "no"` 使失败态保持可见；
-- 镜像体积：torch/cpu wheel 约 200MB，仅在启用 profile 时构建（NFR-001）。
+- 镜像体积：real 目标（torch CPU wheel 约 200MB）仅在启用 profile 时构建；默认镜像（mock 目标）不含 torch，默认编排行为不变（NFR-001）。
 
 ## 8. 测试策略与验收映射
 
@@ -83,7 +83,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 | 真实实例走 8002 而非顶替 8001 | 两种形态可并存对比 | mock 实例仍是默认链路的依赖 | 稳定后可评估是否合并 |
 | 串行推理用进程级锁而非多 worker | uvicorn 单 worker + 进程级锁 | CPU 推理本身串行；多 worker 无收益且破坏「加载至多一次」 | 若未来上 GPU 再评估批量吞吐 |
 | 依赖 pin 取宿主 AC-006 实测版本 | torch 2.14.0（CPU index）+ einops 0.8.2 / safetensors 0.8.0 / huggingface_hub 1.31.0 / tqdm 4.70.0 | 与已实测通过的宿主环境一致；上游 requirements 仅参考 | 容器内真实权重加载验证通过后锁定 |
-| 残余风险：torch 镜像层拖慢 CI | CI 不构建该 profile | profile 未启用时 compose 不解析其构建 | 若 CI 需要则单独 job |
+| 残余风险：torch 镜像层拖慢 CI | CI 不构建也不启用 real 目标；默认镜像不含 torch 由静态门禁锁定 | profile 未启用时 compose 不构建该服务 | 若 CI 需要 real 构建则单独 job |
 
 ## 10. 待确认设计问题
 
