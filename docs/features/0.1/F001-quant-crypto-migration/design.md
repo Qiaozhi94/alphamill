@@ -56,6 +56,8 @@ Kronos HTTP API 契约不变：`GET /health`、`GET /predict/{symbol}`、`POST /
 
 符号映射契约前置：本 feature 对 pair 命名原样直迁、不改名；M1 数据桥须按集成文档 §2.2
 产出 `data_bridge/symbol_map.csv`（湖内 pair ↔ Freqtrade pair，按需附 Vibe symbol）并锁定 UTC。
+（F002 落地时改址：current 副本落 `lake/_metadata/symbol_map.csv`，可复现读取用
+`lake/_metadata/symbol_maps/<digest>.csv`，不再写入源码树；权威定义见集成文档 §2.2。）
 
 ### Event / Trace Contract
 
