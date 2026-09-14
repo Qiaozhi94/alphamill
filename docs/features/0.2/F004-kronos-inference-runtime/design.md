@@ -6,7 +6,7 @@ related_features: [F001, F002]
 topics: [kronos, inference, deployment]
 doc_kind: design
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-09-14
 ---
 
 # F004：Kronos 真实推理运行时 - 设计
@@ -92,6 +92,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 |---|---|---|---|
 | 用 compose profile 而非新建服务文件 | 单一 compose 文件，默认不启用 | 避免多份编排入口（F001 的教训：编排必须唯一） | 若 profile 组合变复杂再拆 override 文件 |
 | 真实实例走 8002 而非顶替 8001 | 两种形态可并存对比 | mock 实例仍是默认链路的依赖 | 稳定后可评估是否合并 |
+| profile 启用时的消费者路由（Freqtrade / runtime snapshot） | 不接线，显式后移（spec §3 范围外） | 本 feature 承诺=编排内可复现证据；路由切换改变默认链路可用性与跨 feature 契约 | 后移见 tasks §5；F002 spec §6 的「自动升级」表述已按此勘正 |
 | 串行推理用进程级锁而非多 worker | uvicorn 单 worker + 进程级锁 | CPU 推理本身串行；多 worker 无收益且破坏「加载至多一次」 | 若未来上 GPU 再评估批量吞吐 |
 | 依赖 pin 取宿主 AC-006 实测版本 | torch 2.14.0（CPU index）+ einops 0.8.2 / safetensors 0.8.0 / huggingface_hub 1.31.0 / tqdm 4.70.0 | 与已实测通过的宿主环境一致；上游 requirements 仅参考 | 容器内真实权重加载验证通过后锁定 |
 | 残余风险：torch 镜像层拖慢 CI | CI 不构建也不启用 real 目标；默认镜像不含 torch 由静态门禁锁定 | profile 未启用时 compose 不构建该服务 | 若 CI 需要 real 构建则单独 job |
