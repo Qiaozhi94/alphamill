@@ -73,6 +73,18 @@ def _wait_for_real_model() -> dict:
     pytest.fail(f"real 实例 {POLL_SECONDS}s 内未就绪: {last_error}")
 
 
+def _compose_image(compose_cmd: list[str], service: str) -> str:
+    """按 compose 默认命名（<project>-<service>:latest）解析镜像名。
+
+    不能用容器 .Image / compose images -q 的镜像 ID：buildkit 每次构建都会生成
+    新的 manifest list（ID 随变），重建后旧 ID 被取消标签，docker run 不认。
+    """
+    cfg = _run([*compose_cmd, "config", "--format", "json"], timeout=60)
+    assert cfg.returncode == 0, cfg.stderr
+    project = json.loads(cfg.stdout)["name"]
+    return f"{project}-{service}:latest"
+
+
 @pytest.fixture(scope="module")
 def real_profile() -> dict:
     """构建 real 目标并拉起 profile 实例；teardown 只清 real 容器，不动共享栈。"""
@@ -113,7 +125,14 @@ def test_real_profile_container_identity_and_full_chain(real_profile) -> None:
 
     # real 目标身份：容器内 torch 可导入（mock 目标做不到，见默认镜像否证用例）
     torch_import = _run(
-        ["docker", "exec", REAL_CONTAINER, "python", "-c", "import torch; print(torch.__version__)"],
+        [
+            "docker",
+            "exec",
+            REAL_CONTAINER,
+            "python",
+            "-c",
+            "import torch; print(torch.__version__)",
+        ],
         timeout=120,
     )
     assert torch_import.returncode == 0, torch_import.stderr
@@ -138,19 +157,25 @@ def test_real_profile_container_identity_and_full_chain(real_profile) -> None:
 def test_missing_assets_fail_closed(real_profile) -> None:
     """AC-002：缺资产实例启动即非零退出并打印缺失路径；不产生可服务的 mock 降级。"""
     _require_integration()
-    # 用 compose 解析的本地镜像 ID（.Image 的 config 摘要可能是构建中途的悬空引用）
-    image = _run([*COMPOSE_PROFILE, "images", "-q", "kronos-signal-real"]).stdout.strip()
-    assert image, "未找到 real 目标镜像"
+    image = _compose_image(COMPOSE_PROFILE, "kronos-signal-real")
 
     # 与 compose real 服务同一运行语义（KRONOS_USE_REAL_MODEL=true），仅把资产路径
     # 指向不存在处——等价于「新 clone 缺 vendor/models 就启用 profile」的失败关闭。
     proc = _run(
         [
-            "docker", "run", "--rm", "--name", "f004-missing-assets",
-            "-e", "KRONOS_USE_REAL_MODEL=true",
-            "-e", "KRONOS_REPO_PATH=/nonexistent/vendor/Kronos",
-            "-e", "KRONOS_MODEL_PATH=/nonexistent/models/Kronos-base",
-            "-e", "KRONOS_TOKENIZER_PATH=/nonexistent/models/Kronos-Tokenizer-base",
+            "docker",
+            "run",
+            "--rm",
+            "--name",
+            "f004-missing-assets",
+            "-e",
+            "KRONOS_USE_REAL_MODEL=true",
+            "-e",
+            "KRONOS_REPO_PATH=/nonexistent/vendor/Kronos",
+            "-e",
+            "KRONOS_MODEL_PATH=/nonexistent/models/Kronos-base",
+            "-e",
+            "KRONOS_TOKENIZER_PATH=/nonexistent/models/Kronos-Tokenizer-base",
             image,
         ],
         timeout=300,
@@ -167,9 +192,7 @@ def test_default_mock_image_has_no_torch(real_profile) -> None:
     _require_integration()
     built = _run([*COMPOSE_BASE, "build", "kronos-signal"], timeout=1800)
     assert built.returncode == 0, f"mock 镜像构建失败: {built.stderr[-2000:]}"
-
-    image_id = _run([*COMPOSE_BASE, "images", "-q", "kronos-signal"]).stdout.strip()
-    assert image_id, "未找到 mock 目标镜像"
+    image_id = _compose_image(COMPOSE_BASE, "kronos-signal")
 
     proc = _run(
         ["docker", "run", "--rm", "--entrypoint", "python", image_id, "-c", "import torch"],

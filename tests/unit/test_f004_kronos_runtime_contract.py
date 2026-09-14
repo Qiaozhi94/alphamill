@@ -21,8 +21,9 @@ from alphamill.kronos_service import kronos_real, server
 REQUIRED_FILES = ("model/kronos.py", "Kronos-base/config.json", "model.safetensors")
 
 
-def _fake_assets(tmp_path, *, repo=True, model_cfg=True, model_weights=True, tok_cfg=True,
-                 tok_weights=True):
+def _fake_assets(
+    tmp_path, *, repo=True, model_cfg=True, model_weights=True, tok_cfg=True, tok_weights=True
+):
     """按开关缺件的 fake 资产树：repo clone + 模型 + 分词器目录。"""
     repo_dir = tmp_path / "Kronos"
     (repo_dir / "model").mkdir(parents=True)

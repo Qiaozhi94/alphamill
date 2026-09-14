@@ -12,7 +12,6 @@ try:  # Package import is used by the host service; fallback keeps the legacy CL
     from .kronos_real import real_signal
 except ImportError:  # pragma: no cover - direct script compatibility only.
     import kronos_real
-
     from db_adapter import healthcheck, latest_ohlcv
     from generator import generate_placeholder_signal
     from kronos_real import real_signal
