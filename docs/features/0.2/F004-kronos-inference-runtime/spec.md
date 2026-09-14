@@ -23,7 +23,7 @@ updated: 2026-09-14
 - **功能类型**：backend / infra
 - **规格模式**：lite
 - **变更类型**：ADDED
-- **一句话意图**：把 Kronos 真实模型推理纳入 `deployment/` 编排（可选 profile），使 F001 AC-006 由一条手工命令变成编排内可复现的验收，并让 F002 导出的 `signals_log` 能承载真实信号而非 placeholder。
+- **一句话意图**：把 Kronos 真实模型推理纳入 `deployment/` 编排（可选 profile），使 F001 AC-006 由一条手工命令变成编排内可复现的验收，并在编排内提供可复用的真实信号源；消费者路由切换（Freqtrade 与 runtime snapshot 指向真实实例）不在本 feature 范围（见 §3）。
 
 ## 1. 问题、目标与非目标
 
@@ -46,9 +46,9 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### US-001：编排内取得真实信号（Priority: P2）
 
-作为 `量化研究员`，我希望 `用一条 compose 命令拉起真实 Kronos 推理`，以便 `AC-006 与 signals_log 的内容有效性不依赖任何仓外手工步骤`。
+作为 `量化研究员`，我希望 `用一条 compose 命令拉起真实 Kronos 推理`，以便 `AC-006 的真实推理证据不依赖任何仓外手工步骤，且真实信号源在编排内可复用`。
 
-**为什么是这个优先级**：F001 已用独立命令留档证据，不阻塞 M1 开工；但 F002 的 signals_log dataset 要有研究价值就需要它。
+**为什么是这个优先级**：F001 已用独立命令留档证据，不阻塞 M1 开工；F002 的 signals_log dataset 要有研究价值需要可复现的真实信号源（消费者接线见 §3 范围外）。
 
 **独立测试**：新 clone + 权重就位后，`docker compose --profile kronos-real up -d` 再跑 AC-006 命令全绿。
 
@@ -67,7 +67,9 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 ### 范围外
 
 - 权重与 vendor clone 的获取（F001 已有流程，仍不入库）；
-- GPU 直通（见非目标）。
+- GPU 直通（见非目标）；
+- 消费者路由切换：Freqtrade `KRONOS_SIGNAL_URL` 与 runtime snapshot `-KronosHostUrl` 仍指向 mock `:8001`；真实实例接线由后续评估决定（见 tasks §5）；
+- `signals_log` 内容的自动升级：本 feature 只提供真实信号源，不改变写入链路。
 
 ### 边界场景
 
@@ -114,14 +116,15 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 ### 依赖
 
 - 上游：F001（薄壳、权重流程、AC-006 命令）；
-- 下游消费者：F002 的 `signals_log` dataset 内容有效性。
+- 下游（非本 feature 承诺）：`signals_log` 内容真实化需消费者路由切换（范围外、后移）；FR3 评测台的真实 Kronos 信号输入在路由完成后成立。
 
 ### 决策与风险
 
 | 决策 / 风险 | 结论或缓解 | 理由 | 后续 |
 |---|---|---|---|
 | 做成可选 profile 而非默认服务 | 默认编排不含 torch 与权重挂载 | 只做数据桥的开发者不该背 torch 镜像体积 | 若真实信号成为常态再评估默认化 |
-| 是否阻塞 F002 done | **不阻塞**（2026-09-13 owner 裁决，见 §8 Q-001） | F002 只承诺导出管线正确，不承诺内容来自真实模型 | 代价已写进 F002 spec §6 限制说明；F004 落地后 signals_log 内容自动升级，无需 F002 返工 |
+| 是否阻塞 F002 done | **不阻塞**（2026-09-13 owner 裁决，见 §8 Q-001） | F002 只承诺导出管线正确，不承诺内容来自真实模型 | 代价已写进 F002 spec §6 限制说明；**F004 落地后 `signals_log` 不会自动升级**——runtime snapshot 与 Freqtrade 仍指向 mock `:8001`，路由切换后移（§3 范围外、tasks §5） |
+| 消费者路由（profile 启用时是否切换 Freqtrade / runtime snapshot） | 不接线，显式后移 | 路由切换改变默认链路可用性与跨 feature 契约，需独立评估 | v0.2.x 后续评估（tasks §5） |
 
 ## 8. 待确认问题
 

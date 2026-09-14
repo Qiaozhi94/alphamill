@@ -218,7 +218,7 @@ updated: 2026-09-14
 **done 时的已知限制(2026-09-13 裁决记录)**:F004(Kronos 真实推理运行时)不阻塞本 feature 收口,
 因此 F002 done 时湖内 `signals_log` 的内容预期仍以 `source=placeholder` 为主——**导出管线正确
 不等于内容可用于因子研究**。收口时验收证据必须如实记录该 dataset 的行数与 `source` 分布,
-不得以"五 dataset 齐备"含糊带过;F004 落地后内容自动升级,F002 无需返工。
+不得以"五 dataset 齐备"含糊带过;**勘正（2026-09-14，F004 设计检视 D001）**:F004 只交付编排内可复用的真实信号源,不自动升级 `signals_log` 内容——runtime snapshot 与 Freqtrade 仍指向 mock `:8001`,消费者路由切换不在 F004 范围（F004 spec §3）;本限制需待该路由另行评估后解除,不因 F004 落地自动消失。
 
 ### 收口复跑证据(2026-09-14,T021;WSL2 Ubuntu + docker-ce + TimescaleDB)
 
