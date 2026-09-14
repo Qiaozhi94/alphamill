@@ -2,7 +2,7 @@
 kind: feature
 id: F002
 version: "0.2"
-status: review
+status: done
 gate_version: 1
 related_features: [F001]
 topics: [data-bridge, parquet, duckdb, m1]
@@ -220,15 +220,20 @@ updated: 2026-09-14
 不等于内容可用于因子研究**。收口时验收证据必须如实记录该 dataset 的行数与 `source` 分布,
 不得以"五 dataset 齐备"含糊带过;F004 落地后内容自动升级,F002 无需返工。
 
-### 历史验收证据(2026-09-14 实测,WSL2 Ubuntu + docker-ce + TimescaleDB 631 万行生产库)
+### 收口复跑证据(2026-09-14,T021;WSL2 Ubuntu + docker-ce + TimescaleDB)
 
-本节数字来自上述具备 Docker/TimescaleDB 的验收环境，保留为历史证据；不能替代当前工作树的
-可复核结果。代码检视循环 10 的修复固化在 `/home/georg/projects/alphamill`、分支 `main`、
-提交 `ad09ff4`（第 1-2 轮）与其后的第 3 轮 Low 级修复序列；在该状态上执行
-`python3 tools/verify.py` 全部通过（`192 passed, 25 skipped`），其中 F002 真实数据库用例因
-当前用户无 Docker socket 权限而 skip，PowerShell 用例因本机未安装 PowerShell 7 而 skip。故本轮
-已复核单元/门禁，AC-001/005/006 等真实数据库/部署证据仍以具备服务的环境重新执行为准
-（跟踪条目见 `tasks.md` T021），不在此处虚构“本机全链路已复跑”。
+收口前在具备 docker + TimescaleDB 的收口环境重跑了 F002 集成套件（代码检视循环 10
+的修复已固化于 `main`）：
+
+- **F002 集成用例 15/15 全绿、零 skip**，含 AC-005 的
+  `tests/integration/test_f002_revision.py::test_full_export_removes_source_partition_and_records_removed`
+  ——即「full 模式不再继承基线」这一语义变更的真实数据库证据（F002-R2-06），以及收缩护栏
+  `--allow-shrink` 的放行/拒绝路径；
+- 全 `tests/integration` 套件 `22 passed, 1 skipped`，唯一 skip 为 F001 Kronos 真实模型用例
+  （需 `KRONOS_REQUIRE_REAL_MODEL=1` 与真实实例，不在 F002 范围）；
+- 命令：`ALPHAMILL_INTEGRATION=1 ALPHAMILL_REAL_LAKE_DIR=lake .venv/bin/python -m pytest tests/integration -q`。
+
+以下数字为首次验收环境（631 万行生产库）的实测记录，保留为规模证据；不替代上述收口复跑。
 
 - **端到端(AC-001/AC-002/AC-003)**:`lake/` 五 dataset 全量导出全部 `valid`,对账三项全 ok——
   ohlcv_1m 6,331,981 行/4,398 分区/184.5s(含逐分区 row_digest 对账);funding 13,152/4,386;
