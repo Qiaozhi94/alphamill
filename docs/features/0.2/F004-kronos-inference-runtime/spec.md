@@ -33,7 +33,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### 目标
 
-- `docker compose --profile kronos-real up` 后，真实模型实例在编排内可达且 `/predict` 返回 `source=kronos`；
+- `docker compose -f deployment/docker-compose.yml --profile kronos-real up` 后，真实模型实例在编排内可达且 `/predict` 返回 `source=kronos`；
 - F001 AC-006 的复跑不再依赖手工起进程。
 
 ### 非目标
@@ -50,11 +50,11 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 **为什么是这个优先级**：F001 已用独立命令留档证据，不阻塞 M1 开工；F002 的 signals_log dataset 要有研究价值需要可复现的真实信号源（消费者接线见 §3 范围外）。
 
-**独立测试**：新 clone + 权重就位后，`docker compose --profile kronos-real up -d` 再跑 AC-006 命令全绿。
+**独立测试**：新 clone + 权重就位 + DB 已迁移且目标 exchange/symbol 有 ≥30 根已闭合 1m K 线后，`docker compose -f deployment/docker-compose.yml --profile kronos-real up -d` 再跑 AC-006 命令全绿。
 
 **验收场景**：
 
-1. Given `vendor/Kronos 与 models/ 就位`，when `docker compose --profile kronos-real up -d`，then `/health` 的 `model_enabled=true` 且 `/predict` 返回 `source=kronos`。
+1. Given `vendor/Kronos 与 models/ 就位`，when `docker compose -f deployment/docker-compose.yml --profile kronos-real up -d`，then `/health` 的 `model_enabled=true` 且 `/predict` 返回 `source=kronos`。
 
 ## 3. 范围与边界
 
@@ -73,7 +73,8 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### 边界场景
 
-- 权重或 vendor 缺失：profile 启动即失败并打印缺失路径，不静默退回 mock。
+- 权重或 vendor 缺失：profile 启动即失败并打印缺失路径，不静默退回 mock；
+- 数据不足：目标 exchange/symbol 少于 30 根已闭合 1m K 线时 `/predict` 无有效输入（服务契约 `limit>=30` 之外还需 DB 有足够行），验收前置见 §7。
 
 ## 4. 需求
 
@@ -116,7 +117,8 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 ### 依赖
 
 - 上游：F001（薄壳、权重流程、AC-006 命令）；
-- 下游（非本 feature 承诺）：`signals_log` 内容真实化需消费者路由切换（范围外、后移）；FR3 评测台的真实 Kronos 信号输入在路由完成后成立。
+- 下游（非本 feature 承诺）：`signals_log` 内容真实化需消费者路由切换（范围外、后移）；FR3 评测台的真实 Kronos 信号输入在路由完成后成立；
+- 外部 / 环境依赖：`vendor/Kronos`（pin `67b630e`）+ `models/Kronos-base`、`models/Kronos-Tokenizer-base`（HF 下载，不入库）；执行机 docker-ce 可构建 torch CPU 镜像；DB 已迁移且目标 exchange/symbol 至少有 30 根已闭合 1m K 线（F001 回填产物）。
 
 ### 决策与风险
 
