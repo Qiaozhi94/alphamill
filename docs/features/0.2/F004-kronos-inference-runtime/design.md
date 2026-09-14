@@ -31,7 +31,17 @@ updated: 2026-09-12
 
 ## 2. 架构与模块边界
 
-沿用 F001 的 `src/alphamill/kronos_service/`，不新增模块；差异=镜像层与挂载 + 薄壳三处最小改造（启动预检、eager load、推理锁，见 §5）：容器内 `KRONOS_REPO_PATH=/app/vendor/Kronos`、`KRONOS_MODEL_PATH=/app/models/Kronos-base`。
+沿用 F001 的 `src/alphamill/kronos_service/`，不新增模块；差异=镜像层与挂载 + 薄壳三处最小改造（启动预检、eager load、推理锁，见 §5）。real 服务的容器挂载、环境变量与端口契约：
+
+| 项 | real 服务契约 |
+|---|---|
+| 构建目标 | `target: real`，`profiles: [kronos-real]` |
+| 挂载 | `../vendor/Kronos:/app/vendor/Kronos:ro`；`../models:/app/models:ro` |
+| KRONOS_REPO_PATH | `/app/vendor/Kronos` |
+| KRONOS_MODEL_PATH | `/app/models/Kronos-base` |
+| KRONOS_TOKENIZER_PATH | `/app/models/Kronos-Tokenizer-base` |
+| KRONOS_USE_REAL_MODEL / KRONOS_DEVICE | `true` / `cpu` |
+| 端口 | host `8002` → container `8001`（mock 保持 host `8001`，互不顶替） |
 
 **real 目标的依赖 pin（镜像内）**：`torch==2.14.0`（`--index-url https://download.pytorch.org/whl/cpu`，CPU wheel；与宿主 AC-006 实测同版）+ `einops==0.8.2`、`safetensors==0.8.0`、`huggingface_hub==1.31.0`、`tqdm==4.70.0`——pin 上游直接 import 的最小集（`model/kronos.py` 导入 torch/huggingface_hub/tqdm，`model/module.py` 导入 einops），版本取宿主 AC-006 实测集，以容器内真实权重加载验证后锁定；上游 `requirements.txt` 仅作参考。
 
@@ -59,6 +69,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 ## 7. 失败、恢复、安全与兼容
 
 - 权重、分词器或 vendor 缺失/加载失败 → **启动期**即非零退出并打印缺失路径，**不退回 mock**（退回会让 AC-006 假绿）；`restart: "no"` 使失败态保持可见；
+- 资产只读：`vendor/Kronos` 与 `models/` 以 `:ro` 挂载，容器不写宿主资产；
 - 镜像体积：real 目标（torch CPU wheel 约 200MB）仅在启用 profile 时构建；默认镜像（mock 目标）不含 torch，默认编排行为不变（NFR-001）。
 
 ## 8. 测试策略与验收映射
