@@ -187,6 +187,19 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 常绿且双向 fail-closed）** 与 **AC-006（真实推理证据，独立命令）**，验收范围不缩小：AC-006
 的证据即原 AC-002 的 T008 实测。AC-006 复跑命令（前置条件见 §7 依赖与 `vendor/VENDORED.md`）：
 
+**compose 形态（首选，F004 落地后）**：
+
+```bash
+# 拉起编排内真实实例（首启含 torch 镜像构建与模型加载，readiness 由 healthcheck 过门）
+docker compose -f deployment/docker-compose.yml --profile kronos-real up -d kronos-signal-real
+# 等待 /health 的 model_loaded=true 后跑冒烟
+ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 \
+  .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py -q
+docker compose -f deployment/docker-compose.yml --profile kronos-real down kronos-signal-real
+```
+
+**手工形态（无 docker / 镜像不可构建时的回退）**：
+
 ```bash
 # 宿主侧运行：DB_HOST 默认是 compose 服务名 timescaledb，宿主上解析不到，
 # 必须先载入 .env 并改指回环——与 deployment/f001-backfill-supervisor.sh 同一约定。
@@ -197,10 +210,9 @@ ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0
   .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py -q
 ```
 
-把真实推理纳入 compose（torch 进镜像 + 权重挂载，可选 profile `kronos-real`）已立为独立
-feature **F004**（`docs/features/0.2/F004-kronos-inference-runtime/`，draft）——原挂 F002 T014，
-但 F002 检视（F002-Q001）判定它不在数据桥契约内已移出。F004 落地后 AC-006 可由编排直接复跑；
-在此之前它是一条留档的显式命令，不是待办。
+F004 已把真实推理纳入 compose（torch 进镜像 + 权重挂载，可选 profile `kronos-real`，
+见 `docs/features/0.2/F004-kronos-inference-runtime/`）——原挂 F002 T014，但 F002 检视
+（F002-Q001）判定它不在数据桥契约内已移出。AC-006 复跑不再依赖手工起进程。
 
 **验收证据（2026-09-12）**：AC-001 `reports/f001-backfill-20260910.json` verdict=PASS（631 万行满窗，缺失率≤0.13%）+ `tests/integration/test_f001_row_reconciliation.py`；AC-002 `tests/integration/test_f001_kronos_smoke.py` 编排内契约与模式自洽通过（两个方向各经一次变异验证：声称 real 却回 placeholder 判红）；AC-006 同文件真实模型 CPU 推理通过（`KRONOS_REQUIRE_REAL_MODEL=1` + :8002 实例，1.76s/次，T008 记录）；AC-003 `tests/integration/test_f001_collector_smoke.py` 幂等复跑通过；AC-004 `tests/integration/test_f001_dryrun_monitoring.py` 3 passed + tasks T017 forceenter 双路径实测；AC-005 `deployment/verify.ps1` 退出码 0（26 项检查，含回填完整性阈值）。集成测试汇总：`ALPHAMILL_INTEGRATION=1 pytest tests/integration` → 7 passed 1 skipped（skip 项为 AC-006，需上面的显式命令；默认编排是 mock 实例）。
 

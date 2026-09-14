@@ -123,8 +123,34 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `NFR-001`): `--profile kronos-real` 拉起的实例由目标 compose 服务与 real 构建目标产生（容器身份、只读挂载、8002:8001 成立），且完整运行链（模型 + TimescaleDB）可用：model_enabled=true、/health 的 database 可达、/predict 返回 source=kronos；不带该 profile 时默认编排不启用也不构建 real 服务、默认镜像不含 torch — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/integration/test_f004_real_profile.py`
-- [ ] **AC-002** (`FR-001`): 失败关闭与串行推理——vendor/权重/分词器缺失或加载失败时 real 实例启动即非零退出并打印缺失路径（不退回 mock）；并发 `/predict` 下模型加载至多一次且推理互斥 — tests: `tests/unit/test_f004_kronos_runtime_contract.py`、`tests/integration/test_f004_real_profile.py`
+- [x] **AC-001** (`FR-001`, `NFR-001`): `--profile kronos-real` 拉起的实例由目标 compose 服务与 real 构建目标产生（容器身份、只读挂载、8002:8001 成立），且完整运行链（模型 + TimescaleDB）可用：model_enabled=true、/health 的 database 可达、/predict 返回 source=kronos；不带该 profile 时默认编排不启用也不构建 real 服务、默认镜像不含 torch — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/integration/test_f004_real_profile.py`
+- [x] **AC-002** (`FR-001`): 失败关闭与串行推理——vendor/权重/分词器缺失或加载失败时 real 实例启动即非零退出并打印缺失路径（不退回 mock）；并发 `/predict` 下模型加载至多一次且推理互斥 — tests: `tests/unit/test_f004_kronos_runtime_contract.py`、`tests/integration/test_f004_real_profile.py`
+
+### 验收证据（2026-09-15）
+
+- **取证机**：执行机 `qiaozhi-lt`（WSL2 + docker-ce），容器内 `torch=2.14.0+cpu`、
+  `/health` 的 `device=cpu`（CPU 推理，本 feature 不含 GPU 直通）。
+- **T008 验收命令**：`ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1
+  KRONOS_BASE_URL=http://127.0.0.1:8002 pytest tests/integration/test_f001_kronos_smoke.py
+  tests/integration/test_f004_real_profile.py -q` → **6 passed**（F001 冒烟 3 +
+  F004 容器集成 3）。真实实例先经 `docker compose --profile kronos-real up -d
+  kronos-signal-real` 拉起，`/health`：`status=ok, model_enabled=true, model_loaded=true,
+  device=cpu, database.total_rows=6346061`（latest candle 2026-09-14T17:35Z，lag 74s）；
+  `/predict BTC/USDT` → `source=kronos`、`model=/app/models/Kronos-base`、
+  `reason=kronos_base_pred_len_12_infer_2.032s`。
+- **失败关闭实测**：real 镜像以 `KRONOS_USE_REAL_MODEL=true` + 资产路径指向不存在处运行 →
+  uvicorn lifespan 预检失败，打印 `[kronos-real] missing asset: …` + `refusing to start`，
+  退出码非零，无可服务的 mock 降级实例（宿主侧同语义实测退出码 3）。
+- **默认镜像否证**：mock 目标镜像 `python -c "import torch"` 退出码非零（NFR-001）；
+  `docker compose config --services` 默认不含 `kronos-signal-real`、`--profile kronos-real`
+  时包含。
+- **门禁**：静态编排契约 16 项（含 13 项变异：改 target/派生、删依赖 pin、放开 `:ro`、
+  改 DB 接线、删 healthy 依赖/profile、改 restart、顶替端口 → 全部判红）；薄壳运行时
+  契约 8 项（含并发下加载至多一次 + 推理峰值并发 1）；收口时全量集成
+  `ALPHAMILL_INTEGRATION=1 ALPHAMILL_REAL_LAKE_DIR=<lake> pytest tests/integration -q`
+  通过（1 skip 为 F001 AC-006 的显式开关语义，预期行为）。
+- **实测勘误**：容器集成测试镜像引用采用 compose 默认命名（`<project>-<service>`）解析
+  ——buildkit 每次构建生成新 manifest list，容器 `.Image` 摘要在重建后悬空不可 `run`。
 
 ## 7. 测试、依赖与决策
 
