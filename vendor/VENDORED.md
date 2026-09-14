@@ -16,3 +16,18 @@
 
 > 服务薄壳（`src/alphamill/kronos_service/`）通过 `KRONOS_*` 环境变量指向 `models/` 路径；
 > GPU 未就绪时 `KRONOS_DEVICE=cpu`（spec FR-003 / T003 决策）。
+
+## 容器内路径（F004 real profile）
+
+`docker compose -f deployment/docker-compose.yml --profile kronos-real up -d` 拉起的
+`kronos-signal-real` 服务以只读挂载方式使用上述资产，容器内路径为：
+
+| 资产 | 容器内路径 | 环境变量 |
+|---|---|---|
+| Kronos 模型代码 | `/app/vendor/Kronos` | `KRONOS_REPO_PATH` |
+| Kronos-base 权重 | `/app/models/Kronos-base` | `KRONOS_MODEL_PATH` |
+| Kronos-Tokenizer-base 权重 | `/app/models/Kronos-Tokenizer-base` | `KRONOS_TOKENIZER_PATH` |
+
+权重与 vendor 均 `:ro` 挂载，容器不写宿主资产；real 实例监听宿主 `8002`（容器内
+8001），与默认 mock 实例（`8001`）并存。真实推理默认不启动、不构建（torch CPU 依赖
+在镜像 `real` 目标内），消费者路由仍指向 mock，见 F004 spec §3。
