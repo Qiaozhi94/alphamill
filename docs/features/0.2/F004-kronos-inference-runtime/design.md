@@ -63,7 +63,14 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
-| `AC-001` | integration | `tests/integration/test_f001_kronos_smoke.py` | profile 实例 model_enabled=true 且 source=kronos；默认 compose 配置不含 torch 层与权重挂载 |
+| `AC-001` | 静态契约（unit，CI 常绿） | `tests/unit/test_f004_compose_profile_contract.py` | Dockerfile 有 mock/real 目标且 real 锁定依赖 pin；real 服务 profiles/只读挂载/端口/环境正确；默认 compose 配置不含 real 服务 |
+| `AC-001` | 容器集成（执行机） | `tests/integration/test_f004_real_profile.py` | compose 拉起后容器身份成立（compose 托管 + real 目标 + 只读挂载 + 8002:8001）且 `/predict source=kronos`；默认镜像 `import torch` 判红 |
+| `AC-002` | 单元 | `tests/unit/test_f004_kronos_runtime_contract.py` | 缺资产/加载失败 → 非零退出且不退回 mock（fake 目录注入）；并发请求加载至多一次、推理互斥 |
+| `AC-002` | 容器集成（执行机） | `tests/integration/test_f004_real_profile.py` | 缺资产场景以非零退出结束并在日志保留缺失路径；不产生可服务的 mock 降级实例 |
+| HTTP 契约（F001 AC-002/006 复用） | integration | `tests/integration/test_f001_kronos_smoke.py` | 保留：`source` 与 `model_enabled` 自洽（两方向判红）；不承担部署形态证明 |
+
+- 容器集成测试遵循 F001 冒烟同款开关语义：未设 `ALPHAMILL_INTEGRATION` 时 skip；设了开关而服务/容器不可达时判红，不得以 skip 代替证据。
+- 每道新门禁（静态契约、容器集成）做一次变异验证：改 target、删依赖 pin、放开 `:ro` 必须判红。
 
 ## 9. 已确认决策与残余风险
 
