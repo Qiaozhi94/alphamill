@@ -8,7 +8,7 @@ related_features: [F001, F002]
 topics: [kronos, inference, deployment]
 doc_kind: spec
 created: 2026-09-12
-updated: 2026-09-14
+updated: 2026-09-15
 ---
 
 # F004：Kronos 真实推理运行时（编排内可复现）
@@ -61,7 +61,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 ### 范围内
 
 - `deployment/kronos-service.Dockerfile` 拆 `mock`（保持现状、不含 torch）与 `real` 两个构建目标，compose 两个服务各自显式声明 target；real 目标含 torch CPU wheel + einops + safetensors + huggingface_hub + tqdm（版本与 wheel 来源在 design 锁定）；
-- compose 增 `kronos-signal-real` 服务（`profiles: [kronos-real]`）：只读挂载 `vendor/Kronos` 与 `models/`（`:ro`），`KRONOS_USE_REAL_MODEL=true`，host 8002 → container 8001；
+- compose 增 `kronos-signal-real` 服务（`profiles: [kronos-real]`）：只读挂载 `vendor/Kronos` 与 `models/`（`:ro`），`KRONOS_USE_REAL_MODEL=true`，host 8002 → container 8001，与 mock 相同的 DB 环境、`depends_on: timescaledb: {condition: service_healthy}` 与 `alphamill` 网络；
 - F001 AC-006 的复跑命令改为 compose 形态并回写 F001 spec §6。
 
 ### 范围外
@@ -123,7 +123,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `NFR-001`): `--profile kronos-real` 拉起的实例由目标 compose 服务与 real 构建目标产生（容器身份、只读挂载、8002:8001 成立），model_enabled=true 且 /predict 返回 source=kronos；不带该 profile 时默认编排不启用也不构建 real 服务、默认镜像不含 torch — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/integration/test_f004_real_profile.py`
+- [ ] **AC-001** (`FR-001`, `NFR-001`): `--profile kronos-real` 拉起的实例由目标 compose 服务与 real 构建目标产生（容器身份、只读挂载、8002:8001 成立），且完整运行链（模型 + TimescaleDB）可用：model_enabled=true、/health 的 database 可达、/predict 返回 source=kronos；不带该 profile 时默认编排不启用也不构建 real 服务、默认镜像不含 torch — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/integration/test_f004_real_profile.py`
 - [ ] **AC-002** (`FR-001`): 失败关闭与串行推理——vendor/权重/分词器缺失或加载失败时 real 实例启动即非零退出并打印缺失路径（不退回 mock）；并发 `/predict` 下模型加载至多一次且推理互斥 — tests: `tests/unit/test_f004_kronos_runtime_contract.py`、`tests/integration/test_f004_real_profile.py`
 
 ## 7. 测试、依赖与决策
@@ -132,7 +132,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 - **静态编排契约（单元，CI 常绿）**：`tests/unit/test_f004_compose_profile_contract.py`——Dockerfile mock/real 目标与依赖 pin、compose real 服务的 profile/挂载/端口/环境、默认配置不含 real 服务；
 - **薄壳运行时契约（单元，CI 常绿）**：`tests/unit/test_f004_kronos_runtime_contract.py`——缺资产启动失败关闭、模型加载至多一次、推理互斥；
-- **容器集成（执行机）**：`tests/integration/test_f004_real_profile.py`——构建 real 目标并拉起 profile，校验容器身份（compose 托管 + real 目标 + 只读挂载 + 8002:8001）与 `source=kronos`；缺资产场景非零退出；默认镜像 `import torch` 判红；开关语义与 F001 冒烟一致（未设 `ALPHAMILL_INTEGRATION` 时 skip、设了不可达判红）；
+- **容器集成（执行机）**：`tests/integration/test_f004_real_profile.py`——构建 real 目标并拉起 profile，校验容器身份（compose 托管 + real 目标 + 只读挂载 + 8002:8001）与完整运行链（模型 + TimescaleDB）：`/health` 的 `database` 可达且 `/predict` 返回 `source=kronos`；缺资产场景非零退出；默认镜像 `import torch` 判红；开关语义与 F001 冒烟一致（未设 `ALPHAMILL_INTEGRATION` 时 skip、设了不可达判红）；
 - F001 的 `test_f001_kronos_smoke.py` 保留 HTTP 契约职责（`source` 与 `model_enabled` 自洽、两方向判红），不再单独承担部署形态证明；
 - **取证纪律**：容器与集成证据必须在执行机 `qiaozhi-lt` 采集并记录 hostname 与 `device=cpu`（SOP §3、架构 §7.1）；开发机只跑静态与单元门禁，开发机 skip 不算证据。
 

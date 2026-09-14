@@ -6,7 +6,7 @@ related_features: [F001, F002]
 topics: [kronos, inference, deployment]
 doc_kind: design
 created: 2026-09-12
-updated: 2026-09-14
+updated: 2026-09-15
 ---
 
 # F004：Kronos 真实推理运行时 - 设计
@@ -41,7 +41,12 @@ updated: 2026-09-14
 | KRONOS_MODEL_PATH | `/app/models/Kronos-base` |
 | KRONOS_TOKENIZER_PATH | `/app/models/Kronos-Tokenizer-base` |
 | KRONOS_USE_REAL_MODEL / KRONOS_DEVICE | `true` / `cpu` |
+| DB 环境（同 mock 服务） | `DB_HOST: timescaledb`、`DB_PORT: 5432`、`DB_USER`/`DB_PASSWORD`/`DB_NAME`（`${DB_*:-...}` 默认值与 compose 其余服务一致） |
+| 服务依赖 | `depends_on: timescaledb: {condition: service_healthy}` |
+| 网络 | `networks: [alphamill]` |
 | 端口 | host `8002` → container `8001`（mock 保持 host `8001`，互不顶替） |
+
+运行链为 compose → real 容器（模型）→ TimescaleDB（healthy）→ HTTP：`/health` 的 `database` 段与 `/predict` 的 OHLCV 读取都要求 DB 可达；凭据、健康依赖或网络任一缺失都会让实例在就绪/预测时失败，由静态与容器门禁双向锁定（§8）。
 
 **real 目标的依赖 pin（镜像内）**：`torch==2.14.0`（`--index-url https://download.pytorch.org/whl/cpu`，CPU wheel；与宿主 AC-006 实测同版）+ `einops==0.8.2`、`safetensors==0.8.0`、`huggingface_hub==1.31.0`、`tqdm==4.70.0`——pin 上游直接 import 的最小集（`model/kronos.py` 导入 torch/huggingface_hub/tqdm，`model/module.py` 导入 einops），版本取宿主 AC-006 实测集，以容器内真实权重加载验证后锁定；上游 `requirements.txt` 仅作参考。
 
@@ -76,8 +81,8 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
-| `AC-001` | 静态契约（unit，CI 常绿） | `tests/unit/test_f004_compose_profile_contract.py` | Dockerfile 有 mock/real 目标且 real 锁定依赖 pin；real 服务 profiles/只读挂载/端口/环境正确；默认 compose 配置不含 real 服务 |
-| `AC-001` | 容器集成（执行机） | `tests/integration/test_f004_real_profile.py` | compose 拉起后容器身份成立（compose 托管 + real 目标 + 只读挂载 + 8002:8001）且 `/predict source=kronos`；默认镜像 `import torch` 判红 |
+| `AC-001` | 静态契约（unit，CI 常绿） | `tests/unit/test_f004_compose_profile_contract.py` | Dockerfile 有 mock/real 目标且 real 锁定依赖 pin；real 服务 profiles/只读挂载/端口/KRONOS_* 与 DB 环境/healthy 依赖/网络正确；默认 compose 配置不含 real 服务 |
+| `AC-001` | 容器集成（执行机） | `tests/integration/test_f004_real_profile.py` | compose 拉起后容器身份成立（compose 托管 + real 目标 + 只读挂载 + 8002:8001），完整运行链（模型 + TimescaleDB）可用：`/health` 的 `database` 可达、`/predict source=kronos`；默认镜像 `import torch` 判红 |
 | `AC-002` | 单元 | `tests/unit/test_f004_kronos_runtime_contract.py` | 缺资产/加载失败 → 非零退出且不退回 mock（fake 目录注入）；并发请求加载至多一次、推理互斥 |
 | `AC-002` | 容器集成（执行机） | `tests/integration/test_f004_real_profile.py` | 缺资产场景以非零退出结束并在日志保留缺失路径；不产生可服务的 mock 降级实例 |
 | HTTP 契约（F001 AC-002/006 复用） | integration | `tests/integration/test_f001_kronos_smoke.py` | 保留：`source` 与 `model_enabled` 自洽（两方向判红）；不承担部署形态证明 |
