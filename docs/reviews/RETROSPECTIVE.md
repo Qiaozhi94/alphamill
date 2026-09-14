@@ -335,3 +335,79 @@
 1. 三项均为 `cross-doc-contract-drift`：新增 ADR/AC 时应在同一批次检查来源区、design 验收映射和 tasks 显式 ID 三个落点。
 2. origin 分布为规格漂移 3；三项均跨一轮修复，第二轮 diff-only 未产生新问题。
 3. 裁决分布：fixed 3、partial/rejected/tracked 0；建议命中率 100%，修复严格限定为追踪补齐，没有借机扩大 F002 范围。
+
+---
+
+## 循环 10：F002 数据桥实现代码检视
+
+- report_type: code-review（round 1）→ fix-verification（round 2、3）| 状态: 闭环
+- 日期：2026-09-14 | 基线：`569359b` →（re-baseline）`ad09ff4` → 第 3 轮修复序列
+- 范围：`src/alphamill/data_bridge/` 全部 F002 新增模块 + `tests/{unit,integration}/test_f002_*` +
+  三件套与调度/备份脚本；不含 F001 采集器（collector/）与历史评测脚本。
+- 结论：27 条发现中 25 条 fixed、1 条 partial（R2-01，带可核对理由）、1 条 tracked（R2-06 → `tasks.md` T021）。
+  Critical 0 / High 0 收口。本地 `python3 tools/verify.py` 全绿（`192 passed, 25 skipped`）；
+  F002 真实数据库用例因当前用户无 docker socket 权限全部 skip，该缺口由 T021 承接，未以 skip 充作证据。
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F002-C001 | signals_log 的 skipped 把有数据的日期也登记进去（`dim_of` 恒返三元组，查表却用空元组） | high | 正确性 | 根因 | 原始编码 | fixed | 非 pair 分支改用 `dim_of({})` 查表并补回归测试 | 两处查表键改为 `non_pair_dim = dim_of({})` | test_f002_partitions.py::test_non_pair_empty_cells_use_data_dates_not_an_unreachable_dimension | 1 | 3 | key-shape-mismatch |
+| F002-C002 | signals_log 同日多 symbol 重复写 N 个整日分区，N-1 个立即成孤儿 | medium | 正确性 | 根因 | 原始编码 | fixed | group_cols 由 spec.partition_keys 推导 | discover_cells 按 partition_keys 分组；非 pair dataset 不拼 db_symbol | test_f002_partitions.py 两条 | 1 | 2 | key-shape-mismatch |
+| F002-C003 | full 模式对源端已删除分区无感知，仍继承并声明 reconcile ok | medium | 正确性 | 根因 | 原始编码 | fixed | 判 removed 写进 revision_diff；是否移出 partitions 交 owner 裁决 | full 不继承基线，版本组成=本轮源库结果（`merge_partitions`），design §3 同步 | test_f002_exporter.py + test_f002_revision.py::test_full_export_removes_source_partition_and_records_removed | 1 | 2 | inherit-without-reverify |
+| F002-C004 | reader 每次读取都对全清单分区做 sha256，查一天也要 hash 整个湖 | medium | 质量 | 根因 | 原始编码 | fixed | 只校验本次 selected 分区 | validate_manifest_integrity 增 partitions 形参，reader 传 selected | test_f002_manifest.py::test_integrity_can_validate_only_reader_selected_partitions | 1 | 3 | whole-scan-on-hot-path |
+| F002-C005 | 质量旗 lake_pair 反查失败静默降级为 warning，带旗分区默认拒绝随之失效 | medium | 正确性 | 根因 | 原始编码 | fixed | 抛错并补「映射缺失→导出判红」测试 | quality_flags 改抛 DataBridgeError（退出码 2） | test_f002_partitions.py::test_quality_flag_without_symbol_mapping_fails_closed | 1 | 3 | silent-safety-downgrade |
+| F002-Q001 | AC-006 真实湖用例恒 skip，且唯一断言 `or True` 恒真 | medium | 测试覆盖 | 根因 | 原始编码 | fixed | 删 `or True`；改用独立环境变量 | ALPHAMILL_REAL_LAKE_DIR 开关 + 删恒真断言（后续见 R3-01） | 用例自身（本轮以构造湖实跑，含判红变异） | 1 | 3 | vacuous-assertion |
+| F002-Q002 | uv.lock 缺 duckdb/pyarrow，按 lock 复现环境跑不起 F002 | medium | 质量 | 根因 | 规格漂移 | fixed | 重生成 lock 或移除该文件 | uv.lock 重新生成，含两个新增运行时依赖 | lock 内容核对 | 1 | 3 | lockfile-drift |
+| F002-Q003 | row_digest 聚合层有两份实现 | low | 质量 | 根因 | 原始编码 | fixed | 委托 digest.row_digest | row_digest_of_rows 改为直接委托 | 既有 digest 用例 | 1 | 3 | duplicate-authority |
+| F002-Q004 | staging 目录硬编码 "current" 与 design 不符 | low | 质量 | 根因 | 规格漂移 | fixed | 传真实 data_version 或改 design | design §3 跟随实现 | 文档一致性 | 1 | 2 | — |
+| F002-Q005 | begin_snapshot_tx 依赖 psycopg2 隐式 BEGIN 的副作用 | low | 质量 | 根因 | 原始编码 | fixed | 改用 set_session | set_session + 新增 reset_snapshot_session | test_f002_reconcile.py::test_snapshot_transaction_sets_and_restores_session_defaults | 1 | 3 | fragile-by-construction |
+| F002-Q006 | CLI/symbol_map 自建的 DB 连接不关闭 | low | 质量 | 根因 | 原始编码 | fixed | try/finally 关闭 | export_symbol_map 加 own_conn + try/finally | 结构性 | 1 | 2 | — |
+| F002-Q007 | 测试文件底部 `_conn_kwargs_shim` 死代码 | low | 质量 | 根因 | 原始编码 | fixed | 删除 | 已删除 | — | 1 | 3 | — |
+| F002-Q008 | reader docstring 的时间过滤语义自相矛盾 | low | 质量 | 根因 | 原始编码 | fixed | 改为「end 不含」 | 已改 | — | 1 | 3 | — |
+| F002-Q009 | 定时导出覆写 git 跟踪的 symbol_map.csv，每晚弄脏工作树 | low | 质量 | 症状 | 规格漂移 | fixed | owner 裁决 current 副本落点 | current 副本改址 lake/_metadata/，集成 §2.2 / design §4 / tasks T005 同步 | test_f002_symbol_map.py | 1 | 3 | runtime-writes-into-source-tree |
+| F002-P001 | spec §6 的验收证据在当前工作树/当前用户下全部不可复现 | high | 测试覆盖 | 根因 | 流程缺陷 | fixed | 在收口机器重跑，或写明证据所属环境 | §6 改标「历史验收证据」+ 环境归属 + 如实声明未复跑项，真实 DB 证据转 T021 | 文档如实性 | 1 | 3 | evidence-not-reproducible |
+| F002-P002 | `.codegraph` 不可读软链使本工作树 pytest / verify.py 完全无法运行 | high | 测试覆盖 | 根因 | 流程缺陷 | fixed | 绕开 collection root | verify.py 限定 `--rootdir=tests --confcutdir=tests` + 显式测试目录 | 门禁自身可运行即证据 | 1 | 2 | gate-cannot-run |
+| F002-R2-01 | 修复未走 FIX-log/commit 流程，多条 finding 无处置声明 | high | 测试覆盖 | 根因 | 流程缺陷 | partial(见裁决记录) | 补 FIX-log 证据三件套 + 按 finding 拆提交 | FIX-log 补齐五项；提交粒度未拆，理由经核对成立 | — | 2 | 3 | fix-without-declaration |
+| F002-R2-02 | full 不继承基线后，空源库/截断窗口会发布 valid 空版本并成 latest | medium | 正确性 | 根因 | 修改引入 | fixed | 收缩阈值 fail-closed + owner 裁决归档语义 | `guard_full_shrink` 三条拒绝路径 + spec/design 同步 | test_f002_exporter.py 两条 shrink guard 用例 | 2 | 3 | fail-open-on-empty-source |
+| F002-R2-03 | signals_log symbol 被当 spot 并入映射，永续 symbol 一出现即碰撞阻断全部导出 | medium | 正确性 | 根因 | 修改引入 | fixed | registry 显式标注是否参与映射 | 新增 `symbol_map_enabled`，signals_log=False | test_f002_symbol_map.py::test_signals_log_symbols_do_not_assume_spot_market_type | 2 | 3 | market-type-inference-gap |
+| F002-R2-04 | 本地门禁红：F001 entrypoint 用例依赖裸 `python` 可执行名 | medium | 测试覆盖 | 根因 | 原始编码 | fixed | 改 python3 或注入 PATH 垫片 | freqtrade-entrypoint.sh 改 `python3` | test_f001_credentials.py 由红转绿 | 2 | 3 | host-dependent-test |
+| F002-R2-05 | publish_manifest / symbol_map artifact 改用 os.link，隐含硬链接文件系统前提 | low | 质量 | 根因 | 修改引入 | fixed | OSError 回退 O_EXCL 或写死前提 | EXDEV/EPERM/EOPNOTSUPP 回退 O_EXCL + fsync，design 记录 | test_f002_manifest.py / test_f002_symbol_map.py 两条 fallback 用例 | 2 | 3 | hidden-platform-assumption |
+| F002-R2-06 | full 模式语义变更缺真实数据库证据 | medium | 测试覆盖 | 根因 | 修改引入 | tracked(T021) | 有 DB 环境跑集成套件 + 补 removed 用例 | 集成用例已补，执行落 tasks.md T021（带 AC） | test_f002_revision.py::test_full_export_removes_source_partition_and_records_removed（待执行） | 2 | — | contract-change-untested |
+| F002-R3-01 | 去掉 `or True` 后换成断言 `Path.glob` 枚举顺序，真实湖上大概率假红 | low | 测试覆盖 | 根因 | 修改引入 | fixed | 改断言版本名可解析 | 逐个 `mf.parse_data_version` 解析 + 文件名唯一性 | 同上用例（构造湖实跑：合法 passed / 非法文件名判红） | 3 | 3 | assertion-asserts-wrong-property |
+| F002-R3-02 | 收缩护栏只有拒绝路径，缺「人工确认后放行」的执行通道 | low | 质量 | 根因 | 修改引入 | fixed | 加 `--allow-shrink` 显式确认并留痕 | CLI `--allow-shrink` → `allow_shrink=True`，manifest 记 `shrink_confirmed`；窗口截断不在确认范围 | test_f002_exporter.py::test_shrink_guard_can_be_confirmed_but_window_truncation_never_is + test_f002_cli_contract.py::test_allow_shrink_flag_is_forwarded_to_exporter | 3 | 3 | guard-without-escape-hatch |
+| F002-R3-03 | 旧 `src/alphamill/data_bridge/symbol_map.csv` 仍被 git 跟踪但已无人读写 | low | 质量 | 根因 | 修改引入 | fixed | `git rm` + 旧引用加改址说明 | 文件删除；F001 design 旧路径处补一行改址（不改写原句） | 全套件绿 | 3 | 3 | orphaned-artifact |
+| F002-R3-04 | `finally` 里的 reset_snapshot_session 会用二次异常覆盖原始导出异常 | low | 质量 | 根因 | 修改引入 | fixed | 吞掉清理期的 psycopg2.Error | reset_snapshot_session 捕获 psycopg2.Error 降级为 warning | test_f002_reconcile.py + test_f002_exporter.py 两条（变异验证：还原旧实现判红） | 3 | 3 | finally-masks-original-error |
+| F002-R3-05 | FIX-log 与 spec §6 记录的 HEAD 是父提交而非固化提交 | low | 质量 | 根因 | 流程缺陷 | fixed | 回写正确哈希 | §6 与 FIX-log 改指 `ad09ff4` + 第 3 轮序列，并补 T021 指针 | 文档如实性 | 3 | 3 | stale-evidence-pointer |
+
+### 循环 10 模式教训
+
+1. **`key-shape-mismatch` 出现两次（C001/C002），根子是同一个**：`signals_log` 是唯一没有
+   pair 维度的 dataset，凡是「按维度分组/按维度查表」的代码都对它走了另一条分支，而测试
+   种子数据恰好每天只有一个 symbol、每个日期只出现一次，两条分支的错误都测不出来。
+   教训：**registry 里任何一个"形状特例"，测试种子必须专门造出能区分它的数据**。
+2. **origin 分布：原始编码 12 / 修改引入 8 / 流程缺陷 4 / 规格漂移 3。**「修改引入」占到
+   30%，且集中在第 2 轮那次大范围加固——一次性提交 15 改 + 5 新增、没有按 finding 拆分时，
+   自伤率明显高于小步修复。这条直接支撑 skill 的「一 finding 一 commit」。
+3. **同一处代码连续两轮出缺陷（Q001 → R3-01）**：第一轮是恒真断言 `or True`，修复时去掉了
+   `or True` 却换上了「断言 `Path.glob` 枚举顺序」这个同样不成立的性质。教训：**把恒真断言
+   改成"有内容的断言"时，要先问这个性质是否真的被保证**，否则只是把空转换成假红。
+4. **最长存活 2 轮，持有者是 C001**——它在第 2 轮被声明修复但代码一行没动。检视方靠第 1 轮
+   留下的离线探针一跑即戳破。教训：**发现缺陷时顺手留一个可重跑的最小复现脚本**，比任何
+   文字描述都更能防住"口头已修复"。
+5. **门禁真的会咬人**：第 3 轮加 `--allow-shrink` 把 exporter.py 顶到 358 行，
+   `test_f001_line_limit_exemptions` 当场判红。豁免表只对 F001 原样迁移文件有效，新代码
+   不得挂靠，于是按 SOP 拆出 `export_policy.py`。这是本循环里门禁阻止范围蔓延的正面案例。
+
+### 循环 10 裁决分布与建议命中率
+
+- fixed 25 / partial 1 / rejected 0 / tracked 1 / carried-forward 0（共 27 条）。
+- 唯一 partial 为 R2-01：FIX-log 补齐部分接纳并核对通过；「一 finding 一 commit」部分不接纳，
+  理由「起始工作树无可还原的 commit 历史」经核对成立（检视方第 2 轮亲见起始态为未提交工作树、
+  HEAD 仍是 569359b）。剩余载体=后续轮次必须按 finding 拆提交，第 3 轮已按此执行（5 条修复
+  拆成 5 个提交）。
+- 建议命中率约 93%（25/27 实质采纳 `suggested_fix`）。两处偏差都有价值：
+  C003 的建议是「判 removed + 是否移出 partitions 交 owner 裁决」，实现直接取了"移出"，
+  由此产生 R2-02；Q001 的建议被字面执行后产生 R3-01。**教训：检视建议不能只写"做什么"，
+  涉及语义变更时要同时写清"这么做会打开哪个新口子"**，否则建议本身就是下一条 finding 的来源。
+- 全接纳率 96% 需警惕"检视在凑数"的反向信号；本循环的对冲证据是：8 条为修改引入（首轮
+  物理上不存在）、1 条第 2 轮被误报已修复后在第 3 轮才真正关闭、1 条转 tracked 而非硬关，
+  说明发现具备实质性而非形式化。

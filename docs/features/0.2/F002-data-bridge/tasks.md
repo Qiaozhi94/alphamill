@@ -56,6 +56,8 @@ updated: 2026-09-13
 
 ## 3. 验证与验收任务
 
+- [ ] T021 (`FR-001`, `FR-005`, `AC-005`, `AC-006`): 在具备 docker + TimescaleDB 的环境重跑 F002 集成套件，为「full 模式不再继承基线」的语义变更与收缩护栏补齐真实数据库证据（代码检视循环 10 / F002-R2-06；当前工作树无 docker socket 权限，单元与门禁已绿但集成用例全部 skip） — verify: `ALPHAMILL_INTEGRATION=1 ALPHAMILL_REAL_LAKE_DIR=<真实湖> .venv/bin/python -m pytest tests/integration -q` 全绿且不出现 skip，其中必须包含 `test_f002_revision.py::test_full_export_removes_source_partition_and_records_removed`；结果回写 spec §6 验收证据并注明所属环境
+
 - [x] T011 (`FR-001`,`FR-002`,`FR-003`): 端到端验收——全量导出 → DuckDB 取数对账 → invalid 拒绝,记录全量导出耗时 — verify: `tests/integration/test_f002_export_reconcile.py` + `test_f002_reader.py` 全绿
 - [x] T012 (`FR-001`..`FR-006`): 全量集成测试 + 统一质量门 — verify: `.venv/bin/python -m pytest tests/integration -q` 与 `python3 tools/verify.py` 全绿
 - [x] T013: 回写 spec 验收证据、BACKLOG 状态与设计决策沉淀(DQ-003 处置结论) — verify: `python tools/validate_spec_lifecycle.py`

@@ -223,11 +223,12 @@ updated: 2026-09-14
 ### 历史验收证据(2026-09-14 实测,WSL2 Ubuntu + docker-ce + TimescaleDB 631 万行生产库)
 
 本节数字来自上述具备 Docker/TimescaleDB 的验收环境，保留为历史证据；不能替代当前工作树的
-可复核结果。本轮修复在 `/home/georg/projects/alphamill`、分支 `main`、HEAD `569359b` 的
-本地环境执行 `python3 tools/verify.py`：`188 passed, 25 skipped`，其中 F002 真实数据库用例因
+可复核结果。代码检视循环 10 的修复固化在 `/home/georg/projects/alphamill`、分支 `main`、
+提交 `ad09ff4`（第 1-2 轮）与其后的第 3 轮 Low 级修复序列；在该状态上执行
+`python3 tools/verify.py` 全部通过（`192 passed, 25 skipped`），其中 F002 真实数据库用例因
 当前用户无 Docker socket 权限而 skip，PowerShell 用例因本机未安装 PowerShell 7 而 skip。故本轮
-已复核单元/门禁，AC-001/005/006 等真实数据库/部署证据仍以具备服务的环境重新执行为准，不在此处
-虚构“本机全链路已复跑”。
+已复核单元/门禁，AC-001/005/006 等真实数据库/部署证据仍以具备服务的环境重新执行为准
+（跟踪条目见 `tasks.md` T021），不在此处虚构“本机全链路已复跑”。
 
 - **端到端(AC-001/AC-002/AC-003)**:`lake/` 五 dataset 全量导出全部 `valid`,对账三项全 ok——
   ohlcv_1m 6,331,981 行/4,398 分区/184.5s(含逐分区 row_digest 对账);funding 13,152/4,386;
