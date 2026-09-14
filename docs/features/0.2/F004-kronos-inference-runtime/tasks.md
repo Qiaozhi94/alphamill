@@ -43,12 +43,12 @@ updated: 2026-09-15
 
 - [ ] T005 (`AC-001`): 静态门禁补全与变异验证：默认配置不含 real 服务、mock 目标不含 torch、real 含 DB 接线；变异验证（改 target、删依赖 pin、去掉 `:ro`、删 DB 依赖必须判红） — verify: `tests/unit/test_f004_compose_profile_contract.py` 全绿 + 变异记录
 - [ ] T006 (`AC-001`, `AC-002`): 容器集成测试：compose 拉起 real 实例后校验容器身份（compose 托管 + real 目标 + 只读挂载 + 端口映射）与完整运行链（模型 + TimescaleDB：`/health` 的 `database` 可达 + `/predict source=kronos`）；缺资产场景非零退出；默认镜像 `import torch` 判红 — verify: `tests/integration/test_f004_real_profile.py`
-- [ ] T007 (`FR-001`): 回写 F001 spec §6 的 AC-006 复跑命令为 compose 形态，并保留手工形态作为无 docker 时的回退 — verify: `python3 tools/verify.py`
-- [ ] T008 (`FR-001`): 更新 `vendor/VENDORED.md`：补容器内路径（`/app/vendor/Kronos`、`/app/models/Kronos-base`、`/app/models/Kronos-Tokenizer-base`）与 real profile 说明 — verify: `grep -n "/app/vendor/Kronos" vendor/VENDORED.md`
+- [ ] T007 (`FR-001`): 更新 `vendor/VENDORED.md`：补容器内路径（`/app/vendor/Kronos`、`/app/models/Kronos-base`、`/app/models/Kronos-Tokenizer-base`）与 real profile 说明 — verify: `grep -n "/app/vendor/Kronos" vendor/VENDORED.md`
 
 ## 3. 验证与验收任务
 
-- [ ] T009 (`AC-001`, `AC-002`): 在执行机 `qiaozhi-lt` 跑集成验收：F001 冒烟（HTTP 契约）+ F004 容器集成 + 默认镜像否证，证据记录 hostname 与 `device=cpu` — verify: `ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py tests/integration/test_f004_real_profile.py -q`
+- [ ] T008 (`AC-001`, `AC-002`): 在执行机 `qiaozhi-lt` 跑集成验收：F001 冒烟（HTTP 契约）+ F004 容器集成 + 默认镜像否证，证据记录 hostname 与 `device=cpu` — verify: `ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py tests/integration/test_f004_real_profile.py -q`
+- [ ] T009 (`FR-001`): 回写 F001 spec §6 的 AC-006 复跑命令为 compose 形态，并保留手工形态作为无 docker 时的回退 — verify: `python3 tools/verify.py`
 - [ ] T010 (`AC-001`): 回写 spec §6 验收证据（命令、输出摘要、取证机 hostname、device） — verify: `python3 tools/verify.py`（文档门禁）
 - [ ] T011 (`AC-001`, `NFR-001`): 运行项目统一质量门并全绿 — verify: `python3 tools/verify.py`
 - [ ] T012: 状态推进（spec frontmatter）与 BACKLOG 同步 — verify: `python3 tools/verify.py`（含生命周期与 BACKLOG 双向校验）
@@ -60,8 +60,10 @@ updated: 2026-09-15
 - `T003 -> T004`：compose `target` 依赖 Dockerfile 目标定义。
 - `T003/T004 -> T005`：静态门禁在全量断言（含默认隔离）与变异验证后定稿。
 - `T002/T005 -> T006`：容器集成建立在薄壳行为与静态契约通过之上。
-- `T006 -> T007/T008`：文档回写以实测通过/契约成立为前提；二者修改不同文件，顺序无关。
-- `T007/T008 -> T009 -> T010 -> T011 -> T012`：验收链顺序执行（实测 → 证据回写 → 全量门禁 → 状态/BACKLOG 同步）。
+- `T006 -> T007`：VENDORED.md 容器路径回写以编排与薄壳契约定稿为前提（不依赖实测）。
+- `T006 -> T008`：执行机实测以容器集成测试定稿为前提（其依赖闭包已含全部实现与门禁任务）。
+- `T008 -> T009/T010`：F001 命令回写与 F004 验收证据回写都以执行机实测通过为前提；二者修改不同文件，顺序无关。
+- `T007/T009/T010 -> T011 -> T012`：全量门禁覆盖全部回写后执行；状态/BACKLOG 同步以门禁全绿为前提。
 
 ## 5. 明确后移
 
