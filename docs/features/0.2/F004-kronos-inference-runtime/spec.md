@@ -60,7 +60,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### 范围内
 
-- `deployment/kronos-service.Dockerfile` 增加 torch/cpu + einops + safetensors 的可选构建目标；
+- `deployment/kronos-service.Dockerfile` 增加 torch CPU wheel + einops + safetensors + huggingface_hub + tqdm 的可选构建目标（版本与 wheel 来源在 design 锁定）；
 - compose 增 `kronos-real` profile：挂载 `vendor/Kronos` 与 `models/`，`KRONOS_USE_REAL_MODEL=true`；
 - F001 AC-006 的复跑命令改为 compose 形态并回写 F001 spec §6。
 

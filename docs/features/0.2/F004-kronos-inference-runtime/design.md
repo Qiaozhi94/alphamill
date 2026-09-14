@@ -33,6 +33,8 @@ updated: 2026-09-12
 
 沿用 F001 的 `src/alphamill/kronos_service/`，不新增模块；差异=镜像层与挂载 + 薄壳三处最小改造（启动预检、eager load、推理锁，见 §5）：容器内 `KRONOS_REPO_PATH=/app/vendor/Kronos`、`KRONOS_MODEL_PATH=/app/models/Kronos-base`。
 
+**real 目标的依赖 pin（镜像内）**：`torch==2.14.0`（`--index-url https://download.pytorch.org/whl/cpu`，CPU wheel；与宿主 AC-006 实测同版）+ `einops==0.8.2`、`safetensors==0.8.0`、`huggingface_hub==1.31.0`、`tqdm==4.70.0`——pin 上游直接 import 的最小集（`model/kronos.py` 导入 torch/huggingface_hub/tqdm，`model/module.py` 导入 einops），版本取宿主 AC-006 实测集，以容器内真实权重加载验证后锁定；上游 `requirements.txt` 仅作参考。
+
 ## 3. 数据模型与 Migration
 
 不适用：本 feature 不触碰数据库与湖。
@@ -79,6 +81,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 | 用 compose profile 而非新建服务文件 | 单一 compose 文件，默认不启用 | 避免多份编排入口（F001 的教训：编排必须唯一） | 若 profile 组合变复杂再拆 override 文件 |
 | 真实实例走 8002 而非顶替 8001 | 两种形态可并存对比 | mock 实例仍是默认链路的依赖 | 稳定后可评估是否合并 |
 | 串行推理用进程级锁而非多 worker | uvicorn 单 worker + 进程级锁 | CPU 推理本身串行；多 worker 无收益且破坏「加载至多一次」 | 若未来上 GPU 再评估批量吞吐 |
+| 依赖 pin 取宿主 AC-006 实测版本 | torch 2.14.0（CPU index）+ einops 0.8.2 / safetensors 0.8.0 / huggingface_hub 1.31.0 / tqdm 4.70.0 | 与已实测通过的宿主环境一致；上游 requirements 仅参考 | 容器内真实权重加载验证通过后锁定 |
 | 残余风险：torch 镜像层拖慢 CI | CI 不构建该 profile | profile 未启用时 compose 不解析其构建 | 若 CI 需要则单独 job |
 
 ## 10. 待确认设计问题
