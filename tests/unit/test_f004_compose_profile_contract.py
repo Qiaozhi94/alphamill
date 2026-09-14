@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE_PATH = ROOT / "deployment/kronos-service.Dockerfile"
 COMPOSE_PATH = ROOT / "deployment/docker-compose.yml"
@@ -101,3 +103,55 @@ def assert_compose_real_service_contract(compose: str) -> None:
 
 def test_compose_real_service_contract() -> None:
     assert_compose_real_service_contract(COMPOSE_PATH.read_text(encoding="utf-8"))
+
+
+def test_default_compose_stays_mock_only() -> None:
+    """默认隔离（NFR-001）：real 服务必须挂 profile，mock 服务不得背权重挂载。"""
+    compose = COMPOSE_PATH.read_text(encoding="utf-8")
+    real_block = _service_block(compose, "kronos-signal-real")
+    assert "profiles: [kronos-real]" in real_block, "real 服务必须挂 kronos-real profile"
+    mock_block = _service_block(compose, "kronos-signal")
+    assert "profiles" not in mock_block
+    assert "/app/vendor/Kronos" not in mock_block, "默认服务不得挂载权重/vendor"
+
+
+def _mutate(text: str, old: str, new: str) -> str:
+    assert old in text, f"变异基准串不存在（上游改动后需同步变异用例）: {old}"
+    return text.replace(old, new)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("FROM mock AS real", "FROM python:3.11-slim AS real"),  # 改派生关系
+        ("torch==2.14.0", "torch==9.9.9"),  # 改 torch pin
+        ("--index-url https://download.pytorch.org/whl/cpu", ""),  # 删 CPU wheel index
+        ("einops==0.8.2", ""),  # 删 einops pin
+        ("huggingface_hub==1.31.0", ""),  # 删 huggingface_hub pin
+    ],
+)
+def test_dockerfile_mutations_fail_the_gate(old: str, new: str) -> None:
+    """变异验证：Dockerfile 契约被破坏时门禁必须判红（design §8）。"""
+    mutated = _mutate(DOCKERFILE_PATH.read_text(encoding="utf-8"), old, new)
+    with pytest.raises(AssertionError):
+        assert_real_dockerfile_contract(mutated)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("      target: real\n", "      target: mock\n"),  # 改 real 服务的构建目标
+        ("../vendor/Kronos:/app/vendor/Kronos:ro", "../vendor/Kronos:/app/vendor/Kronos"),
+        ("../models:/app/models:ro", "../models:/app/models"),  # 放开 models 只读
+        ("DB_HOST: timescaledb", "DB_HOST: localhost"),  # 破坏 DB 接线
+        ("timescaledb: {condition: service_healthy}", "timescaledb"),  # 删 healthy 依赖
+        ("profiles: [kronos-real]\n", ""),  # 删 profile（real 变默认启动，破坏 NFR-001）
+        ('restart: "no"', "restart: unless-stopped"),  # 破坏失败可见语义
+        ('- "8002:8001"', '- "8001:8001"'),  # 端口顶替默认实例
+    ],
+)
+def test_compose_mutations_fail_the_gate(old: str, new: str) -> None:
+    """变异验证：compose 契约被破坏时门禁必须判红（design §8）。"""
+    mutated = _mutate(COMPOSE_PATH.read_text(encoding="utf-8"), old, new)
+    with pytest.raises(AssertionError):
+        assert_compose_real_service_contract(mutated)
