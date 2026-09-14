@@ -86,7 +86,6 @@ class KronosRealSignal:
         )
 
     def generate_signal(self, rows: list[dict]) -> dict:
-        predictor = self._load_predictor()
         if len(rows) < 30:
             return {
                 "signal_type": "neutral",
@@ -97,23 +96,28 @@ class KronosRealSignal:
                 "reason": "not_enough_data",
             }
 
-        df = self._rows_to_df(rows[-self.max_context :])
-        x_df = df[["open", "high", "low", "close", "volume"]]
-        x_timestamp = df["time"]
-        y_timestamp = self._future_timestamps(x_timestamp.iloc[-1], self.pred_len)
+        # 进程级锁包住加载与推理：并发请求排队执行，加载至多一次、
+        # predictor 无并发进入（spec FR-001 串行推理不变式 / design §5）。
+        with self._lock:
+            predictor = self._load_predictor()
 
-        started = time.perf_counter()
-        pred_df = predictor.predict(
-            df=x_df,
-            x_timestamp=x_timestamp,
-            y_timestamp=y_timestamp,
-            pred_len=self.pred_len,
-            T=float(os.getenv("KRONOS_TEMPERATURE", "1.0")),
-            top_p=float(os.getenv("KRONOS_TOP_P", "0.9")),
-            sample_count=int(os.getenv("KRONOS_SAMPLE_COUNT", "1")),
-            verbose=False,
-        )
-        infer_seconds = time.perf_counter() - started
+            df = self._rows_to_df(rows[-self.max_context :])
+            x_df = df[["open", "high", "low", "close", "volume"]]
+            x_timestamp = df["time"]
+            y_timestamp = self._future_timestamps(x_timestamp.iloc[-1], self.pred_len)
+
+            started = time.perf_counter()
+            pred_df = predictor.predict(
+                df=x_df,
+                x_timestamp=x_timestamp,
+                y_timestamp=y_timestamp,
+                pred_len=self.pred_len,
+                T=float(os.getenv("KRONOS_TEMPERATURE", "1.0")),
+                top_p=float(os.getenv("KRONOS_TOP_P", "0.9")),
+                sample_count=int(os.getenv("KRONOS_SAMPLE_COUNT", "1")),
+                verbose=False,
+            )
+            infer_seconds = time.perf_counter() - started
 
         latest_close = float(x_df["close"].iloc[-1])
         predicted_close = float(pred_df["close"].iloc[-1])

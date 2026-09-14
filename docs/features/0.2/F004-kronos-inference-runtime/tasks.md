@@ -32,7 +32,7 @@ updated: 2026-09-15
 ### Phase 1：薄壳运行时改造
 
 - [x] T001 (`FR-001`): 先红后绿——新增 `tests/unit/test_f004_kronos_runtime_contract.py::test_real_mode_preflight_fails_closed_without_assets`（fake 目录注入，先失败）；实现 `kronos_real.py` 启动预检与 eager load，并由 `server.py` 启动钩子在 real 模式调用：校验 `KRONOS_REPO_PATH`、模型与分词器目录及必需文件（`config.json`、权重文件），任一缺失或加载失败即打印缺失路径并非零退出，不退回 mock — verify: 该用例由红转绿
-- [ ] T002 (`FR-001`): 先红后绿——新增同文件 `::test_predictor_loads_once_and_inference_serializes`（先失败）；实现进程级推理锁：模型加载至多一次、推理互斥（含并发首请求同时到达的场景） — verify: 该用例由红转绿
+- [x] T002 (`FR-001`): 先红后绿——新增同文件 `::test_predictor_loads_once_and_inference_serializes`（先失败）；实现进程级推理锁：模型加载至多一次、推理互斥（含并发首请求同时到达的场景） — verify: 该用例由红转绿
 
 ### Phase 2：镜像与编排
 

@@ -107,6 +107,70 @@ def test_real_mode_startup_is_noop_for_mock(monkeypatch) -> None:
     kronos_real.real_mode_startup()
 
 
+class _FakePredictor:
+    """记录并发度的假 predictor：predict 慢执行并统计峰值并发。"""
+
+    def __init__(self) -> None:
+        self.active = 0
+        self.max_active = 0
+
+    def predict(self, **_kwargs) -> pd.DataFrame:
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        time.sleep(0.05)
+        self.active -= 1
+        return pd.DataFrame({"close": [100.0, 101.0, 102.0]})
+
+
+def _rows(count: int) -> list[dict]:
+    start = datetime(2026, 9, 1, tzinfo=UTC)
+    return [
+        {
+            "time": start + timedelta(minutes=idx),
+            "open": 100.0,
+            "high": 101.0,
+            "low": 99.0,
+            "close": 100.0 + idx,
+            "volume": 1.0,
+        }
+        for idx in range(count)
+    ]
+
+
+def test_predictor_loads_once_and_inference_serializes(monkeypatch) -> None:
+    """并发推理：模型加载至多一次、推理互斥（请求排队，无并发进入 predictor）。"""
+    signal = kronos_real.KronosRealSignal()
+    fake = _FakePredictor()
+    load_calls: list[int] = []
+    errors: list[Exception] = []
+
+    def slow_load():
+        # 复刻真实 _load_predictor 的记忆化契约：登记 self._predictor 后复用。
+        # 无锁时并发首请求会同时看到 None → 多次加载；有锁时只有首个请求真正加载。
+        if signal._predictor is None:
+            load_calls.append(1)
+            time.sleep(0.05)  # 拉长加载窗口，放大并发首请求的加载竞态
+            signal._predictor = fake
+        return signal._predictor
+
+    def run() -> None:
+        try:
+            signal.generate_signal(_rows(40))
+        except Exception as exc:  # 收集线程内异常，不让断言被静默吞掉
+            errors.append(exc)
+
+    monkeypatch.setattr(signal, "_load_predictor", slow_load)
+    threads = [threading.Thread(target=run) for _ in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert len(load_calls) == 1, f"模型被加载了 {len(load_calls)} 次"
+    assert fake.max_active == 1, f"predictor 峰值并发 {fake.max_active}"
+
+
 def test_server_lifespan_invokes_startup_hook_in_real_mode(monkeypatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(server, "healthcheck", lambda: {"total_rows": 1})
