@@ -5,7 +5,7 @@ import datetime as dt
 import psycopg2
 import pytest
 
-from alphamill.data_bridge import exporter, registry
+from alphamill.data_bridge import export_policy, exporter, registry
 from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge.errors import DataBridgeError
 
@@ -34,24 +34,24 @@ def test_default_window_end_excludes_current_partial_day(monkeypatch):
 def test_full_merge_drops_source_partitions_that_disappeared():
     baseline = [_partition("BTC-USDT"), _partition("ETH-USDT")]
     produced = [_partition("BTC-USDT")]
-    merged = exporter._merge_partitions("full", baseline, produced)
+    merged = export_policy.merge_partitions("full", baseline, produced)
     assert [entry["logical_partition_key"]["pair"] for entry in merged] == ["BTC-USDT"]
 
 
 def test_full_shrink_guard_rejects_empty_result_with_nonempty_baseline():
     with pytest.raises(DataBridgeError, match="空快照"):
-        exporter._guard_full_shrink([_partition("BTC-USDT")], [], dt.date(2026, 9, 15))
+        export_policy.guard_full_shrink([_partition("BTC-USDT")], [], dt.date(2026, 9, 15))
 
 
 def test_full_shrink_guard_rejects_large_shrink_and_truncated_window():
     baseline = [_partition("BTC-USDT"), _partition("ETH-USDT"), _partition("SOL-USDT")]
     with pytest.raises(DataBridgeError, match="大幅降至"):
-        exporter._guard_full_shrink(baseline, [_partition("BTC-USDT")], dt.date(2026, 9, 15))
+        export_policy.guard_full_shrink(baseline, [_partition("BTC-USDT")], dt.date(2026, 9, 15))
 
     baseline = [_partition("BTC-USDT"), _partition("ETH-USDT")]
     current = [_partition("BTC-USDT")]
     with pytest.raises(DataBridgeError, match="截断"):
-        exporter._guard_full_shrink(baseline, current, dt.date(2026, 9, 14))
+        export_policy.guard_full_shrink(baseline, current, dt.date(2026, 9, 14))
 
 
 def test_quality_flag_count_change_is_not_a_noop():
@@ -94,19 +94,19 @@ def test_shrink_guard_can_be_confirmed_but_window_truncation_never_is():
     end = dt.date(2026, 9, 15)
 
     # 未确认：空结果与腰斩（4 → 1）都拒绝
-    with pytest.raises(exporter.DataBridgeError, match="空快照"):
-        exporter._guard_full_shrink(baseline, [], end)
-    with pytest.raises(exporter.DataBridgeError, match="大幅降至"):
-        exporter._guard_full_shrink(baseline, survivor, end)
+    with pytest.raises(DataBridgeError, match="空快照"):
+        export_policy.guard_full_shrink(baseline, [], end)
+    with pytest.raises(DataBridgeError, match="大幅降至"):
+        export_policy.guard_full_shrink(baseline, survivor, end)
 
     # 已确认：同样的两种情形放行
-    exporter._guard_full_shrink(baseline, [], end, allow_shrink=True)
-    exporter._guard_full_shrink(baseline, survivor, end, allow_shrink=True)
+    export_policy.guard_full_shrink(baseline, [], end, allow_shrink=True)
+    export_policy.guard_full_shrink(baseline, survivor, end, allow_shrink=True)
 
     # 窗口截断（基线最新日期 >= window_end）即使确认也必须拒绝
-    with pytest.raises(exporter.DataBridgeError, match="截断已有基线"):
-        exporter._guard_full_shrink(baseline, [_partition("BTC-USDT")], dt.date(2026, 9, 14))
-    with pytest.raises(exporter.DataBridgeError, match="截断已有基线"):
-        exporter._guard_full_shrink(
+    with pytest.raises(DataBridgeError, match="截断已有基线"):
+        export_policy.guard_full_shrink(baseline, [_partition("BTC-USDT")], dt.date(2026, 9, 14))
+    with pytest.raises(DataBridgeError, match="截断已有基线"):
+        export_policy.guard_full_shrink(
             baseline, [_partition("BTC-USDT")], dt.date(2026, 9, 14), allow_shrink=True
         )
