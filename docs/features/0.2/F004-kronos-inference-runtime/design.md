@@ -24,7 +24,7 @@ updated: 2026-09-15
 
 给 `kronos-service.Dockerfile` 拆出 `mock`（保持现状、不含 torch）与 `real` 两个构建目标；compose 两个服务各自显式声明 target，`kronos-signal-real` 用 `profiles: [kronos-real]`，默认 `up` 不启用也不构建该服务。薄壳做三处最小改造：real 模式启动预检、模型 eager load 与进程级推理锁（§5）。
 
-- 后端 / API：无变更（同一份 `kronos_service`）
+- 后端 / API：HTTP 契约无变更（同一份 `kronos_service`）；薄壳改动落在 `server.py`（real 模式启动钩子调用预检/eager load）与 `kronos_real.py`（预检/加载/锁实现，§5）
 - 存储 / Migration：无
 - Event / Evidence：F001 AC-006 的复跑命令改为 compose 形态
 - 文档 / 配置：F001 spec §6 命令回写；`vendor/VENDORED.md` 补容器内路径说明
@@ -61,7 +61,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 ## 5. Runtime、Workflow 与并发
 
 - 启动：`docker compose -f deployment/docker-compose.yml --profile kronos-real up -d kronos-signal-real`；默认 profile 不含该服务；
-- 启动序列（real 模式）：进程启动 → **预检**（`KRONOS_REPO_PATH`、模型/分词器目录及必需文件存在）→ **eager load**（一次性加载 Kronos + Tokenizer，放在应用启动钩子、先于接收流量）→ 服务就绪；预检或加载任一失败 → 打印缺失路径/错误并**非零退出**（real 服务 `restart: "no"`，失败态可直接观察，不静默降级）；
+- 启动序列（real 模式）：进程启动 → **`server.py` 启动钩子**：**预检**（`KRONOS_REPO_PATH`、模型/分词器目录及必需文件存在）→ **eager load**（一次性加载 Kronos + Tokenizer，先于接收流量）→ 服务就绪；预检或加载任一失败 → 打印缺失路径/错误并**非零退出**（real 服务 `restart: "no"`，失败态可直接观察，不静默降级）；
 - readiness：容器 healthcheck 以 `/health` 的 `model_loaded=true`（且 `device=cpu`）为通过条件；mock 服务保持现状；
 - 端口：真实实例用 8002（host）→ 8001（container），与默认 mock 实例的 8001 并存，避免二者互相顶替；
 - 并发：单实例单 worker；**进程级锁**保证模型加载至多一次、推理互斥（并发请求排队），无其它共享状态；
