@@ -82,7 +82,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### Requirement: 编排内真实推理（`FR-001`）
 
-系统应当提供一个非默认的 compose profile，使真实模型实例在编排内启动并保持 F001 冻结的 HTTP API 契约不变。
+系统应当提供一个非默认的 compose profile，使真实模型实例在编排内启动、完成启动期资产预检与模型加载、串行处理推理请求，并保持 F001 冻结的 HTTP API 契约不变。
 
 #### Scenario: profile 拉起
 
@@ -90,23 +90,41 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 - WHEN 执行 `docker compose -f deployment/docker-compose.yml --profile kronos-real up -d`
 - THEN `/health` 的 `model_enabled=true`，`/predict` 返回 `source=kronos`
 
+#### Scenario: 缺资产失败关闭
+
+- GIVEN `vendor/Kronos`、模型或分词器任一缺失
+- WHEN 启动 profile 实例
+- THEN 进程非零退出并在日志打印缺失路径，不退回 mock
+
+#### Scenario: 并发推理串行
+
+- GIVEN 真实实例已就绪
+- WHEN 多个 `/predict` 请求并发到达
+- THEN 请求按序执行，模型加载至多一次，且无请求并发进入 predictor
+
 ### 非功能需求
 
 - **NFR-001**：默认 `docker compose up` 的行为与镜像体积不受本 feature 影响（profile 未启用时不构建 torch 层）。
 
 ## 5. 生命周期与不变量
 
-不适用：一次性运行时改造，无长生命周期状态机。
+不适用长生命周期状态机（一次性运行时改造）；三条运行时不变式由测试锁定：
+
+- **失败关闭**：real 模式启动期校验 vendor clone、模型与分词器目录及必需文件；任一缺失或加载失败即非零退出并打印缺失路径，**绝不退回 mock**；
+- **串行推理**：进程内模型加载至多一次、推理互斥（进程级锁）；并发请求排队执行，不并发进入 predictor；
+- **默认隔离**：未启用 profile 时默认编排不启动 real 服务，默认镜像不含 torch（NFR-001）。
 
 ## 6. 成功与验收
 
 ### 成功标准
 
 - **SC-001**：F001 AC-006 可由编排命令复跑（US-001）。
+- **SC-002**：失败关闭与串行推理不变式成立（US-001）。
 
 ### 验收清单
 
 - [ ] **AC-001** (`FR-001`, `NFR-001`): `--profile kronos-real` 起的实例 model_enabled=true 且 /predict 返回 source=kronos；不带该 profile 时默认编排行为与镜像层不变 — tests: `tests/integration/test_f001_kronos_smoke.py`
+- [ ] **AC-002** (`FR-001`): 失败关闭与串行推理——vendor/权重/分词器缺失或加载失败时 real 实例启动即非零退出并打印缺失路径（不退回 mock）；并发 `/predict` 下模型加载至多一次且推理互斥 — tests: `tests/unit/test_f004_kronos_runtime_contract.py`、`tests/integration/test_f004_real_profile.py`
 
 ## 7. 测试、依赖与决策
 

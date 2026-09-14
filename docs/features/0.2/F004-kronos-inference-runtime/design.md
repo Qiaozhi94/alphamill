@@ -22,7 +22,7 @@ updated: 2026-09-12
 
 ## 1. 技术概要与影响面
 
-给 `kronos-service.Dockerfile` 增一个包含 torch/cpu 的构建目标，compose 用 `profiles: [kronos-real]` 挂一个额外服务，默认 `up` 不触发其构建。
+给 `kronos-service.Dockerfile` 增一个包含 torch/cpu 的构建目标，compose 用 `profiles: [kronos-real]` 挂一个额外服务，默认 `up` 不触发其构建。薄壳做三处最小改造：real 模式启动预检、模型 eager load 与进程级推理锁（§5）。
 
 - 后端 / API：无变更（同一份 `kronos_service`）
 - 存储 / Migration：无
@@ -31,7 +31,7 @@ updated: 2026-09-12
 
 ## 2. 架构与模块边界
 
-沿用 F001 的 `src/alphamill/kronos_service/`，不新增 Python 模块。差异只在镜像层与挂载：容器内 `KRONOS_REPO_PATH=/app/vendor/Kronos`、`KRONOS_MODEL_PATH=/app/models/Kronos-base`。
+沿用 F001 的 `src/alphamill/kronos_service/`，不新增模块；差异=镜像层与挂载 + 薄壳三处最小改造（启动预检、eager load、推理锁，见 §5）：容器内 `KRONOS_REPO_PATH=/app/vendor/Kronos`、`KRONOS_MODEL_PATH=/app/models/Kronos-base`。
 
 ## 3. 数据模型与 Migration
 
@@ -39,13 +39,16 @@ updated: 2026-09-12
 
 ## 4. 接口、Contract 与 Event
 
-HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model_enabled=true`、`/predict` 的 `source=kronos` 与 `model` 字段回报权重路径。
+HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model_enabled=true`、`/predict` 的 `source=kronos` 与 `model` 字段回报权重路径。real 实例在启动预检与 eager load 完成后才对外服务；预检/加载失败即进程非零退出（§7），不产生「enabled 但未加载」的可用中间态。
 
 ## 5. Runtime、Workflow 与并发
 
 - 启动：`docker compose -f deployment/docker-compose.yml --profile kronos-real up -d kronos-signal-real`；默认 profile 不含该服务；
-- 端口：真实实例用 8002，与默认 mock 实例的 8001 并存，避免二者互相顶替；
-- 并发：单实例，CPU 推理串行，无共享状态。
+- 启动序列（real 模式）：进程启动 → **预检**（`KRONOS_REPO_PATH`、模型/分词器目录及必需文件存在）→ **eager load**（一次性加载 Kronos + Tokenizer，放在应用启动钩子、先于接收流量）→ 服务就绪；预检或加载任一失败 → 打印缺失路径/错误并**非零退出**（real 服务 `restart: "no"`，失败态可直接观察，不静默降级）；
+- readiness：容器 healthcheck 以 `/health` 的 `model_loaded=true`（且 `device=cpu`）为通过条件；mock 服务保持现状；
+- 端口：真实实例用 8002（host）→ 8001（container），与默认 mock 实例的 8001 并存，避免二者互相顶替；
+- 并发：单实例单 worker；**进程级锁**保证模型加载至多一次、推理互斥（并发请求排队），无其它共享状态；
+- 数据前置：`/predict` 需要目标 exchange/symbol ≥30 根已闭合 1m K 线（DB 已迁移，F001 回填产物）。
 
 ## 6. UI 与可观测性
 
@@ -53,7 +56,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 
 ## 7. 失败、恢复、安全与兼容
 
-- 权重或 vendor 缺失 → 容器启动即非零退出并打印缺失路径，**不退回 mock**（退回会让 AC-006 假绿）；
+- 权重、分词器或 vendor 缺失/加载失败 → **启动期**即非零退出并打印缺失路径，**不退回 mock**（退回会让 AC-006 假绿）；`restart: "no"` 使失败态保持可见；
 - 镜像体积：torch/cpu wheel 约 200MB，仅在启用 profile 时构建（NFR-001）。
 
 ## 8. 测试策略与验收映射
@@ -68,6 +71,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 |---|---|---|---|
 | 用 compose profile 而非新建服务文件 | 单一 compose 文件，默认不启用 | 避免多份编排入口（F001 的教训：编排必须唯一） | 若 profile 组合变复杂再拆 override 文件 |
 | 真实实例走 8002 而非顶替 8001 | 两种形态可并存对比 | mock 实例仍是默认链路的依赖 | 稳定后可评估是否合并 |
+| 串行推理用进程级锁而非多 worker | uvicorn 单 worker + 进程级锁 | CPU 推理本身串行；多 worker 无收益且破坏「加载至多一次」 | 若未来上 GPU 再评估批量吞吐 |
 | 残余风险：torch 镜像层拖慢 CI | CI 不构建该 profile | profile 未启用时 compose 不解析其构建 | 若 CI 需要则单独 job |
 
 ## 10. 待确认设计问题
