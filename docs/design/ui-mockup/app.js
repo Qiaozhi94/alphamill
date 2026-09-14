@@ -56,61 +56,61 @@ var FACTORS = [
     gen: "alphagen", scope: "XS", ric: 0.043, icir: 0.61, pos: 57, net: 8.4, cost: "cost_ok", verdict: "promising",
     dv: "v2026.09.12", seed: 11, turnover: "3.2x/周", hold: "p50 6.5h · p90 14h", ntr: 412,
     taker: "0.05%", slip: "0.03%", funding: "-1.2%/年",
-    flow: { reached: 6, rejected: -1, cur: 6, pm: "PM-007", w: "0.34", note10: "dry-run · 2026-08-28 起", note11: "IC 与成本漂移正常" } },
+    flow: { reached: 3, rejected: -1, cur: 3, pm: "PM-007", w: "0.34", note10: "dry-run · 2026-08-28 起", note11: "IC 与成本漂移正常" } },
 
   { id: "manual_funding_carry", hid: "H-031", hyp: "资金费率套利", genNote: "人工 · 论文因子", genDate: "2026-07-02",
     gen: "manual", scope: "TS", ric: 0.031, icir: 0.88, pos: 63, net: 5.1, cost: "cost_ok", verdict: "promising",
     dv: "v2026.09.12", seed: 22, turnover: "0.4x/周", hold: "p50 3.1d · p90 5d", ntr: 58,
     taker: "0.02%", slip: "0.01%", funding: "+6.8%/年(收益)",
-    flow: { reached: 6, rejected: -1, cur: 6, pm: "PM-009", w: "单成员", note10: "dry-run · 2026-08-28 起", note11: "IC 与成本漂移正常" } },
+    flow: { reached: 3, rejected: -1, cur: 3, pm: "PM-009", w: "单成员", note10: "dry-run · 2026-08-28 起", note11: "IC 与成本漂移正常" } },
 
   { id: "kronos_rev_v3", hid: "H-019", hyp: "Kronos 60m 反转", genNote: "Kronos 基础模型", genDate: "2026-07-18",
     gen: "kronos", scope: "XS", ric: 0.037, icir: 0.44, pos: 54, net: 3.9, cost: "cost_ok", verdict: "promising",
     dv: "v2026.09.12", seed: 33, turnover: "5.1x/周", hold: "p50 4h · p90 9h", ntr: 733,
     taker: "0.05%", slip: "0.04%", funding: "-2.1%/年",
-    flow: { reached: 6, rejected: -1, cur: 6, pm: "PM-007", w: "0.41", note10: "dry-run · 2026-08-28 起", note11: "IC 与成本漂移正常" } },
+    flow: { reached: 3, rejected: -1, cur: 3, pm: "PM-007", w: "0.41", note10: "dry-run · 2026-08-28 起", note11: "IC 与成本漂移正常" } },
 
   { id: "alphagen_gen042_f001", hid: "H-042", hyp: "日内动量衰减", genNote: "RL 协同池 · g042", genDate: "2026-08-30",
     gen: "alphagen", scope: "XS", ric: 0.021, icir: 0.29, pos: 52, net: 1.2, cost: "cost_ok", verdict: "weak",
     dv: "v2026.09.12", seed: 44, turnover: "4.0x/周", hold: "p50 5h · p90 11h", ntr: 388,
     taker: "0.05%", slip: "0.03%", funding: "-1.8%/年",
-    flow: { reached: 2, rejected: -1, cur: 2, pm: null } },
+    flow: { reached: 0, rejected: -1, cur: 0, pm: null } },
 
   { id: "gp_alpha_017", hid: "H-051", hyp: "波动率挤压", genNote: "遗传规划", genDate: "2026-08-22",
     gen: "genetic", scope: "TS", ric: 0.018, icir: 0.22, pos: 51, net: 0.7, cost: "cost_ok", verdict: "weak",
     dv: "v2026.09.12", seed: 55, turnover: "2.2x/周", hold: "p50 9h · p90 20h", ntr: 190,
     taker: "0.05%", slip: "0.02%", funding: "-0.9%/年",
-    flow: { reached: 2, rejected: -1, cur: 2, pm: null } },
+    flow: { reached: 0, rejected: -1, cur: 0, pm: null } },
 
   { id: "expr_mom_break_v2", hid: "H-044", hyp: "动量破位", genNote: "表达式枚举", genDate: "2026-08-25",
     gen: "expression", scope: "TS", ric: 0.052, icir: 0.71, pos: 59, net: -2.3, cost: "cost_negative", verdict: "dead",
     dv: "v2026.09.12", seed: 66, turnover: "11.7x/周", hold: "p50 2h · p90 5h", ntr: 1204,
     taker: "0.05%", slip: "0.06%", funding: "-4.4%/年",
-    flow: { reached: 1, rejected: 1, cur: -1, pm: null } },
+    flow: { reached: 0, rejected: 0, cur: -1, pm: null } },
 
   { id: "alphagen_gen041_f009", hid: "H-038", hyp: "期限结构", genNote: "RL 协同池 · g041", genDate: "2026-08-20",
     gen: "alphagen", scope: "XS", ric: 0.046, icir: 0.66, pos: 58, net: -0.8, cost: "cost_negative", verdict: "dead",
     dv: "v2026.09.05", seed: 77, turnover: "8.9x/周", hold: "p50 3h · p90 7h", ntr: 902,
     taker: "0.05%", slip: "0.05%", funding: "-3.7%/年",
-    flow: { reached: 1, rejected: 1, cur: -1, pm: null } },
+    flow: { reached: 0, rejected: 0, cur: -1, pm: null } },
 
   { id: "kronos_rev_v2", hid: "H-019", hyp: "Kronos 60m 反转", genNote: "Kronos 基础模型", genDate: "2026-06-10",
     gen: "kronos", scope: "XS", ric: 0.029, icir: 0.31, pos: 53, net: -0.4, cost: "cost_ok", verdict: "decayed",
     dv: "v2026.09.05", seed: 88, turnover: "4.8x/周", hold: "p50 4h · p90 8h", ntr: 691,
     taker: "0.05%", slip: "0.04%", funding: "-2.0%/年",
-    flow: { reached: 6, rejected: -1, cur: 6, pm: "PM-005", w: "0.52", note10: "dry-run · 2026-06-14 起", note11: "已降权 · 2026-09-02 · 归因复盘完成，新假设已入队" } },
+    flow: { reached: 3, rejected: -1, cur: 3, pm: "PM-005", w: "0.52", note10: "dry-run · 2026-06-14 起", note11: "已降权 · 2026-09-02 · 归因复盘完成，新假设已入队" } },
 
   { id: "gp_alpha_009", hid: "H-029", hyp: "均值回复", genNote: "遗传规划", genDate: "2026-07-30",
     gen: "genetic", scope: "TS", ric: -0.004, icir: -0.11, pos: 47, net: -1.1, cost: "cost_negative", verdict: "dead",
     dv: "v2026.09.05", seed: 99, turnover: "6.6x/周", hold: "p50 3h · p90 6h", ntr: 540,
     taker: "0.05%", slip: "0.05%", funding: "-2.8%/年",
-    flow: { reached: 1, rejected: 1, cur: -1, pm: null } },
+    flow: { reached: 0, rejected: 0, cur: -1, pm: null } },
 
   { id: "manual_oi_diverge", hid: "H-047", hyp: "OI 背离", genNote: "人工 · 假设清单", genDate: "2026-09-01",
     gen: "manual", scope: "XS", ric: 0.026, icir: 0.35, pos: 55, net: 2.2, cost: "cost_ok", verdict: "weak",
     dv: "v2026.09.12", seed: 12, turnover: "1.8x/周", hold: "p50 11h · p90 22h", ntr: 141,
     taker: "0.05%", slip: "0.02%", funding: "-0.7%/年",
-    flow: { reached: 2, rejected: -1, cur: 2, pm: null } }
+    flow: { reached: 0, rejected: -1, cur: 0, pm: null } }
 ];
 
 var BATCHES = [
@@ -124,13 +124,13 @@ var STAGES = [
   { name: "提案", v: 214, cls: "" },
   { name: "评测中", v: 89, cls: "" },
   { name: "选择期", v: 47, cls: "" },
-  { name: "留出验证", v: 12, cls: "hot" },
-  { name: "最终确认", v: 5, cls: "hot" },
-  { name: "Champion", v: 2, cls: "ok" },
-  { name: "Challenger", v: 3, cls: "ok" },
-  { name: "监控", v: 18, cls: "" },
-  { name: "衰减", v: 41, cls: "" },
-  { name: "停用", v: 96, cls: "" }
+  { name: "组合门", v: 5, cls: "hot" },
+  { name: "留出验证", v: 9, cls: "hot" },
+  { name: "最终确认", v: 3, cls: "hot" },
+  { name: "在跑·Champion", v: 2, cls: "ok" },
+  { name: "在跑·Challenger", v: 3, cls: "ok" },
+  { name: "衰减", v: 3, cls: "" },
+  { name: "停用", v: 2, cls: "" }
 ];
 
 /* 服务矩阵 */
@@ -149,26 +149,35 @@ var SERVICES = [
     ops: ["立即运行"], danger: [] }
 ];
 
-/* 业务参数：修改即生成新规则版本并记入日志（FR7.4） */
+/* 业务参数：全部取自仓库真实配置与代码默认值（最终交付稿，非 mock）
+   type: num=数值+单位后缀 / enum=枚举下拉 / dual=双阈值
+   来源：freqtrade_bridge/risk/ 代码默认、freqtrade/user_data/config.json、
+        KronosFusionStrategy.py 环境变量默认、PRD FR3.2/3.4/3.5、ADR-0004、架构 §4.3 */
 var PARAMS = [
-  { g: "交易风控", name: "单日最大亏损熔断", val: "2%", note: "触发后当日停止开新仓" },
-  { g: "交易风控", name: "最大回撤熔断", val: "8%", note: "触发后全组合降杠杆" },
-  { g: "交易风控", name: "相关性护栏", val: "0.70", note: "组合内两两信号相关上限" },
-  { g: "交易风控", name: "单 pair 仓位上限", val: "10%", note: "占权益比例" },
-  { g: "验证门禁", name: "留出窗口", val: "90 天", note: "PortfolioDef 整体验证窗" },
-  { g: "验证门禁", name: "每周留出晋级上限", val: "5", note: "超出的候选顺延下一周" },
-  { g: "验证门禁", name: "样本量裁决阈值", val: "30 / 69 笔", note: "低于 30 不做判定" },
-  { g: "验证门禁", name: "IC 降权阈值", val: "0.015", note: "连续 5 日低于阈值自动降权" },
-  { g: "成本模型", name: "Taker 费率", val: "0.05%", note: "评测硬过滤字段 · cm-v1" },
-  { g: "成本模型", name: "滑点模型", val: "dry-run 校准", note: "随实际成交更新" },
-  { g: "信号执行", name: "信号陈旧度上限", val: "4 根决策 K 线", note: "越界信号置空不使用" },
-  { g: "信号执行", name: "实盘交易", val: "关闭", note: "需最终确认 + 可信样本量后人工开启", safe: true },
-  { g: "交易宇宙", name: "交易宇宙范围", val: "50 pairs", note: "FR1.5 扩容后 · 新增 pair 需过数据质量门" },
-  { g: "组合工厂", name: "组合 Top-K", val: "3（硬上限 5）", note: "权重 = 逆波动率" },
-  { g: "组合工厂", name: "换手预算", val: "≤ 100% / 周期", note: "超出的候选标记后顺延" },
-  { g: "通知", name: "告警通知渠道", val: "Telegram", note: "熔断 / IC 降权 / 同步异常即时推送" },
-  { g: "通知", name: "周报生成", val: "每周一 09:00", note: "完整指标体系周报（FR7.5）" }
+  { g: "交易风控", name: "单日亏损熔断", type: "num", v: 3, unit: "%（权益比）", note: "超过后当日停止开新仓", src: "CircuitBreaker 默认" },
+  { g: "交易风控", name: "连续亏损熔断", type: "num", v: 3, unit: "笔", note: "连续亏损达到即触发", src: "CircuitBreaker 默认" },
+  { g: "交易风控", name: "最大回撤熔断", type: "num", v: 20, unit: "%", note: "全历史权益窗口", src: "DrawdownGuard 默认" },
+  { g: "交易风控", name: "相关性护栏", type: "num", v: 0.85, unit: "", note: "回看 72 根 K 线", src: "CorrelationGuard 默认" },
+  { g: "交易风控", name: "全局止损", type: "num", v: -10, unit: "%", note: "单笔兜底止损", src: "config.json stoploss" },
+  { g: "交易风控", name: "同时持仓上限", type: "num", v: 3, unit: "笔（每笔 100 USDT）", note: "占权益比例由仓位模块约束", src: "config.json max_open_trades" },
+  { g: "信号执行", name: "决策周期", type: "enum", v: "5m", opts: ["1m", "5m", "15m"], note: "freqtrade timeframe", src: "config.json" },
+  { g: "信号执行", name: "Kronos 最小预期收益", type: "num", v: 0.0005, unit: "", note: "低于阈值不出信号 · 环境变量可调", src: "策略模板默认" },
+  { g: "信号执行", name: "入场波动率上限", type: "num", v: 8, unit: "%", note: "高波动不入场", src: "策略模板默认" },
+  { g: "信号执行", name: "动态止损下限", type: "num", v: 2.5, unit: "%", note: "动态止损的最小距离", src: "策略模板默认" },
+  { g: "信号执行", name: "信号陈旧度上限", type: "num", v: 1, unit: "个因子周期", note: "4h→1h 即 4 根 · 越界置空", src: "架构 §4.3" },
+  { g: "信号执行", name: "实盘交易", type: "enum", v: "dry-run", opts: ["dry-run", "paper", "live（需满足最终确认红线）"], safe: true, note: "渐进发布：backtest → dry-run → paper → live", src: "config.json dry_run · PRD FR5.4" },
+  { g: "验证门禁", name: "留出窗口", type: "num", v: 90, unit: "天", note: "PortfolioDef 整体验证窗", src: "PRD FR3.4" },
+  { g: "验证门禁", name: "每周留出晋级上限", type: "num", v: 5, unit: "个", note: "超出的候选顺延下一周", src: "PRD FR3.4" },
+  { g: "验证门禁", name: "样本量裁决阈值", type: "dual", v: [30, 69], unit: "笔", note: "低于 30 不判定 · 30~69 临时 PASS", src: "PRD FR3.5" },
+  { g: "组合工厂", name: "组合 Top-K", type: "num", v: 3, unit: "（硬上限 5）", note: "权重 = 逆波动率", src: "ADR-0004" },
+  { g: "组合工厂", name: "换手预算", type: "num", v: 100, pre: "≤ ", unit: "% / 周期", note: "超出的候选标记后顺延", src: "ADR-0004" },
+  { g: "交易宇宙", name: "交易宇宙范围", type: "num", v: 6, unit: "pairs", note: "BTC/ETH/SOL 等 · 目标扩容 30~50", src: "config.json pair_whitelist" }
 ];
+
+function fmtVal(p) {
+  if (p.type === "dual") return p.v[0] + " / " + p.v[1] + " " + p.unit;
+  return (p.pre || "") + p.v + (p.unit ? " " + p.unit : "");
+}
 
 /* 记录表：唯一时间线（操作 / 审批 / 生命周期 / 人审 / 系统事件） */
 var LOGS = [
@@ -335,9 +344,9 @@ document.getElementById("btn-compare").addEventListener("click", function () {
   gotoView("compare");
 });
 
-/* ── 生命周期工作流（7 个宏观阶段）──
-   生成 → 评测（纯度/成本/查重子门）→ 选择期 → 组合 → 验证（留出+最终确认）→ 上线（复核+挂载）→ 监控 */
-var MACRO_STAGES = ["生成", "评测", "选择期", "组合", "验证", "上线", "监控"];
+/* ── 生命周期工作流（四阶段宏观口径 · ADR-0008 / PRD §2.3）──
+   研究评测 → 策略组合 → 部署交易 → 监控反馈；数据治理（S1）为全链底座，不计入因子流程 */
+var MACRO_STAGES = ["研究评测", "策略组合", "部署交易", "监控反馈"];
 
 function flowStatus(f, m) {
   var fl = f.flow;
@@ -350,11 +359,11 @@ function flowWord(st) {
   return st === "done" ? "通过" : st === "active" ? "进行中" : st === "reject" ? "拒绝" : "未到达";
 }
 
-/* 因子列表：7 节点迷你进展（悬停显示阶段名与状态） */
+/* 因子列表：4 节点迷你进展（悬停显示阶段名与状态） */
 function miniFlow(f) {
   return '<span class="mini-flow">' + MACRO_STAGES.map(function (name, m) {
     var st = flowStatus(f, m);
-    var decayed = st === "active" && f.verdict === "decayed";
+    var decayed = st === "active" && m === 3 && f.verdict === "decayed";
     var tip = name + "：" + (decayed ? "已降权（" + (f.flow.note11 || "") + "）" : flowWord(st));
     return '<span class="mstep ' + st + '" title="' + tip + '">' +
       '<span class="mf ' + st + (decayed ? " warn" : "") + '"></span>' +
@@ -364,15 +373,16 @@ function miniFlow(f) {
 
 function flowInfo(f, m) {
   var fl = f.flow;
-  if (m === 0) return f.hid + " · " + f.genNote;
-  if (m === 1) return fl.rejected === 1
-    ? (f.cost === "cost_negative" ? "成本否定 → dead" : "纯度门拒绝")
-    : "RankIC " + f.ric.toFixed(3) + " · 纯度/成本/查重通过";
-  if (m === 2) return fl.reached >= 3 ? "180 天窗口 · 查重通过" : "存续 · 未入选组合";
-  if (m === 3) return fl.pm ? "入选 " + fl.pm + " · 权重 " + fl.w : "未入选组合";
-  if (m === 4) return "留出 90 天 · 214 笔 · 隔离确认通过";
-  if (m === 5) return fl.note10 || "部署前复核 + 挂载";
-  if (m === 6) return fl.note11 || "IC 与成本漂移正常";
+  if (m === 0) {
+    if (fl.rejected === 0) return f.cost === "cost_negative" ? "成本否定 → dead" : "纯度门拒绝";
+    return "RankIC " + f.ric.toFixed(3) + " · 纯度/成本/查重通过" +
+      (fl.reached >= 1 ? " · 选择期存续" : " · 评测中");
+  }
+  if (m === 1) return fl.pm
+    ? "入选 " + fl.pm + " · 权重 " + fl.w + " · 已过留出/最终确认"
+    : (fl.reached >= 1 ? "组合候选评估中" : "未到达");
+  if (m === 2) return fl.reached >= 2 ? (fl.note10 || "部署前复核 + 挂载") : "未到达";
+  if (m === 3) return fl.reached >= 3 ? (fl.note11 || "IC 与成本漂移正常") : "未到达";
   return "—";
 }
 
@@ -397,7 +407,7 @@ function renderWorkflow(f) {
     '<div class="fish-wrap"><div class="fish-inner">' + cols + "</div></div>";
   document.getElementById("d-flow-aux").textContent =
     fl.rejected >= 0 ? "于「" + MACRO_STAGES[fl.rejected] + "」被拒绝" :
-      fl.reached >= 6 ? "当前挂载于 " + fl.pm : "选择期存续 · 未入选组合";
+      fl.reached >= 3 ? "在跑 · 挂载于 " + fl.pm : "研究评测存续 · 未入选组合";
 }
 
 /* ── 因子详情 ─────────────────────────────── */
@@ -568,11 +578,103 @@ function renderMatrix() {
 }
 
 function renderParams() {
-  document.getElementById("param-rows").innerHTML = PARAMS.map(function (p) {
-    var val = p.safe ? '<span class="badge red">' + p.val + "</span>" : "<b>" + p.val + "</b>";
-    return '<tr><td class="muted">' + p.g + "</td><td>" + p.name + "</td><td>" + val +
-      '</td><td class="muted">' + p.note + '</td><td><button class="btn sm" disabled>编辑</button></td></tr>';
+  document.getElementById("param-rows").innerHTML = PARAMS.map(function (p, i) {
+    var val = p.safe ? '<span class="badge red">' + fmtVal(p) + "</span>" : "<b>" + fmtVal(p) + "</b>";
+    return "<tr><td><b>" + p.name + '</b></td><td class="muted">' + p.g + "</td>" +
+      '<td class="muted">' + p.note + ' <span class="mono" style="font-size:10px;color:var(--text-3);">· ' + p.src + "</span></td>" +
+      "<td>" + val + '</td><td><button class="btn sm" data-act="edit" data-i="' + i + '">编辑</button></td></tr>';
   }).join("");
+}
+
+document.getElementById("param-rows").addEventListener("click", function (e) {
+  var btn = e.target.closest('[data-act="edit"]');
+  if (!btn) return;
+  openParamModal(parseInt(btn.getAttribute("data-i"), 10));
+});
+
+var pmIdx = -1;
+function openParamModal(i) {
+  pmIdx = i;
+  var p = PARAMS[i];
+  document.getElementById("pm-name").textContent = p.name;
+  document.getElementById("pm-meta").textContent = p.g + " · 来源：" + p.src;
+  document.getElementById("pm-desc").textContent = p.note;
+  var f = document.getElementById("pm-fields");
+  if (p.type === "enum") {
+    f.innerHTML = '<select id="pm-v" class="modal-input">' +
+      p.opts.map(function (o) { return '<option' + (o === p.v ? " selected" : "") + '>' + o + '</option>'; }).join("") + '</select>';
+  } else if (p.type === "dual") {
+    f.innerHTML = '<div class="dual"><input id="pm-v" class="modal-input" inputmode="numeric" value="' + p.v[0] + '">' +
+      '<span class="dual-sep">/</span><input id="pm-v2" class="modal-input" inputmode="numeric" value="' + p.v[1] + '">' +
+      '<span class="unit">' + p.unit + '</span></div>';
+  } else {
+    f.innerHTML = '<div class="unit-wrap">' + (p.pre ? '<span class="unit">' + p.pre + '</span>' : '') +
+      '<input id="pm-v" class="modal-input" inputmode="decimal" value="' + p.v + '">' +
+      (p.unit ? '<span class="unit">' + p.unit + '</span>' : '') + '</div>';
+  }
+  document.getElementById("param-modal").style.display = "flex";
+  setTimeout(function () { var inp = document.getElementById("pm-v"); if (inp) { inp.focus(); inp.select(); } }, 30);
+}
+
+function closeParamModal() {
+  document.getElementById("param-modal").style.display = "none";
+}
+
+function saveParam() {
+  if (pmIdx < 0) { closeParamModal(); return; }
+  var p = PARAMS[pmIdx];
+  var oldV = fmtVal(p);
+  var nv;
+  if (p.type === "enum") {
+    nv = document.getElementById("pm-v").value;
+  } else if (p.type === "dual") {
+    var a1 = parseFloat(document.getElementById("pm-v").value);
+    var b1 = parseFloat(document.getElementById("pm-v2").value);
+    if (isNaN(a1) || isNaN(b1)) { toast("请输入有效的数字阈值"); return; }
+    nv = a1 + " / " + b1 + " " + p.unit;
+  } else {
+    var num = parseFloat(document.getElementById("pm-v").value);
+    if (isNaN(num)) { toast("请输入有效数字（可含负号与小数）"); return; }
+    nv = (p.pre || "") + num + (p.unit ? " " + p.unit : "");
+  }
+  if (nv === oldV) { closeParamModal(); return; }
+  if (p.type === "dual") p.v = [a1, b1];
+  else p.v = num;
+  paramRV += 1;
+  var d = new Date(), pad = function (x) { return (x < 10 ? "0" : "") + x; };
+  var ts = d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) + " " +
+    pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds());
+  LOGS.unshift({ t: ts, type: "参数", src: "业务参数",
+    text: p.name + "：" + nv + " · 规则版本 rv-" + (paramRV - 1) + " → rv-" + paramRV,
+    who: "georg", ev: "界面修改" });
+  renderParams();
+  renderLogs();
+  var rn = document.getElementById("rv-num");
+  if (rn) rn.textContent = "rv-" + paramRV;
+  toast("参数「" + p.name + "」已保存 · 规则版本 rv-" + (paramRV - 1) + " → rv-" + paramRV + "，已记入日志记录");
+  closeParamModal();
+}
+
+document.getElementById("pm-close").addEventListener("click", closeParamModal);
+document.getElementById("pm-cancel").addEventListener("click", closeParamModal);
+document.getElementById("pm-save").addEventListener("click", saveParam);
+document.getElementById("pm-fields").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") saveParam();
+  if (e.key === "Escape") closeParamModal();
+});
+document.getElementById("param-modal").addEventListener("click", function (e) {
+  if (e.target === this) closeParamModal();
+});
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") closeParamModal();
+});
+
+function toast(msg) {
+  var t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function () { t.classList.remove("show"); }, 3200);
 }
 
 function renderLogs() {
@@ -598,176 +700,369 @@ document.querySelectorAll(".tab-btn").forEach(function (btn) {
   });
 });
 
-/* ── 总览：实时流水线动画 ─────────────────────── */
-var OVERVIEW_FLOW = [
-  { name: "生成", num: "128", label: "本周产出", extra: "存量提案 214" },
-  { name: "评测", num: "89", label: "评测中", extra: "本周初筛淘汰 81" },
-  { name: "选择期", num: "47", label: "存续", extra: "180 天窗口 · 查重通过" },
-  { name: "组合", num: "12", label: "组合验证中", extra: "边际贡献评估 + 冻结" },
-  { name: "验证", num: "17", label: "留出 + 最终确认", extra: "每周晋级上限 5" },
-  { name: "上线", num: "5", label: "已挂载因子", extra: "PM-007 · PM-009 dry-run" },
-  { name: "监控", num: "18", label: "监控中因子", extra: "PnL +6.42% · 衰减 41 · 停用 96" }
-];
-
+/* ── 总览：北极星 + 动态工作流（五阶段口径 · ADR-0008）──
+   S1 数据治理 = 底座条（不占漏斗节点）；主链 S2 研究评测 → S3 策略组合 → S4 部署交易 →
+   S5 监控反馈；S5 → S2 复盘回流弧。实时模式下粒子是语义化的：候选沿主链流动，在门禁处
+   按通过率晋级或坠落「证据库」，紫色粒子沿回流弧把人审后的新假设带回研究评测。 */
 var SVGNS = "http://www.w3.org/2000/svg";
 
-function renderOverview() {
-  document.getElementById("ov-spark").innerHTML = svgChart(360, 44,
-    '<polyline points="' + linePath(series(7, 16, 0.42, 0.9, 0), 360, 44, 6) +
-    '" fill="none" stroke="#10b981" stroke-width="1.6"/>');
-
-  var host = document.getElementById("flow-anim");
-  var W = 1200, H = 268, Y = 112, N = OVERVIEW_FLOW.length;
-  var x0 = 70, x1 = W - 70, xs = [];
-  for (var i = 0; i < N; i++) xs.push(x0 + i * (x1 - x0) / (N - 1));
-
-  var fbColor = "#7c3aed";
-  var svg = '<svg width="100%" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">';
-  svg += '<line id="flowlane" x1="' + x0 + '" y1="' + Y + '" x2="' + x1 + '" y2="' + Y + '"/>';
-  svg += '<line x1="' + (x0 - 34) + '" y1="' + Y + '" x2="' + (x1 + 34) + '" y2="' + Y +
-    '" stroke="#e5e7eb" stroke-width="4" stroke-linecap="round"/>';
-  svg += '<line x1="' + (x0 - 34) + '" y1="' + Y + '" x2="' + (x1 + 34) + '" y2="' + Y +
-    '" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-dasharray="3 15" opacity="0.3" class="lane-dash"/>';
-
-  /* 淘汰粒子层（画在文字下方） */
-  svg += '<g id="falls"></g>';
-
-  OVERVIEW_FLOW.forEach(function (st, i) {
-    var x = xs[i];
-    svg += '<circle id="halo-' + i + '" cx="' + x + '" cy="' + Y + '" r="11" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>';
-    svg += '<text x="' + x + '" y="' + (Y - 56) + '" text-anchor="middle" font-size="13" font-weight="600" fill="#111827">' + st.name + '</text>';
-    svg += '<text x="' + x + '" y="' + (Y - 32) + '" text-anchor="middle" font-size="21" font-weight="600" fill="#2563eb">' + st.num + '</text>';
-    svg += '<text x="' + x + '" y="' + (Y + 36) + '" text-anchor="middle" font-size="11" fill="#374151">' + st.label + '</text>';
-    svg += '<text x="' + x + '" y="' + (Y + 52) + '" text-anchor="middle" font-size="10" fill="#9ca3af">' + st.extra + '</text>';
-  });
-
-  /* 证据库：所有拒绝/失败/衰减的归宿，复盘的原材料 */
-  var poolY = 208;
-  svg += '<rect x="180" y="' + poolY + '" width="960" height="34" rx="6" fill="#f5f3ff" stroke="' +
-    fbColor + '" stroke-dasharray="4 4" opacity="0.95"/>';
-  svg += '<text x="200" y="' + (poolY + 21) + '" font-size="11" font-weight="600" fill="' + fbColor + '">证据库 · 归因复盘</text>';
-  svg += '<text x="1120" y="' + (poolY + 21) + '" text-anchor="end" font-size="11" fill="' + fbColor +
-    '">累计淘汰 306 · 本季复盘 12 次 → 新假设入队 9（generation +1）</text>';
-
-  /* 反馈弧：证据库 → 生成 */
-  svg += '<path id="fb-path" d="M 185 ' + (poolY + 14) + ' C 115 ' + (poolY + 12) + ', ' + (x0 - 14) + ' ' + (Y + 70) + ', ' + (x0 - 14) + ' ' + (Y + 22) +
-    '" fill="none" stroke="' + fbColor + '" stroke-width="2" stroke-dasharray="5 6" opacity="0.55"/>';
-  svg += '<path d="M ' + (x0 - 20) + ' ' + (Y + 30) + ' L ' + (x0 - 14) + ' ' + (Y + 18) + ' L ' + (x0 - 8) + ' ' + (Y + 30) +
-    '" fill="none" stroke="' + fbColor + '" stroke-width="2" stroke-linecap="round" opacity="0.8"/>';
-  svg += '<g id="parts"></g><g id="fb-parts"></g></svg>';
-  host.innerHTML = svg;
-
-  var lane = document.getElementById("flowlane");
-  var laneLen = lane.getTotalLength();
-  var fbPath = document.getElementById("fb-path");
-  var fbLen = fbPath.getTotalLength();
-
-  var weights = OVERVIEW_FLOW.map(function (o) { return parseFloat(o.num); });
-  var totalW = weights.reduce(function (a, b) { return a + b; }, 0);
-  function pickTarget() {
-    var r = Math.random() * totalW, acc = 0;
-    for (var i = 0; i < weights.length; i++) { acc += weights[i]; if (r <= acc) return i; }
-    return N - 1;
+var OV_STAGES = [
+  {
+    idx: "S2", name: "研究评测", anchor: "proposed · evaluating", fr: "FR2 · FR3.1-3.4",
+    desc: "把假设变成组合就绪因子（存续 + 晋级裁决 + 成本后为正）",
+    live: { num: "214", unit: "存量候选", sub1: "本周新增 128 · 评测中 89", sub2: "选择期存续 47 · 有效独立 31" },
+    detail: [
+      ["本周新增候选", "128", "漏斗分母 · 不设产出目标（ADR-0008）"],
+      ["有效独立数", "31", "选择期 purged CV 的 OOS PnL 聚类 · 防自欺护栏"],
+      ["成本后为正占比", "34%", "taker / maker / 零成本三档 · cost_negative 一律 dead"],
+      ["查重拒绝", "7", "|ρ| > 0.99 拒绝 · 0.90~0.99 标记变体"],
+      ["最大流失级", "成本门", "FR3.8 周报逐级指认"],
+      ["假设 → 结论中位", "6.2 天", "可审计结论：promising / dead / underpowered"]
+    ]
+  },
+  {
+    idx: "S3", name: "策略组合", anchor: "validated", fr: "FR4 · FR3.4/3.5",
+    desc: "边际贡献门 → Top-K/权重 → 冻结 PortfolioDef → 留出 → 最终确认",
+    live: { num: "17", unit: "组合验证中", sub1: "组合门 5 · 留出 9 · 最终确认 3", sub2: "留出通过率 71% · 本周晋级 2/5" },
+    detail: [
+      ["留出通过率", "71%", "90 天留出 · PortfolioDef 整体裁决"],
+      ["样本量三级裁决", "5 / 1 / 0", "≥69 可信 / 30~69 临时 PASS / <30 UNDERPOWERED"],
+      ["边际贡献门拒绝", "4", "无正边际贡献不进入冻结"],
+      ["换手达标率", "100%", "单周期换手 ≤100%（FR4.4）"],
+      ["Top-K 配置", "3 · 硬上限 5", "选择期逆波动率权重"],
+      ["防泄漏违例", "0", "看结果后改字段 → 新 ID 重跑，必须为 0（FR4.5）"]
+    ]
+  },
+  {
+    idx: "S4", name: "部署交易", anchor: "champion · challenger", fr: "FR5",
+    desc: "部署前复核 → 挂载 → dry-run / paper，确定性系统执行，风控不可绕过",
+    live: { num: "2", unit: "在跑组合", sub1: "5 因子 · Challenger 3 待替换", sub2: "确认 → 挂载 0.6 天 · parity 100%" },
+    detail: [
+      ["部署前复核通过率", "86%", "晚于留出窗的最近窗口 · challenger 替换重做（FR5.2）"],
+      ["确认 → 挂载", "0.6 天", "门槛 ≤1 天（G5）"],
+      ["决策时 parity", "100%", "离线特征 → 预测 → 仓位 → order-intent（FR5.7）"],
+      ["执行四桶", "96.4% accepted", "intended / attempted / accepted / failed"],
+      ["滑点偏差", "+0.4bp", "实际成交回流 → 持续校准 cm-v1"],
+      ["风控事件", "1", "相关性护栏触发 · 未熔断 · kill-switch 就绪"]
+    ]
+  },
+  {
+    idx: "S5", name: "监控反馈", anchor: "monitoring · decayed · disabled", fr: "FR6 · FR7",
+    desc: "北极星承载阶段：衰减观测 → 生命周期动作 → 归因复盘 → 新假设回流",
+    live: { num: "+4.8%", unit: "滚动 90 天超额", sub1: "滚动窗 3/4 为正 · 回撤 -2.3% / 阈 -8%", sub2: "降权 3 · 停用 2 · 复盘 12 → 新假设 9" },
+    detail: [
+      ["滚动 90 天超额", "+4.8%", "成本后 · 相对各策略预注册基准（北极星）"],
+      ["滚动窗持续性", "3/4 为正", "最近 4 个滚动 90 天窗 · 要求 ≥3"],
+      ["IC 漂移", "-0.002 / 月", "低于 0.015 连续 5 日自动降权"],
+      ["回测偏差", "-0.3%", "回测 vs paper · 成本漂移 +2%"],
+      ["生命周期动作", "降权 3 · 停用 2", "恢复重验 1/1 = 100%（FR6.2）"],
+      ["复盘回流", "12 → 9", "复盘 → 人审入队 · generation+1 · 回到研究评测"]
+    ]
   }
+];
 
-  var halos = [];
-  for (var hIdx = 0; hIdx < N; hIdx++) halos.push(document.getElementById("halo-" + hIdx));
-  var pulseT = {};
-  for (var pIdx = 0; pIdx < N; pIdx++) pulseT[pIdx] = -9;
+/* 门禁胶囊：只有真实筛选门显示转化率；S4 → S5 是时间推移，不设百分比 */
+var OV_GATE_PILLS = [
+  { label: "冻结转化", pct: "26%" },
+  { label: "验证 → 挂载", pct: "75%" },
+  { label: "持续运行", pct: null }
+];
+var OV_PASS_RATE = [0.55, 0.75, 1]; // 粒子过门示意通过率（可视化速率，非真实比例）
 
-  var parts = [], fbParts = [], falls = [];
-  function spawnPart(randomP) {
+/* 时段流量周基线：in 流入 / kill 淘汰 / out 流出；hold = 选择期滚存 */
+var OV_FLOW = [
+  { in: 128, kill: 81, out: 12, hold: 47 },
+  { in: 12, kill: 3, out: 9 },
+  { in: 9, kill: 1, out: 8 },
+  { in: 8, kill: 1, out: 0 }
+];
+var OV_REVIEW = { review: 3, hyp: 2, decay: 2 }; // 周基线：复盘 / 新假设入队 / 降权
+
+var OV_RANGES = {
+  day: { label: "今日", scale: 0.14 },
+  week: { label: "本周", scale: 1 },
+  month: { label: "本月", scale: 4.2 },
+  year: { label: "今年", scale: 46 },
+  custom: { label: "自定义区间", scale: 2.6 }
+};
+
+var ovMode = "live";
+var ovSel = 0;
+var ovGeom = null;
+var ovAnim = { raf: 0, active: false };
+
+function ovSpark8(scale, base) {
+  var r = mulberry32(Math.round(base * 97 + scale * 13));
+  var pts = [];
+  for (var i = 0; i < 8; i++) {
+    pts.push(Math.max(0.4, (base + r() * base * 1.1) * scale * (0.55 + 0.45 * i / 7)));
+  }
+  return pts;
+}
+
+function ovFlowCards() {
+  var s = (OV_RANGES[ovMode] || OV_RANGES.week).scale;
+  function f(v) { return Math.max(1, Math.round(v * s)); }
+  var b = OV_FLOW;
+  var rv = f(OV_REVIEW.review), hyp = f(OV_REVIEW.hyp), decay = f(OV_REVIEW.decay);
+  return [
+    { num: String(f(b[0].in)), unit: "时段流入", sub1: "初筛淘汰 " + f(b[0].kill) + " · 存续滚存 " + f(b[0].hold), sub2: "冻结流出 " + f(b[0].out) + " · 转化 26%", spark: ovSpark8(s, 10) },
+    { num: String(f(b[1].in)), unit: "新冻结组合", sub1: "留出/确认淘汰 " + f(b[1].kill), sub2: "验证通过流出 " + f(b[1].out) + " · 转化 75%", spark: ovSpark8(s, 4) },
+    { num: String(f(b[2].in)), unit: "进入部署复核", sub1: "复核拒绝 " + f(b[2].kill), sub2: "新挂载 " + f(b[2].out) + " · 用时 0.6 天", spark: ovSpark8(s, 2) },
+    { num: String(f(b[3].in)), unit: "进入监控", sub1: "降权 " + decay + " · 停用 " + Math.max(0, decay - 1), sub2: "复盘 " + rv + " → 新假设 " + hyp, spark: ovSpark8(s, 2) }
+  ];
+}
+
+function ovCardsHtml() {
+  var live = ovMode === "live";
+  var flows = live ? null : ovFlowCards();
+  return '<div class="flow-nodes">' + OV_STAGES.map(function (st, i) {
+    var d = live ? st.live : flows[i];
+    var spark = "";
+    if (!live) {
+      spark = '<div class="fnode-spark"><svg width="100%" height="22" viewBox="0 0 100 22" preserveAspectRatio="none">' +
+        '<polyline points="' + linePath(d.spark, 100, 22, 3) + '" fill="none" stroke="#10b981" stroke-width="1.4"/>' +
+        '</svg><span>阶段流量趋势</span></div>';
+    }
+    return '<div class="fnode' + (i === ovSel ? " sel" : "") + '" data-i="' + i + '">' +
+      '<div class="fnode-top"><span class="fnode-idx">' + st.idx + '</span><span class="fnode-name">' + st.name +
+      '</span><span class="fnode-anchor">' + st.anchor + '</span></div>' +
+      '<div class="fnode-num">' + d.num + "<small> " + d.unit + "</small></div>" +
+      '<div class="fnode-sub">' + d.sub1 + '</div>' +
+      '<div class="fnode-sub muted">' + d.sub2 + '</div>' +
+      spark +
+      '<div class="fnode-foot">' + st.fr + '</div>' +
+      '</div>';
+  }).join("") + "</div>";
+}
+
+function ovDetailRender() {
+  var st = OV_STAGES[ovSel];
+  var items = st.detail.map(function (m) {
+    return '<div class="ovd-item"><div class="ovd-k">' + m[0] + '</div><div class="ovd-v">' + m[1] +
+      '</div><div class="ovd-n">' + m[2] + "</div></div>";
+  }).join("");
+  document.getElementById("ov-detail").innerHTML =
+    '<div class="ovd-head"><span class="fnode-idx">' + st.idx + '</span><b>' + st.name + "</b>" +
+    '<span class="muted">' + st.desc + '</span><span class="badge blue">' + st.anchor + '</span>' +
+    '<span class="muted mono">' + st.fr + "</span></div>" +
+    '<div class="ovd-grid">' + items + "</div>";
+}
+
+function ovBaseRender() {
+  document.getElementById("flow-base").innerHTML =
+    '<span class="fb-tag">S1 底座 · 数据治理</span>' +
+    '<span class="fb-item">快照 <b class="mono">v2026.09.12</b> <b class="pos">对账通过</b></span>' +
+    '<span class="fb-item">缺失/重复 K 线 <b class="pos">0</b></span>' +
+    '<span class="fb-item">采集延迟 <b>0.8s</b></span>' +
+    '<span class="fb-item">NAS 备份 <b class="pos">09-12 ✓</b></span>' +
+    '<span class="fb-item">宇宙 <b>50 对</b></span>' +
+    '<span class="fb-note">研究只读不可变快照（FR1 · ADR-0007）——支撑上方全部阶段，失效快照下游必须拒绝</span>';
+}
+
+function ovRender() {
+  var stage = document.getElementById("flow-stage");
+  var W = Math.max(760, stage.clientWidth || 1100);
+  var H = 452, cardBot = ovMode === "live" ? 158 : 200, laneY = 246, trayY = 292, trayH = 42, arcY = 424;
+  var N = OV_STAGES.length;
+  var xs = [];
+  for (var i = 0; i < N; i++) xs.push(W * (2 * i + 1) / (2 * N));
+  var x0 = xs[0], xL = xs[N - 1];
+  var live = ovMode === "live";
+
+  var svg = '<svg id="flow-svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '">';
+  /* 主链 */
+  svg += '<line x1="' + (x0 - 44) + '" y1="' + laneY + '" x2="' + (xL + 30) + '" y2="' + laneY + '" stroke="#e5e7eb" stroke-width="4" stroke-linecap="round"/>';
+  svg += '<line class="lane-dash" x1="' + (x0 - 44) + '" y1="' + laneY + '" x2="' + (xL + 30) + '" y2="' + laneY + '" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-dasharray="3 15" opacity="0.25"/>';
+  svg += '<path d="M ' + (x0 - 42) + " " + (laneY - 6) + " L " + (x0 - 34) + " " + laneY + " L " + (x0 - 42) + " " + (laneY + 6) + '" fill="none" stroke="#9ca3af" stroke-width="1.6"/>';
+  svg += '<text x="' + (x0 - 44) + '" y="' + (laneY - 16) + '" font-size="10" fill="#9ca3af">候选流入</text>';
+  /* 节点：连接线 + halo */
+  for (var i = 0; i < N; i++) {
+    svg += '<line x1="' + xs[i] + '" y1="' + cardBot + '" x2="' + xs[i] + '" y2="' + (laneY - 12) + '" stroke="#d1d5db" stroke-width="1.4" stroke-dasharray="2 4"/>';
+    svg += '<circle id="ov-halo-' + i + '" cx="' + xs[i] + '" cy="' + laneY + '" r="11" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>';
+  }
+  /* 门禁胶囊 */
+  for (var g = 0; g < N - 1; g++) {
+    var mid = (xs[g] + xs[g + 1]) / 2;
+    var t = OV_GATE_PILLS[g].label + (OV_GATE_PILLS[g].pct ? " " + OV_GATE_PILLS[g].pct : "");
+    var tw = t.length * 6.4 + 18;
+    svg += '<line x1="' + mid + '" y1="' + (laneY - 10) + '" x2="' + mid + '" y2="' + (laneY - 3) + '" stroke="#d1d5db" stroke-width="1.2"/>';
+    svg += '<rect x="' + (mid - tw / 2) + '" y="' + (laneY - 30) + '" width="' + tw + '" height="20" rx="10" fill="#f3f4f6" stroke="#e5e7eb"/>';
+    svg += '<text x="' + mid + '" y="' + (laneY - 16) + '" text-anchor="middle" font-size="10.5" fill="#6b7280">' + t + "</text>";
+  }
+  /* 证据库托盘 */
+  var killTxt;
+  if (live) {
+    killTxt = "累计淘汰 306 · 降权 3 · 停用 2";
+  } else {
+    var sc = (OV_RANGES[ovMode] || OV_RANGES.week).scale;
+    function kf(v) { return Math.max(1, Math.round(v * sc)); }
+    killTxt = "时段淘汰 " + kf(OV_FLOW[0].kill + OV_FLOW[1].kill + OV_FLOW[2].kill) +
+      " · 复盘 " + kf(OV_REVIEW.review) + " → 新假设 " + kf(OV_REVIEW.hyp);
+  }
+  svg += '<rect x="' + (x0 - 30) + '" y="' + trayY + '" width="' + (xL - x0 + 60) + '" height="' + trayH + '" rx="6" fill="#f5f3ff" stroke="#7c3aed" stroke-dasharray="4 4" opacity="0.95"/>';
+  svg += '<text x="' + (x0 - 12) + '" y="' + (trayY + 26) + '" font-size="11" font-weight="600" fill="#7c3aed">证据库 · 归因复盘（失败也是资产）</text>';
+  svg += '<text x="' + (xL + 42) + '" y="' + (trayY + 26) + '" text-anchor="end" font-size="11" fill="#7c3aed">' + killTxt + "</text>";
+  /* 回流弧 S5 → S2 */
+  svg += '<path id="ov-arc" d="M ' + xL + " " + (laneY + 14) + " C " + xL + " " + arcY + ", " + x0 + " " + arcY + ", " + x0 + " " + (laneY + 14) + '" fill="none" stroke="#7c3aed" stroke-width="1.8" stroke-dasharray="5 6" opacity="0.55"/>';
+  svg += '<path d="M ' + (x0 - 6) + " " + (laneY + 26) + " L " + x0 + " " + (laneY + 16) + " L " + (x0 + 6) + " " + (laneY + 26) + '" fill="none" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round" opacity="0.8"/>';
+  svg += '<text x="' + ((x0 + xL) / 2) + '" y="' + (arcY - 10) + '" text-anchor="middle" font-size="10.5" fill="#7c3aed" opacity="0.85">复盘回流 · 归因 → 人审 → 新假设入队（generation+1）· 本季 12 次复盘 → 9 新假设</text>';
+  svg += '<g id="ov-parts"></g></svg>';
+
+  stage.innerHTML = svg + ovCardsHtml();
+  ovBaseRender();
+
+  ovGeom = {
+    xs: xs, laneY: laneY, trayY: trayY,
+    halos: OV_STAGES.map(function (_, i) { return document.getElementById("ov-halo-" + i); }),
+    pulseT: [-9, -9, -9, -9]
+  };
+}
+
+function ovStartAnim() {
+  if (ovAnim.active) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var partsG = document.getElementById("ov-parts");
+  var arc = document.getElementById("ov-arc");
+  if (!partsG || !arc || !ovGeom) return;
+  ovAnim.active = true;
+  var xs = ovGeom.xs, laneY = ovGeom.laneY, trayY = ovGeom.trayY;
+  var halos = ovGeom.halos, pulseT = ovGeom.pulseT;
+  var arcLen = arc.getTotalLength();
+
+  var parts = [];
+  function makeEl(color) {
     var el = document.createElementNS(SVGNS, "circle");
-    el.setAttribute("r", "3.4");
-    el.setAttribute("fill", "#2563eb");
-    el.setAttribute("opacity", "0");
-    document.getElementById("parts").appendChild(el);
-    parts.push({ p: randomP ? Math.random() * laneLen : 0, target: pickTarget(),
-      speed: 55 + Math.random() * 65, el: el, fade: 0 });
+    el.setAttribute("r", "3.4"); el.setAttribute("fill", color); el.setAttribute("opacity", "0");
+    partsG.appendChild(el);
+    return el;
   }
-  function spawnFb(delay) {
-    var el = document.createElementNS(SVGNS, "circle");
-    el.setAttribute("r", "3.4");
-    el.setAttribute("fill", fbColor);
-    el.setAttribute("opacity", "0");
-    document.getElementById("fb-parts").appendChild(el);
-    fbParts.push({ len: -delay, speed: 110 + Math.random() * 40, el: el });
+  function spawn(x) {
+    parts.push({ x: x === undefined ? -14 : x, y: laneY, node: 0, st: "run", speed: 110 + Math.random() * 70, fade: 0, el: makeEl("#2563eb") });
   }
+  for (var i = 0; i < 16; i++) spawn(24 + Math.random() * (xs[3] - 60));
 
-  for (var sCount = 0; sCount < 34; sCount++) spawnPart(Math.random() * laneLen);
-  spawnFb(0); spawnFb(2600); spawnFb(5200);
-
-  /* 淘汰粒子：评测/选择期/组合/验证/监控 各自不定期落入证据库 */
-  var FALL_FROM = [1, 2, 3, 4, 6];
-  var fallNext = {}, now0 = performance.now();
-  FALL_FROM.forEach(function (m) { fallNext[m] = now0 + 1200 + Math.random() * 5200; });
-  var fallsG = document.getElementById("falls");
-
-  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce) return;
+  var returns = [];
+  function spawnRet(delay) {
+    returns.push({ len: -delay, speed: 95 + Math.random() * 45, el: makeEl("#7c3aed") });
+  }
+  spawnRet(1000); spawnRet(4600);
 
   var last = performance.now();
   function frame(now) {
+    if (!ovAnim.active) return;
     var dt = Math.min(0.05, (now - last) / 1000); last = now;
 
-    /* 淘汰坠落 */
-    FALL_FROM.forEach(function (m) {
-      if (now >= (fallNext[m] || 0)) {
-        fallNext[m] = now + 5000 + Math.random() * 7000;
-        var el = document.createElementNS(SVGNS, "circle");
-        var decay = m === 6;
-        el.setAttribute("r", "2.6");
-        el.setAttribute("fill", decay ? "#d97706" : "#9ca3af");
-        el.setAttribute("opacity", "0.8");
-        fallsG.appendChild(el);
-        falls.push({ x: xs[m], y: Y + 8, vy: 85 + Math.random() * 35, el: el, ty: poolY - 2,
-          c: decay ? "#d97706" : "#9ca3af" });
+    if (parts.length < 16 && Math.random() < 0.05) spawn();
+
+    parts = parts.filter(function (p) {
+      if (p.st === "run") {
+        p.x += p.speed * dt;
+        var tx = xs[p.node];
+        if (p.x >= tx) {
+          p.x = tx; pulseT[p.node] = now;
+          if (p.node === 3) { p.st = "done"; p.el.setAttribute("fill", "#10b981"); }
+          else if (Math.random() < OV_PASS_RATE[p.node]) { p.node++; }
+          else { p.st = "fall"; p.el.setAttribute("fill", "#9ca3af"); p.vy = 95 + Math.random() * 55; }
+        }
+        p.el.setAttribute("cx", p.x.toFixed(1)); p.el.setAttribute("cy", p.y.toFixed(1));
+        p.el.setAttribute("opacity", "0.85");
+        return true;
       }
-    });
-    falls = falls.filter(function (f) {
-      f.y += f.vy * dt;
-      if (f.y >= f.ty) { f.el.parentNode && f.el.parentNode.removeChild(f.el); return false; }
-      f.el.setAttribute("cy", f.y.toFixed(1));
+      if (p.st === "fall") {
+        p.y += p.vy * dt;
+        p.el.setAttribute("cy", p.y.toFixed(1));
+        if (p.y >= trayY + 8) { p.el.parentNode.removeChild(p.el); return false; }
+        return true;
+      }
+      p.fade += dt * 1.4;
+      p.el.setAttribute("opacity", String(Math.max(0, 0.85 - p.fade)));
+      if (p.fade >= 1) { p.el.parentNode.removeChild(p.el); return false; }
       return true;
     });
 
-    parts.forEach(function (pt) {
-      var stopX = xs[pt.target];
-      if (pt.fade === 0) {
-        pt.p += pt.speed * dt;
-        if (pt.p > laneLen) pt.p = laneLen;
-        var pos = lane.getPointAtLength(pt.p);
-        pt.el.setAttribute("cx", pos.x); pt.el.setAttribute("cy", pos.y);
-        pt.el.setAttribute("opacity", "0.85");
-        if (pt.p >= laneLen || pos.x >= xs[pt.target] - 0.5) { pt.fade = 0.001; pulseT[pt.target] = now; }
-      } else {
-        pt.fade += dt * 1.6;
-        pt.el.setAttribute("opacity", String(Math.max(0, 0.85 - pt.fade)));
-        if (pt.fade >= 1) {
-          pt.p = 0; pt.target = pickTarget(); pt.fade = 0;
-          pt.el.setAttribute("opacity", "0");
-        }
-      }
+    returns.forEach(function (rp) {
+      rp.len += rp.speed * dt;
+      if (rp.len < 0) { rp.el.setAttribute("opacity", "0"); return; }
+      if (rp.len >= arcLen) { pulseT[0] = now; rp.len = -(5000 + Math.random() * 6000); return; }
+      var pos = arc.getPointAtLength(rp.len);
+      rp.el.setAttribute("cx", pos.x.toFixed(1)); rp.el.setAttribute("cy", pos.y.toFixed(1));
+      rp.el.setAttribute("opacity", "0.9");
     });
 
-    fbParts.forEach(function (pt) {
-      pt.len += pt.speed * dt;
-      if (pt.len < 0) { pt.el.setAttribute("opacity", "0"); return; }
-      if (pt.len >= fbLen) { pulseT[0] = now; pt.len = -(3000 + Math.random() * 5000); return; }
-      var pos = fbPath.getPointAtLength(pt.len);
-      pt.el.setAttribute("cx", pos.x); pt.el.setAttribute("cy", pos.y);
-      pt.el.setAttribute("opacity", "0.9");
-    });
-
-    for (var k = 0; k < N; k++) {
+    for (var k = 0; k < halos.length; k++) {
       var dt2 = (now - pulseT[k]) / 1000;
       var r = dt2 >= 0 && dt2 < 0.6 ? 11 + 5 * Math.sin(dt2 / 0.6 * Math.PI) : 11;
       halos[k].setAttribute("r", r.toFixed(1));
     }
-    requestAnimationFrame(frame);
+    ovAnim.raf = requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  ovAnim.raf = requestAnimationFrame(frame);
 }
+
+function ovStopAnim() {
+  ovAnim.active = false;
+  if (ovAnim.raf) cancelAnimationFrame(ovAnim.raf);
+}
+
+function renderHero() {
+  document.getElementById("ov-spark").innerHTML = svgChart(560, 44,
+    '<polyline points="' + linePath(series(7, 24, 0.55, 0.8, 0), 560, 44, 6) + '" fill="none" stroke="#10b981" stroke-width="1.6"/>');
+  document.getElementById("ov-spark-pm").innerHTML = svgChart(360, 40,
+    '<polyline points="' + linePath(series(31, 18, 0.4, 0.9, 0), 360, 40, 6) + '" fill="none" stroke="#2563eb" stroke-width="1.6"/>');
+}
+
+document.querySelectorAll("#ov-seg .seg-btn").forEach(function (b) {
+  b.addEventListener("click", function () { ovSetMode(b.getAttribute("data-r")); });
+});
+document.getElementById("ov-apply").addEventListener("click", function () {
+  var f = document.getElementById("ov-from").value, t = document.getElementById("ov-to").value;
+  OV_RANGES.custom.label = (f || "起") + " → " + (t || "止");
+  ovSetMode("custom");
+});
+document.getElementById("flow-stage").addEventListener("click", function (e) {
+  var n = e.target.closest(".fnode");
+  if (!n) return;
+  ovSel = parseInt(n.getAttribute("data-i"), 10);
+  document.querySelectorAll("#flow-stage .fnode").forEach(function (c) {
+    c.classList.toggle("sel", parseInt(c.getAttribute("data-i"), 10) === ovSel);
+  });
+  ovDetailRender();
+});
+
+function ovSetMode(r) {
+  ovMode = r;
+  document.querySelectorAll("#ov-seg .seg-btn").forEach(function (b) {
+    b.classList.toggle("active", b.getAttribute("data-r") === r);
+  });
+  var custom = document.getElementById("ov-custom");
+  var note = document.getElementById("ov-mode-note");
+  var pill = document.getElementById("ov-live-pill");
+  ovStopAnim();
+  if (r === "live") {
+    custom.style.display = "none";
+    pill.style.display = "inline-flex";
+    note.textContent = "实时：粒子 = 候选沿主链流动，按门禁通过率晋级或坠落证据库（速率示意）· 紫色粒子为复盘回流";
+    ovRender();
+    ovStartAnim();
+  } else {
+    pill.style.display = "none";
+    custom.style.display = r === "custom" ? "inline-flex" : "none";
+    var lbl = r === "custom" ? OV_RANGES.custom.label : OV_RANGES[r].label;
+    note.textContent = "时段统计：" + lbl + " · 节点为该时段流量，门禁胶囊为转化率，节点下为趋势";
+    ovRender();
+  }
+  ovDetailRender();
+}
+
+var ovResizeT = 0;
+window.addEventListener("resize", function () {
+  clearTimeout(ovResizeT);
+  ovResizeT = setTimeout(function () {
+    ovStopAnim(); ovRender();
+    if (ovMode === "live") ovStartAnim();
+  }, 150);
+});
 
 /* ── 初始化 ─────────────────────────────── */
 renderStages("factory-stages", STAGES);
@@ -780,7 +1075,8 @@ renderStrategy();
 renderMatrix();
 renderParams();
 renderLogs();
-renderOverview();
+renderHero();
+ovSetMode(ovMode);
 
 /* hash 深链：#factors / #detail / #strategy … */
 (function () {

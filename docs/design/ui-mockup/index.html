@@ -43,14 +43,14 @@
   <div class="view-head"><h1>因子工厂</h1><span class="sub">候选产能、流水线分布与因子全量列表</span></div>
 
   <div class="grid g4">
-    <div class="card"><h3>本周产出</h3><div class="big">128 <small>候选</small></div><div class="sub">目标 ≥ 100 · 已达成</div></div>
+    <div class="card"><h3>本周产出</h3><div class="big">128 <small>候选</small></div><div class="sub">漏斗分母 · 不设周产出目标（ADR-0008）</div></div>
     <div class="card"><h3>初筛存活</h3><div class="big">47</div><div class="sub">其余 81 个被纯度门 / 成本 / 查重淘汰</div></div>
-    <div class="card"><h3>组合验证中</h3><div class="big">12</div><div class="sub">留出验证 90 天 · 其中最终确认 5</div></div>
-    <div class="card"><h3>在跑与监控</h3><div class="big">2 <small>Champion</small></div><div class="sub">Challenger 3 · 监控 18 · 有效独立数 23</div></div>
+    <div class="card"><h3>组合验证中</h3><div class="big">17</div><div class="sub">组合门 5 · 留出 9 · 最终确认 3</div></div>
+    <div class="card"><h3>在跑与监控</h3><div class="big">2 <small>在跑组合 · 5 因子</small></div><div class="sub">Challenger 3 · 衰减 3 · 停用 2 · 有效独立数 31</div></div>
   </div>
 
   <div class="grid g2 mt">
-    <div class="card"><h3>流水线状态分布</h3><div id="factory-stages"></div></div>
+    <div class="card"><h3>生命周期状态分布（存量）</h3><div id="factory-stages"></div></div>
     <div class="card"><h3>评测批次</h3><div id="factory-batches"></div></div>
   </div>
 
@@ -94,7 +94,7 @@
   <div class="card">
     <h3>生命周期工作流 <span class="aux" id="d-flow-aux"></span></h3>
     <div class="flow" id="d-flow"></div>
-    <div class="fsh-legend"><span>✓ 通过</span><span>● 进行中</span><span>✕ 拒绝</span><span>· 未到达</span><span>自「验证」起为组合级环节，以所属 PortfolioDef 整体进行</span></div>
+    <div class="fsh-legend"><span>✓ 通过</span><span>● 进行中</span><span>✕ 拒绝</span><span>· 未到达</span><span>自「策略组合」起为组合级环节，以所属 PortfolioDef 整体进行；数据治理为全链底座，不计入因子流程</span></div>
     <div class="hint">各环节的留出访问、审批与降权记录均可在设置的记录表中按证据编号检索</div>
   </div>
 
@@ -155,28 +155,87 @@
 
 <!-- ═══ 总览 ═══ -->
 <section class="view active" id="view-overview">
-  <div class="view-head"><h1>总览</h1><span class="sub">全工作流各阶段运行情况</span></div>
+  <div class="view-head"><h1>总览</h1><span class="sub">北极星与端到端工作流各阶段运行情况</span></div>
 
-  <div class="card" style="padding:6px 8px 0;">
-    <div id="flow-anim"></div>
+  <div class="grid g3">
+    <div class="card span2">
+      <h3>北极星 · 在跑组合持续盈利 <span class="aux">ADR-0008 · 成本后 · 相对预注册基准</span></h3>
+      <div class="ov-hero-grid">
+        <div class="ov-hero-main">
+          <div class="big pos" style="font-size:36px;">+4.8%</div>
+          <div class="sub">滚动 90 天净超额收益</div>
+        </div>
+        <div class="ov-hero-cell">
+          <div class="ov-windows"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+          <div class="sub">滚动窗 <b>3/4</b> 为正 · 要求 ≥3/4</div>
+        </div>
+        <div class="ov-hero-cell">
+          <div class="ov-kv"><span>当前回撤</span><b class="neg">-2.3%</b><em>阈值 -8%</em></div>
+          <div class="ov-kv"><span>单组合样本</span><b>214 笔</b><em>≥69 ✓</em></div>
+          <div class="ov-kv"><span>成本三档</span><b class="pos">均为正</b><em>taker / maker / 零成本</em></div>
+        </div>
+        <div class="ov-hero-cell">
+          <span class="badge green">达标中</span>
+          <div class="sub">在跑 2 组合 · 5 因子</div>
+        </div>
+      </div>
+      <div class="ov-hero-spark">
+        <div id="ov-spark"></div>
+        <div class="chart-meta"><span>在跑组合合并净值 · 近 90 个交易日</span><span>成本后 · 超额</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>信任护栏 <span class="aux">FR7 · 违例即阻断</span></h3>
+      <dl class="ov-guard">
+        <dt>前视泄漏</dt><dd class="pos">0 <span class="muted">/ 容忍度 0</span></dd>
+        <dt>留出访问台账</dt><dd class="pos">100% <span class="muted">append-only</span></dd>
+        <dt>实验可复现率</dt><dd class="pos">100% <span class="muted">manifest 重建</span></dd>
+        <dt>数据快照</dt><dd><span class="mono">v2026.09.12</span> <span class="pos">对账通过</span></dd>
+        <dt>verify 门禁</dt><dd class="pos">26 项通过 <span class="muted">09-12 18:04</span></dd>
+      </dl>
+      <div class="hint">北极星允许早期为零；§2.6 论题检查点为停止时钟（M4 后 10 周或 100 个有效独立候选，先到为准）。</div>
+    </div>
+  </div>
+
+  <div class="card mt ov-flowcard">
+    <h3>端到端工作流 <span class="aux">S1 底座 + 四阶段主链 + 复盘回流 · 点击节点查看该阶段核心指标</span></h3>
+    <div class="ov-toolbar" style="margin-bottom:4px;">
+      <div class="seg" id="ov-seg">
+        <button class="seg-btn active" data-r="live">实时</button>
+        <button class="seg-btn" data-r="day">今日</button>
+        <button class="seg-btn" data-r="week">本周</button>
+        <button class="seg-btn" data-r="month">本月</button>
+        <button class="seg-btn" data-r="year">今年</button>
+        <button class="seg-btn" data-r="custom">自定义</button>
+      </div>
+      <span class="custom-dates" id="ov-custom" style="display:none; gap:6px; align-items:center;">
+        <input type="date" id="ov-from" value="2026-08-01"> <span class="muted">→</span> <input type="date" id="ov-to" value="2026-09-13">
+        <button class="btn sm" id="ov-apply">应用</button>
+      </span>
+      <span class="hint" id="ov-mode-note" style="margin-top:0;"></span>
+      <span class="live-pill" id="ov-live-pill"><i></i>LIVE</span>
+    </div>
+    <div class="flow-stage" id="flow-stage"></div>
+    <div class="flow-base" id="flow-base"></div>
+    <div class="ov-detail" id="ov-detail"></div>
   </div>
 
   <div class="grid g3 mt">
     <div class="card">
-      <h3>策略执行 <span class="aux">PM-007 · dry-run</span></h3>
-      <div class="big pos">+6.42%</div>
-      <div class="sub">累计 · 今日 <span class="neg">-0.31%</span> · 回撤 -1.94% · 持仓 4</div>
-      <div style="margin-top:10px;"><div id="ov-spark"></div></div>
+      <h3>昨夜产出 <span class="aux link" data-goto="factory">进因子工厂 →</span></h3>
+      <div class="big">124 <small>候选</small></div>
+      <div class="sub">B-20260912 · promising 9 · 淘汰 64 · 成本否定 17 · 分母口径 · 不设产出目标</div>
     </div>
     <div class="card">
       <h3>信号与数据</h3>
       <div class="big pos">0.038</div>
-      <div class="sub">信号预测力 · 采集延迟 0.8s · 同步 42s · 陈旧信号 7</div>
+      <div class="sub">信号滚动 IC · 采集延迟 0.8s · 同步 42s · 陈旧信号 7（越界已置空）</div>
     </div>
     <div class="card">
-      <h3>昨夜产出 <span class="aux link" data-goto="factory">进因子工厂 →</span></h3>
-      <div class="big">124 <small>候选</small></div>
-      <div class="sub">B-20260912 · 晋级 9 · 淘汰 64 · 成本否定 17</div>
+      <h3>在跑组合 · PM-007 <span class="aux">dry-run · r3</span></h3>
+      <div class="big pos">+6.42%</div>
+      <div class="sub">累计 · 今日 <span class="neg">-0.31%</span> · 回撤 -1.94% · 持仓 4</div>
+      <div style="margin-top:10px;"><div id="ov-spark-pm"></div></div>
     </div>
   </div>
 </section>
@@ -243,11 +302,11 @@
   <div class="tab-panel active" id="tab-biz">
     <div class="card">
       <table>
-        <thead><tr><th style="width:90px;">分组</th><th>参数</th><th>当前值</th><th>说明</th><th style="width:70px;">操作</th></tr></thead>
+        <thead><tr><th>参数</th><th style="width:80px;">分组</th><th>说明</th><th>当前值</th><th style="width:130px;">操作</th></tr></thead>
         <tbody id="param-rows"></tbody>
       </table>
     </div>
-    <div class="hint">参数修改即生成新规则版本（当前 <span class="mono">rv-7</span>）并自动记入「项目运维 → 日志记录」；安全相关项修改需二次确认。</div>
+    <div class="hint">参数修改即生成新规则版本（当前 <span class="mono" id="rv-num">rv-7</span>）并自动记入「项目运维 → 日志记录」；安全相关项修改需二次确认。</div>
   </div>
 
   <div class="tab-panel" id="tab-ops">
@@ -274,6 +333,29 @@
     </div>
 </section>
 
+  <div id="toast"></div>
+
+  <div class="modal-mask" id="param-modal" style="display:none">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="pm-name">—</div>
+          <div class="modal-sub" id="pm-meta">—</div>
+        </div>
+        <button class="modal-x" id="pm-close" title="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-desc" id="pm-desc">—</div>
+        <label class="modal-label">当前值</label>
+        <div id="pm-fields"></div>
+        <div class="modal-warn">保存后立即生效：生成新规则版本，并自动记入「项目运维 → 日志记录」。</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="pm-cancel">取消</button>
+        <button class="btn primary" id="pm-save">保存</button>
+      </div>
+    </div>
+  </div>
 </main>
 
 <script src="app.js"></script>
