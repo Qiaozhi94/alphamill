@@ -2,7 +2,7 @@
 kind: feature
 id: F004
 version: "0.2"
-status: draft
+status: review
 gate_version: 1
 related_features: [F001, F002]
 topics: [kronos, inference, deployment]
@@ -123,8 +123,8 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 
 ### 验收清单
 
-- [x] **AC-001** (`FR-001`, `NFR-001`): `--profile kronos-real` 拉起的实例由目标 compose 服务与 real 构建目标产生（容器身份、只读挂载、8002:8001 成立），且完整运行链（模型 + TimescaleDB）可用：model_enabled=true、/health 的 database 可达、/predict 返回 source=kronos；不带该 profile 时默认编排不启用也不构建 real 服务、默认镜像不含 torch — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/integration/test_f004_real_profile.py`
-- [x] **AC-002** (`FR-001`): 失败关闭与串行推理——vendor/权重/分词器缺失或加载失败时 real 实例启动即非零退出并打印缺失路径（不退回 mock）；并发 `/predict` 下模型加载至多一次且推理互斥 — tests: `tests/unit/test_f004_kronos_runtime_contract.py`、`tests/integration/test_f004_real_profile.py`
+- [x] **AC-001** (`FR-001`, `NFR-001`): --profile kronos-real 拉起的实例由目标 compose 服务与 real 构建目标产生（容器身份、只读挂载、8002:8001 成立），且完整运行链（模型 + TimescaleDB）可用：model_enabled=true、/health 的 database 可达、/predict 返回 source=kronos；不带该 profile 时默认编排不启用也不构建 real 服务、默认镜像不含 torch — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/integration/test_f004_real_profile.py`
+- [x] **AC-002** (`FR-001`): 失败关闭与串行推理——vendor/权重/分词器缺失或加载失败时 real 实例启动即非零退出并打印缺失路径（不退回 mock）；并发 /predict 下模型加载至多一次且推理互斥 — tests: `tests/unit/test_f004_kronos_runtime_contract.py`、`tests/integration/test_f004_real_profile.py`
 
 ### 验收证据（2026-09-15）
 
