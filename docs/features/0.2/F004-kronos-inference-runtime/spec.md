@@ -87,7 +87,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 #### Scenario: profile 拉起
 
 - GIVEN `vendor/Kronos` 与 `models/` 就位
-- WHEN 执行 `docker compose --profile kronos-real up -d`
+- WHEN 执行 `docker compose -f deployment/docker-compose.yml --profile kronos-real up -d`
 - THEN `/health` 的 `model_enabled=true`，`/predict` 返回 `source=kronos`
 
 ### 非功能需求
