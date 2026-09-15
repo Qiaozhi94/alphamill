@@ -56,10 +56,14 @@ def _inspect(container: str) -> dict:
 
 
 def _wait_for_real_model() -> dict:
-    """轮询 /health 直到模型加载完成（uvicorn 在 lifespan 完成前不监听端口）。"""
-    deadline = POLL_SECONDS
+    """轮询 /health 直到模型加载完成（uvicorn 在 lifespan 完成前不监听端口）。
+
+    截止时刻用 time.monotonic() 计算：请求耗时不得挤掉轮询窗口——固定步长递减
+    会把实际等待拉到最多约 2×POLL_SECONDS（F004-Q003）。
+    """
+    deadline = time.monotonic() + POLL_SECONDS
     last_error: str | None = None
-    while deadline > 0:
+    while time.monotonic() < deadline:
         try:
             resp = requests.get(f"{BASE_URL}/health", timeout=5)
             if resp.status_code == 200:
@@ -69,7 +73,6 @@ def _wait_for_real_model() -> dict:
                 last_error = f"model_loaded=false: {health.get('model_error')}"
         except requests.RequestException as exc:
             last_error = str(exc)
-        deadline -= 5
         time.sleep(5)
     pytest.fail(f"real 实例 {POLL_SECONDS}s 内未就绪: {last_error}")
 
