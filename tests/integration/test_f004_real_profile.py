@@ -215,3 +215,20 @@ def test_default_mock_image_has_no_torch(real_profile) -> None:
         timeout=120,
     )
     assert proc.returncode != 0, "默认镜像竟能 import torch——NFR-001 被破坏"
+
+
+def test_default_compose_excludes_real_service() -> None:
+    """F004-T004 回归：默认编排不含 kronos-signal-real（NFR-001）；带 profile 才含。
+
+    静态门禁读文本；这里用 compose CLI 实际解析，双重覆盖（config 无需 daemon）。
+    """
+    _require_integration()
+    default = _run([*COMPOSE_BASE, "config", "--services"], timeout=60)
+    assert default.returncode == 0, default.stderr
+    default_services = set(default.stdout.split())
+    assert "kronos-signal-real" not in default_services, default_services
+    assert "kronos-signal" in default_services, default_services
+
+    profiled = _run([*COMPOSE_PROFILE, "config", "--services"], timeout=60)
+    assert profiled.returncode == 0, profiled.stderr
+    assert "kronos-signal-real" in set(profiled.stdout.split()), profiled.stdout
