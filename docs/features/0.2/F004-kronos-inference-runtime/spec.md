@@ -144,11 +144,18 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 - **默认镜像否证**：mock 目标镜像 `python -c "import torch"` 退出码非零（NFR-001）；
   `docker compose config --services` 默认不含 `kronos-signal-real`、`--profile kronos-real`
   时包含。
-- **门禁**：静态编排契约 16 项（含 13 项变异：改 target/派生、删依赖 pin、放开 `:ro`、
-  改 DB 接线、删 healthy 依赖/profile、改 restart、顶替端口 → 全部判红）；薄壳运行时
-  契约 8 项（含并发下加载至多一次 + 推理峰值并发 1）；收口时全量集成
+- **门禁**（2026-09-15 复核勘正计数）：静态编排/构建契约 26 项——6 组合约断言
+  （Dockerfile 目标与依赖 pin、compose 双服务接线、默认隔离、块注释边界、注释剥离
+  语义、.dockerignore 白名单）+ 20 项变异（Dockerfile 5、compose 13、.dockerignore 2；
+  含整行注释类与 mock real 开关类变异 → 全部判红）；薄壳运行时契约 13 项（失败关闭、
+  加载至多一次、推理互斥、lifespan 接线变异可杀、not_enough_data 的 source/model
+  不虚标双向、批量信封 source/model 汇总、DeprecationWarning 清零）；收口时全量集成
   `ALPHAMILL_INTEGRATION=1 ALPHAMILL_REAL_LAKE_DIR=<lake> pytest tests/integration -q`
   通过（1 skip 为 F001 AC-006 的显式开关语义，预期行为）。
+- **依赖与构建上下文**：集成测试顶层 import 的 requests 显式声明为 dev 依赖并锁范围
+  （`requests>=2.32,<3`，纳入 `check_dep_pins`）；仓库根新增白名单式 `.dockerignore`
+  （`*` + `!pyproject.toml` + `!README.md` + `!src/`），构建上下文不再携带
+  `.git`/`.venv`/`models`/`vendor` 等重资产（docker 构建语义在执行机取证，载体 tasks T013）。
 - **实测勘误**：容器集成测试镜像引用采用 compose 默认命名（`<project>-<service>`）解析
   ——buildkit 每次构建生成新 manifest list，容器 `.Image` 摘要在重建后悬空不可 `run`。
 
