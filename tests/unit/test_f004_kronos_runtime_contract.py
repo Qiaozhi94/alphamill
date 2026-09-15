@@ -179,7 +179,9 @@ def _drive_lifespan() -> None:
 
 
 async def _consume_lifespan() -> None:
-    async with server.lifespan(server.app):
+    # 走 app 实际绑定的 lifespan 上下文：直接调用 server.lifespan(server.app)
+    # 会绕开 FastAPI(lifespan=...) 接线——解绑后门禁照样绿（F004-T002 回归）。
+    async with server.app.router.lifespan_context(server.app):
         pass
 
 
