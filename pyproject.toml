@@ -30,6 +30,9 @@ dev = [
   # 记录。升级仍必须是一次显式、本地验证过的改动；已装版本是否落在声明
   # 范围内由 verify.py 的 check_dep_pins 步骤强制。
   "pytest>=8,<10",
+  # 集成测试顶层 import（F004-Q006）：原先靠 ccxt 传递安装，显式声明并纳入
+  # check_dep_pins 范围校验。
+  "requests>=2.32,<3",
   "ruff>=0.16,<0.17",
 ]
 
