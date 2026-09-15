@@ -52,7 +52,7 @@ updated: 2026-09-15
 - [x] T010 (`AC-001`): 回写 spec §6 验收证据（命令、输出摘要、取证机 hostname、device） — verify: `python3 tools/verify.py`（文档门禁）
 - [x] T011 (`AC-001`, `NFR-001`): 运行项目统一质量门并全绿 — verify: `python3 tools/verify.py`
 - [x] T012: 状态推进（spec frontmatter）与 BACKLOG 同步 — verify: `python3 tools/verify.py`（含生命周期与 BACKLOG 双向校验）
-- [ ] T013 (`AC-001`, `AC-002`): 执行机容器证据第二轮（review R002/R004 载体）：构建 kronos-service（mock/real 双目标）与 data-collector 镜像成功（验证 `.dockerignore` 白名单不破坏构建、上下文不含重资产）、容器内 `import alphamill` 成功；`ALPHAMILL_INTEGRATION=1` 重跑 F004 容器套件（含 compose config 双向断言、缺资产 exited+非零退出码、real 全链）并回写证据（hostname + device） — verify: 三个构建退出码 0 + `docker run --rm <镜像> python -c "import alphamill"` 退出码 0 + `ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 .venv/bin/python -m pytest tests/integration/test_f004_real_profile.py tests/integration/test_f001_kronos_smoke.py -q` 全绿
+- [x] T013 (`AC-001`, `AC-002`): 执行机容器证据第二轮（review R002/R004 载体）：构建 kronos-service（mock/real 双目标）与 data-collector 镜像成功（验证 `.dockerignore` 白名单不破坏构建、上下文不含重资产）、容器内 `import alphamill` 成功；`ALPHAMILL_INTEGRATION=1` 重跑 F004 容器套件（含 compose config 双向断言、缺资产 exited+非零退出码、real 全链）并回写证据（hostname + device） — verify: 三个构建退出码 0 + `docker run --rm <镜像> python -c "import alphamill"` 退出码 0 + `ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 .venv/bin/python -m pytest tests/integration/test_f004_real_profile.py tests/integration/test_f001_kronos_smoke.py -q` 全绿
 
 ## 4. 依赖与并行关系
 

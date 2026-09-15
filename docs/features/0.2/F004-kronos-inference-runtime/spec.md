@@ -2,13 +2,13 @@
 kind: feature
 id: F004
 version: "0.2"
-status: review
+status: done
 gate_version: 1
 related_features: [F001, F002]
 topics: [kronos, inference, deployment]
 doc_kind: spec
 created: 2026-09-12
-updated: 2026-09-15
+updated: 2026-09-16
 ---
 
 # F004：Kronos 真实推理运行时（编排内可复现）
@@ -158,6 +158,20 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
   `.git`/`.venv`/`models`/`vendor` 等重资产（docker 构建语义在执行机取证，载体 tasks T013）。
 - **实测勘误**：容器集成测试镜像引用采用 compose 默认命名（`<project>-<service>`）解析
   ——buildkit 每次构建生成新 manifest list，容器 `.Image` 摘要在重建后悬空不可 `run`。
+- **第二轮容器证据（T013，2026-09-16）**：R002/R004 载体——修复后代码三镜像全量重建 + 容器套件复跑：
+  - 构建：`kronos-service`（mock/real 双目标）与 `data-collector` 退出码均 0；构建上下文经
+    `.dockerignore` 白名单收敛至 354B / 6.67kB 级（buildkit `transferring context` 实测，
+    不含 `.git`/`.venv`/`models`/`vendor` 重资产）——R002 的 docker 语义由此闭环；
+  - 容器内 `import alphamill`：三镜像均退出码 0；
+  - 套件：`ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1
+    KRONOS_BASE_URL=http://127.0.0.1:8002 .venv/bin/python -m pytest
+    tests/integration/test_f001_kronos_smoke.py tests/integration/test_f004_real_profile.py -q`
+    → **7 passed**（F001 冒烟 3 + F004 容器集成 4，含 compose config 双向断言、缺资产
+    exited + 非零退出码、real 全链）；`/health`：`model_loaded=true, device=cpu,
+    database.total_rows=6352187`；取证机 hostname=`qiaozhi-lt`；
+  - 环境说明：本机 WSL2 mirrored 网络下 docker 默认桥对大流量下载整段卡死（torch 200MB
+    流中断），构建须经 host 网络完成（`docker build --network=host` / hostnet 构建器）；
+    产物与编排未改，属取证环境适配。
 
 ## 7. 测试、依赖与决策
 
