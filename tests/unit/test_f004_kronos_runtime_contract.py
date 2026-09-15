@@ -221,13 +221,15 @@ def test_future_timestamps_emits_no_deprecation_warning() -> None:
 
 
 def test_not_enough_data_signal_never_labeled_kronos(monkeypatch) -> None:
-    """F004-C002 回归：rows<30 未进模型，source 不得虚标 kronos（湖内证据可区分）。"""
+    """F004-C002/R005 回归：rows<30 未进模型，source 不得虚标 kronos、
+    也不得回报真实权重路径（湖内证据可区分，F004-R005）。"""
     monkeypatch.setattr(server.real_signal, "enabled", True)
     monkeypatch.setattr(server, "latest_ohlcv", lambda **_: _rows(29))
 
     response = server.build_prediction(symbol="BTC/USDT", exchange="binance", limit=120)
 
     assert response.source == "placeholder", response
+    assert response.model == "placeholder", response
     assert response.reason == "not_enough_data", response
 
 
