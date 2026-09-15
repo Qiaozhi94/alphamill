@@ -1,0 +1,7 @@
+# 构建上下文白名单（F004-Q001）：两个构建目标（kronos-service / data-collector）
+# 共享仓库根 context，COPY 只取 pyproject.toml / README.md / src——其余全部排除，
+# 防止 .git / .venv / models / vendor 等重资产随每次构建上传。
+*
+!pyproject.toml
+!README.md
+!src/

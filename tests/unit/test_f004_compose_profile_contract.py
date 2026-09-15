@@ -21,6 +21,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE_PATH = ROOT / "deployment/kronos-service.Dockerfile"
 COMPOSE_PATH = ROOT / "deployment/docker-compose.yml"
+DOCKERIGNORE_PATH = ROOT / ".dockerignore"
 
 # design §2 锁定的 real 目标依赖 pin（与宿主 AC-006 实测集一致）
 REAL_PIN_LINES = (
@@ -190,3 +191,28 @@ def test_compose_mutations_fail_the_gate(old: str, new: str) -> None:
     mutated = _mutate(COMPOSE_PATH.read_text(encoding="utf-8"), old, new)
     with pytest.raises(AssertionError):
         assert_compose_real_service_contract(mutated)
+
+
+def assert_dockerignore_contract(dockerignore: str) -> None:
+    """构建上下文白名单契约（F004-Q001）：覆盖两个构建目标 COPY 的全部输入。"""
+    lines = {line.strip() for line in dockerignore.splitlines() if line.strip()}
+    assert "*" in lines, "白名单式 .dockerignore 必须以 * 排除其余全部条目"
+    for needed in ("!pyproject.toml", "!README.md", "!src/"):
+        assert needed in lines, f".dockerignore 缺少构建所需白名单项: {needed}"
+
+
+def test_dockerignore_keeps_build_context_minimal() -> None:
+    assert_dockerignore_contract(DOCKERIGNORE_PATH.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("!src/", ""),  # 删 src 白名单：镜像构建将缺源码
+        ("*", "src"),  # 顶层不再全场排除：.venv/models/vendor 重回 context
+    ],
+)
+def test_dockerignore_mutations_fail_the_gate(old: str, new: str) -> None:
+    mutated = _mutate(DOCKERIGNORE_PATH.read_text(encoding="utf-8"), old, new)
+    with pytest.raises(AssertionError):
+        assert_dockerignore_contract(mutated)
