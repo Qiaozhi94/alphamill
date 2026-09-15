@@ -9,8 +9,10 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import threading
 import time
+import types
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
@@ -170,6 +172,40 @@ def test_predictor_loads_once_and_inference_serializes(monkeypatch) -> None:
     assert errors == []
     assert len(load_calls) == 1, f"模型被加载了 {len(load_calls)} 次"
     assert fake.max_active == 1, f"predictor 峰值并发 {fake.max_active}"
+
+
+def test_production_load_predictor_memoizes(monkeypatch, tmp_path) -> None:
+    """F004-T003 回归：生产 _load_predictor 的记忆化不得由测试 fake 复刻。
+
+    只替换底层加载（torch 与 vendor 的 model 模块），保留生产 _load_predictor：
+    第二次调用必须直接复用实例、不再 from_pretrained。删掉其早退分支后本用例判红。
+    """
+    signal = _make_signal(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "path", [*sys.path])  # _load_predictor 会插入 fake 路径
+    from_pretrained_calls: list[str] = []
+
+    class _Loader:
+        @staticmethod
+        def from_pretrained(_path: str) -> object:
+            from_pretrained_calls.append(_path)
+            return object()
+
+    fake_torch = types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: False))
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    fake_model_module = types.SimpleNamespace(
+        Kronos=_Loader,
+        KronosTokenizer=_Loader,
+        KronosPredictor=lambda *_args, **_kwargs: object(),
+    )
+    monkeypatch.setitem(sys.modules, "model", fake_model_module)
+
+    with signal._lock:
+        first = signal._load_predictor()
+        second = signal._load_predictor()
+
+    assert first is second
+    assert len(from_pretrained_calls) == 2, from_pretrained_calls
 
 
 def _drive_lifespan() -> None:
