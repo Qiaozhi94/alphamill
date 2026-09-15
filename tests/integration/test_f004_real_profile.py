@@ -22,6 +22,7 @@ import os
 import socket
 import subprocess
 import time
+from collections.abc import Iterator
 
 import pytest
 import requests
@@ -37,11 +38,11 @@ INTEGRATION_REQUIRED = os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "
 POLL_SECONDS = 300  # CPU 上 torch 导入 + 391MB 权重加载的首启窗口
 
 
-def _require_integration(reasonUnavailable: str | None = None) -> None:
+def _require_integration(reason_unavailable: str | None = None) -> None:
     if not INTEGRATION_REQUIRED:
         pytest.skip("容器集成需 ALPHAMILL_INTEGRATION=1 并在执行机取证（SOP §3）")
-    if reasonUnavailable:
-        pytest.fail(reasonUnavailable)
+    if reason_unavailable:
+        pytest.fail(reason_unavailable)
 
 
 def _run(cmd: list[str], timeout: int | None = None) -> subprocess.CompletedProcess:
@@ -86,7 +87,7 @@ def _compose_image(compose_cmd: list[str], service: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def real_profile() -> dict:
+def real_profile() -> Iterator[dict]:
     """构建 real 目标并拉起 profile 实例；teardown 只清 real 容器，不动共享栈。"""
     _require_integration()
     info = _run(["docker", "info"], timeout=30)
