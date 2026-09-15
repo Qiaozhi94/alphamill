@@ -243,6 +243,29 @@ def test_model_backed_signal_is_still_labeled_kronos(monkeypatch) -> None:
     assert response.reason.startswith("kronos_base_pred_len_"), response
 
 
+def test_batch_envelope_source_reflects_predictions(monkeypatch) -> None:
+    """F004-R001 回归：/predict_batch 信封 source/model 由 predictions 汇总，
+    不得与内含条目矛盾（全部兜底不得标 kronos；混合需显式区分）。"""
+    monkeypatch.setattr(server.real_signal, "enabled", True)
+    monkeypatch.setattr(server.real_signal, "_load_predictor", lambda: _FakePredictor())
+    row_counts = {"THIN/USDT": 29, "FAT/USDT": 40}
+    monkeypatch.setattr(
+        server, "latest_ohlcv", lambda symbol, exchange, limit: _rows(row_counts[symbol])
+    )
+
+    mixed = server.predict_batch(server.BatchPredictRequest(symbols=["THIN/USDT", "FAT/USDT"]))
+    assert [p.source for p in mixed.predictions] == ["placeholder", "kronos"], mixed
+    assert mixed.source == "mixed", mixed
+    assert mixed.model == "placeholder", mixed
+
+    model_backed = server.predict_batch(server.BatchPredictRequest(symbols=["FAT/USDT"]))
+    assert model_backed.source == "kronos", model_backed
+
+    fallback_only = server.predict_batch(server.BatchPredictRequest(symbols=["THIN/USDT"]))
+    assert fallback_only.source == "placeholder", fallback_only
+    assert fallback_only.model == "placeholder", fallback_only
+
+
 def _drive_lifespan() -> None:
     """直接驱动 server 的 lifespan（不经 TestClient——CI 不装 httpx；HTTP 层
     由容器集成测试覆盖）。"""

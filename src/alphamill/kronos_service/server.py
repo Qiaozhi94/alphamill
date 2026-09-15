@@ -114,10 +114,20 @@ def predict_batch(request: BatchPredictRequest):
         except Exception as exc:
             errors[symbol] = str(exc)
 
+    # 信封 source/model 由 predictions 汇总，不得与内含条目矛盾（F004-R001：全部
+    # 兜底 → placeholder，混合 → mixed 显式区分；未进模型不回报权重路径）。
+    sources = {prediction.source for prediction in predictions}
+    if sources == {"kronos"}:
+        envelope_source, envelope_model = "kronos", real_signal.model_path
+    elif sources <= {"placeholder"}:
+        envelope_source, envelope_model = "placeholder", "placeholder"
+    else:
+        envelope_source, envelope_model = "mixed", "placeholder"
+
     return BatchPredictResponse(
         exchange=request.exchange,
-        source=prediction_source(),
-        model=prediction_model(),
+        source=envelope_source,
+        model=envelope_model,
         count=len(predictions),
         predictions=predictions,
         errors=errors,
