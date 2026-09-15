@@ -190,9 +190,9 @@ docker-compose、.env 模板与 verify 脚本应当迁入 `deployment/`，verify
 **compose 形态（首选，F004 落地后）**：
 
 ```bash
-# 拉起编排内真实实例（首启含 torch 镜像构建与模型加载，readiness 由 healthcheck 过门）
-docker compose -f deployment/docker-compose.yml --profile kronos-real up -d kronos-signal-real
-# 等待 /health 的 model_loaded=true 后跑冒烟
+# 拉起编排内真实实例（首启含 torch 镜像构建与模型加载）；--wait 以 healthcheck
+# （model_loaded=true 且 device=cpu）为通过条件，返回即就绪
+docker compose -f deployment/docker-compose.yml --profile kronos-real up -d --wait kronos-signal-real
 ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 \
   .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py -q
 docker compose -f deployment/docker-compose.yml --profile kronos-real down kronos-signal-real
