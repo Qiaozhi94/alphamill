@@ -36,20 +36,20 @@ updated: 2026-09-15
 
 ### Phase 2：镜像与编排
 
-- [ ] T003 (`FR-001`, `NFR-001`): 先红后绿——新增 `tests/unit/test_f004_compose_profile_contract.py::test_dockerfile_targets_pin_real_dependencies`（先失败）；实现 `deployment/kronos-service.Dockerfile` 拆 `mock`/`real` 两个构建目标：real 从 CPU wheel index 安装 design §2 锁定的 torch 与最小推理依赖（einops/safetensors/huggingface_hub/tqdm），mock 保持现状且不含 torch — verify: 该用例由红转绿
-- [ ] T004 (`FR-001`, `NFR-001`): 先红后绿——新增同文件 `::test_compose_real_service_contract`（先失败）；实现 compose 两服务：`kronos-signal-real`（`profiles: [kronos-real]`、`target: real`、`:ro` 挂载、`8002:8001`、KRONOS_* 与 DB_* 环境、`depends_on: timescaledb: {condition: service_healthy}`、`networks: [alphamill]`、healthcheck 以 `model_loaded=true` 为通过条件、失败不自动重启）；`kronos-signal` 显式 `target: mock` — verify: 该用例由红转绿 + `docker compose -f deployment/docker-compose.yml config --services`（不含 real）与 `docker compose -f deployment/docker-compose.yml --profile kronos-real config`（含 real）
+- [x] T003 (`FR-001`, `NFR-001`): 先红后绿——新增 `tests/unit/test_f004_compose_profile_contract.py::test_dockerfile_targets_pin_real_dependencies`（先失败）；实现 `deployment/kronos-service.Dockerfile` 拆 `mock`/`real` 两个构建目标：real 从 CPU wheel index 安装 design §2 锁定的 torch 与最小推理依赖（einops/safetensors/huggingface_hub/tqdm），mock 保持现状且不含 torch — verify: 该用例由红转绿
+- [x] T004 (`FR-001`, `NFR-001`): 先红后绿——新增同文件 `::test_compose_real_service_contract`（先失败）；实现 compose 两服务：`kronos-signal-real`（`profiles: [kronos-real]`、`target: real`、`:ro` 挂载、`8002:8001`、KRONOS_* 与 DB_* 环境、`depends_on: timescaledb: {condition: service_healthy}`、`networks: [alphamill]`、healthcheck 以 `model_loaded=true` 为通过条件、失败不自动重启）；`kronos-signal` 显式 `target: mock` — verify: 该用例由红转绿 + `docker compose -f deployment/docker-compose.yml config --services`（不含 real）与 `docker compose -f deployment/docker-compose.yml --profile kronos-real config`（含 real）
 
 ### Phase 3：门禁补全与文档回写
 
-- [ ] T005 (`AC-001`): 静态门禁补全与变异验证：默认配置不含 real 服务、mock 目标不含 torch、real 含 DB 接线；变异验证（改 target、删依赖 pin、去掉 `:ro`、删 DB 依赖必须判红） — verify: `tests/unit/test_f004_compose_profile_contract.py` 全绿 + 变异记录
-- [ ] T006 (`AC-001`, `AC-002`): 容器集成测试：compose 拉起 real 实例后校验容器身份（compose 托管 + real 目标 + 只读挂载 + 端口映射）与完整运行链（模型 + TimescaleDB：`/health` 的 `database` 可达 + `/predict source=kronos`）；缺资产场景非零退出；默认镜像 `import torch` 判红 — verify: `tests/integration/test_f004_real_profile.py`
-- [ ] T007 (`FR-001`): 更新 `vendor/VENDORED.md`：补容器内路径（`/app/vendor/Kronos`、`/app/models/Kronos-base`、`/app/models/Kronos-Tokenizer-base`）与 real profile 说明 — verify: `grep -n "/app/vendor/Kronos" vendor/VENDORED.md`
+- [x] T005 (`AC-001`): 静态门禁补全与变异验证：默认配置不含 real 服务、mock 目标不含 torch、real 含 DB 接线；变异验证（改 target、删依赖 pin、去掉 `:ro`、删 DB 依赖必须判红） — verify: `tests/unit/test_f004_compose_profile_contract.py` 全绿 + 变异记录
+- [x] T006 (`AC-001`, `AC-002`): 容器集成测试：compose 拉起 real 实例后校验容器身份（compose 托管 + real 目标 + 只读挂载 + 端口映射）与完整运行链（模型 + TimescaleDB：`/health` 的 `database` 可达 + `/predict source=kronos`）；缺资产场景非零退出；默认镜像 `import torch` 判红 — verify: `tests/integration/test_f004_real_profile.py`
+- [x] T007 (`FR-001`): 更新 `vendor/VENDORED.md`：补容器内路径（`/app/vendor/Kronos`、`/app/models/Kronos-base`、`/app/models/Kronos-Tokenizer-base`）与 real profile 说明 — verify: `grep -n "/app/vendor/Kronos" vendor/VENDORED.md`
 
 ## 3. 验证与验收任务
 
-- [ ] T008 (`AC-001`, `AC-002`): 在执行机 `qiaozhi-lt` 跑集成验收：F001 冒烟（HTTP 契约）+ F004 容器集成 + 默认镜像否证，证据记录 hostname 与 `device=cpu` — verify: `ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py tests/integration/test_f004_real_profile.py -q`
-- [ ] T009 (`FR-001`): 回写 F001 spec §6 的 AC-006 复跑命令为 compose 形态，并保留手工形态作为无 docker 时的回退 — verify: `python3 tools/verify.py`
-- [ ] T010 (`AC-001`): 回写 spec §6 验收证据（命令、输出摘要、取证机 hostname、device） — verify: `python3 tools/verify.py`（文档门禁）
+- [x] T008 (`AC-001`, `AC-002`): 在执行机 `qiaozhi-lt` 跑集成验收：F001 冒烟（HTTP 契约）+ F004 容器集成 + 默认镜像否证，证据记录 hostname 与 `device=cpu` — verify: `ALPHAMILL_INTEGRATION=1 KRONOS_REQUIRE_REAL_MODEL=1 KRONOS_BASE_URL=http://127.0.0.1:8002 .venv/bin/python -m pytest tests/integration/test_f001_kronos_smoke.py tests/integration/test_f004_real_profile.py -q`
+- [x] T009 (`FR-001`): 回写 F001 spec §6 的 AC-006 复跑命令为 compose 形态，并保留手工形态作为无 docker 时的回退 — verify: `python3 tools/verify.py`
+- [x] T010 (`AC-001`): 回写 spec §6 验收证据（命令、输出摘要、取证机 hostname、device） — verify: `python3 tools/verify.py`（文档门禁）
 - [x] T011 (`AC-001`, `NFR-001`): 运行项目统一质量门并全绿 — verify: `python3 tools/verify.py`
 - [x] T012: 状态推进（spec frontmatter）与 BACKLOG 同步 — verify: `python3 tools/verify.py`（含生命周期与 BACKLOG 双向校验）
 
