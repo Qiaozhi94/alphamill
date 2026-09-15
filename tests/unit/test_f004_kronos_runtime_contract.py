@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import types
+import warnings
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
@@ -206,6 +207,17 @@ def test_production_load_predictor_memoizes(monkeypatch, tmp_path) -> None:
 
     assert first is second
     assert len(from_pretrained_calls) == 2, from_pretrained_calls
+
+
+def test_future_timestamps_emits_no_deprecation_warning() -> None:
+    """F004-Q005 回归：裸整数 Timedelta 换算已弃用（未来版本升级为错误）。"""
+    anchor = pd.Timestamp("2026-09-01T00:00:00")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        stamps = kronos_real.KronosRealSignal._future_timestamps(anchor, 12)
+
+    assert len(stamps) == 12
+    assert stamps.iloc[0] == pd.Timestamp("2026-09-01T00:01:00")
 
 
 def test_not_enough_data_signal_never_labeled_kronos(monkeypatch) -> None:

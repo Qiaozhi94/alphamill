@@ -198,7 +198,10 @@ class KronosRealSignal:
 
     @staticmethod
     def _future_timestamps(last_timestamp: pd.Timestamp, pred_len: int) -> pd.Series:
-        start = last_timestamp + pd.Timedelta(minutes=1)
+        # 必须显式 unit：Timedelta(minutes=1) 与 Timedelta("1min") 都走 NumPy
+        # generic-unit 换算，在 pandas 2.3 + numpy 2.5 触发 DeprecationWarning
+        # （F004-Q005，未来版本升级为错误）。
+        start = last_timestamp + pd.Timedelta(1, unit="min")
         return pd.Series(pd.date_range(start=start, periods=pred_len, freq="1min"))
 
 
