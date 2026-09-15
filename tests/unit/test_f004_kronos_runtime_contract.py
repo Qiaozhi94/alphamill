@@ -208,6 +208,29 @@ def test_production_load_predictor_memoizes(monkeypatch, tmp_path) -> None:
     assert len(from_pretrained_calls) == 2, from_pretrained_calls
 
 
+def test_not_enough_data_signal_never_labeled_kronos(monkeypatch) -> None:
+    """F004-C002 回归：rows<30 未进模型，source 不得虚标 kronos（湖内证据可区分）。"""
+    monkeypatch.setattr(server.real_signal, "enabled", True)
+    monkeypatch.setattr(server, "latest_ohlcv", lambda **_: _rows(29))
+
+    response = server.build_prediction(symbol="BTC/USDT", exchange="binance", limit=120)
+
+    assert response.source == "placeholder", response
+    assert response.reason == "not_enough_data", response
+
+
+def test_model_backed_signal_is_still_labeled_kronos(monkeypatch) -> None:
+    """反方向：真进模型的信号必须保持 source=kronos（防修复过度纠正）。"""
+    monkeypatch.setattr(server.real_signal, "enabled", True)
+    monkeypatch.setattr(server, "latest_ohlcv", lambda **_: _rows(40))
+    monkeypatch.setattr(server.real_signal, "_load_predictor", lambda: _FakePredictor())
+
+    response = server.build_prediction(symbol="BTC/USDT", exchange="binance", limit=120)
+
+    assert response.source == "kronos", response
+    assert response.reason.startswith("kronos_base_pred_len_"), response
+
+
 def _drive_lifespan() -> None:
     """直接驱动 server 的 lifespan（不经 TestClient——CI 不装 httpx；HTTP 层
     由容器集成测试覆盖）。"""

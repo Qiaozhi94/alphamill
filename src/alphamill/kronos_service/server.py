@@ -133,7 +133,12 @@ def build_prediction(symbol: str, exchange: str, limit: int) -> PredictResponse:
     model = prediction_model()
     if real_signal.enabled:
         signal = real_signal.generate_signal(rows)
-        source = "kronos"
+        # 未进模型的兜底信号不得标 kronos（F004-C002：证据标签必须真实 earned；
+        # 数据不足时 /predict 无有效输入，湖内需能区分真实推理与兜底）。
+        if signal["reason"] == kronos_real.NOT_ENOUGH_DATA_REASON:
+            source = "placeholder"
+        else:
+            source = "kronos"
         model = real_signal.model_path
     else:
         signal = generate_placeholder_signal(rows)

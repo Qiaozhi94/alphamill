@@ -15,6 +15,9 @@ except ImportError:  # pragma: no cover - direct script compatibility only.
 # 上游 from_pretrained 认的权重文件名（Kronos / Tokenizer 目录内二选一）。
 WEIGHT_FILE_NAMES = ("model.safetensors", "pytorch_model.bin")
 
+# 数据不足的兜底信号 reason：未进模型，消费端据此不得标 source=kronos（F004-C002）。
+NOT_ENOUGH_DATA_REASON = "not_enough_data"
+
 
 @dataclass
 class ModelStatus:
@@ -93,7 +96,7 @@ class KronosRealSignal:
                 "expected_return": 0.0,
                 "volatility": 0.0,
                 "direction_prob": 0.5,
-                "reason": "not_enough_data",
+                "reason": NOT_ENOUGH_DATA_REASON,
             }
 
         # 进程级锁包住加载与推理：并发请求排队执行，加载至多一次、
