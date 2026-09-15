@@ -162,33 +162,45 @@ def test_missing_assets_fail_closed(real_profile) -> None:
     """AC-002：缺资产实例启动即非零退出并打印缺失路径；不产生可服务的 mock 降级。"""
     _require_integration()
     image = _compose_image(COMPOSE_PROFILE, "kronos-signal-real")
+    container = "f004-missing-assets"
 
     # 与 compose real 服务同一运行语义（KRONOS_USE_REAL_MODEL=true），仅把资产路径
     # 指向不存在处——等价于「新 clone 缺 vendor/models 就启用 profile」的失败关闭。
-    proc = _run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "--name",
-            "f004-missing-assets",
-            "-e",
-            "KRONOS_USE_REAL_MODEL=true",
-            "-e",
-            "KRONOS_REPO_PATH=/nonexistent/vendor/Kronos",
-            "-e",
-            "KRONOS_MODEL_PATH=/nonexistent/models/Kronos-base",
-            "-e",
-            "KRONOS_TOKENIZER_PATH=/nonexistent/models/Kronos-Tokenizer-base",
-            image,
-        ],
-        timeout=300,
-    )
-    output = proc.stdout + proc.stderr
-    assert proc.returncode != 0, f"缺资产实例未失败关闭: returncode={proc.returncode}"
-    assert "/nonexistent/vendor/Kronos" in output
-    assert "refusing to start" in output
-    assert "placeholder" not in output.lower(), "失败关闭实例不得出现 mock 服务痕迹"
+    # 不用 --rm：保留容器以便 inspect 失败态（exited + 非零退出码）而非只看日志；
+    # 若发生 mock 降级，docker run 会挂着不退（TimeoutExpired）——同样判红（F004-Q004）。
+    try:
+        proc = _run(
+            [
+                "docker",
+                "run",
+                "--name",
+                container,
+                "-e",
+                "KRONOS_USE_REAL_MODEL=true",
+                "-e",
+                "KRONOS_REPO_PATH=/nonexistent/vendor/Kronos",
+                "-e",
+                "KRONOS_MODEL_PATH=/nonexistent/models/Kronos-base",
+                "-e",
+                "KRONOS_TOKENIZER_PATH=/nonexistent/models/Kronos-Tokenizer-base",
+                image,
+            ],
+            timeout=300,
+        )
+        output = proc.stdout + proc.stderr
+        assert proc.returncode != 0, f"缺资产实例未失败关闭: returncode={proc.returncode}"
+        assert "/nonexistent/vendor/Kronos" in output
+        assert "refusing to start" in output
+
+        state = _run(
+            ["docker", "inspect", "-f", "{{.State.Status}}|{{.State.ExitCode}}", container]
+        )
+        assert state.returncode == 0, state.stderr
+        status_name, _, exit_code = state.stdout.strip().partition("|")
+        assert status_name == "exited", f"失败关闭实例必须 exited（非 running）: {state.stdout}"
+        assert int(exit_code) != 0, f"失败关闭实例退出码必须非零: {state.stdout}"
+    finally:
+        _run(["docker", "rm", "-f", container], timeout=60)
 
 
 def test_default_mock_image_has_no_torch(real_profile) -> None:
