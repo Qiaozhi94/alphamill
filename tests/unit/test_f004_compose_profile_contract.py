@@ -121,6 +121,18 @@ def test_default_compose_stays_mock_only() -> None:
     assert "/app/vendor/Kronos" not in mock_block, "默认服务不得挂载权重/vendor"
 
 
+def test_service_block_never_reads_next_service_comments() -> None:
+    """F004-Q002 回归：下一服务的前置注释不得并入上一块参与断言。
+
+    kronos-signal-real 的前置注释叙述里含 `--profile kronos-real`、`restart: "no"`
+    等文本；若切块把注释算进来，默认隔离断言实际核对的是注释而非配置。
+    """
+    compose = COMPOSE_PATH.read_text(encoding="utf-8")
+    mock_block = _service_block(compose, "kronos-signal")
+    assert "--profile kronos-real" not in mock_block
+    assert 'restart: "no"' not in mock_block
+
+
 def _mutate(text: str, old: str, new: str) -> str:
     assert old in text, f"变异基准串不存在（上游改动后需同步变异用例）: {old}"
     return text.replace(old, new)
