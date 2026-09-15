@@ -77,6 +77,10 @@ def assert_compose_real_service_contract(compose: str) -> None:
     assert "target: mock" in mock_block, (
         "kronos-signal 必须显式 target: mock（无 target 的默认构建会取最后一个 stage=real）"
     )
+    # mock 的 real 开关必须钉死（C001）：保留 ${KRONOS_USE_REAL_MODEL} 覆盖时，
+    # .env 误置 true 会让默认服务预检失败、再被 unless-stopped 拉成无限重启。
+    assert 'KRONOS_USE_REAL_MODEL: "false"' in mock_block
+    assert "${KRONOS_USE_REAL_MODEL" not in mock_block
 
     real_block = _service_block(compose, "kronos-signal-real")
     # profile 与构建目标
@@ -174,6 +178,11 @@ def test_dockerfile_mutations_fail_the_gate(old: str, new: str) -> None:
             "# - ../vendor/Kronos:/app/vendor/Kronos:ro",
         ),  # 注释掉只读挂载
         ('restart: "no"', '# restart: "no"'),  # 注释掉失败不重启
+        # F004-C001 回归：mock 服务恢复 .env 覆盖开关必须判红
+        (
+            'KRONOS_USE_REAL_MODEL: "false"',
+            "KRONOS_USE_REAL_MODEL: ${KRONOS_USE_REAL_MODEL:-false}",
+        ),
     ],
 )
 def test_compose_mutations_fail_the_gate(old: str, new: str) -> None:

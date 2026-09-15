@@ -63,7 +63,9 @@ services:
       DB_USER: ${DB_USER:-quant}
       DB_PASSWORD: ${DB_PASSWORD:-change-me}
       DB_NAME: ${DB_NAME:-quant}
-      KRONOS_USE_REAL_MODEL: ${KRONOS_USE_REAL_MODEL:-false}
+      # 钉死 false：real 模式由 kronos-signal-real 专属服务提供；保留 .env 覆盖时
+      # 误置 true 会让默认服务预检失败并陷入无限重启（F004-C001）。
+      KRONOS_USE_REAL_MODEL: "false"
       KRONOS_MODEL: ${KRONOS_MODEL:-models/Kronos-base}
       KRONOS_TOKENIZER: ${KRONOS_TOKENIZER:-models/Kronos-Tokenizer-base}
       KRONOS_DEVICE: ${KRONOS_DEVICE:-cpu}
