@@ -36,11 +36,17 @@ SERVICE_KEY_RE = re.compile(r"^  ([a-z][a-z0-9-]*):\n", re.M)
 
 
 def _service_block(compose: str, service: str) -> str:
-    """截取某服务的 compose 块：从服务键到下一个同级键（或文件尾）。"""
-    start = compose.index(f"\n  {service}:\n") + 1
-    nxt = SERVICE_KEY_RE.search(compose[start + len(service) + 3 :])
-    end = start + len(service) + 3 + nxt.start() if nxt else len(compose)
-    return compose[start:end]
+    """截取某服务的 compose 块：从服务键到下一个同级键（或文件尾）。
+
+    先剥离整行注释再切块：整行注释掉关键行后断言不得再从注释文本读到子串，且
+    下一服务的前置注释不并入上一块（F004 检视 T001/Q002 回归——门禁读语义，
+    不读裸文本）。
+    """
+    stripped = _strip_comments(compose)
+    start = stripped.index(f"\n  {service}:\n") + 1
+    nxt = SERVICE_KEY_RE.search(stripped[start + len(service) + 3 :])
+    end = start + len(service) + 3 + nxt.start() if nxt else len(stripped)
+    return stripped[start:end]
 
 
 def _strip_comments(text: str) -> str:
@@ -148,6 +154,14 @@ def test_dockerfile_mutations_fail_the_gate(old: str, new: str) -> None:
         ("profiles: [kronos-real]\n", ""),  # 删 profile（real 变默认启动，破坏 NFR-001）
         ('restart: "no"', "restart: unless-stopped"),  # 破坏失败可见语义
         ('- "8002:8001"', '- "8001:8001"'),  # 端口顶替默认实例
+        # F004-T001 回归：整行注释掉关键行必须判红——门禁读语义文本，不读裸子串
+        ("profiles: [kronos-real]\n", "# profiles: [kronos-real]\n"),  # 注释掉 profile
+        ("target: real\n", "# target: real\n"),  # 注释掉构建目标
+        (
+            "- ../vendor/Kronos:/app/vendor/Kronos:ro",
+            "# - ../vendor/Kronos:/app/vendor/Kronos:ro",
+        ),  # 注释掉只读挂载
+        ('restart: "no"', '# restart: "no"'),  # 注释掉失败不重启
     ],
 )
 def test_compose_mutations_fail_the_gate(old: str, new: str) -> None:
