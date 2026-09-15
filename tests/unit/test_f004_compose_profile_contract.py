@@ -51,7 +51,12 @@ def _service_block(compose: str, service: str) -> str:
 
 
 def _strip_comments(text: str) -> str:
-    return re.sub(r"(?m)#.*$", "", text)
+    """剥离整行注释（行首允许空白）。
+
+    不处理行尾注释：行尾注释不改变 YAML/Dockerfile 语义，而「空白+#」式匹配会
+    误伤引号内的合法 #（F004-R006）。
+    """
+    return re.sub(r"(?m)^[ \t]*#.*$", "", text)
 
 
 def assert_real_dockerfile_contract(dockerfile: str) -> None:
@@ -136,6 +141,19 @@ def test_service_block_never_reads_next_service_comments() -> None:
     mock_block = _service_block(compose, "kronos-signal")
     assert "--profile kronos-real" not in mock_block
     assert 'restart: "no"' not in mock_block
+
+
+def test_strip_comments_ignores_hashes_inside_values() -> None:
+    """F004-R006 回归：值内的 #（如引号内容）不得被当注释剥掉。
+
+    注释剥离只认整行注释（行首空白 + #）——「空白+#」式行尾匹配会误伤
+    引号内合法 #，且行尾注释不改变 YAML/Dockerfile 语义，无需剥离。
+    """
+    sample = 'test: ["CMD", "sh", "-c", "echo #not-a-comment"]\n# 整行注释\nkey: value\n'
+    stripped = _strip_comments(sample)
+    assert "#not-a-comment" in stripped
+    assert "整行注释" not in stripped
+    assert "key: value" in stripped
 
 
 def _mutate(text: str, old: str, new: str) -> str:
