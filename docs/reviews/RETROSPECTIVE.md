@@ -453,3 +453,66 @@
 - 建议命中率 100%（14/14 实质采纳 `suggested_fix`）；D001、D014 都从检视给出的备选方案中选择了边界更小的一项。
 - 全接纳率 100% 需警惕检视意见是否过度保守；对冲证据是 7 条 High 中包含可复现的 DB/compose 断链和测试假绿，3 条修复引入只在后续轮次出现，并非首轮形式化凑数。
 - 提交纪律有两项透明偏差：D001、D003 各有补遗提交；tasks.md 是共享编辑面，D010/D013 提交承载了其他 finding 的任务级同步。偏差已在 FIX-log 逐条声明，未影响 diff 归属核对。
+
+## 循环 12：F004 Kronos 真实推理运行时实现代码检视
+
+- report_type: code-review | round: 1（full-scan）→ 2（fix-verification，diff-only）→ 3（fix-verification，diff-only，封顶轮）| 状态: 闭环（CI 最终门禁受环境限制，见下）
+- 日期：2026-09-15 | 基线：`fe9403b` → `3216a6d` → `7fc67c7`
+- 范围：F004 实现交付 `b4968cc..fe9403b`（12 files，+791/−40）及其两轮修复；含 `deployment/kronos-service.Dockerfile`、`docker-compose.yml`、`.dockerignore`、`src/alphamill/kronos_service/{server,kronos_real}.py`、三个 F004 测试文件、F001 spec §6 AC-006 命令与 `vendor/VENDORED.md`。不含 F004 设计三件套的规格检视（循环 11 已闭环）。
+- 结论：23 条 finding——**fixed 18 / partial 1 / tracked 2 / open(Low) 3**，Critical 0、High 2（均 round 2 关闭）。本地 `.venv/bin/python tools/verify.py` 全绿（231 passed, 29 skipped），检视方三轮共复现 **28 组反向变异**独立核对，未采信任何纯文字修复声明。
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F004-T001 | 静态编排门禁读裸子串，把关键行整行注释掉后门禁仍全绿 | High | 测试覆盖 | 根因 | 初始实现 | fixed | 切块前统一 `_strip_comments` 并补注释类变异 | `_service_block` 切块前剥离注释；变异表 +4 项「整行注释掉」 | `test_f004_compose_profile_contract.py::test_compose_mutations_fail_the_gate` | 1 | 2 | gate-reads-text-not-semantics |
+| F004-T002 | `app` 解绑 lifespan 钩子后 F004 全部单测仍绿——失败关闭接线在 CI 侧无门 | High | 测试覆盖 | 根因 | 初始实现 | fixed | 走 `app.router.lifespan_context` 而非模块函数 | `_consume_lifespan` 改走 `server.app.router.lifespan_context(server.app)` | `test_f004_kronos_runtime_contract.py::test_server_lifespan_invokes_startup_hook_in_real_mode` | 1 | 2 | gate-tests-function-not-wiring |
+| F004-C001 | mock 服务保留 `KRONOS_USE_REAL_MODEL` 覆盖，置 true 即让默认编排陷入崩溃重启循环 | Medium | 正确性 | 根因 | 初始实现 | fixed | compose 钉死 `"false"` + 静态断言与变异 | 钉死 `"false"`，`.env.example` 删该键，门禁双向断言 + 2 项变异 | `test_f004_compose_profile_contract.py::test_compose_real_service_contract` | 1 | 2 | fail-closed-hook-hits-unintended-service |
+| F004-C002 | rows<30 时 `/predict` 仍标 `source=kronos`，湖内无法区分真实推理与兜底中性信号 | Medium | 正确性 | 根因 | 初始实现 | partial(见裁决记录#1) | 未进模型不得写 kronos（抬 4xx 或按 reason 决定 source） | `build_prediction` 按 `reason` 判定 `source`，双向单测 | `test_f004_kronos_runtime_contract.py::test_not_enough_data_signal_never_labeled_kronos` | 1 | 2 | evidence-label-not-earned |
+| F004-Q001 | 缺 `.dockerignore`，build context 是仓库根，real 目标每次构建重传 `.venv`/`models`/`vendor` | Medium | 质量 | 根因 | 初始实现 | fixed | 加仓库根 `.dockerignore` 排除重资产 | 白名单 `*` + `!pyproject.toml` + `!README.md` + `!src/`，静态门禁 + 2 项变异 | `test_f004_compose_profile_contract.py::test_dockerignore_keeps_build_context_minimal` | 1 | 2 | — |
+| F004-T003 | 去掉 `_load_predictor` 记忆化后单测仍全绿——「加载至多一次」由测试自带 fake 复刻 | Low | 测试覆盖 | 根因 | 初始实现 | fixed | 只 patch 更底层的加载，用生产 `_load_predictor` 验证 | 新增用例 patch `sys.modules` 的 torch/model，断言第二次调用不再 `from_pretrained` | `test_f004_kronos_runtime_contract.py::test_production_load_predictor_memoizes` | 1 | 2 | test-simulates-itself |
+| F004-T004 | 「默认编排不启用/不构建 real 服务」只有 tasks 里的手工命令，无自动门禁 | Low | 测试覆盖 | 根因 | 初始实现 | fixed | 加 `compose config --services` 双向断言 | 集成层新增双向断言（默认不含 real / 带 profile 含） | `test_f004_real_profile.py::test_default_compose_excludes_real_service` | 1 | 2 | — |
+| F004-Q002 | `_service_block` 把下一服务的前置注释并入上一块，默认隔离断言实际在核对注释文本 | Low | 质量 | 根因 | 初始实现 | fixed | 同 T001 一处修复 | 随 T001 剥离注释一并解决，加独立边界回归用例 | `test_f004_compose_profile_contract.py::test_service_block_never_reads_next_service_comments` | 1 | 2 | — |
+| F004-Q003 | `_wait_for_real_model` 的 deadline 不计请求超时，实际等待窗口最多约 2×POLL_SECONDS | Low | 质量 | 根因 | 初始实现 | fixed | 改用 `time.monotonic()` 截止时刻 | 同建议，去掉固定步长递减 | 静态复核（容器证据载体 tasks T013） | 1 | 2 | — |
+| F004-Q004 | `assert "placeholder" not in output` 是偶然性断言，不构成「不退回 mock」的证据 | Low | 质量 | 症状 | 初始实现 | fixed | 换成容器 exited + 退出码非零 | 去 `--rm`，断言 `State.Status=exited` 且 `ExitCode≠0`，`finally` 清理 | `test_f004_real_profile.py::test_missing_assets_fail_closed` | 1 | 2 | — |
+| F004-Q005 | `_future_timestamps` 触发 NumPy generic-unit DeprecationWarning（未来版本会报错） | Low | 质量 | 根因 | 初始实现 | fixed | 用 `pd.Timedelta("1min")` 替代裸整数换算 | **`pd.Timedelta(1, unit="min")`**——建议方案实测同样告警（见裁决记录#2） | `test_f004_kronos_runtime_contract.py::test_future_timestamps_emits_no_deprecation_warning` | 1 | 2 | — |
+| F004-Q006 | 集成测试顶层 `import requests`，而 requests 未在 pyproject 声明（靠 ccxt 传递） | Low | 质量 | 根因 | 初始实现 | fixed | 写进 dev 依赖并锁范围 | `requests>=2.32,<3` 入 dev 依赖，纳入 `check_dep_pins` | `tools/check_dep_pins.py`（verify.py 步骤） | 1 | 2 | undeclared-test-dependency |
+| F004-Q007 | F001 spec §6 compose 形态给了「等待 model_loaded=true」的注释却没有等待命令 | Low | 质量 | 根因 | 初始实现 | fixed | `up -d --wait` 让 healthcheck 充当等待步骤 | 同建议 | `tools/check_doc_links.py` + `test_f001_compose_contract.py` | 1 | 2 | — |
+| F004-Q008 | 集成测试里的驼峰参数名与错误的 fixture 返回标注 | Low | 质量 | 根因 | 初始实现 | fixed | `reason_unavailable`；标注改 `Iterator[dict]` | 同建议 | `ruff check`（verify.py 步骤） | 1 | 2 | — |
+| F004-R001 | C002 修复不对称——`/predict_batch` 信封仍无条件 `source=kronos`，与其内含 predictions 矛盾 | Medium | 正确性 | 根因 | 修复引入 | fixed | 信封 source 由 predictions 汇总决定 + batch 双向单测 | 信封 source/model 由 predictions 汇总：全 kronos→kronos、全兜底→placeholder、混合→mixed | `test_f004_kronos_runtime_contract.py::test_batch_envelope_source_reflects_predictions` | 2 | 3 | partial-symmetric-fix |
+| F004-R002 | `.dockerignore` 白名单未经真实构建验证，且同时作用于 data-collector 镜像（F001/F002 运行链） | Medium | 测试覆盖 | 根因 | 修复引入 | tracked(T013) | tasks.md 立条目含 AC，执行机构建后标 tracked | 载体 tasks T013：执行机构建三镜像 + 容器内 `import alphamill` + 容器套件复跑 | 待 T013 执行机取证 | 2 | — | gate-cannot-see-runtime-semantics |
+| F004-R003 | spec §6 验收证据的门禁计数已失真（静态 16/变异 13/运行时 8） | Medium | 质量 | 根因 | 流程缺陷 | fixed | 按 T010 回写 spec §6，done 前必须完成 | 勘正为 26/20/13 并补依赖与构建上下文条目；检视方复核计数与实际用例数逐一相符 | `tools/validate_spec_lifecycle.py` + 实际用例计数核对 | 2 | 3 | evidence-record-drift |
+| F004-R004 | 延后到执行机的容器证据（Q001/Q003/Q004/T004）只写在 FIX-log 备注里，tasks.md 无承载条目 | Low | 质量 | 根因 | 流程缺陷 | tracked(T013) | 增 T013 含 AC，可与 R002 合并 | 与 R002 合并为 T013（含可判定的退出码级 AC 与 DAG 边 `T013 -> 状态收口`） | 待 T013 执行机取证 | 2 | — | deferred-work-without-carrier |
+| F004-R005 | `source=placeholder` 的兜底响应仍回报真实权重路径 `model=/app/models/Kronos-base` | Low | 正确性 | 根因 | 修复引入 | fixed | model 与 source 同一处判定 | 兜底分支 model 一并退回 `"placeholder"`（限 real 模式兜底，不动 mock 语义） | `test_f004_kronos_runtime_contract.py::test_not_enough_data_signal_never_labeled_kronos` | 2 | 3 | partial-symmetric-fix |
+| F004-R006 | `_strip_comments` 对「值内含 `#`」无免疫，是静态门禁的潜在假红面 | Low | 质量 | 根因 | 修复引入 | fixed | 正则收窄或加约束注释 | 收窄为整行注释 `^[ \t]*#.*$`；13 组注释类变异复跑仍全判红 | `test_f004_compose_profile_contract.py::test_strip_comments_ignores_hashes_inside_values` | 2 | 3 | — |
+| F004-R007 | R001 修复后 mock 模式下 `/predict_batch` 信封 `model=placeholder` 与内含条目 `models/Kronos-base` 矛盾 | Low | 正确性 | 根因 | 修复引入 | open | 信封 model 同样由 `{p.model}` 汇总，而非非-kronos 分支硬编码 `"placeholder"` | — | — | 3 | — | partial-symmetric-fix |
+| F004-R008 | `/predict_batch` 信封 source 新增 `"mixed"` 取值，扩展了 F001 冻结的 HTTP 契约且未同步文档 | Low | 质量 | 根因 | 规格漂移 | open | F004 spec §4 记一句信封汇总语义，并同步 `db/init.sql:160` 的取值注释 | — | — | 3 | — | contract-extension-undocumented |
+| F004-R009 | `_strip_comments` 收窄后行尾注释不再剥离，可被行尾注释冒充满足断言 | Low | 测试覆盖 | 根因 | 修复引入 | open | 断言改行级精确匹配（不引入新依赖），或解析 YAML 并显式声明 pyyaml 依赖 | — | — | 3 | — | gate-reads-text-not-semantics |
+
+### 循环 12 裁决记录
+
+**#1 · F004-C002 · partial · 裁决轮次 2** —— 接纳部分（`/predict` 单条按 `reason` 判定 `source`）已 fixed 并经变异复核（把 `source` 改回无条件 `"kronos"` → 回归测试判红）。未完成部分有明确载体：`/predict_batch` 信封 → `F004-R001`（round 3 已 fixed）；`model` 字段 → `F004-R005`（round 3 已 fixed）。证据为本地实跑输出：`单条 source=placeholder / 信封 source=kronos / 批量内单条 source=placeholder`。
+
+**#2 · F004-Q005 · 建议未命中、修复方案更优 · 裁决轮次 2** —— 修复方指出检视建议的 `pd.Timedelta("1min")` 同样触发告警。检视方复跑核实成立（pandas 2.3.3 / numpy 2.5.3：`minutes=1` 告警、`"1min"` 告警、`1, unit="min"` 无告警）。finding 本身成立且已修，不记 rejected，只计入建议命中率的未命中项。
+
+**#3 · F004-R006 · 取舍接纳 · 裁决轮次 3** —— 修复方采用「仅剥整行注释」而非检视建议的「空白+# 行尾注释」，理由是二者与「值内 `#` 免疫」在正则层不可兼得。检视方接受该取舍（行尾注释不改变 YAML/Dockerfile 语义），但残余的行尾注释冒充面已单列为 `F004-R009`，不让取舍吞掉问题。
+
+### 循环 12 模式教训
+
+1. **两条 High 是同一个失效模式的两面：门禁在"验函数"而不是"验接线/验语义"。** `gate-reads-text-not-semantics`（静态编排门禁读裸子串，注释掉整行照样绿）与 `gate-tests-function-not-wiring`（测试直接调模块函数，绕开 `app` 实际绑定的 lifespan）合计 2/23，但它们守的恰好是 F004 仅有的两条核心不变式（默认隔离、失败关闭）。**教训：新增门禁必须对"配置/接线被移除"这一类变异做验证，而不是只对"值被改错"做验证。** Round 1 的 13 项变异全是改值/删行，因此全部判红却全部无效。
+2. **`partial-symmetric-fix` 出现 3 次（R001/R005/R007），是本循环复发率最高的模式。** C002 的原则（未进模型的标签不得声称 kronos）有四个落点：单条 source、单条 model、信封 source、信封 model。修一个落点就宣布修完，导致同一原则被拆成三轮才补齐，且 R007 至今仍开着。**教训：发现"标签/状态语义"类缺陷时，先枚举该语义的全部落点再动手，把枚举写进 finding 的 suggested_fix。**
+3. **origin 分布：初始实现 14、修复引入 7、流程缺陷 2。修复引入占 30%（7/23），全部由后续 diff-only 轮次抓到，首轮物理上不可能发现。** 这是本项目第二次实测到该比例（循环 11 是 21%），"最低 2 轮"的协议规定再次被证明不是形式主义。
+4. **存活轮数：18 条为 1 轮，3 条（R007/R008/R009）仍为 0 轮内新发现，无任何 finding 跨 2 轮以上未解决。** 没有触发不收敛升级协议。
+5. **`deferred-work-without-carrier`：修复方把四条延后到执行机的容器证据只写在 FIX-log 备注里，tasks.md 无条目。** 这正是协议第 4 条要堵的"按缺陷走检视循环永远关不掉"。建立 T013（含退出码级 AC 与 DAG 边）后才允许标 `tracked` 并移出收敛统计。**教训：任何"本机没有这个能力"的延后，落点必须是带 AC 的任务条目，不是声明文字。**
+6. **`evidence-record-drift`：两轮修复加了 10 个门禁用例，spec §6 的验收证据计数没人动。** 证据记录不是写一次就完的静态文本；只要门禁集合变化，AC 引用的计数就失真。**教训：把"门禁计数回写"绑到"新增门禁"这个动作上，而不是绑到 feature 收口。**
+
+### 循环 12 裁决分布与建议命中率
+
+- fixed 18 / partial 1 / tracked 2 / rejected 0 / open(Low) 3。无 rejected——三轮里修复方一次都没有行使不接纳权，两次分歧（Q005 的方案、R006 的取舍）都以"finding 成立、方案更优"的形式收敛，这是健康形态。
+- 建议命中率 **85%（17/20 实质采纳 `suggested_fix`）**。三条未命中各有原因：Q005（我的 `Timedelta("1min")` 实测同样告警，修复方方案更优）、C002（我给了"抬 4xx 或按 reason 判定"两个选项，修复方选了边界更小的后者）、R006（取舍不同，见裁决记录#3）。**85% 比循环 11 的 100% 更健康**——全接纳往往说明检视在凑数或修复方在照单全收。
+- **检视质量的自证靠变异，不靠条数**：三轮共 28 组反向变异，Round 1 抓到 2 条 High 都是"既有门禁全绿但变异不红"，Round 2/3 的每一条 fixed 都由检视方重跑变异从绿翻红。修复声明中没有一条是靠文字采信的。
+- 提交纪律：三轮共 19 个 commit，一 finding 一 commit，仅 R002+R004 按检视方明示建议合并为同一条目。无批量大提交。
+
+### 循环 12 残余观察项与闭环处置
+
+- **`F004-R007` / `F004-R008` / `F004-R009`（均 Low，open）**：不阻塞闭环（协议第 7 条只以 Critical/High 为阻塞判据），但也不允许蒸发——三条完整留在上表，含 `suggested_fix`。R007/R008 的现实影响面为零：`/predict_batch` HTTP 端点在仓内**没有任何消费者**（`KronosFusionStrategy` 只用单条 `/predict`；bench 脚本调的是 Kronos 库自带的 `predict_batch` 方法；`signals_log.source` 是无约束 TEXT）。建议在消费者路由切换（spec §3 范围外、tasks §5 后移项）立项时一并处理。
+- **`F004-R002` / `F004-R004`（tracked → T013）**：`.dockerignore` 的 docker 语义与容器级证据只能在执行机取。开发机 `docker info` 实测不可达，按 SOP §3 这不是失败也不是证据。T013 的 AC 是退出码级可判定的，F004 `review → done` 以它为前置。
+- **CI 最终门禁未能由检视方触发**：本会话到 `api.github.com` 的 HTTPS 出口被拦截（`gh run list` → TLS handshake timeout；`curl` 同样无响应），而 SSH 到 origin 正常（`git ls-remote` 成功，`origin/main` 已在 `7fc67c7`）。这属协议允许停下来说明的"客观不可执行"。**`CURRENT-code.md` 与 `FIX-log.md` 因此保留在工作树，未删除**——CI 绿是删除的前置条件，未经确认不得清理。
