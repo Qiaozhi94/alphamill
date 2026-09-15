@@ -515,4 +515,5 @@
 
 - **`F004-R007` / `F004-R008` / `F004-R009`（均 Low，open）**：不阻塞闭环（协议第 7 条只以 Critical/High 为阻塞判据），但也不允许蒸发——三条完整留在上表，含 `suggested_fix`。R007/R008 的现实影响面为零：`/predict_batch` HTTP 端点在仓内**没有任何消费者**（`KronosFusionStrategy` 只用单条 `/predict`；bench 脚本调的是 Kronos 库自带的 `predict_batch` 方法；`signals_log.source` 是无约束 TEXT）。建议在消费者路由切换（spec §3 范围外、tasks §5 后移项）立项时一并处理。
 - **`F004-R002` / `F004-R004`（tracked → T013）**：`.dockerignore` 的 docker 语义与容器级证据只能在执行机取。开发机 `docker info` 实测不可达，按 SOP §3 这不是失败也不是证据。T013 的 AC 是退出码级可判定的，F004 `review → done` 以它为前置。
-- **CI 最终门禁未能由检视方触发**：本会话到 `api.github.com` 的 HTTPS 出口被拦截（`gh run list` → TLS handshake timeout；`curl` 同样无响应），而 SSH 到 origin 正常（`git ls-remote` 成功，`origin/main` 已在 `7fc67c7`）。这属协议允许停下来说明的"客观不可执行"。**`CURRENT-code.md` 与 `FIX-log.md` 因此保留在工作树，未删除**——CI 绿是删除的前置条件，未经确认不得清理。
+- **CI 最终门禁：绿**。修复终态 `7fc67c7` 的 CI run `34953277116` success；本复盘提交 `af8bdce` 的 run `34954284354` success（py3.11 / py3.13 双矩阵，`verify.py` 全部步骤通过）。据此执行协议第 8 节的闭环清理：本地删除过程稿 `CURRENT-code.md` 与 `FIX-log.md`（二者 gitignored，无删除提交）。
+- **取证环境备注**：默认沙箱内到 `api.github.com` 的 HTTPS 出口被拦截（`gh run list` → TLS handshake timeout / EOF），SSH 到 origin 正常；CI 状态最终在放开沙箱后取得。这条记下来是因为它会重复影响后续循环的"推送后确认 CI"步骤——不要因为 `gh` 首次超时就判定无 CI 权限。
