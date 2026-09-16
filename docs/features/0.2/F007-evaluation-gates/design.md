@@ -305,6 +305,7 @@ F005 前端**只经** `src/alphamill/api/` 的统一只读 API 消费 report、c
 | `AC-003` 全链控制 | integration | `tests/integration/test_f007_controls.py` | 正控制/白噪声/泄漏四类 fixture；多成员分母完整 |
 | 变异证据 | mutation | `tests/mutation/test_f007_gate_mutations.py` | 定向 mutant 全部被杀死；`reports/mutation/f007/mutation_report.json` |
 | 第二实现对照 | unit | `tests/unit/evaluation/test_second_implementation.py` | 独立实现与自研统计在既定容差内一致 |
+| `AC-006`/`NFR-002` 属性测试 | property | `tests/property/test_f007_identity_properties.py` | 身份稳定与快照敏感性；固定可复现 seed，输入由显式策略枚举 |
 | `AC-007` | integration + golden | `tests/integration/test_f007_synthesis.py` | 只读 canonical、五阶段漏斗、三栏输出、确定重建 |
 | `AC-008` | CLI integration | `tests/integration/test_f007_cli.py` | 非法 canonical 非零退出且 error code 稳定；`signals_log` 的 `source=placeholder` 在 canonical 被拒、preview 标注 |
 | `AC-001`/`AC-004` 真实环境 | real-env integration（执行机） | `tests/integration/test_f007_controls_real.py`，`ALPHAMILL_INTEGRATION=1` | 绑定不可变 snapshot ID/digest、记录 hostname；与 fixture 控制分属不同命令 |
@@ -312,10 +313,13 @@ F005 前端**只经** `src/alphamill/api/` 的统一只读 API 消费 report、c
 | `SC-002` | integration + fault injection | `tests/integration/test_f007_concurrency.py` | 同 ID 并发 claim、崩溃后 lease 接管、finalize 原子性、registration 幂等 |
 | `AC-010` | integration + mutation | `tests/integration/test_f007_execution_tiers.py` | 最终确认窗统计量不出现在 Agent/preview 可读产物；越权 fail-closed |
 
-另以 funding carry/BTC-ETH 截面动量、白噪声、故意 future-fill 四类 fixture 做端到端 golden；
-对 guard 注册表、异常吞噬、preview writer、embargo 比较符与 artifact 完整性各做一次定向变异，
+另以 funding carry/BTC-ETH 截面动量、白噪声、故意 future-fill 四类 fixture 做端到端 golden；对 guard 注册表、异常吞噬、preview writer、embargo 比较符与 artifact 完整性各做一次定向变异，
 逐 mutant 产出 kill 证据到 `reports/mutation/f007/mutation_report.json`（无 survived 项才算通过），
 变异工具版本按 SOP §1 在 dev 依赖 pin 范围上界。
+
+属性测试的可复现约束：固定可复现 seed（`--property-seed`，写入 manifest），输入由显式策略枚举生成
+（不依赖随机数据分布，也不默认引入第三方 property-testing 框架；如引入则按 SOP §1 pin 版本范围），
+失败反例落 `reports/property/f007/<seed>/` 供复现。
 
 ## 9. 已确认决策与残余风险
 

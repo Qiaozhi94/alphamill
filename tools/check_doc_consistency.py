@@ -406,6 +406,16 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_DESIGN, "`evaluation.registered`"),
         ),
     ),
+    TextCheck(
+        "property_strategy_has_execution_task",
+        "F007-D025",
+        requires=(
+            (F007_TASKS, "属性测试轨"),
+            (F007_TASKS, "显式策略枚举"),
+            (F007_DESIGN, "固定可复现 seed"),
+            (F007_DESIGN, "`tests/property/test_f007_identity_properties.py`"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

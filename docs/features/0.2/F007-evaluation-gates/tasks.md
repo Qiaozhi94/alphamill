@@ -65,6 +65,8 @@ updated: 2026-09-17
 
 - [ ] T025 (`FR-004`, `NFR-002`): 统计第二实现对照抽查（PRD FR3.7）——对高价值候选或统计实现变更，用独立实现（Vibe-Trading `quantlib_call` 或本仓手工第二实现）对照 BH-FDR/block bootstrap，**time-box 1 周**；对照对象、容差（估计量相对差 ≤1e-6，超出则显式记录差异与原因）与证据路径 `reports/second_impl/<experiment_id>/` 一并落档；超时不阻塞主链路 — verify: `tests/unit/evaluation/test_second_implementation.py`
 
+- [ ] T026 (`DR-001`, `DR-002`, `NFR-002`): 属性测试轨——身份稳定（同语义输入任意路径/codec 重跑得同一 ID）与 ResearchSnapshot 变化敏感性（成员/cutoff/映射日历变化必产生新 ID）以属性测试执行；固定可复现 seed、输入生成器由显式策略枚举（不依赖随机数据分布），反例落 `reports/property/f007/<seed>/` — verify: `pytest -q tests/property/test_f007_identity_properties.py`
+
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 > 编写早、执行晚：以下条目在 Phase 1 先以红灯立起（夹具与断言先写），收尾全量执行；
