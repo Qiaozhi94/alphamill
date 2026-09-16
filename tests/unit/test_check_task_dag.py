@@ -46,6 +46,18 @@ UNKNOWN = tasks("- `T001 -> T099`：指向不存在任务。")
 BACKWARD = tasks("- `T003 -> T001`：依赖后序任务。")
 NO_INCOMING = tasks("- `T001 -> T002`：最高编号任务 T003 无入边。")
 PARALLEL_TARGET = tasks("- `T001 -> T002`：T002 是 [P] 却声明了前置边。", t002_parallel=True)
+ORPHAN = tasks("- `T001 -> T003`：T002 不在任何边上。")
+KEY_EDGE_REMOVED = (
+    "# F001-demo tasks\n\n"
+    "## 2. 实现任务\n\n"
+    "- [ ] T001 (`FR-001`): a\n"
+    "- [ ] T002 (`FR-001`): b\n"
+    "- [ ] T003 (`FR-001`): c\n"
+    "- [ ] T004 (`FR-001`): d\n"
+    "\n## 4. 依赖与并行关系\n\n"
+    "- `T001 -> T002 -> T003`：链\n"
+    "- `T001 -> T004`：收口任务另有入边，故最高任务规则通过\n"
+)
 
 
 def test_valid_dag_passes(tmp_path: pathlib.Path) -> None:
@@ -71,6 +83,20 @@ def test_last_task_without_incoming_edge_rejected(tmp_path: pathlib.Path) -> Non
 def test_parallel_task_with_predecessor_rejected(tmp_path: pathlib.Path) -> None:
     write_feature(tmp_path, "review", PARALLEL_TARGET)
     assert any("[P]" in msg for _, msg in dag.run_checks(tmp_path))
+
+
+def test_orphan_task_rejected(tmp_path: pathlib.Path) -> None:
+    write_feature(tmp_path, "review", ORPHAN)
+    errors = dag.run_checks(tmp_path)
+    assert any("T002" in msg and "孤立任务" in msg for _, msg in errors)
+
+
+def test_missing_key_edge_breaks_reachability(tmp_path: pathlib.Path) -> None:
+    """T004 仍有入边（最高任务规则通过），但 T003 失去通往收口的边——必须判红。"""
+    write_feature(tmp_path, "review", KEY_EDGE_REMOVED)
+    errors = dag.run_checks(tmp_path)
+    assert not any("无入边" in msg for _, msg in errors)
+    assert any("T003" in msg and "孤立任务" in msg for _, msg in errors)
 
 
 def test_draft_feature_not_enforced(tmp_path: pathlib.Path) -> None:

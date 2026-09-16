@@ -7,6 +7,7 @@ review}）校验 `docs/features/<version>/Fxxx-*/tasks.md`：
   - §4「依赖与并行关系」里所有边端点都是已定义的任务 ID；
   - 边一律「向前」：源 ID < 目标 ID（任务编号即执行顺序，禁止依赖后序任务）；
   - 最高编号任务（收口任务）必须有至少一条入边；
+  - **每个任务都必须有路径到达收口任务**（从收口任务沿入边反向遍历，孤立任务判红）；
   - `[P]` 任务不得同时声明前置边（tasks 模板规定）。
 
 **作用域说明**：不收 `done`（F001/F004 等历史 Feature 已收口，纳入会立刻破坏
@@ -119,8 +120,22 @@ def check_tasks(text: str) -> list[str]:
             errors.append(f"`[P]` 任务不得有前置边: {dst} 被 {src} 依赖")
 
     last = max(ids)
-    if not any(dst == last for _, dst in edges):
+    incoming: dict[str, set[str]] = {}
+    for src, dst in edges:
+        incoming.setdefault(dst, set()).add(src)
+    if not incoming.get(last):
         errors.append(f"最高编号任务 {last} 无入边（收口任务必须有前置依赖）")
+    reachable = {last}
+    stack = [last]
+    while stack:
+        current = stack.pop()
+        for prev in incoming.get(current, ()):
+            if prev not in reachable:
+                reachable.add(prev)
+                stack.append(prev)
+    for tid in ids:
+        if tid not in reachable:
+            errors.append(f"任务 {tid} 无路径到达收口任务 {last}（孤立任务）")
     return list(dict.fromkeys(errors))
 
 

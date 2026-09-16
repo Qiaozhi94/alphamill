@@ -26,7 +26,7 @@ updated: 2026-09-14
 
 ## 1. 前置条件
 
-- [ ] T001 (`Q-001`): 关闭 spec 唯一剩余的开放问题——宇宙扩容（FR1.5）是否与 F003 并行立项 — verify: `docs/features/0.2/F003-alphagen-vendor/spec.md` §8 全部 Q 关闭
+- [ ] T001 (`FR-003`, `AC-003`): 冻结并校验 F008 宇宙台账 artifact 的消费契约（按 digest 加载、`universe_at(T)` 与 `schema_version` 可读），产出 T020 的输入夹具；F008 未落地时以显式 universe 配置作为等价夹具 — verify: `tests/unit/test_f003_binding.py`
 - [ ] T002 (`FR-003`, `DR-001`): 固定绑定文件格式并验证目标 dataset 的 valid 版本与 `value_digest` 可由 F002 reader 解析 — verify: `tests/unit/test_f003_binding.py`
 - [ ] T003 (`FR-002`): clone 上游 AlphaGen、记录 commit hash、核对核心子集的实际文件布局，产出 vendor 清单初稿，并**冻结可复现的上游基线**（逐文件 sha256 清单写入 `alphagen_vendor/_upstream_baseline.json`） — verify: `src/alphamill/factor_factory/generators/alphagen_vendor/VENDORED.md`
 - [ ] T004 (`NFR-002`, `NFR-005`): 打通并标定执行机 `qiaozhi-lt`——**先恢复 shell 接入**（env-manager 台账记录 2026-09-14 全端口复测 22/2222/2200/8022/3389/5985 全闭，当前无 shell 路径，按 `references/access-methods.md` §4 启用 Windows OpenSSH）；再在其 WSL2 内实测 CUDA 可用性与可用显存，按 §7.1 标定显存上限写进配置（不写死代码）；确认该机 F002 湖可读且通过完整性校验 — verify: `tests/unit/test_f003_gpu_slot.py`（能力探测纯函数）+ 在 `qiaozhi-lt` 上用 `alphamill.data_bridge.reader` 读一次真实快照
@@ -64,7 +64,7 @@ updated: 2026-09-14
 
 ### Phase 4：批量挖掘、协同池与产能
 
-- [ ] T025 (`NFR-002`, `AC-010`): 实现 `gpu_slot`——显存自检（上限可配，不写死常数）、flock 单槽 FIFO（`queue_seq` / 取锁 / 释放 / 超时状态记录）、训练窗口校验、`--allow-cpu` / `--allow-offhours` 显式开关，运行记录写 `hostname` / `device` / `kronos_offload`；并实现夜槽切换的 Kronos 卸载编排（**live owner = F003**）：经 F004 交付的容器编排控制优雅停止 `kronos-signal`、校验显存释放、窗口结束恢复，停止失败或显存未释放则 fail-closed 留在 FIFO（不向未知进程发 signal） — verify: `tests/unit/test_f003_gpu_slot.py`
+- [ ] T025 (`NFR-002`, `AC-010`): 实现 `gpu_slot`——显存自检（上限可配，不写死常数）、flock 单槽 FIFO（`queue_seq` / 取锁 / 释放 / 超时状态记录）、训练窗口校验、`--allow-cpu` / `--allow-offhours` 显式开关，运行记录写 `hostname` / `device` / `kronos_offload`；实现夜槽 Kronos 生命周期客户端（**live owner = F003**）：按架构 §7.1 契约调用 `status` / `stop` / `restore`（含 `contract_version`、幂等、超时与错误码），用 `status.vram_bytes` 确认显存释放，失败或版本不匹配则 fail-closed 留在 FIFO — verify: `tests/unit/test_f003_gpu_slot.py`, `tests/integration/test_f003_kronos_lifecycle.py`
 - [ ] T026 (`FR-007`, `DR-004`, `AC-008`): 实现协同池导出为可执行 FactorDef（`generator=pool`，加载后可按成员重算）与 `pool_store`，成员权重可反解且重算一致，成员或权重变化产生新 `factor_id` — verify: `tests/integration/test_f003_alpha_pool.py`
 - [ ] T027 (`IR-001`, `FR-001`, `AC-011`): 实现 CLI `mine` 子命令与全部启动期拒绝条件（缺绑定/invalid/档位不明/窗口外/无 CUDA），并支持 `--window` / `--config` 默认值以构造完整 `GenerationRequest`（默认值来自代码内常量并写入 config artifact） — verify: `tests/unit/test_f003_cli_contract.py`
 - [ ] T028 (`NFR-003`, `AC-009`): 实现并验证可复现性——canonical config artifact 与 `config_digest` 落盘、seed 稳定派生、torch 确定性开关；同 `(seed, binding, code_digest, config_digest)` 重跑得到相同 factor_id 集合与相同池成员 — verify: `tests/integration/test_f003_generation_run.py`
@@ -72,10 +72,10 @@ updated: 2026-09-14
 
 ## 3. 验证与验收任务
 
-- [ ] T030 (`AC-001`, `AC-002`, `AC-004`, `AC-005`, `AC-012`): 运行生成器契约、vendor 卫生、适配器、算子登记与 CLI 契约单元套件 — verify: `pytest -q tests/unit/test_f003_generator_contract.py tests/unit/test_f003_vendor_hygiene.py tests/unit/test_f003_alphagen_adapter.py tests/unit/test_f003_operator_registry.py tests/unit/test_f003_cli_contract.py`
+- [ ] T030 (`AC-001`, `AC-002`, `AC-004`, `AC-005`, `AC-012`): 运行生成器契约、vendor 卫生、适配器、算子登记、人工种子与 CLI 契约单元套件 — verify: `pytest -q tests/unit/test_f003_generator_contract.py tests/unit/test_f003_vendor_hygiene.py tests/unit/test_f003_alphagen_adapter.py tests/unit/test_f003_operator_registry.py tests/unit/test_f003_manual_seeds.py tests/unit/test_f003_cli_contract.py`
 - [ ] T031 (`AC-003`, `AC-008`, `AC-009`, `AC-011`): 运行数据面、协同池、运行记录、边界与 CLI 契约集成套件 — verify: `pytest -q tests/integration/test_f003_lake_tensor.py tests/integration/test_f003_alpha_pool.py tests/integration/test_f003_generation_run.py tests/integration/test_f003_boundaries.py tests/unit/test_f003_cli_contract.py`
 - [ ] T032 (`AC-007`): 归档冒烟闸门 time-box 的真实执行证据（逐条判据 pass/fail、时间戳、两条 M2 义务记录），并**在证据归档之后**把裁决结论与触发判据回写 `spec.md` §7 决策表 — verify: `pytest -q tests/integration/test_f003_smoke_gate.py` + `spec.md` §7 含裁决记录
-- [ ] T033 (`AC-006`, `AC-010`): 在执行机的真实训练夜槽复跑产能与显存断言，证据记录 hostname、GPU 型号、显存峰值与耗时；开发机的同名用例跳过属预期，不得以其 CPU 结果替代 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_generation_run.py tests/unit/test_f003_gpu_slot.py`
+- [ ] T033 (`AC-006`, `AC-010`): 在执行机的真实训练夜槽复跑产能与显存断言，证据记录 hostname、GPU 型号、显存峰值与耗时；开发机的同名用例跳过属预期，不得以其 CPU 结果替代 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_generation_run.py tests/integration/test_f003_kronos_lifecycle.py tests/unit/test_f003_gpu_slot.py`
 - [ ] T034 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 - [ ] T035 (`AC-006`, `DR-001`): `F008` 宇宙扩容落地后，用扩容宇宙（≥30 对）复跑一次挖掘运行作对照，记录两次运行的 `universe` 与候选质量差异；在此之前的质量结论一律标注「6 对宇宙」前提 — verify: `pytest -q tests/integration/test_f003_generation_run.py` + 两次 `run.json` 的 `universe` 对照
 
@@ -94,16 +94,24 @@ updated: 2026-09-14
 - `T005 -> T010`、`T005 -> T013`：接口先定，两个后端都按同一协议实现。
 - `T007 -> T008 -> T029`：候选持久化 → 运行记录 → 产能计数。
 - `T009 -> T020`：绑定校验是数据面的启动前置。
+- `T001 -> T020`：F008 宇宙台账消费契约（或等价显式 universe 夹具）是 PIT 掩码的输入前置。
+- `T002 -> T009`：绑定文件格式与 digest 解析先于 `binding.py` 实现。
 - `F008.IR-002 -> T020`：PIT 掩码依赖 F008 的内容寻址宇宙台账（`universe_at(T)` 与 digest、IR-003 的 `schema_version`）；F008 未落地前 T020 用显式 universe 配置并在 `run.json` 记录 digest 与来源，任何情况下都不得用当前成员表回填历史。
 - `T013 -> T016 -> T017 -> T018 -> T019 -> T032`：判定器（T016）先于判据实跑（T017/T018），判据先于 time-box 实跑与裁决记录（T019）；证据归档与裁决回写（T032）以裁决为前提，禁止先回写后归档。
 - `T030/T031/T032/T033/T034/T035 -> T036/T037/T038`：[TEST] 组三条旅程验收以各验收套件与真实执行证据为前提（编写早、执行晚），并需 `ALPHAMILL_INTEGRATION=1` 在执行机取证。
 - `T036/T037/T038 -> T039`：三条旅程验收全绿后才回写 spec 验收证据与状态。
 - `T014 -> T015`：先声明 `mining` extra，再扩展 pin 门禁。
+- `T022 -> T023 -> T024`：算子能力登记表先于生成侧自检，自检先于目标对齐。
 - `T020 -> T021 -> T024 -> T029`：数据面 → 适配 → 目标对齐 → 批量产出。
 - `T025 -> T027 -> T029`：调度就位后才允许完整挖掘运行。
+- `T026 -> T031`：协同池导出由集成套件验收。
+- `T028 -> T029`：可复现性由完整运行验收。
+- `T010 -> T030`、`T011 -> T031`、`T012 -> T030`：人工种子、egress 护栏与 CLI 契约各自由对应单元/集成套件验收。
+- `T015 -> T016`：pin 门禁与 mining extra 声明就绪后才判定器结构可用。
 - `F004 交付（kronos-signal 服务编排）-> T025`：夜槽卸载经该服务的容器生命周期控制；F004 交付未部署时记 `offload_not_needed`，停止失败或显存未释放则 fail-closed 留在 FIFO。FIFO 协议用两个并发挖掘运行独立取证。
 - `T029 -> T035`：先有 6 对宇宙的基线运行，`F008` 落地后才有可对照的第二次运行；`F008` 不阻塞 T001–T039 的任何一项。
-- `T006 [P]`：只改假设模块，与接口/存储任务无共享状态。
+- `T006 -> T010`：假设 catalog 供人工种子后端绑定真实 `HypothesisDef`。
+- `T006 [P]`：只改假设模块，与接口/存储任务无共享状态（无前置边，仅可并行）。
 
 ## 5. 明确后移
 
@@ -114,4 +122,4 @@ updated: 2026-09-14
 - 批量移植 GTJA191 / WQ101 公式库作为种子宇宙 → 后续 Feature：需先做 crypto 24/7 窗口重定义与 A 股专有因子剔除。
 - 模型族级联与 DML 诊断 → 独立研究 Feature（`F007` spec §3 已把它指向 F003 或独立立项；本 spec 不纳入范围）。
 - 执行机从 `qiaozhi-lt` 整体迁移到 `qiaozhi-lab`（RTX 5070 Ti）→ 独立 Feature：不只是换卡，还包括 Win11+WSL2 → 原生 Ubuntu 的平台迁移（docker 编排、路径、自启、备份通道）与 Blackwell sm_120 的 torch 构建切换；F003 只面向当前执行机验收，迁移时重标显存上限与时段表，并按 `docs/SOP.md` §3 重跑依赖机器能力的验收项。
-- Kronos 推理性能优化与 GPU 直通 → `F004` / v0.2.x 后续评估：F004 交付的服务编排是 F003 夜槽卸载编排的依赖（容器生命周期控制），但性能与直通能力本身不在 F003 范围；F003 的卸载编排失败时一律 fail-closed 留在 FIFO，不降级为并行抢卡。
+- `kronos-signal` 服务端 `status` / `stop` / `restore` 端点实现（版本化契约见架构 §7.1）→ 待分配 Feature（`BACKLOG.md`「规划中」登记）：契约已定义、F003 客户端与契约测试在本 feature（T025 / `tests/integration/test_f003_kronos_lifecycle.py`）；服务端未实现时 F003 记 `offload_not_needed`（服务确实不存在）或 fail-closed 留在队列，不降级为并行抢卡。Kronos 推理性能优化与 GPU 直通仍按 `F004` / v0.2.x 后续评估。
