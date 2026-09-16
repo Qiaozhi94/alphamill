@@ -48,6 +48,7 @@ AlphaMill 已定义严格的产品门槛，但还没有可运行的统一评测�
 - 不为所有资产/频率承诺“只改配置即可迁移”；
 - 不把 DML、PBO 或 Reality Check 设为 v0.2 的通用硬门；
 - 不实现 F005 研究控制台，F007 只提供其只读真相源。
+- 不实现无前视 L2（独立逐 K 线重放审计）与 L3（信号缓存 merge/join 时间戳对齐）的审计器——owner 为 F006/M3；F007 只消费其证据并在缺失时于晋级前失败关闭（`FR-007`）。
 
 ## 2. 用户场景
 
@@ -107,7 +108,7 @@ AlphaMill 已定义严格的产品门槛，但还没有可运行的统一评测�
 ### 范围外
 
 - PortfolioDef 的成员选择、权重和边际贡献算法 → FR4/M3 Feature；
-- 离线到决策时 parity、run_record、kill-switch 与启动对账 → F006/M3；
+- 离线到决策时 parity、run_record、kill-switch 与启动对账，以及**无前视 L2（独立逐 K 线重放审计）与 L3（信号缓存 merge/join 时间戳与陈旧度对齐）的审计器实现** → F006/M3；F007 只消费其证据，并在 L2/L3 非 `PASS` 时于晋级前 fail-closed 阻断（`FR-007`、`AC-009`、PRD FR3.6 / SOP 原则 3）。
 - 模型族级联与 DML 诊断 → F003 或独立研究 Feature；
 - 研究页面、人工审批和生命周期写路径 → F005/F006。
 
@@ -182,6 +183,16 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 - WHEN canonical 裁决
 - THEN `cost_verdict=cost_negative` 且最终 verdict 为 `dead`
 
+### Requirement: 无前视三层归属与晋级阻断（`FR-007`）
+
+系统应当把 PRD FR3.6 的三层无前视防线显式归属：**L1 = AST 纯度与未来算子门**（因子定义层）由 F007 方法论守卫在评测入口复检并 fail-closed（执行者在 F003 生成侧）；**L2 = 独立逐 K 线重放审计**（策略层）与 **L3 = 信号缓存 merge/join 时间戳与陈旧度对齐**（数据层）的 owner 为 F006/M3，F007 不重复实现。manifest 必须逐层记录状态（`PASS` / `FAIL` / `not_yet_available`）与证据引用，缺失层携带 owner。**L2/L3 未取得通过证据前，任何成员或组合不得晋级 paper**：状态不得记 `PASS`，也不得静默省略。
+
+#### Scenario: 只有 L1 通过时不得晋级
+
+- GIVEN 一个 canonical 成员仅 L1 通过，L2/L3 记 `not_yet_available`（owner=F006）
+- WHEN 请求晋级 paper
+- THEN 请求被拒绝（阻断点在三层状态校验），拒绝事件含缺失层与 owner
+
 ### Requirement: 不可变证据与综合报告（`FR-006`）
 
 系统应当原子发布 `report.json`、`curves.parquet` 和 manifest，并从 canonical ledger 生成版本化
@@ -246,6 +257,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 - canonical 成员登记不等于晋级；cohort 未 FINALIZED 时不得产生可晋级结论。
 - 必需门被 skip、warning 或 null 时，运行不能进入 `EVIDENCE_READY/REGISTERED`。
 - 历史证据不覆盖；变化产生新 ID，并通过 supersedes 表达替代关系。
+- 无前视三层归属显式：L1 由本 Feature 方法论守卫 fail-closed 执行；L2/L3 owner 为 F006/M3，非 `PASS` 前不得晋级 paper，缺失层记 `not_yet_available` 并携带 owner（`FR-007`）。
 
 ## 6. 成功与验收
 
@@ -266,6 +278,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 - [ ] **AC-006** (`DR-001`, `DR-002`, `DR-006`, `NFR-002`): ResearchSnapshot 跨路径/codec 身份稳定；动态 latest 先冻结；成员/cutoff/映射日历或实验语义变化使相应身份变化并可 supersede；universe（F008 digest + `universe_at(T)`）与 calendar 两个 artifact 引用分别校验，缺失或 digest 不符即拒绝发布
 - [ ] **AC-007** (`FR-006`, `UX-002`): synthesis 只消费 canonical，输出五阶段漏斗且事实/推断/建议分栏
 - [ ] **AC-008** (`IR-001`, `IR-002`, `IR-003`): CLI/schema 契约能拒绝非法 canonical 请求并返回结构化失败
+- [ ] **AC-009** (`FR-007`): 三层无前视状态逐层进入 manifest；L1 fail-closed 生效（未来算子负例被拒）；L2/L3 非 `PASS` 时阻断晋级且拒绝事件携带缺失层与 owner；任何情况下不得把缺失层记为 PASS 或静默省略
 
 ## 7. 测试、依赖与决策
 
@@ -290,6 +303,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 | DML/PBO/Reality Check | 可选诊断，不做通用硬门 | 前提敏感且非所有候选适用 | 数据与用途成熟后独立立项 |
 | PortfolioDef 五阶段 | 协议预留；组合构建/执行阶段可为 NOT_APPLICABLE | F007 先完成 M1 因子证据切片 | M3 Feature 补齐，不能伪记 PASS |
 | 统计实现风险 | 自研最小协议 + 正/负控制 + 第二实现抽查 | 门禁不能依赖会 warning 降级的黑盒 | ADR-0003 |
+| 无前视 L2/L3 归属 | F007 不实现审计器；owner=F006/M3，晋级前以三层状态 + fail-closed 门阻断 | 逐 K 线重放与信号缓存对齐属策略/数据层，重复实现会产生第二真相源 | F006 落地后 F007 只接线其审计证据 |
 
 ## 8. 待确认问题
 

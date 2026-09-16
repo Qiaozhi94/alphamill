@@ -213,6 +213,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "--universe-calendar"),
         ),
     ),
+    TextCheck(
+        "no_lookahead_three_layers_owned",
+        "F007-D005",
+        requires=(
+            (F007_SPEC, "FR-007"),
+            (F007_SPEC, "独立逐 K 线重放"),
+            (F007_SPEC, "信号缓存"),
+            (F007_DESIGN, "owner=F006"),
+            (F007_TASKS, "三层无前视状态"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

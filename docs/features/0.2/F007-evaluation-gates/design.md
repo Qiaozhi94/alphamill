@@ -240,6 +240,8 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 统计函数不得 `except Exception -> warning/null`。可选 PBO/Reality Check/DML 诊断放独立
 `optional_diagnostics`，状态和失败原因可见，但其缺失既不能推翻硬门失败，也不能制造硬门通过。
 
+**无前视三层归属**：L1（AST 纯度与未来算子）由 MethodologyGate 在评测入口 fail-closed 执行；L2（独立逐 K 线重放审计）与 L3（信号缓存 merge/join 时间戳与陈旧度对齐）的 owner=F006/M3，F007 不实现审计器。manifest 的 `no_lookahead` 段逐层记录 `status`（`PASS`/`FAIL`/`not_yet_available`）与 `evidence_refs`，缺失层带 `owner`；L2/L3 非 `PASS` 时 `promotion_verdict` 不得为 `promising`，任何 paper 晋级请求失败关闭（`E_REQUIRED_METRIC_FAILED`）。
+
 ## 8. 测试策略与验收映射
 
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
@@ -252,6 +254,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 | `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |
 | `AC-007` | integration + golden | `tests/integration/test_f007_synthesis.py` | 只读 canonical、五阶段漏斗、三栏输出、确定重建 |
 | `AC-008` | CLI integration | `tests/integration/test_f007_cli.py` | 非法 canonical 非零退出且 error code 稳定 |
+| `AC-009` | unit + integration | `tests/unit/validation/test_methodology_gate.py`、`tests/integration/test_f007_execution_tiers.py` | 三层状态入 manifest；L2/L3 缺失时阻断晋级 |
 
 另以 funding carry/BTC-ETH 截面动量、白噪声、故意 future-fill 四类 fixture 做端到端 golden；
 对 guard 注册表、异常吞噬、preview writer、embargo 比较符与 artifact 完整性各做一次定向变异。

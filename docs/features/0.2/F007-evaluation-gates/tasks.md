@@ -37,7 +37,7 @@ updated: 2026-09-17
 
 ### Phase 2：方法论门与 canonical 证据
 
-- [ ] T008 (`FR-002`, `AC-002`): 实现 capability/guard 配对及 label endpoint/PIT/max-horizon/train-only-fit 守卫 — verify: `tests/unit/validation/test_methodology_gate.py`
+- [ ] T008 (`FR-002`, `FR-007`, `AC-002`, `AC-009`): 实现 capability/guard 配对及 label endpoint/PIT/max-horizon/train-only-fit 守卫，并在 manifest 写入三层无前视状态（L1 本 Feature fail-closed 执行；L2/L3 owner=F006/M3，缺失层记 `not_yet_available` 并阻断晋级） — verify: `tests/unit/validation/test_methodology_gate.py`
 - [ ] T009 (`FR-004`, `AC-003`): 实现成员级 HAC IC/block bootstrap 与 cohort 级 BH-FDR、有效独立数 DSR、MinTRL，异常统一失败关闭 — verify: `tests/unit/evaluation/test_required_statistics.py`
 - [ ] T010 (`FR-005`, `AC-004`): 实现 purged/embargoed rolling split、样本量裁决和稳定性报告 — verify: `tests/unit/evaluation/test_cost_and_stability.py`
 - [ ] T011 (`DR-003`, `TR-001`, `TR-002`, `AC-005`): 实现 run 事件、report/curves/manifest 同盘原子发布与恢复 — verify: `tests/integration/test_f007_atomic_publish.py`
