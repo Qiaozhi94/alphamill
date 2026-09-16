@@ -332,6 +332,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_SPEC, "第二实现抽查"),
         ),
     ),
+    TextCheck(
+        "f004_to_f007_factor_source_contract",
+        "F007-D017",
+        requires=(
+            (F007_SPEC, "DR-007"),
+            (F007_SPEC, "source=placeholder"),
+            (F007_DESIGN, "signals_log"),
+            (F007_DESIGN, "`source=placeholder` 的处理分层"),
+            (F007_TASKS, "placeholder"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

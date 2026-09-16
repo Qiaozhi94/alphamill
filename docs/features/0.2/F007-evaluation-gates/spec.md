@@ -219,6 +219,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 - **DR-001**：`ResearchSnapshot` 应当按 ADR-0007 持久化 cutoff、精确 dataset/version/value-digest 成员、as-of/覆盖语义、symbol-map 与 universe/calendar 摘要；universe 摘要以 **F008** 的内容寻址台账 digest 与 `universe_at(T)` 语义为锚点（`IR-003` 的 `schema_version`），calendar 摘要由本 Feature 拥有的 calendar artifact 导出；缺失或 invalid 成员不得发布。
 - **DR-002**：`ExperimentContext` 应当持久化 tier、upstream ID、cohort、规范化规则/窗口/成本配置、research_snapshot_id、code/build digest、seed 与可选 supersedes；`experiment_id` 由这些语义字段（除 tier/supersedes）导出，path、codec、created_at、host、duration 与 file SHA 不参与身份。
 - **DR-006**：`UniverseCalendarBinding` 应当把 universe 与 calendar 拆为两个独立 artifact 引用：universe 按 **F008** `IR-002` 的内容寻址台账消费（`lake/_metadata/universes/<digest>.csv`，提供 `universe_at(T)` 语义），calendar 由本 Feature 拥有并规范化保存为内容寻址 JSON（`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`）；ADR-0007 的 `universe_calendar_digest` 由两者 digest 组合导出（不再等于单一 JSON 文件摘要），拆解关系写入 ResearchSnapshot provenance。
+- **DR-007**：`SignalFactorProvenance` 应当记录从 F004/Kronos 信号或人工种子派生为可评测 `FactorDef` 的适配信息（来源 dataset 与 `source` 分布、适配器版本、原始信号列、标签与 horizon 映射）；`source=placeholder` 的来源在 canonical 被拒绝（`E_INPUT_INVALID`），preview 允许但报告必须标注 `signal_source=placeholder` 并置 `approximation=true`；F004 只交付真实信号源与 `/predict` 契约，不升级 `signals_log` 内容，消费者路由切换不在本 Feature 范围。
 - **DR-003**：`ExperimentManifest` 应当关联输入、逐阶段状态、报告、曲线、规则版本和结论；canonical 历史产物只增不改。
 - **DR-004**：`CohortLedger` 应当保存预注册试验定义、选择阶段、全部候选和计数；preview 不得出现在 official population。
 - **DR-005**：`HoldoutBudgetLedger` 应当以 append-only 台账持久化每次留出评估（`candidate_id`、ISO 周、`experiment_id`、`cohort_id`、`verdict`、`recorded_at`、`execution_tier=canonical`）；只有 canonical capability 可追加，preview 越权写入必须被拒绝并写 `evaluation.gate_rejected`；台账与 manifest 同为可复现要件，不支持事后补记（ADR-0003 留出期使用预算）。
@@ -287,7 +288,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 - [ ] **AC-005** (`FR-006`, `DR-003`, `NFR-001`): report/curves/manifest 原子发布，失败注入不产生半个 PASS
 - [ ] **AC-006** (`DR-001`, `DR-002`, `DR-006`, `NFR-002`): ResearchSnapshot 跨路径/codec 身份稳定；动态 latest 先冻结；成员/cutoff/映射日历或实验语义变化使相应身份变化并可 supersede；universe（F008 digest + `universe_at(T)`）与 calendar 两个 artifact 引用分别校验，缺失或 digest 不符即拒绝发布
 - [ ] **AC-007** (`FR-006`, `UX-002`): synthesis 只消费 canonical，输出五阶段漏斗且事实/推断/建议分栏
-- [ ] **AC-008** (`IR-001`, `IR-002`, `IR-003`): CLI/schema 契约能拒绝非法 canonical 请求并返回结构化失败
+- [ ] **AC-008** (`IR-001`, `IR-002`, `IR-003`, `DR-007`): CLI/schema 契约能拒绝非法 canonical 请求并返回结构化失败；`source=placeholder` 的 Kronos 信号源自 canonical 被拒（`E_INPUT_INVALID`）、preview 显式标注，适配 provenance 完整
 - [ ] **AC-009** (`FR-007`): 三层无前视状态逐层进入 manifest；L1 fail-closed 生效（未来算子负例被拒）；L2/L3 非 `PASS` 时阻断晋级且拒绝事件携带缺失层与 owner；任何情况下不得把缺失层记为 PASS 或静默省略
 - [ ] **AC-011** (`FR-006`, `NFR-004`): preview 的采样/缩窗在报告 `approximation` 字段显式标注（`is_approximate` 与缩减维度可核），canonical 不因性能压力静默减少门禁或样本
 

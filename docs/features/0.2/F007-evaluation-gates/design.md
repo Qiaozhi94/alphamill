@@ -194,6 +194,14 @@ verdict 和 artifact URI；领域错误输出稳定 error code，不输出 PASS-
 - **协同池**：以 `generator="pool"` 的可执行 `FactorDef` 与普通因子走同一评测路径，不因来源或聚合形态获得豁免；其成员 `factor_id` 与权重作为 provenance 进入 manifest。
 - 摄入只读且按 `schema_version` 消费：F007 不写 F003 侧记录，也不读取 vendor 内部结构。
 
+### 信号来源与 FactorDef 适配（F004 / 人工种子）
+
+F004 交付真实 Kronos 推理实例与 `/predict` 契约，但**不**升级 `signals_log` 内容，也不切换消费者路由；因此从信号到可评测 `FactorDef` 的适配契约由本 Feature 拥有：
+
+- 信号型 `FactorDef` 由 `signals_log` dataset（F002 只读）派生，定义与 manifest 记录 `SignalFactorProvenance`：来源 dataset、`source` 分布、适配器版本、原始信号列与标签/horizon 映射。
+- `source=placeholder` 的处理分层：**canonical 拒绝**（`E_INPUT_INVALID`，fail-closed，与 ADR-0003 一致）；**preview 允许**但报告必须标注 `signal_source=placeholder` 并置 `approximation=true`，且不得据此产生任何晋级结论。
+- 适配器只做形状/语义映射，不改变信号数值；数值一致性由 `tests/contract/test_f007_upstream_contracts.py` 以 fixture 固定。
+
 ### Event / Trace Contract
 
 `events.jsonl` 保存本次 run 内事件；canonical 的总体登记另写不可变 cohort event：
@@ -274,7 +282,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 | `AC-011` | contract + integration | `tests/contract/test_f007_artifact_schemas.py` | `approximation` 标注存在；canonical 非近似；POSIX 逻辑路径；CLI 首屏字段快照 |
 | `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |
 | `AC-007` | integration + golden | `tests/integration/test_f007_synthesis.py` | 只读 canonical、五阶段漏斗、三栏输出、确定重建 |
-| `AC-008` | CLI integration | `tests/integration/test_f007_cli.py` | 非法 canonical 非零退出且 error code 稳定 |
+| `AC-008` | CLI integration | `tests/integration/test_f007_cli.py` | 非法 canonical 非零退出且 error code 稳定；`signals_log` 的 `source=placeholder` 在 canonical 被拒、preview 标注 |
 | `AC-001`/`AC-004` 真实环境 | real-env integration（执行机） | `tests/integration/test_f007_controls_real.py`，`ALPHAMILL_INTEGRATION=1` | 绑定不可变 snapshot ID/digest、记录 hostname；与 fixture 控制分属不同命令 |
 | `AC-009` | unit + integration | `tests/unit/validation/test_methodology_gate.py`、`tests/integration/test_f007_execution_tiers.py` | 三层状态入 manifest；L2/L3 缺失时阻断晋级 |
 | `SC-002` | integration + fault injection | `tests/integration/test_f007_concurrency.py` | 同 ID 并发 claim、崩溃后 lease 接管、finalize 原子性、registration 幂等 |
