@@ -49,10 +49,10 @@ updated: 2026-09-14
 - [ ] T013 (`FR-002`, `AC-002`): vendor 核心子集落地（表达式/算子、张量求值器、线性协同池、RL 环境），丢弃 `requirements.txt` 与 `alphagen_qlib/`，逐处改动标注并补齐 `VENDORED.md` 五项，且与 T003 冻结的上游基线逐文件比对（差异集合 == 标注集合） — verify: `tests/unit/test_f003_vendor_hygiene.py`
 - [ ] T014 (`FR-002`): `pyproject.toml` 新增 `mining` 可选依赖组（torch / numpy / stable-baselines3 / gymnasium 全部写版本范围；torch 需显式选 CUDA 构建，且必须覆盖 `qiaozhi-lab` 的 Blackwell sm_120，为迁移留路）、`ruff extend-exclude` 排除 vendor 目录，并在 `docs/SOP.md` Code Quality 豁免表登记 vendor 目录 — verify: `python3 tools/verify.py`
 - [ ] T015 (`FR-002`, `NFR-004`): 扩展 `tools/check_dep_pins.py` 为"可选 extras 已安装才校验范围"，并在 runner 入口加 mining extra 能力自检 fail-closed（两者必须同时落地） — verify: `tests/unit/test_check_dep_pins.py`
-- [ ] T016 (`FR-006`, `AC-007`): 在执行机用最小数据切片跑通 1 个 PPO epoch（含 gym→gymnasium env wrapper 适配）——冒烟第 1 天判据 — verify: `tests/integration/test_f003_smoke_gate.py`
-- [ ] T017 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
-- [ ] T018 (`FR-006`, `AC-007`): 实现冒烟闸门判据判定器、当日冒烟 manifest、档位状态机与降级裁决（L1→L0 回切须新 time-box 记录） — verify: `tests/integration/test_f003_smoke_gate.py`
-- [ ] T019 (`FR-006`): 实跑 time-box 并归档裁决（L0 锁定或 L1 降级；L2 不属 time-box 裁决），把结论与触发判据回写 `spec.md` §7 决策表 — verify: `docs/features/0.2/F003-alphagen-vendor/spec.md` §7 含裁决记录
+- [ ] T016 (`FR-006`, `AC-007`): 实现冒烟闸门判据判定器、当日冒烟 manifest（含 ADR-0001 两条 M2 义务：生成侧逐级计数、下游级 `owner=F007`+`not_yet_available` 占位、奖励频率抽查）、档位状态机与降级裁决（L1→L0 回切须新 time-box 记录），并提供 `smoke` 的默认 config/window 构造 — verify: `tests/integration/test_f003_smoke_gate.py`
+- [ ] T017 (`FR-006`, `AC-007`): 在执行机用最小数据切片跑通 1 个 PPO epoch（含 gym→gymnasium env wrapper 适配）——冒烟第 1 天判据 — verify: `tests/integration/test_f003_smoke_gate.py`
+- [ ] T018 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
+- [ ] T019 (`FR-006`): 在执行机实跑 time-box（第 1、2 天判据），产出裁决记录（L0 锁定或 L1 降级；L2 不属 time-box 裁决）与触发判据写入当日 manifest；**不在此步回写 spec**（回写在 T032，须先归档证据） — verify: `tests/integration/test_f003_smoke_gate.py` + 当日 manifest 含裁决与触发判据
 
 ### Phase 3：完整数据面、适配器与生成侧自检
 
@@ -74,26 +74,35 @@ updated: 2026-09-14
 
 - [ ] T030 (`AC-001`, `AC-002`, `AC-004`, `AC-005`): 运行生成器契约、vendor 卫生、适配器与算子登记单元套件 — verify: `pytest -q tests/unit/test_f003_generator_contract.py tests/unit/test_f003_vendor_hygiene.py tests/unit/test_f003_alphagen_adapter.py tests/unit/test_f003_operator_registry.py`
 - [ ] T031 (`AC-003`, `AC-008`, `AC-009`, `AC-011`): 运行数据面、协同池、运行记录与边界集成套件 — verify: `pytest -q tests/integration/test_f003_lake_tensor.py tests/integration/test_f003_alpha_pool.py tests/integration/test_f003_generation_run.py tests/integration/test_f003_boundaries.py`
-- [ ] T032 (`AC-007`): 归档冒烟闸门 time-box 的真实执行证据（逐条判据 pass/fail、时间戳、裁决） — verify: `pytest -q tests/integration/test_f003_smoke_gate.py` + `spec.md` §7 裁决记录
+- [ ] T032 (`AC-007`): 归档冒烟闸门 time-box 的真实执行证据（逐条判据 pass/fail、时间戳、两条 M2 义务记录），并**在证据归档之后**把裁决结论与触发判据回写 `spec.md` §7 决策表 — verify: `pytest -q tests/integration/test_f003_smoke_gate.py` + `spec.md` §7 含裁决记录
 - [ ] T033 (`AC-006`, `AC-010`): 在执行机的真实训练夜槽复跑产能与显存断言，证据记录 hostname、GPU 型号、显存峰值与耗时；开发机的同名用例跳过属预期，不得以其 CPU 结果替代 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_generation_run.py tests/unit/test_f003_gpu_slot.py`
 - [ ] T034 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 - [ ] T035 (`AC-006`, `DR-001`): `F008` 宇宙扩容落地后，用扩容宇宙（≥30 对）复跑一次挖掘运行作对照，记录两次运行的 `universe` 与候选质量差异；在此之前的质量结论一律标注「6 对宇宙」前提 — verify: `pytest -q tests/integration/test_f003_generation_run.py` + 两次 `run.json` 的 `universe` 对照
-- [ ] T036: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
+
+### [TEST] 组：层 2 旅程验收轨（必填）
+
+- [ ] T036 [TEST] (`US-001`, `AC-001`, `AC-003`, `AC-004`): 旅程 US-001 端到端验收——固定快照绑定与 seed 经 `produce()` 连跑两次得到同一 `factor_id` 集合、加载后的 FactorDef 可直接执行、invalid 绑定被拒；夹具在 Phase 1 先以红灯立起，收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/unit/test_f003_generator_contract.py tests/integration/test_f003_lake_tensor.py`
+- [ ] T037 [TEST] (`US-002`, `AC-007`): 旅程 US-002 端到端验收——在执行机按 `smoke --day 1`、`--day 2` 走完 time-box：逐条 L1 判据 pass/fail、两条 M2 义务入 manifest、判据未达标即输出 L1 降级、回切请求被拒；收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_smoke_gate.py` + 当日 manifest
+- [ ] T038 [TEST] (`US-003`, `AC-006`, `AC-008`, `AC-009`): 旅程 US-003 端到端验收——执行机训练夜槽一次完整挖掘：入册 ≥50、逐级计数入 run.json、协同池可导出且按成员重算一致、零交易型表达式被排除、同配置重跑得到相同 factor_id 集合与池成员 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_generation_run.py tests/integration/test_f003_alpha_pool.py`
+
+- [ ] T039: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
 
 ## 4. 依赖与并行关系
 
-- `T004 -> T016`：执行机环境与湖可读性没钉死前不得开跑 time-box（否则闸门结论的环境前提不明）。
+- `T004 -> T017`：执行机环境与湖可读性没钉死前不得开跑 time-box 的判据实跑（否则闸门结论的环境前提不明）；T016 判定器实现不依赖执行机。
 - `T003 -> T013`：先核对上游实际布局，再落 vendor 子集。
 - `T005 -> T010`、`T005 -> T013`：接口先定，两个后端都按同一协议实现。
 - `T007 -> T008 -> T029`：候选持久化 → 运行记录 → 产能计数。
 - `T009 -> T020`：绑定校验是数据面的启动前置。
 - `F008.IR-002 -> T020`：PIT 掩码依赖 F008 的内容寻址宇宙台账（`universe_at(T)` 与 digest、IR-003 的 `schema_version`）；F008 未落地前 T020 用显式 universe 配置并在 `run.json` 记录 digest 与来源，任何情况下都不得用当前成员表回填历史。
-- `T013 -> T016 -> T017 -> T018 -> T019`：冒烟闸门是严格串行的 time-box 序列。
+- `T013 -> T016 -> T017 -> T018 -> T019 -> T032`：判定器（T016）先于判据实跑（T017/T018），判据先于 time-box 实跑与裁决记录（T019）；证据归档与裁决回写（T032）以裁决为前提，禁止先回写后归档。
+- `T030/T031/T032/T033/T034/T035 -> T036/T037/T038`：[TEST] 组三条旅程验收以各验收套件与真实执行证据为前提（编写早、执行晚），并需 `ALPHAMILL_INTEGRATION=1` 在执行机取证。
+- `T036/T037/T038 -> T039`：三条旅程验收全绿后才回写 spec 验收证据与状态。
 - `T014 -> T015`：先声明 `mining` extra，再扩展 pin 门禁。
 - `T020 -> T021 -> T024 -> T029`：数据面 → 适配 → 目标对齐 → 批量产出。
 - `T025 -> T027 -> T029`：调度就位后才允许完整挖掘运行。
 - `T025` 内的 Kronos 卸载编排只发请求并记录观测（卸载动作 owner 是 F004 运行时）；FIFO 协议用两个并发挖掘运行独立取证，不依赖 F004 是否提供卸载入口。
-- `T029 -> T035`：先有 6 对宇宙的基线运行，`F008` 落地后才有可对照的第二次运行；`F008` 不阻塞 T001–T034 的任何一项。
+- `T029 -> T035`：先有 6 对宇宙的基线运行，`F008` 落地后才有可对照的第二次运行；`F008` 不阻塞 T001–T039 的任何一项。
 - `T006 [P]`：只改假设模块，与接口/存储任务无共享状态。
 
 ## 5. 明确后移
