@@ -212,7 +212,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 
 - **校验与失败映射**：绑定缺失/invalid/digest 不符 → 启动期 `rejected`（写终态 `run.json`：`status`/`termination`/`reason`/时间戳，退出码非零）；未登记算子/前视/可达性/重复定义 → 候选级拒绝并计数（运行继续）；训练或写出异常 → `failed`（写终态 `run.json`，已产候选不入册）；终态 manifest 自身写出失败 → 目录视为未完成；mining extra 未装齐 → 启动期拒绝（不静默跳过）。
 - **重启与恢复**：无 `run.json` 的运行目录视为未完成，可直接删除重跑；非 `completed` 的终态运行不得作为成功基线或被下游入册；相同语义输入重跑得到相同 `factor_id` 集合，因此"重跑"永远是安全的恢复手段。
-- **权限 / escalation / 凭据边界**：生成器进程无任何凭据需求（不访问 TimescaleDB、不访问交易所、不联网）；写路径白名单限定 `reports/generation/<run_id>/`；`egress_guard` 在 runner 入口替换 socket 构造函数、只放行 AF_UNIX——**这是进程级护栏，不等于内核级网络隔离**，如需更强隔离再引入 netns（本 feature 不做，如实记录）。
+- **权限 / escalation / 凭据边界**：生成器进程无任何凭据需求（不访问 TimescaleDB、不访问交易所、不联网）；写路径白名单限定 `reports/generation/<run_id>/`；`egress_guard` 在 runner 入口替换 socket 构造函数、只放行 AF_UNIX——**这是进程级护栏，不等于内核级网络隔离**（AC-011 的断言范围据此收敛为"护栏生效 + 白名单拒绝"，不声称内核级隔离），如需更强隔离再引入 netns（本 feature 不做，如实记录）。**两类护栏 fail-closed**：guard 安装失败或白名单无法生效时拒绝启动，不降级为"仅警告"。
 - **Windows / POSIX / 版本兼容**：开发机与当前执行机 `qiaozhi-lt` 都是 Win11 + WSL2，最终执行机 `qiaozhi-lab` 是原生 Ubuntu——因此不得依赖任何 WSL 专属路径（`/mnt/c`、`/usr/lib/wsl`）或 Windows 宿主行为；路径统一 `pathlib`，产物路径写 POSIX 逻辑路径，物理路径只进 provenance；运行记录必须带 `hostname` 与 `device`，让任何一份证据都能追到取证机器——迁移后这也是「哪些结论需要重跑」的判定依据；vendor 目录不参与 ruff 与 350 行限制（`extend-exclude` + `docs/SOP.md` 豁免表登记），理由是 ADR-0002 的最小 diff 卫生规则与"贴近上游原貌"直接冲突于本仓代码风格门；
 - **依赖 pin**：`torch` / `numpy` / `stable-baselines3` / `gymnasium` 等进 `[project.optional-dependencies].mining` 并写版本范围；`tools/check_dep_pins.py` 扩展为"可选 extras 已安装才校验范围、未安装不判红"，同时由运行期能力自检保证未装齐时**拒绝启动**——两者配合才不会变成静默漏洞（SOP「安全校验降级必须声明」）。
 
@@ -230,7 +230,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 | `AC-008` | integration | `tests/integration/test_f003_alpha_pool.py` | 池成员与权重可反解；按成员重算与记录容差内一致；成员变化产生新 `pool_id` |
 | `AC-009` | integration | `tests/integration/test_f003_generation_run.py` | 同 `(seed, binding, code_digest, config)` 重跑 factor_id 集合相同；自动候选绑定 `mechanism_unknown` |
 | `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 显存低于上限/时段撞车进队列不并行；FIFO 先入队先取锁、释放后队首取得、超时留 `queue_timeout` 终态；无 CUDA 且无 `--allow-cpu` 拒绝启动；运行标注 `device`/`hostname` 与 `kronos_offload` 观测 |
-| `AC-011` | integration | `tests/integration/test_f003_boundaries.py` | egress guard 拦截出网；写 `reports/generation/<run_id>/` 之外路径被拒；缺绑定 `mine` 非零退出 |
+| `AC-011` | integration | `tests/integration/test_f003_boundaries.py`, `tests/unit/test_f003_cli_contract.py` | 进程级 egress guard 拦截出网尝试（非内核隔离）、护栏缺失拒绝启动；写 `reports/generation/<run_id>/` 之外路径被拒；缺绑定 `mine` 非零退出 |
 | `AC-012` | unit | `tests/unit/test_f003_cli_contract.py` | `run.json` 与 `factors/*.json` 均带 `schema_version`；`show` 遇未知 `schema_version` 非零退出，不猜测兼容 |
 
 真实环境场景：冒烟闸门 time-box 实跑（US-002）与训练窗口实测（显存峰值、耗时、入册数）必须在**执行机**上执行并记录 hostname 与设备，不得以 skip 代替证据（`docs/SOP.md` §3 机器边界）。开发机上这些用例按「本机无该能力」跳过是预期行为，不算证据也不算失败；**任何情况下不以开发机的 CPU 结果冒充执行机 GPU 结论**。执行机迁移到 5070 Ti 后，依赖显存与耗时的用例必须在新机重跑，不继承旧机结论。

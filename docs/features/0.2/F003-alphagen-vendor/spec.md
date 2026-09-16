@@ -119,7 +119,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 - 快照绑定指向 `invalid` 或缺失 `value_digest` 的 data_version：拒绝启动，不做"先跑再说"。
 - 训练窗口外或可用显存低于预算时启动挖掘：进单槽 FIFO 队列等待，绝不与 Kronos 常驻推理并行赌 OOM。
-- vendor 代码尝试联网（下载数据/权重）：生成运行在无网络出口下执行，任何 egress 视为失败。
+- vendor 代码尝试联网（下载数据/权重）：生成运行在**进程级** egress guard 下执行，任何 egress 尝试视为失败（护栏缺失即拒绝启动；不等价于内核级网络隔离）。
 - 表达式引用了未登记算子或未在 `feature_map` 中的特征：生成侧拒绝该候选并计数，不静默丢弃、不降级为"可用"。
 - 冒烟闸门 time-box 到期而判据未达标：输出降级裁决；不允许以"再给一天"延期。
 - 在开发机（`qiaozhi-gp`/`gp-wsl`，AMD iGPU 无 NVIDIA）执行：只允许走单元/契约层的 CPU 回退路径，运行记录标注 `device=cpu` 与 hostname，该运行不得用于产能或显存结论；挖掘训练的真实证据一律在执行机取（架构 §7.1、`docs/SOP.md` §3 机器边界）。
@@ -262,7 +262,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 - **NFR-001**：产能：单次挖掘运行应当在执行机的一个夜间训练窗口（22:00–06:30，≤8.5h）内产出 ≥50 个通过生成侧自检的候选（M2 出口量化线）。
 - **NFR-002**：资源：挖掘训练按架构 §7.1 的时段表在夜槽内以 ≤6GB 独占运行（当前执行机 RTX 4060 Laptop 8GB 的标定值），显存上限可配并写入运行记录；启动前自检可用显存，低于上限或与在跑任务撞车时进单槽 FIFO 队列，不允许并行抢卡。**FIFO 须可验证**：入队 / 取锁 / 释放 / 等待超时各写一条带 `queue_seq`、`run_id`、时间戳的状态记录；先入队者先取锁，释放后由队首等待者取得；等待超过可配超时则留 `REJECTED` 终态（`termination=queue_timeout`），不无限挂起。
 - **NFR-003**：可复现：相同 `(seed, 快照绑定, code digest, 配置摘要)` 重跑应当得到相同的 factor_id 集合与相同的协同池成员。
-- **NFR-004**：安全 / 边界：生成运行在无网络出口下完成；生成器进程不具备写入证据台账、留出数据或晋级状态的能力（AI 权限红线、ADR-0003）。
+- **NFR-004**：安全 / 边界：生成运行在**进程级 egress guard** 下执行（runner 入口替换 socket 构造函数、只放行 AF_UNIX；这是进程级护栏，**不等于内核级网络隔离**——本 feature 不引入 netns/容器，如实声明）；写路径白名单限定 `reports/generation/<run_id>/`，生成器进程不具备写入证据台账、留出数据或晋级状态的能力（AI 权限红线、ADR-0003）。两类护栏都 **fail-closed**：护栏安装失败或白名单无法生效即拒绝启动，不降级为"仅警告"。
 - **NFR-005**：兼容性：执行机的 WSL2 + CUDA 为主路径；开发机无 GPU，只允许 CPU 回退用于单元与契约测试；运行记录必须标注 `device` 与 hostname，开发机运行不得用于产能或显存结论。
 
 ## 5. 生命周期与不变量
@@ -311,7 +311,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 - [ ] **AC-008** (`FR-007`, `DR-004`): 协同池导出为 meta-factor，成员 factor_id 与权重可反解，重算值与训练期记录容差内一致，成员变化产生新版本 — tests: `tests/integration/test_f003_alpha_pool.py`
 - [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空） — tests: `tests/integration/test_f003_generation_run.py`
 - [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；运行记录标注 device 与 hostname，开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`
-- [ ] **AC-011** (`NFR-004`, `IR-001`): 生成运行在无网络出口下完成；生成器写入证据台账/留出路径的尝试被拒绝；缺绑定的 mine 请求非零退出 — tests: `tests/integration/test_f003_boundaries.py`
+- [ ] **AC-011** (`NFR-004`, `IR-001`): egress guard 安装后出网尝试被拒绝（socket 构造被替换、只放行 AF_UNIX；断言范围为**进程级护栏，非内核隔离**）、护栏缺失时拒绝启动；写 `reports/generation/<run_id>/` 之外路径（证据台账/留出/晋级状态）的尝试被拒绝；缺绑定的 `mine` 请求非零退出并留 `rejected` 终态 run.json — tests: `tests/integration/test_f003_boundaries.py`, `tests/unit/test_f003_cli_contract.py`
 - [ ] **AC-012** (`IR-003`): `GenerationRun` manifest 与 FactorDef JSON 均持久化 `schema_version`；`show` 遇到未知 `schema_version` 以非零退出拒绝，不做兼容性猜测 — tests: `tests/unit/test_f003_cli_contract.py`
 
 ## 7. 测试、依赖与决策

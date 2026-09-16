@@ -41,7 +41,7 @@ updated: 2026-09-14
 - [ ] T008 (`DR-001`, `TR-001`, `TR-002`, `AC-009`, `AC-012`): 实现 `run_store`——GenerationRun manifest（带 `schema_version`）原子写（终态 `run.json` 最后写，含 `hostname` / `device` / `vram_limit_gb` / `universe`）与 `events.jsonl` append-only — verify: `tests/unit/test_f003_run_store.py`
 - [ ] T009 (`FR-003`, `AC-003`): 实现 `binding.py`：两种绑定形态解析、逐 dataset `value_digest` 校验、invalid 立即拒绝 — verify: `tests/unit/test_f003_binding.py`
 - [ ] T010 (`US-001`, `FR-001`, `AC-001`): 实现人工 crypto 原生种子后端（funding carry、basis、OI 变化、截面动量、波动），每个种子绑定真实 `HypothesisDef` — verify: `tests/unit/test_f003_manual_seeds.py`
-- [ ] T011 (`NFR-004`, `AC-011`): 实现 `egress_guard` 与写路径白名单（只允许 `reports/generation/<run_id>/`） — verify: `tests/integration/test_f003_boundaries.py`
+- [ ] T011 (`NFR-004`, `AC-011`): 实现 `egress_guard` 与写路径白名单（只允许 `reports/generation/<run_id>/`），两者 fail-closed（安装/生效失败即拒绝启动，不降级为仅警告） — verify: `tests/integration/test_f003_boundaries.py`
 - [ ] T012 (`IR-001`, `AC-011`, `AC-012`): 实现 CLI `seed` / `show` 子命令与缺绑定的非零拒绝、未知 `schema_version` 的拒绝 — verify: `tests/unit/test_f003_cli_contract.py`
 
 ### Phase 2：AlphaGen vendor 与冒烟闸门（US-002，2 个工作日 time-box）
