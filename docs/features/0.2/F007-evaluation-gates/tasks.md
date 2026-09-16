@@ -59,6 +59,8 @@ updated: 2026-09-17
 - [ ] T021 (`AC-002`, `AC-005`): 运行 F007 定向变异并确认每个 mutant 被门禁杀死 — verify: `pytest -q tests/mutation/test_f007_gate_mutations.py`
 - [ ] T022 (`AC-001`, `AC-003`, `AC-004`, `AC-007`): 在**执行机**的不可变 crypto 快照跑四类正负控制并归档 manifest——绑定 snapshot ID 与 `value_digest`，证据落 `reports/f007/real_env/<run_id>/` 并记录 hostname 与 `device=cpu`；不得复用 T016 的 fixture 或命令 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f007_controls_real.py --snapshot <snapshot-id>`
 - [ ] T023 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
+- [ ] T024 (`FR-001`, `FR-004`, `NFR-001`, `AC-001`, `AC-003`): 承接 SC-002 的并发与故障注入集成测试——同 ID 并发 claim 只有一个成功、崩溃后 lease 超时才可接管、finalize 原子性（失败不产生部分 `cohort_verdict`）、registration 幂等重试不重复计数 — verify: `tests/integration/test_f007_concurrency.py`
+
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 > 编写早、执行晚：以下条目在 Phase 1 先以红灯立起（夹具与断言先写），收尾全量执行；
@@ -77,6 +79,7 @@ updated: 2026-09-17
 - `T008,T009,T010 -> T011,T016,T017`：先有可独立测试的门，再组装 canonical 全链。
 - `T009 -> T012`：cohort 级校正（BH-FDR/DSR/MinTRL）依赖成员级估计器实现；`T012 -> T013`：finalize CLI 依赖登记、收齐校验与 official population 投影实现。
 - `T007 -> T010/T011`：阶段状态模型是 rolling split 与事件/原子发布实现的输入；`T012/T014 -> T016`：全链控制需 canonical registry（登记/收齐）与 synthesis（漏斗/失败汇总）实现。
+- `T012/T013 -> T024`：并发 claim 与 finalize 原子性测试依赖登记与 CLI 实现。
 - `T011,T012 -> T014,T015`：综合只消费已发布并登记的 canonical 证据。
 - `T005 [P]` 可与 T004 并行：分别修改隔离能力与纯身份模块，不共享状态。
 - `T027/T028/T029 -> T030`：三条旅程验收全绿后才回写 spec 验收证据与状态。

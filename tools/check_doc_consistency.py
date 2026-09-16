@@ -284,6 +284,16 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "术语表"),
         ),
     ),
+    TextCheck(
+        "sc002_concurrency_has_task",
+        "F007-D012",
+        requires=(
+            (F007_TASKS, "SC-002"),
+            (F007_TASKS, "故障注入"),
+            (F007_TASKS, "test_f007_concurrency.py"),
+            (F007_DESIGN, "SC-002"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

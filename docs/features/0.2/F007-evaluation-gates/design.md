@@ -229,6 +229,7 @@ claim 包含 owner token 和启动时间。崩溃后只有恢复命令在确认�
 超出配置 lease 后才可接管；正常运行不能偷锁。canonical registration 失败时运行保持
 `EVIDENCE_READY` 但不属于 official population，重试只补同一幂等 registration。cohort finalize
 使用独立原子 claim；失败不产生部分 `cohort_verdict`，修复后可按同一 cohort ID 重试。
+`SC-002` 的同 ID 并发 claim、崩溃后 lease 接管与 finalize 原子性由 `tests/integration/test_f007_concurrency.py` 以故障注入取证。
 
 方法论门采用“能力声明 + 守卫注册”配对：标签、变换、join、forward-fill、跨 pair/operator
 每新增一种 capability，测试必须证明存在对应 guard；未知 capability 默认拒绝。运行时守卫至少
@@ -273,6 +274,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 | `AC-008` | CLI integration | `tests/integration/test_f007_cli.py` | 非法 canonical 非零退出且 error code 稳定 |
 | `AC-001`/`AC-004` 真实环境 | real-env integration（执行机） | `tests/integration/test_f007_controls_real.py`，`ALPHAMILL_INTEGRATION=1` | 绑定不可变 snapshot ID/digest、记录 hostname；与 fixture 控制分属不同命令 |
 | `AC-009` | unit + integration | `tests/unit/validation/test_methodology_gate.py`、`tests/integration/test_f007_execution_tiers.py` | 三层状态入 manifest；L2/L3 缺失时阻断晋级 |
+| `SC-002` | integration + fault injection | `tests/integration/test_f007_concurrency.py` | 同 ID 并发 claim、崩溃后 lease 接管、finalize 原子性、registration 幂等 |
 
 另以 funding carry/BTC-ETH 截面动量、白噪声、故意 future-fill 四类 fixture 做端到端 golden；
 对 guard 注册表、异常吞噬、preview writer、embargo 比较符与 artifact 完整性各做一次定向变异。
