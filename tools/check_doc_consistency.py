@@ -265,8 +265,7 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         "holdout_budget_ledger_exists",
         "F007-D010",
         requires=(
-            (F007_SPEC, "DR-005"),
-            (F007_SPEC, "HoldoutBudgetLedger"),
+            (F007_SPEC, "**DR-005**：`HoldoutBudgetLedger`"),
             (F007_DESIGN, "holdout_budget/ledger.jsonl"),
             (F007_TASKS, "DR-005"),
             (F007_TASKS, "留出预算台账"),
