@@ -157,10 +157,12 @@ CLI `alphamill-generate`（IR-001）：
 
 | 子命令 | 作用 | 拒绝条件（非零退出） |
 |---|---|---|
-| `smoke --day {1,2}` | 逐条判定 ADR-0001 冒烟判据并写当日 manifest | 缺绑定；判据脚本无法执行 |
-| `mine --generator <name> --binding <file> --seed N --quota K` | 完整挖掘运行 | 缺绑定 / 绑定 invalid / digest 不符 / 档位不明 / 窗口外且无 `--allow-offhours` / 无 CUDA 且无 `--allow-cpu` |
-| `seed --generator manual --binding <file>` | 人工种子后端产出 | 同上（不含 GPU 相关项） |
+| `smoke --day {1,2} --binding <file> [--window <preset>] [--config <file>] [--quota K]` | 逐条判定 ADR-0001 冒烟判据并写当日 manifest | 缺绑定；判据脚本无法执行 |
+| `mine --generator <name> --binding <file> --seed N [--quota K] [--window <preset>] [--config <file>]` | 完整挖掘运行 | 缺绑定 / 绑定 invalid / digest 不符 / 档位不明 / 窗口外且无 `--allow-offhours` / 无 CUDA 且无 `--allow-cpu` |
+| `seed --generator manual --binding <file> [--seed N] [--config <file>]` | 人工种子后端产出 | 同上（不含 GPU 相关项） |
 | `show --run <id> \| --factor <id>` | 只读打印产物 | 产物不存在或 schema 版本不识别 |
+
+**强制字段的构造**：`GenerationRequest` 的每个字段都必须能由 CLI 拼出——`binding`（以及 `mine` 的 `seed`）必填；`--window` 缺省取内置 preset `default_1h_2y`（其展开后的 `start`/`end`/`resample` 写入 canonical config artifact）；`--config` 缺省取内置默认 config（内容与 `config_digest` 写入 `run.json`）；`--quota` 缺省取内置默认值。默认值一律来自代码内常量并随运行留痕，不要求调用方记忆，也不允许"缺字段就静默用零值"。
 
 适配契约（架构 §4.1.1，FR-004）：表达式 token 序列 → 闭包编译为 `FactorDef.compute`；表达式原文入 `meta["expression"]` 保证可反解；`feature_map: {数据列名 → 张量通道}` 反解出 `data_columns`；`time_series` 输入单 pair Frame，`cross_sectional` 输入带 PIT 宇宙掩码的面板。`feature_map` 本身内容寻址（`feature_map_digest`），改变映射即改变候选身份。
 
