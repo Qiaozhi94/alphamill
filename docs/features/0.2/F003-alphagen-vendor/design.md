@@ -64,7 +64,7 @@ src/alphamill/factor_factory/
 │   └── alphagen_vendor/      # AlphaGen 核心 vendor（最小 diff）+ VENDORED.md
 ├── registry/
 │   ├── factor_store.py       # FactorDef 内容寻址读写（DR-002）
-│   ├── pool_store.py         # 协同池 meta-factor（DR-004）
+│   ├── pool_store.py         # 协同池 meta-factor（可执行 FactorDef，DR-004）
 │   └── run_store.py          # GenerationRun manifest + 事件 JSONL（DR-001, TR-001/002）
 ├── bench/                    # F001 原样迁入的历史评测脚本，本 feature 不触碰
 └── cli.py                    # alphamill-generate（IR-001）
@@ -120,7 +120,7 @@ reports/generation/<run_id>/
   - `{"mode": "explicit_tuples", "schema_version": 1, "cutoff_time": "...", "members": {"<dataset>": {data_version, value_digest, as_of_fidelity, event_time_min, event_time_max}}, "symbol_map_digest": "...", "universe_calendar_digest": "...", "provenance": {member_manifest_paths, symbol_map_path, universe_calendar_path}}`（过渡态，spec Q-002）。
   两种形态都必须在启动时逐项校验成员 `value_digest`，并校验 `cutoff_time` / `as_of_fidelity` / `symbol_map_digest` / `universe_calendar_digest` 与 `provenance` 中的不可变 artifact 引用存在且可解析。字段与 ADR-0007 的成员/身份契约一一对应；**F007 落地不是纯字段改名**——须先由 `experiment_store` 构造并发布 `ResearchSnapshot`（ADR-0007 决策 4/5），再把过渡元组替换为 `research_snapshot_id`，下游消费字段不变。
 
-**AlphaPoolDef**：`pool_id`（内容寻址）/ `members: [{factor_id, weight}]` / `run_id` / `pool_version`。成员集合变化即新 `pool_id`，不原地改写（DR-004）。
+**协同池 meta-factor**：`pool.json` 持久化为**可执行 `FactorDef`**（`generator="pool"`、`scope="cross_sectional"`、`factor_id = pool_<definition_digest[:12]>`），其 `params`/`meta` 携带成员引用与权重 `members: [{factor_id, weight}]`、`run_id` 与 `pool_version`；`compute` 在加载时按成员 `FactorDef`（经 `factor_store.load()` 得到可执行对象）与权重重算，**加载即可执行**，不需要调用方自行拼装。`AlphaPoolDef` 降为**内部成员描述**（成员/权重视图），不再作为独立顶层持久化对象。成员集合或权重变化即产生新 `definition_digest`／新 `factor_id`，不原地改写（DR-004）。
 
 **Migration / 历史数据**：无历史数据。`reports/generation/` 加入 `.gitignore`（体积大、含 checkpoint）；需要入库的只有 curated 摘要，按需单独提交。
 
@@ -142,7 +142,7 @@ class GenerationRequest:
 class GenerationResult:
     run_id: str
     factors: list[FactorDef]
-    pool: AlphaPoolDef | None
+    pool: FactorDef | None         # 协同池 meta-factor（generator="pool"，加载后可执行）
     counts: GenerationCounts
     device: str
     tier_level: str
@@ -227,7 +227,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 | `AC-005` | unit | `tests/unit/test_f003_operator_registry.py` | 启用算子全部登记；未登记/前视/非法跨 pair 候选按原因码计数拒绝 |
 | `AC-006` | integration | `tests/integration/test_f003_generation_run.py` | 零变号表达式被可达性预筛拒绝；成本后收益预筛参数（`cost_model`/`min_after_cost_return`）入 `run.json` 的 `objective`；一次运行入册 ≥50（在执行机上判定） |
 | `AC-007` | integration | `tests/integration/test_f003_smoke_gate.py` | L1 三条判据逐条二元判定并入 manifest；任一触发即 L1 降级裁决；time-box 不裁 L2（L2 须 L1 连续 2 周判据）；L1→L0 回切请求被拒 |
-| `AC-008` | integration | `tests/integration/test_f003_alpha_pool.py` | 池成员与权重可反解；按成员重算与记录容差内一致；成员变化产生新 `pool_id` |
+| `AC-008` | integration | `tests/integration/test_f003_alpha_pool.py` | 池持久化为可执行 FactorDef（`generator=pool`，加载后可直接重算）；成员与权重可反解；按成员重算与记录容差内一致；成员/权重变化产生新 `factor_id` |
 | `AC-009` | integration | `tests/integration/test_f003_generation_run.py` | 同 `(seed, binding, code_digest, config)` 重跑 factor_id 集合相同；自动候选绑定 `mechanism_unknown` |
 | `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 显存低于上限/时段撞车进队列不并行；FIFO 先入队先取锁、释放后队首取得、超时留 `queue_timeout` 终态；无 CUDA 且无 `--allow-cpu` 拒绝启动；运行标注 `device`/`hostname` 与 `kronos_offload` 观测 |
 | `AC-011` | integration | `tests/integration/test_f003_boundaries.py`, `tests/unit/test_f003_cli_contract.py` | 进程级 egress guard 拦截出网尝试（非内核隔离）、护栏缺失拒绝启动；写 `reports/generation/<run_id>/` 之外路径被拒；缺绑定 `mine` 非零退出 |
