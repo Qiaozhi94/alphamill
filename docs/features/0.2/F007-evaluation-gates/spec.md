@@ -151,13 +151,15 @@ AlphaMill 已定义严格的产品门槛，但还没有可运行的统一评测�
 
 系统应当按信号质量、组合转换、成本/容量、时序稳定、执行实现五阶段记录结果；FactorDef 运行
 可将尚不适用的后续阶段显式记为 `NOT_APPLICABLE`，不得记为 PASS。必需输入/指标/实现失败时
-运行必须 `INCOMPLETE/FAIL`。
+运行必须 `INCOMPLETE/FAIL`。阶段状态与晋升/成本 verdict 是**两层独立枚举**，不得互相替代：
+阶段状态（`PASS`/`FAIL`/`UNDERPOWERED`/`INCOMPLETE`/`NOT_APPLICABLE`）只描述单阶段结果，
+`promising`/`dead` 等晋升与成本裁决只在 cohort 级产出（完整术语表由 design §3.3 冻结，本 Feature 各 scenario 与 AC-003/AC-004 引用同一份）。
 
 #### Scenario: 必需估计器异常
 
 - GIVEN canonical 运行的 BH-FDR 或 block bootstrap 估计器报错
 - WHEN 汇总 verdict
-- THEN verdict 不得为 PASS/promising，失败记录包含 stage/owner/mechanism 与原始异常引用
+- THEN stage 状态不得为 `PASS` 且 `promotion_verdict` 不得为 `promising`，失败记录包含 stage/owner/mechanism 与原始异常引用
 
 ### Requirement: 统计与试验总体（`FR-004`）
 

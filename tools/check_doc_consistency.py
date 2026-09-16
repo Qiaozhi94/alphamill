@@ -272,6 +272,18 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "留出预算台账"),
         ),
     ),
+    TextCheck(
+        "verdict_vocabulary_frozen",
+        "F007-D011",
+        requires=(
+            (F007_DESIGN, "术语表（冻结"),
+            (F007_DESIGN, "promotion_verdict"),
+            (F007_DESIGN, "cost_verdict"),
+            (F007_SPEC, "promotion_verdict"),
+            (F007_SPEC, "两层独立枚举"),
+            (F007_TASKS, "术语表"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

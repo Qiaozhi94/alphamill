@@ -135,6 +135,16 @@ cost/capacity、sample-size/stability、structured failure 与成员诊断 verdi
 `provisional`（30~69 笔，最多临时 PASS、仅允许缩减仓位 paper）、`trustworthy`（≈≥69 笔，才允许完整
 成本后 PASS/FAIL 判定）。`underpowered` / `provisional` 都不得计入北极星判据。
 
+**术语表（冻结；spec FR-003/FR-005 与 AC-003/AC-004 引用同一份）**：
+
+| 层 | 字段 | 枚举 | 说明 |
+|---|---|---|---|
+| 阶段状态 | `stage_results[].status` | `PASS \| FAIL \| UNDERPOWERED \| INCOMPLETE \| NOT_APPLICABLE` | 只描述单阶段结果；`PASS` 不是晋级结论 |
+| 成本裁决 | `cost_verdict` | `cost_positive \| cost_negative \| cost_undetermined` | 三档成本后收益判定 |
+| 样本量裁决 | `sample_tier` | `underpowered \| provisional \| trustworthy` | 见 §7 与 ADR-0003 |
+| 成员晋升裁决 | `promotion_verdict` | `promising \| dead \| underpowered \| incomplete` | 只在 `cohort_verdict.json`，cohort FINALIZED 后才产生 |
+| cohort 状态 | `cohort_verdict.status` | `OPEN \| FINALIZED` | 承诺成员未收齐时恒为 `OPEN`，不产生可晋级结论 |
+
 `curves.parquet` 最小列集沿用架构 §4.2：UTC time、成本后权益、回撤、q1~q5/long-short 累计收益、
 各 horizon rolling IC；列 metadata 记录 schema/return convention/window。标量摘要必须能从侧车
 在容差内重算。
