@@ -90,7 +90,7 @@ bench 不读取环境变量、不决定 tier/窗口/cohort，也不写 official 
 
 规范化规则：UTF-8 canonical JSON、key 排序、时间统一 UTC ISO-8601、数值使用配置 schema 的
 十进制定标格式、集合字段先去重再排序。`experiment_id` 只哈希 upstream ID、cohort、规范化
-规则/窗口/成本配置、research_snapshot_id、code/build digest 与 seed。`execution_tier` 由物理根目录
+规则/窗口/成本配置、research_snapshot_id、code/build digest 与 seed。`universe_calendar_digest` 是 universe（F008 台账 digest）与 calendar（本 Feature calendar JSON digest）两个 artifact 的组合摘要。`execution_tier` 由物理根目录
 和 capability 强制，`supersedes` 只表达谱系，二者均不参与身份。物理路径、Parquet
 codec/row-group、文件 SHA、主机、PID、开始/结束时间与 duration 仅进 provenance。
 
@@ -145,7 +145,8 @@ python -m alphamill.evaluation preview \
 
 python -m alphamill.evaluation preview \
   --factor <factor-ref> --latest <dataset,...> --cutoff <UTC> \
-  --symbol-map <digest> --universe-calendar <path> --config <path> --seed <int>
+  --symbol-map <digest> --universe <digest|ref> --calendar <path> \
+  --config <path> --seed <int>
 
 python -m alphamill.evaluation canonical \
   --factor <factor-ref> --snapshot <id> --cohort <frozen-cohort> \
@@ -156,9 +157,8 @@ python -m alphamill.evaluation finalize-cohort --cohort <cohort-id>
 python -m alphamill.evaluation synthesis --cohort <cohort-id>
 ```
 
-CLI 仅解析参数和序列化结果；preview 的 `--latest` 模式要求显式 symbol-map digest 和
-universe/calendar JSON，builder 将后者 canonicalize 后原子保存为
-`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`，再发布 ResearchSnapshot 并显示
+CLI 仅解析参数和序列化结果；preview 的 `--latest` 模式要求显式 symbol-map digest、**F008** universe artifact 引用（`--universe`）与 calendar 输入（`--calendar`）两个独立参数。universe 按 F008 `IR-002` 从 `lake/_metadata/universes/<digest>.csv` 加载并走 `universe_at(T)` 语义，**不复制进 reports**；calendar 由 builder canonicalize 后原子保存为
+`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`（该路径只承载 calendar，universe 不合并进此文件；ADR-0007 的 `universe_calendar_digest` 由两个 digest 组合导出），再发布 ResearchSnapshot 并显示
 实际 ID；`--snapshot` 模式不重新选择这些输入。
 `canonical` 缺 cohort、code digest、ResearchSnapshot 或规则版本时
 返回非零。成员 canonical 成功只表示 `REGISTERED`，不输出可晋级 verdict；`finalize-cohort` 在
@@ -200,7 +200,7 @@ verdict 和 artifact URI；领域错误输出稳定 error code，不输出 PASS-
 
 ## 5. Runtime、Workflow 与并发
 
-1. preview 可由 ResearchSnapshotBuilder 解析 latest，或两种 tier 读取既有 snapshot；builder 校验每个 F002 manifest/value digest、cutoff、覆盖范围和不可变 symbol-map artifact，并把显式 universe/calendar JSON 内容寻址保存后，原子发布 snapshot。
+1. preview 可由 ResearchSnapshotBuilder 解析 latest，或两种 tier 读取既有 snapshot；builder 校验每个 F002 manifest/value digest、cutoff、覆盖范围、**F008 universe artifact**（digest 与 `universe_at(T)` 语义）、不可变 symbol-map artifact，并把显式 calendar 输入内容寻址保存后，原子发布 snapshot。
 2. ContextBuilder 只接收 snapshot ID 并解析其他引用；IdentityHasher 生成 experiment ID。
 3. runner 以 `<experiment_id>.claim` 原子创建取得单写权；已有完整 canonical 直接幂等返回。
 4. MethodologyGate 先跑能力/静态守卫，再构造 per-pair、label-end-aware purged splits。

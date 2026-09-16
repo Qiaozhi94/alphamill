@@ -199,6 +199,20 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "universe_at(T)"),
         ),
     ),
+    TextCheck(
+        "universe_calendar_artifacts_split",
+        "F007-D004",
+        requires=(
+            (F007_SPEC, "DR-006"),
+            (F007_DESIGN, "lake/_metadata/universes/"),
+            (F007_DESIGN, "--calendar <path>"),
+            (F007_DESIGN, "--universe <digest|ref>"),
+        ),
+        forbids=(
+            (F007_DESIGN, "--universe-calendar"),
+            (F007_TASKS, "--universe-calendar"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
