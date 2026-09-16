@@ -343,6 +343,14 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "placeholder"),
         ),
     ),
+    TextCheck(
+        "f005_frontend_does_not_bypass_api",
+        "F007-D018",
+        requires=(
+            (F007_DESIGN, "src/alphamill/api/"),
+            (F007_DESIGN, "不得成为前端直读路径"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

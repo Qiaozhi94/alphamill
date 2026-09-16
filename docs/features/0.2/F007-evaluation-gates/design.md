@@ -252,8 +252,10 @@ as-of join 方向为 backward 且陈旧度有上限。
 结构化日志按 experiment/cohort/stage 关联；记录各阶段耗时、样本量、拒绝数与 artifact publish
 状态，但不记录数据内容或凭据。
 
-F005 通过只读 API/文件 reader 渲染 report、curves 与 synthesis；不得重算 BH-FDR、漏斗、
-failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载研究口径或门禁按钮。
+F005 前端**只经** `src/alphamill/api/` 的统一只读 API 消费 report、curves 与 synthesis；文件 reader
+只允许作为 API/后端内部 adapter（由 API 进程持有），**不得成为前端直读路径**（前端不直接读文件系统、
+不托管产物静态目录）。前端不得重算 BH-FDR、漏斗、failure taxonomy 或 verdict。Grafana 只监控评测
+任务健康，不承载研究口径或门禁按钮。
 
 ## 7. 失败、恢复、安全与兼容
 
