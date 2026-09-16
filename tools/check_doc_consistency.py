@@ -312,6 +312,16 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "`approximation`"),
         ),
     ),
+    TextCheck(
+        "mutation_targets_labels_aligned",
+        "F007-D015",
+        requires=(
+            (F007_TASKS, "变异工具版本 pin"),
+            (F007_TASKS, "mutation_report.json"),
+            (F007_DESIGN, "mutation_report.json"),
+            (F007_TASKS, "`AC-001`, `AC-002`, `AC-003`, `AC-005`"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
