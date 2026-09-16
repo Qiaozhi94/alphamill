@@ -243,7 +243,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 ### 事件 / Trace 需求
 
-- **TR-001**：生成运行结束时，系统应当写入 `generation.run_completed`，payload 包含 run_id、generator、引擎版本、快照绑定、seed、device、档位与逐级计数。
+- **TR-001**：生成运行**以 `status=completed` 结束**时，系统应当写入 `generation.run_completed`，payload 包含 run_id、generator、引擎版本、快照绑定、seed、device、档位与逐级计数；`rejected`/`failed`/`partial` 等非完成终态只写终态 `run.json`，不得写该事件。
 - **TR-002**：生成侧自检拒绝时，系统应当写入 `generation.candidate_rejected`，payload 包含表达式原文、拒绝原因码（未登记算子 / 前视 / 可达性不足 / 重复定义）；事件应当可按 run 查询，供 `F007` 的漏斗第一级消费。
 
 ### API / 接口需求
@@ -263,11 +263,12 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 ## 5. 生命周期与不变量
 
 ```text
-生成运行：
+生成运行（四种终态 `completed` / `rejected` / `failed` / `partial`，均写终态 `run.json`）：
 QUEUED    -> RUNNING    取得 GPU 单槽 + 快照绑定校验通过 + 时段允许
-QUEUED    -> REJECTED   绑定缺失/invalid、digest 不符、档位不明
-RUNNING   -> COMPLETED  候选集与 GenerationRun manifest 原子写出
-RUNNING   -> FAILED     训练/求值/写出异常；已产候选不入册
+QUEUED    -> REJECTED   绑定缺失/invalid、digest 不符、档位不明、队列等待超时（写终态 run.json）
+RUNNING   -> COMPLETED  候选集与 GenerationRun manifest 原子写出；仅本态发 run_completed、可被下游消费
+RUNNING   -> FAILED     训练/求值/写出异常；写终态 run.json，已产候选不入册
+RUNNING   -> PARTIAL    SIGTERM 优雅停机；保留已产候选供诊断，不写 pool.json、不发 run_completed
 
 引擎档位（ADR-0001 降级阶梯，单向）：
 L0 AlphaGen RL -> L1 表达式求值器 + 自写搜索   任一 L1 判据触发
@@ -278,6 +279,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 不变量：
 
 - 生成器只产定义：`FactorDef` 与 `GenerationRun` 内不得出现 verdict、IC、PnL 等结论字段；
+- 终态唯一且可消费性明确：任何终止路径都写 `run.json`（`completed`/`rejected`/`failed`/`partial`），只有 `completed` 发 `run_completed` 并可被下游入册；
 - 依赖方向单向：胶水代码可以依赖 vendor，vendor 不得依赖胶水代码；
 - 任一入册候选都能由 `(run_id, seed, 快照绑定, 表达式原文)` 重建；
 - 降级只由判据触发、不由主观判断推迟；档位变化必须留下触发原因；
@@ -296,7 +298,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 
 - [ ] **AC-001** (`FR-001`, `IR-002`): 两个后端经同一 produce() 接口产出通过 schema 校验的 FactorDef；返回值含结论字段时校验失败；落盘 DTO 加载后得到的 FactorDef 可直接执行（compute 由表达式重建、meta 还原） — tests: `tests/unit/test_f003_generator_contract.py`
 - [ ] **AC-002** (`FR-002`): vendor 目录内每处改动带 alphamill 标注、VENDORED.md 记录上游 repo/commit/日期/修改清单/许可，且 vendor 不反向依赖胶水模块 — tests: `tests/unit/test_f003_vendor_hygiene.py`
-- [ ] **AC-003** (`FR-003`, `DR-001`): 按显式绑定构造张量；invalid 版本或 digest 不符时拒绝启动；张量与 reader 行集在抽样点数值一致且不可交易时点掩码为不可用 — tests: `tests/integration/test_f003_lake_tensor.py`
+- [ ] **AC-003** (`FR-003`, `DR-001`): 按显式绑定构造张量；invalid 版本或 digest 不符时拒绝启动并留 `rejected` 终态 run.json（含 termination/reason/时间戳与 DR-001 运行字段）；张量与 reader 行集在抽样点数值一致且不可交易时点掩码为不可用 — tests: `tests/integration/test_f003_lake_tensor.py`
 - [ ] **AC-004** (`FR-004`): 编译后的 compute 闭包与 vendor 张量求值在同一切片容差内一致；meta.expression 可反解为等价表达式；data_columns 由 feature_map 反解得到；落盘后加载的 FactorDef 可直接执行 — tests: `tests/unit/test_f003_alphagen_adapter.py`
 - [ ] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数 — tests: `tests/unit/test_f003_operator_registry.py`
 - [ ] **AC-006** (`FR-005`, `NFR-001`): 换手惩罚/可达性预筛生效——零交易型表达式不进池；在执行机上单次挖掘入册 ≥50 个通过自检候选 — tests: `tests/integration/test_f003_generation_run.py`

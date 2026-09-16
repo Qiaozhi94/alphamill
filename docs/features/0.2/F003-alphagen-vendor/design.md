@@ -93,12 +93,14 @@ src/alphamill/factor_factory/
 
 ```text
 reports/generation/<run_id>/
-├── run.json                  # GenerationRun manifest（最后写，原子 rename）
-├── factors/<factor_id>.json  # FactorDef 定义（只含定义，无结论）
-├── pool.json                 # 协同池 meta-factor（可选）
+├── run.json                  # GenerationRun 终态 manifest（唯一运行事实；四态都写，tmp+fsync+rename 最后写）
+├── factors/<factor_id>.json  # FactorDef 定义（只含定义，无结论；仅 status=completed 的运行可被下游入册）
+├── pool.json                 # 协同池 meta-factor（可选；仅 status=completed 的运行产出）
 ├── events.jsonl              # TR-001/TR-002 append-only
 └── checkpoints/              # 训练 checkpoint（可清理，不属于证据）
 ```
+
+**终态与可消费性**：`run.json` 是唯一运行事实，四种终态 `completed` / `rejected` / `failed` / `partial` 都必须写出，字段至少含 `status`、`termination`、`reason`、`started_at`/`finished_at`；写出之前目录一律视为未完成（与 F002「manifest 最后写」同构）。若终态 manifest 自身写出失败，目录同样视为未完成（fail-safe），不得凭残留物推断终态。**只有 `status=completed` 的运行可被下游消费**：`rejected`/`failed` 不产出候选；`partial` 的 `factors/` 仅作 `show` 诊断残留、不得被下游入册，且不产出 `pool.json`。
 
 **FactorDef（`schema_version: 1`）**：`factor_id` / `definition_digest` / `hypothesis_id` / `name` / `generator` / `generator_version` / `scope` / `expression` / `params` / `data_columns` / `feature_map_digest` / `run_id` / `created_at`。
 
@@ -165,7 +167,7 @@ CLI `alphamill-generate`（IR-001）：
 
 append-only `events.jsonl`，每行一个事件，含 `event_type` / `ts` / `run_id` / payload：
 
-- `generation.run_completed`（TR-001）：`generator`、`engine`、`binding`、`seed`、`device`、`tier_level`、`counts`、`pool`；
+- `generation.run_completed`（TR-001，**仅 `status=completed` 的运行发出**）：`generator`、`engine`、`binding`、`seed`、`device`、`tier_level`、`counts`、`pool`；
 - `generation.candidate_rejected`（TR-002）：`expression`、`reason_code ∈ {unregistered_op, lookahead, reachability, duplicate_definition}`、`detail`。
 
 幂等键：`(run_id, event_seq)`。查询方式：按 `run_id` 目录顺序读，F007 以此重建漏斗第一级；F003 不提供查询服务。
@@ -192,7 +194,7 @@ mine/seed 调用
 - **显存自检**：取锁后、建张量前读可用显存，低于配置上限即释放锁并回到队列（不强行启动）。上限**可配不写死**：当前执行机（4060 8GB）按 §7.1 标定为 ≤6GB，迁移到 5070 Ti 时改配置而非改代码，实际取值写进 `run.json`；
 - **CPU 回退**：无 CUDA 时必须显式 `--allow-cpu`，否则拒绝启动——防止"静默跑了一夜 CPU"；CPU 运行在 `run.json` 标 `device=cpu` 与 `hostname`，产能与显存类断言对该运行不成立（spec NFR-005）。开发机只走这条路径，且只用于单元与契约测试；
 - **checkpoint**：训练每 N steps 落 `checkpoints/`；崩溃后重跑以相同 `(seed, binding, code_digest, config)` 从头复算即可得到相同候选集（NFR-003），checkpoint 只用于省时，不参与身份；
-- **优雅停机**：SIGTERM 走正常收尾（导出已产候选与池），`status=completed` + `termination=early`；非受控异常为 `FAILED`，此时 `run.json` 不写出，目录内残留物被下次 `show` 视为未完成运行（与 F002 的"manifest 最后写"同构）；
+- **优雅停机与失败终态**：SIGTERM 走正常收尾——保留已产候选供 `show` 诊断（**不写 `pool.json`**），写 `status=partial` + `termination=early` 的终态 `run.json`，且**不发** `generation.run_completed`；非受控异常写 `status=failed` + `termination=<异常类>` 的终态 `run.json`（若该次写出本身失败，则目录视为未完成）；只有完整原子运行写 `status=completed` + `generation.run_completed`；下游只消费 `status=completed` 的运行；
 - **与 Kronos 的协同（live owner 与取证）**：训练夜槽内 Kronos 应卸载（架构 §7.1）。**卸载动作的 owner 是 F004 运行时**（服务控制入口由它提供）；F003 侧只拥有「编排请求 + 结果观测」任务——训练窗口开始时发起卸载请求，并把 `kronos_offload: {requested_at, observed_state, vram_before_gb, vram_after_gb}` 写进 `run.json`，绝不主动杀别人的进程。若卸载控制契约尚不可用（F004 已收口且把 GPU 直通后移，见 tasks §5），F003 **不降级为并行抢卡**：保持在单槽 FIFO 中等待显存达标，并把 `offload_contract_unavailable` 如实记入运行记录；此时 FIFO 协议仍可由两个并发挖掘运行独立取证。
 
 ## 6. UI 与可观测性
@@ -208,8 +210,8 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 
 ## 7. 失败、恢复、安全与兼容
 
-- **校验与失败映射**：绑定缺失/invalid/digest 不符 → 启动期 `REJECTED`（退出码非零，原因入日志）；未登记算子/前视/可达性/重复定义 → 候选级拒绝并计数（运行继续）；训练或写出异常 → `FAILED` 且不写 `run.json`；mining extra 未装齐 → 启动期拒绝（不静默跳过）。
-- **重启与恢复**：无 `run.json` 的运行目录视为未完成，可直接删除重跑；相同语义输入重跑得到相同 `factor_id` 集合，因此"重跑"永远是安全的恢复手段。
+- **校验与失败映射**：绑定缺失/invalid/digest 不符 → 启动期 `rejected`（写终态 `run.json`：`status`/`termination`/`reason`/时间戳，退出码非零）；未登记算子/前视/可达性/重复定义 → 候选级拒绝并计数（运行继续）；训练或写出异常 → `failed`（写终态 `run.json`，已产候选不入册）；终态 manifest 自身写出失败 → 目录视为未完成；mining extra 未装齐 → 启动期拒绝（不静默跳过）。
+- **重启与恢复**：无 `run.json` 的运行目录视为未完成，可直接删除重跑；非 `completed` 的终态运行不得作为成功基线或被下游入册；相同语义输入重跑得到相同 `factor_id` 集合，因此"重跑"永远是安全的恢复手段。
 - **权限 / escalation / 凭据边界**：生成器进程无任何凭据需求（不访问 TimescaleDB、不访问交易所、不联网）；写路径白名单限定 `reports/generation/<run_id>/`；`egress_guard` 在 runner 入口替换 socket 构造函数、只放行 AF_UNIX——**这是进程级护栏，不等于内核级网络隔离**，如需更强隔离再引入 netns（本 feature 不做，如实记录）。
 - **Windows / POSIX / 版本兼容**：开发机与当前执行机 `qiaozhi-lt` 都是 Win11 + WSL2，最终执行机 `qiaozhi-lab` 是原生 Ubuntu——因此不得依赖任何 WSL 专属路径（`/mnt/c`、`/usr/lib/wsl`）或 Windows 宿主行为；路径统一 `pathlib`，产物路径写 POSIX 逻辑路径，物理路径只进 provenance；运行记录必须带 `hostname` 与 `device`，让任何一份证据都能追到取证机器——迁移后这也是「哪些结论需要重跑」的判定依据；vendor 目录不参与 ruff 与 350 行限制（`extend-exclude` + `docs/SOP.md` 豁免表登记），理由是 ADR-0002 的最小 diff 卫生规则与"贴近上游原貌"直接冲突于本仓代码风格门；
 - **依赖 pin**：`torch` / `numpy` / `stable-baselines3` / `gymnasium` 等进 `[project.optional-dependencies].mining` 并写版本范围；`tools/check_dep_pins.py` 扩展为"可选 extras 已安装才校验范围、未安装不判红"，同时由运行期能力自检保证未装齐时**拒绝启动**——两者配合才不会变成静默漏洞（SOP「安全校验降级必须声明」）。
