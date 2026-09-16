@@ -17,14 +17,8 @@ from tools import check_doc_consistency as cdc
 
 REPO = cdc.ROOT
 TEXT_CHECK_IDS = [c.check_id for c in cdc.TEXT_CHECKS]
-ALL_DOC_FILES = {
-    cdc.SPEC,
-    cdc.DESIGN,
-    cdc.TASKS,
-    cdc.F007_SPEC,
-    cdc.F007_DESIGN,
-    cdc.F007_TASKS,
-}
+# 由注册表推导，避免硬编码列表随新增断言（其他 feature 的检视轮次也会追加）失效。
+ALL_DOC_FILES = {rel for chk in cdc.TEXT_CHECKS for rel, _ in (*chk.requires, *chk.forbids)}
 
 
 def _materialize(tmp_path: pathlib.Path, rels: set[str]) -> None:
@@ -152,3 +146,16 @@ def test_f007_design_test_map_goes_red_on_unmapped_test(tmp_path: pathlib.Path) 
     )
     errors = cdc.check_f007_design_test_map_covers_tasks(tmp_path)
     assert "tests/unit/evaluation/test_ghost_unmapped.py" in " ".join(msg for _, msg in errors)
+
+
+def test_stale_closed_question_task_goes_red(tmp_path: pathlib.Path) -> None:
+    """F003-R2-006：前置任务只引用已关闭的 Q 时必须判红。"""
+    _materialize(tmp_path, {cdc.SPEC, cdc.TASKS})
+    target = tmp_path / cdc.TASKS
+    target.write_text(
+        target.read_text(encoding="utf-8") + "\n- [ ] T099 (`Q-001`): 已关闭问题的过时前置动作\n",
+        encoding="utf-8",
+    )
+    assert "no_stale_closed_question_task" in _check_ids(
+        cdc.check_no_stale_closed_question_task(tmp_path)
+    )

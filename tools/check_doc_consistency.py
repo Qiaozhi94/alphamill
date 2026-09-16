@@ -26,6 +26,10 @@ SPEC = "docs/features/0.2/F003-alphagen-vendor/spec.md"
 DESIGN = "docs/features/0.2/F003-alphagen-vendor/design.md"
 TASKS = "docs/features/0.2/F003-alphagen-vendor/tasks.md"
 F007_SPEC = "docs/features/0.2/F007-evaluation-gates/spec.md"
+ARCH = "docs/alphamill-architecture.md"
+BACKLOG = "BACKLOG.md"
+CLAUDE = "CLAUDE.md"
+README = "docs/README.md"
 F007_DESIGN = "docs/features/0.2/F007-evaluation-gates/design.md"
 F007_TASKS = "docs/features/0.2/F007-evaluation-gates/tasks.md"
 
@@ -415,6 +419,50 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_DESIGN, "`tests/property/test_f007_identity_properties.py`"),
         ),
     ),
+    # ---- F003 文档检视 Round 2 修复断言（finding id 前缀 F003-R2）----
+    TextCheck(
+        "explicit_binding_splits_universe_calendar",
+        "F003-R2-003",
+        requires=(
+            (DESIGN, '"universe": {"digest"'),
+            (DESIGN, '"calendar": {"digest"'),
+            (DESIGN, "universe_path"),
+            (DESIGN, "calendar_path"),
+            (DESIGN, "组合导出"),
+        ),
+        forbids=((DESIGN, "universe_calendar_path"),),
+    ),
+    TextCheck(
+        "factordef_expression_dto_shape",
+        "F003-R2-004",
+        requires=(
+            (DESIGN, "`expression` 的唯一形态"),
+            (DESIGN, "**不新增**"),
+            (DESIGN, 'meta["expression"]'),
+            (ARCH, "不进入可执行对象顶层"),
+        ),
+    ),
+    TextCheck(
+        "factor_registry_owner_declared",
+        "F003-R2-005",
+        requires=(
+            (SPEC, "查重判定与 lifecycle 状态判定"),
+            (SPEC, "owner = `F007`"),
+            (SPEC, "lifecycle 动作执行"),
+            (F007_SPEC, "唯一写入 owner"),
+        ),
+    ),
+    TextCheck(
+        "kronos_lifecycle_contract_defined",
+        "F003-R2-002",
+        requires=(
+            (ARCH, "Kronos 服务生命周期契约"),
+            (ARCH, "contract_version"),
+            (ARCH, "E_UNSUPPORTED_VERSION"),
+            (DESIGN, "Kronos 生命周期 Contract"),
+            (TASKS, "test_f003_kronos_lifecycle.py"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
@@ -583,11 +631,39 @@ def check_f007_design_test_map_covers_tasks(root: pathlib.Path) -> list[tuple[st
     return errors
 
 
+TASK_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+(T\d{3})\b(.*)$")
+REF_PAREN_RE = re.compile(r"\(([^)]*)\)")
+TASK_REF_RE = re.compile(r"\b(?:FR|DR|TR|IR|UX|NFR)-\d+\b|Q-\d+")
+
+
+def check_no_stale_closed_question_task(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F003-R2-006：前置任务不得只引用已关闭的 Q（已关闭问题不是开发前动作）。"""
+    errors: list[tuple[str, str]] = []
+    closed = {m.group(1) for m in re.finditer(r"^-\s+\[[xX]\]\s+(Q-\d+)", read(root, SPEC), re.M)}
+    for line in read(root, TASKS).replace("\r\n", "\n").split("\n"):
+        task = TASK_LINE_RE.match(line.strip())
+        if not task:
+            continue
+        paren = REF_PAREN_RE.search(task.group(2))
+        if not paren:
+            continue
+        refs = TASK_REF_RE.findall(paren.group(1))
+        if refs and all(ref in closed for ref in refs):
+            errors.append(
+                (
+                    "no_stale_closed_question_task",
+                    f"{task.group(1)} 只引用已关闭的 Q（{', '.join(refs)}）",
+                )
+            )
+    return errors
+
+
 CUSTOM_CHECKS = (
     check_f007_declares_f003,
     check_ac_body_covers_clauses,
     check_active_feature_indexes,
     check_f007_design_test_map_covers_tasks,
+    check_no_stale_closed_question_task,
 )
 
 

@@ -108,6 +108,7 @@ reports/generation/<run_id>/
 - `factor_id = <generator>_<definition_digest[:12]>`：人读前缀 + 内容后缀，**不含 run 序号**——同一表达式跨 run 重跑得到同一 `factor_id`（NFR-003）；运行归属由独立的 `run_id` 字段承载，不进入身份；
 - **禁止字段**：`ic`、`rank_ic`、`pnl`、`verdict`、`promoted` 等结论字段由 schema 白名单显式拒绝（AC-001）。
 - **加载契约（可执行恢复）**：落盘 DTO 与架构 §4.1 的可执行 `FactorDef` 是**同一对象的两种形态**——磁盘只存定义字段，加载时由 `alphagen_adapter` 依据 `expression` 与校验过 digest 的 `feature_map` 重建 `compute` 闭包，并还原 `meta`（含 `meta["expression"]` 与假设来源）；`factor_store.load()` 必须返回可直接执行的对象，不得要求调用方自行重新编译（AC-001/AC-004）。
+- **`expression` 的唯一形态（R2-004）**：`expression`（token 序列原文）**只存在于磁盘 DTO 顶层**，并在加载时写入可执行对象的 `meta["expression"]`；架构 §4.1 的可执行 `FactorDef` **不新增** `expression` 顶层字段（继续由 `meta` 承载）。每层只有一个合法形态：落盘 `canonical_json` 白名单 = DTO 字段表（含 `expression`/`feature_map_digest`/`definition_digest`/`run_id`/`created_at`）；加载后对象 = 架构字段表（`compute` 由 `expression` + `feature_map` 重建、`meta` 含 `expression`）。`data_columns` 落盘存值供可用性检查，其来源仍由 `feature_map_digest` 反解校验。
 
 **HypothesisDef**：`hypothesis_id` / `mechanism`（经济动机与作用机制）/ `data_columns` / `applicable_state`（适用状态/regime；catalog 与自动候选给显式默认值 `unspecified`，不隐式留空）/ `expected_holding_period` / `cost_sensitivity` / `source` / `generation`。内置 `mechanism_unknown` 条目供自动候选绑定，并在 FactorDef 上如实标记（PRD FR2.1）。
 
@@ -117,8 +118,8 @@ reports/generation/<run_id>/
 - `universe` + `hostname` + `vram_limit_gb` 三项一起回答「这个结论在什么条件下成立」：宇宙规模决定横截面 reward 的信噪比（`F008` 并行扩容中），机器与显存上限决定产能数字可不可比。跨运行比较前必须先比这三项；
 - `binding` 两种形态，**语义字段与 ADR-0007 的 `ResearchSnapshot` 逐项对齐**（同一语义集合，差别只在过渡态不落 `experiment_store` artifact）：
   - `{"mode": "snapshot", "research_snapshot_id": "..."}`（F007 落地后，即 ADR-0007 的 `snapshot_id`）；
-  - `{"mode": "explicit_tuples", "schema_version": 1, "cutoff_time": "...", "members": {"<dataset>": {data_version, value_digest, as_of_fidelity, event_time_min, event_time_max}}, "symbol_map_digest": "...", "universe_calendar_digest": "...", "provenance": {created_at, artifact_path, member_manifest_paths, symbol_map_path, universe_calendar_path}}`（过渡态，spec Q-002）。
-  两种形态都必须在启动时逐项校验成员 `value_digest`，并校验 `cutoff_time` / `as_of_fidelity` / `symbol_map_digest` / `universe_calendar_digest` 与 `provenance` 中的不可变 artifact 引用存在且可解析。字段与 ADR-0007 的成员/身份契约一一对应；**F007 落地不是纯字段改名**——须先由 `experiment_store` 构造并发布 `ResearchSnapshot`（ADR-0007 决策 4/5），再把过渡元组替换为 `research_snapshot_id`，下游消费字段不变。
+  - `{"mode": "explicit_tuples", "schema_version": 1, "cutoff_time": "...", "members": {"<dataset>": {data_version, value_digest, as_of_fidelity, event_time_min, event_time_max}}, "symbol_map_digest": "...", "universe": {"digest": "...", "path": "...", "schema_version": 1}, "calendar": {"digest": "...", "path": "...", "schema_version": 1}, "universe_calendar_digest": "<combine(universe.digest, calendar.digest)>", "provenance": {created_at, artifact_path, member_manifest_paths, symbol_map_path, universe_path, calendar_path}}`（过渡态，spec Q-002）。
+  两种形态都必须在启动时逐项校验成员 `value_digest`，并校验 `cutoff_time` / `as_of_fidelity` / `symbol_map_digest` 与 `provenance` 中的不可变 artifact 引用存在且可解析。**universe 与 calendar 是两个独立 artifact，必须分别校验**（口径同 F007 DR-006 / F008 IR-002）：universe 走 F008 内容寻址台账并校验 `universe_at(T)` 语义与 `schema_version`；calendar 按自身 schema 校验。`universe_calendar_digest` 由两者 digest **组合导出**，不再等于任一单文件摘要；任一 artifact 缺失或校验失败即 fail-closed 拒绝启动。字段与 ADR-0007 的成员/身份契约一一对应；**F007 落地不是纯字段改名**——须先由 `experiment_store` 构造并发布 `ResearchSnapshot`（ADR-0007 决策 4/5），再把过渡元组替换为 `research_snapshot_id`，下游消费字段不变。
 - **配置与确定性（NFR-003）**：`config_digest = sha256(canonical_json(config))`（键排序、排除时间戳与主机字段）；canonical config artifact 落盘到 `reports/generation/<run_id>/config.json`，使"配置摘要"可**重放**而不只是一个哈希。RNG 由 `seed` 经稳定派生函数生成各组件子种子，不依赖全局 `random` 状态；训练侧显式开启 torch 确定性开关。CPU/GPU 差异只允许影响浮点末位，不允许改变候选集合——NFR-003 断言的是 `factor_id` 集合与池成员一致（跨 device 亦然），不承诺逐位数值相同。
 
 **协同池 meta-factor**：`pool.json` 持久化为**可执行 `FactorDef`**（`generator="pool"`、`scope="cross_sectional"`、`factor_id = pool_<definition_digest[:12]>`），其 `params`/`meta` 携带成员引用与权重 `members: [{factor_id, weight}]`、`run_id` 与 `pool_version`；`compute` 在加载时按成员 `FactorDef`（经 `factor_store.load()` 得到可执行对象）与权重重算，**加载即可执行**，不需要调用方自行拼装。`AlphaPoolDef` 降为**内部成员描述**（成员/权重视图），不再作为独立顶层持久化对象。成员集合或权重变化即产生新 `definition_digest`／新 `factor_id`，不原地改写（DR-004）。
@@ -166,8 +167,17 @@ CLI `alphamill-generate`（IR-001）：
 
 适配契约（架构 §4.1.1，FR-004）：表达式 token 序列 → 闭包编译为 `FactorDef.compute`；表达式原文入 `meta["expression"]` 保证可反解；`feature_map: {数据列名 → 张量通道}` 反解出 `data_columns`；`time_series` 输入单 pair Frame，`cross_sectional` 输入带 PIT 宇宙掩码的面板。`feature_map` 本身内容寻址（`feature_map_digest`），改变映射即改变候选身份。
 
-### Event / Trace Contract
+### Kronos 生命周期 Contract（R2-002）
 
+夜槽编排对 `kronos-signal` 的调用遵循**架构 §7.1 的版本化契约**（`status` / `stop` / `restore`，含
+`contract_version`、幂等语义、可配超时与错误码 `E_UNAVAILABLE` / `E_BUSY` / `E_TIMEOUT` /
+`E_UNSUPPORTED_VERSION`）。客户端行为：进入夜槽 → `status` →（`running` 则 `stop`）→ 用
+`status.vram_bytes` 确认显存释放 → 取锁训练 → 窗口结束 `restore`；全过程写 `kronos_offload` 观测。
+契约版本不匹配等同服务端未实现；服务确未部署记 `offload_not_needed`；忙碌/超时/版本错误一律
+**fail-closed** 留在队列。契约测试：`tests/integration/test_f003_kronos_lifecycle.py`——`tests/contract/`
+不在 `tools/verify.py` 的收集范围内（design §0 约束：测试只落 `tests/unit` / `tests/integration`）。
+
+### Event / Trace Contract
 append-only `events.jsonl`，每行一个事件，含 `event_type` / `ts` / `run_id` / payload：
 
 - `generation.run_completed`（TR-001，**仅 `status=completed` 的运行发出**）：`generator`、`engine`、`binding`、`seed`、`device`、`tier_level`、`counts`、`pool`；

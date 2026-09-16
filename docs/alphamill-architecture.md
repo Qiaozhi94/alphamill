@@ -273,6 +273,9 @@ class FactorDef:
 `factor_id` 与权重放在 `params`/`meta`，`compute` 由成员 `FactorDef` 与权重重算，加载即可执行；
 成员集合或权重变化产生新 `factor_id`，不原地改写（契约详见 F003 FR-007 / DR-004）。
 
+`expression` **不进入可执行对象顶层**：表达式原文由磁盘 DTO 保存，加载时写入 `meta["expression"]`
+（见 F003 design §3「expression 的唯一形态」）。
+
 #### 4.1.1 AlphaGen 适配契约（表达式树/张量世界 ↔ FactorDef pandas 世界）
 
 FactorDef 同时承载单 pair 时序和多 pair 横截面契约；主引擎 AlphaGen 使用表达式树与 GPU 张量。
@@ -579,3 +582,20 @@ flowchart LR
 | 任意 | 碰撞规则：单槽 FIFO 队列 | — | 时段表之外或与在跑任务撞车的任务一律排队，**队列赢，绝不并行赌 OOM** |
 
 VRAM 预算为硬上限：任务启动前自检可用显存，低于预算即进队列等待，不允许挤占时段或互相抢卡。预算值与时段表随执行机走，迁移后按上文重标。
+
+**Kronos 服务生命周期契约（版本化，供夜槽编排消费）**：`kronos-signal` 的服务端暴露版本化控制面
+（`contract_version`），供挖掘编排在训练窗口边界调用：
+
+| 动作 | 语义 | 幂等性 | 超时 | 错误码 |
+|---|---|---|---|---|
+| `status` | 返回 `{state: running\|stopped, contract_version, model_loaded, vram_bytes}` | 只读，天然幂等 | 可配（默认 5s） | `E_UNAVAILABLE` |
+| `stop` | 优雅停止推理并释放显存，返回释放后的 `vram_bytes` | 重复调用返回 `state=stopped`，不报错 | 可配（默认 60s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
+| `restore` | 恢复常驻推理，返回 `state=running` | 重复调用返回 `state=running` | 可配（默认 120s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
+
+- **显存确认**：`stop` 之后编排必须经 `status` 的 `vram_bytes` 或设备侧读数确认显存已释放，
+  未确认不得取锁训练；
+- **契约版本**：`contract_version` 不匹配（`E_UNSUPPORTED_VERSION`）视为服务端未实现该契约；
+- **未部署与失败语义**：控制面不可达且该服务确实未部署 → 编排记 `offload_not_needed` 并继续；
+  服务在跑却返回忙碌/超时 → **fail-closed**：任务留在单槽队列，绝不与常驻推理并行抢卡；
+- **所有权**：契约正文由本节拥有；客户端调用与运行取证归 F003（训练窗口编排），服务端实现归
+  `kronos-signal` 交付。

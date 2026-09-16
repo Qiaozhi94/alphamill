@@ -109,8 +109,8 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 ### 范围外
 
 - RankIC/IC 衰减/分位数/成本门三档裁决/多重检验/样本量裁决与任何 verdict → `F007`；F003 只保留参数化的成本后收益预筛（不产成本裁决）；
-- ResearchSnapshot 的实现（归 `experiment_store/`，随 `F007` 落地）——F003 只消费绑定，冒烟期用显式元组过渡（Q-002）；过渡元组须携带与 ADR-0007 对齐的语义字段（`schema_version`、`cutoff_time`、逐 dataset `as_of_fidelity`/`event_time_min`/`event_time_max`、`symbol_map_digest`、`universe_calendar_digest` 与不可变 artifact 的 provenance 引用），仅不落 snapshot artifact；F007 落地时须先发布 `ResearchSnapshot` 再替换为 `snapshot_id`（ADR-0007 决策 4/5）；
-- 因子注册表的评测摘要回写、`|ρ|>0.99` 查重与生命周期状态机 → `F007` / `F006`；
+- ResearchSnapshot 的实现（归 `experiment_store/`，随 `F007` 落地）——F003 只消费绑定，冒烟期用显式元组过渡（Q-002）；过渡元组须携带与 ADR-0007 对齐的语义字段（`schema_version`、`cutoff_time`、逐 dataset `as_of_fidelity`/`event_time_min`/`event_time_max`、`symbol_map_digest`、**独立且分别校验的 universe（F008 台账）与 calendar artifact 引用**及其组合导出的 `universe_calendar_digest`、不可变 artifact 的 provenance 引用），仅不落 snapshot artifact；F007 落地时须先发布 `ResearchSnapshot` 再替换为 `snapshot_id`（ADR-0007 决策 4/5）；
+- 因子注册表的**定义面**（`FactorDef` 内容寻址读写、内容版本与定义级引用）归本 feature 的 `registry/`；**评测摘要回写、`|ρ|>0.99`/`0.90~0.99` 查重判定与 lifecycle 状态判定** 的 owner = `F007`（评测面唯一写入者），**lifecycle 动作执行** 的 owner = `F006`（运营操作入口）；F003 不持有评测摘要或 lifecycle 状态，只向下游提供定义与 `generation.*` 事件；
 - 宇宙扩容 30~50 对与新 pair 质量流程（FR1.5）→ `F008`（并行推进，不阻塞本 feature 的接口与闸门交付）；
 - 批量移植 GTJA191 / WQ101 公式库作为种子宇宙 → 后移（见 §7 决策）；
 - 研究控制台与任何页面 → `F005`。
@@ -241,7 +241,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 ### 数据 / 实体需求
 
-- **DR-001**：`GenerationRun` 应当持久化快照绑定（`research_snapshot_id`，或过渡期的显式元组：`schema_version`、`cutoff_time`、逐 dataset 成员映射 `{<dataset>: (data_version, value_digest, as_of_fidelity, event_time_min, event_time_max)}`、`symbol_map_digest`、`universe_calendar_digest` 与不可变 artifact 的 `provenance` 引用——字段与身份语义与 ADR-0007 一致）、seed、生成器与引擎版本、配置摘要（canonical config artifact 与 `config_digest`）、device、hostname、宇宙规模（pair 数与 `symbol_map_digest`）、档位与逐级计数；**宇宙规模是候选质量结论的前提条件，必须随运行留痕**。
+- **DR-001**：`GenerationRun` 应当持久化快照绑定（`research_snapshot_id`，或过渡期的显式元组：`schema_version`、`cutoff_time`、逐 dataset 成员映射 `{<dataset>: (data_version, value_digest, as_of_fidelity, event_time_min, event_time_max)}`、`symbol_map_digest`、**相互独立的** `universe` 引用（F008 台账 digest、`universe_at(T)` 语义、`schema_version`）与 `calendar` 引用（自身 schema 的内容寻址 artifact），以及由两者 digest **组合导出**的 `universe_calendar_digest` 与不可变 artifact 的 `provenance` 引用——字段与身份语义与 ADR-0007 一致，universe/calendar 拆分口径同 F007 DR-006）、seed、生成器与引擎版本、配置摘要（canonical config artifact 与 `config_digest`）、device、hostname、宇宙规模（pair 数与 `symbol_map_digest`）、档位与逐级计数；**宇宙规模是候选质量结论的前提条件，必须随运行留痕**。
 - **DR-002**：`FactorDef` 应当以规范化 JSON 内容寻址持久化，`factor_id = <generator>_<definition_digest[:12]>`（**不含 run 序号**；运行归属由 `run_id` 承载，跨 run 重跑同一表达式得到同一 `factor_id`），并保存 `generator`、表达式原文、`params`、`scope`、`data_columns`、`hypothesis_id`、`definition_digest`、`run_id` 与生成来源引用；**不得**保存任何评测结论。
 - **DR-003**：`HypothesisDef` 应当至少记录经济动机、作用机制、数据依赖、适用状态/regime（`applicable_state`，缺失时给显式默认值而非留空）、预期持有期、成本敏感性、来源与 generation；自动候选绑定 `mechanism_unknown` 假设并如实标记。
 - **DR-004**：协同池 meta-factor 应当持久化为可执行 `FactorDef`（`generator="pool"`），定义中保存成员 `factor_id` 与权重、池版本与产出运行引用，加载后 `compute` 可按成员 `FactorDef` 重算；成员集合或权重变化必须产生新 `factor_id` 版本而非原地改写。
@@ -326,7 +326,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 ### 依赖
 
 - 上游 Feature / Contract：F002 的 `data_bridge.reader.read()` 与 `(dataset, data_version, value_digest)` 身份、`symbol_map`；ADR-0007 的 `ResearchSnapshot` 语义字段（`cutoff_time`、`as_of_fidelity`、`event_time_min/max`、`symbol_map_digest`、`universe_calendar_digest`）——过渡期由显式元组承载同一语义；F001 的 `src/alphamill/` 布局；架构 §4.1/§4.1.1 的 FactorDef 与适配契约、§7.1 的机器边界与 GPU 槽位。**并行依赖**：`F008` 宇宙扩容——PIT 掩码消费其 IR-002 的 `universe_at(T)` 与内容寻址台账 digest（IR-003 的 `schema_version`），不阻塞接口与冒烟闸门，但候选质量结论以其落地后的宇宙为准；F008 未落地时掩码用显式 universe 配置并在运行记录里留 digest 与来源。
-- 下游消费者：`F007`（把 FactorDef 与协同池作为评测输入，把 `generation.candidate_rejected` 作为漏斗第一级，把算子能力登记表作为 FR-002 的已登记算子能力清单消费）、`F005`（只读展示候选与产能）、FR4/M3 组合构建。
+- 下游消费者：`F007`（把 FactorDef 与协同池作为评测输入，把 `generation.candidate_rejected` 作为漏斗第一级，把算子能力登记表作为 FR-002 的已登记算子能力清单消费；**因子注册表的评测摘要回写、`|ρ|` 查重判定与 lifecycle 状态判定的唯一写入 owner**）、`F006`（**lifecycle 动作执行入口**）、`F005`（只读展示候选与产能）、FR4/M3 组合构建。
 - 外部 / 环境依赖：AlphaGen 上游仓库（vendor 时点 clone，之后不跟随）；torch 2.x / numpy 2.x / pandas 2.x / gymnasium / stable-baselines3，全部 pin；执行机提供挖掘训练的 CUDA 运行时（当前 `qiaozhi-lt`：Win11+WSL2 + RTX 4060 Laptop 8GB，按架构 §7.1 时段表；湖与训练同机，无跨机传输）；宇宙规模当前为 6 对（见 Q-001）。
 
 ### 决策与风险
@@ -334,7 +334,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 | 决策 / 风险 | 结论或缓解 | 理由 | 后续 |
 |---|---|---|---|
 | 第二独立后端选谁 | 人工 crypto 原生种子后端（FR2.2 的"人工"分支） | 与 AlphaGen 风险解耦，冒烟失败也能交付 FR2.2；顺带为 F007 提供正控制因子 | vendor 自带 gplearn/dso 仅在降级到 L2 时启用 |
-| 是否等 F007 的 ResearchSnapshot | 不等：冒烟与挖掘期用显式元组绑定并标注过渡态，元组携带 `schema_version`／`cutoff_time`／`as_of_fidelity`／`event_time` 范围／`symbol_map_digest`／`universe_calendar_digest` 与 artifact provenance（与 ADR-0007 语义对齐） | ResearchSnapshot 归 `experiment_store/`，在 F003 内重复实现会产生第二真相源；若只带 `(dataset, data_version, value_digest)` 会丢失 PIT、映射与 provenance 语义，过渡态与正式身份不可互换 | F007 落地时先构造并发布 `ResearchSnapshot` 再切 `research_snapshot_id`（ADR-0007 决策 4/5），过渡路径删除 |
+| 是否等 F007 的 ResearchSnapshot | 不等：冒烟与挖掘期用显式元组绑定并标注过渡态，元组携带 `schema_version`／`cutoff_time`／`as_of_fidelity`／`event_time` 范围／`symbol_map_digest`，并把 universe 与 calendar 拆为两个独立 artifact 引用（口径同 F007 DR-006，组合导出 `universe_calendar_digest`）与 artifact provenance（与 ADR-0007 语义对齐） | ResearchSnapshot 归 `experiment_store/`，在 F003 内重复实现会产生第二真相源；若只带 `(dataset, data_version, value_digest)` 会丢失 PIT、映射与 provenance 语义，过渡态与正式身份不可互换 | F007 落地时先构造并发布 `ResearchSnapshot` 再切 `research_snapshot_id`（ADR-0007 决策 4/5），过渡路径删除 |
 | 冒烟的 IC 对齐会不会变成影子评测台 | 只做数值一致性回归（vendor 张量 IC vs pandas 参考实现），不产 verdict、不写台账 | 评测权唯一属 F007（ADR-0003 门禁不降级） | F007 落地后该检查退化为 vendor 回归测试 |
 | 生成侧要不要成本后收益 | 要：按可配成本参数（taker/maker/零成本）做预筛并把参数写进 `run.json` 的 `objective`，但不产成本裁决 | PRD FR2.3 要求目标对齐同时考虑成本后收益；ADR-0003 禁止生成器自裁决，成本门真相源在 F007（FR3.2 的 `cost_model_version` 与三档结论） | F007 落地后生成侧改为引用其 `cost_model_version`，预筛口径与其对齐 |
 | 批量移植 GTJA191 / WQ101 作种子 | 不做：只手写少量 crypto 原生种子（funding carry、basis、OI 变化、截面动量、波动） | 公式库假设 A 股日频，含行业/市值/财报依赖，crypto 24/7 需重定义窗口 | 批量种子宇宙后移到独立 Feature |
