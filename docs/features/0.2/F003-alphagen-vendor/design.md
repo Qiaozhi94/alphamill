@@ -226,7 +226,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 | `AC-004` | unit | `tests/unit/test_f003_alphagen_adapter.py` | 编译闭包与张量求值一致；表达式反解等价；`data_columns` 由 `feature_map` 反解；加载后的 FactorDef 可直接执行 |
 | `AC-005` | unit | `tests/unit/test_f003_operator_registry.py` | 启用算子全部登记；未登记/前视/非法跨 pair 候选按原因码计数拒绝 |
 | `AC-006` | integration | `tests/integration/test_f003_generation_run.py` | 零变号表达式被可达性预筛拒绝；一次运行入册 ≥50（在执行机上判定） |
-| `AC-007` | integration | `tests/integration/test_f003_smoke_gate.py` | 四条判据逐条二元判定并入 manifest；任一触发即降级裁决；L1→L0 回切请求被拒 |
+| `AC-007` | integration | `tests/integration/test_f003_smoke_gate.py` | L1 三条判据逐条二元判定并入 manifest；任一触发即 L1 降级裁决；time-box 不裁 L2（L2 须 L1 连续 2 周判据）；L1→L0 回切请求被拒 |
 | `AC-008` | integration | `tests/integration/test_f003_alpha_pool.py` | 池成员与权重可反解；按成员重算与记录容差内一致；成员变化产生新 `pool_id` |
 | `AC-009` | integration | `tests/integration/test_f003_generation_run.py` | 同 `(seed, binding, code_digest, config)` 重跑 factor_id 集合相同；自动候选绑定 `mechanism_unknown` |
 | `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 显存低于上限/时段撞车进队列不并行；FIFO 先入队先取锁、释放后队首取得、超时留 `queue_timeout` 终态；无 CUDA 且无 `--allow-cpu` 拒绝启动；运行标注 `device`/`hostname` 与 `kronos_offload` 观测 |
@@ -249,7 +249,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 | 机器边界 | 开发机无 GPU 只跑单元与门禁；挖掘训练与 GPU/产能证据在执行机取，记录 hostname 与设备 | 架构 §7.1：开发机不承载 GPU 负载，也不作为性能证据来源 | 执行机主机名与实测可用显存在 tasks T004 钉死 |
 | 执行机后续整体迁移到 `qiaozhi-lab` | 显存上限、时段、耗时阈值一律可配并写入运行记录，不写死常数；不依赖 WSL 专属路径；torch pin 显式覆盖 sm_120 | 迁移同时换平台（WSL2 → 原生 Ubuntu）与换架构（Ada → Blackwell），机器差异藏进常数或路径假设会让迁移变成改代码 | 迁移动作按独立 Feature 立项 |
 | 横截面 reward 在 6 对上噪声大 | 接口与闸门可在 6 对上验收；产出质量结论必须标注宇宙规模 | ADR-0001 后果条 | spec Q-001：宇宙扩容 Feature 立项窗口 |
-| 上游冻结 21 个月 | 现代化成本由 2 日 time-box 封顶，超时即降级 | ADR-0001 冒烟即闸门 | L1/L2 阶梯已预写为二元判据 |
+| 上游冻结 21 个月 | 现代化成本由 2 日 time-box 封顶，超时即 L1 降级 | ADR-0001 冒烟即闸门 | L1 判据在 time-box 内二元判定；L2 按 ADR-0001 连续 2 周口径另行触发 |
 
 ## 10. 待确认设计问题
 

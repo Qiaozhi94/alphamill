@@ -40,7 +40,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 - `factor_factory/generators/` 出现统一 `produce()` 接口与**两个独立后端**（AlphaGen RL 主引擎 + 人工 crypto 原生种子后端），替换后端不改调用方；
 - AlphaGen 核心在 vendor 卫生规则下进主仓（最小 diff、`# [alphamill]` 标注、`VENDORED.md` 溯源），在 pin 的现代栈上跑通训练并向协同池产出因子；
 - 挖掘运行的输入是 F002 不可变快照的**显式版本绑定**，输出是只带定义、不带结论的 FactorDef 与协同池 meta-factor，全部可由 `(seed, 快照绑定, 表达式)` 重建；
-- 2 个工作日 time-box 内得到二元裁决：主引擎锁定，或按 ADR-0001 判据降级到 L1/L2，裁决与触发原因入档。
+- 2 个工作日 time-box 内得到二元裁决：主引擎锁定 L0，或按 ADR-0001 判据降级到 L1，裁决与触发原因入档；**L1→L2 不在 time-box 内**——须由 L1 连续 2 周满足 ADR-0001 判据触发。
 
 ### 非目标
 
@@ -71,7 +71,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 **为什么是这个优先级**：ADR-0001 的选型结论依赖这个闸门；闸门不跑，M2 的全部批量能力承诺都建立在未验证假设上。单人 time-box 最容易自我豁免，因此判据必须是自动判定的二元项。
 
-**独立测试**：在最小数据切片上执行 `alphamill-generate smoke`，检查四条 ADR-0001 判据逐条产出 `pass/fail` 与时间戳，并写入当日冒烟 manifest。
+**独立测试**：在最小数据切片上执行 `alphamill-generate smoke`，检查 ADR-0001 的 **L1 三条判据**逐条产出 `pass/fail` 与时间戳，并写入当日冒烟 manifest。
 
 **验收场景**：
 
@@ -103,7 +103,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 - 表达式 token 序列 ↔ FactorDef 适配层（闭包编译、表达式原文可反解、`data_columns` 反解、截面边界）；
 - 算子能力登记表与生成侧自检（未登记算子/前视/跨 pair 非法算子直接拒绝并计数）；
 - 目标对齐（换手惩罚或 ≥30 笔/90 天可达性前置筛选）与其参数入档；
-- 冒烟闸门、二元降级判据、L1/L2 降级阶梯与裁决记录；
+- 冒烟闸门、二元降级判据（time-box 内只裁 L0/L1）、L1/L2 降级阶梯定义与裁决记录；
 - FactorDef / HypothesisDef / GenerationRun 的定义级持久化与 CLI 入口。
 
 ### 范围外
@@ -210,7 +210,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 ### Requirement: 冒烟闸门与降级阶梯（`FR-006`）
 
-系统应当把 ADR-0001 的切换判据实现为自动判定的二元项，在 2 个工作日 time-box 内输出「主引擎锁定」或「降级到 L1/L2」的裁决，并把裁决、触发判据与时间戳写入当日冒烟 manifest；降级不自动回切，回切须重开一轮 time-box。
+系统应当把 ADR-0001 的切换判据实现为自动判定的二元项：2 个工作日 time-box 内只输出「主引擎锁定 L0」或「降级到 L1」的裁决，并把裁决、触发判据与时间戳写入当日冒烟 manifest；**L1→L2 的降级不由 time-box 裁决**，只在 L1 连续 2 周满足 ADR-0001 判据（周候选 <50 或零候选通过无前视审计）时触发；降级不自动回切，回切须重开一轮 time-box。
 
 #### Scenario: time-box 用尽
 
@@ -271,8 +271,8 @@ RUNNING   -> FAILED     训练/求值/写出异常；写终态 run.json，已产
 RUNNING   -> PARTIAL    SIGTERM 优雅停机；保留已产候选供诊断，不写 pool.json、不发 run_completed
 
 引擎档位（ADR-0001 降级阶梯，单向）：
-L0 AlphaGen RL -> L1 表达式求值器 + 自写搜索   任一 L1 判据触发
-L1             -> L2 纯 gplearn 基线           任一 L2 判据触发
+L0 AlphaGen RL -> L1 表达式求值器 + 自写搜索   任一 L1 判据触发（2 日 time-box 内，自动判定）
+L1             -> L2 纯 gplearn 基线           L1 连续 2 周：周候选 <50 或零候选通过无前视审计（ADR-0001）
 L1/L2          -> L0                           仅在重开一轮冒烟 time-box 并通过后
 ```
 
@@ -302,7 +302,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 - [ ] **AC-004** (`FR-004`): 编译后的 compute 闭包与 vendor 张量求值在同一切片容差内一致；meta.expression 可反解为等价表达式；data_columns 由 feature_map 反解得到；落盘后加载的 FactorDef 可直接执行 — tests: `tests/unit/test_f003_alphagen_adapter.py`
 - [ ] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数 — tests: `tests/unit/test_f003_operator_registry.py`
 - [ ] **AC-006** (`FR-005`, `NFR-001`): 换手惩罚/可达性预筛生效——零交易型表达式不进池；在执行机上单次挖掘入册 ≥50 个通过自检候选 — tests: `tests/integration/test_f003_generation_run.py`
-- [ ] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
+- [ ] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；2 日 time-box 只裁 L0 锁定或 L1 降级，L2 须 L1 连续 2 周判据（ADR-0001）；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
 - [ ] **AC-008** (`FR-007`, `DR-004`): 协同池导出为 meta-factor，成员 factor_id 与权重可反解，重算值与训练期记录容差内一致，成员变化产生新版本 — tests: `tests/integration/test_f003_alpha_pool.py`
 - [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空） — tests: `tests/integration/test_f003_generation_run.py`
 - [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；运行记录标注 device 与 hostname，开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`

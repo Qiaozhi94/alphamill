@@ -52,7 +52,7 @@ updated: 2026-09-14
 - [ ] T016 (`FR-006`, `AC-007`): 在执行机用最小数据切片跑通 1 个 PPO epoch（含 gym→gymnasium env wrapper 适配）——冒烟第 1 天判据 — verify: `tests/integration/test_f003_smoke_gate.py`
 - [ ] T017 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
 - [ ] T018 (`FR-006`, `AC-007`): 实现冒烟闸门判据判定器、当日冒烟 manifest、档位状态机与降级裁决（L1→L0 回切须新 time-box 记录） — verify: `tests/integration/test_f003_smoke_gate.py`
-- [ ] T019 (`FR-006`): 实跑 time-box 并归档裁决（锁定 L0 或降级 L1/L2），把结论与触发判据回写 `spec.md` §7 决策表 — verify: `docs/features/0.2/F003-alphagen-vendor/spec.md` §7 含裁决记录
+- [ ] T019 (`FR-006`): 实跑 time-box 并归档裁决（L0 锁定或 L1 降级；L2 不属 time-box 裁决），把结论与触发判据回写 `spec.md` §7 决策表 — verify: `docs/features/0.2/F003-alphagen-vendor/spec.md` §7 含裁决记录
 
 ### Phase 3：完整数据面、适配器与生成侧自检
 
