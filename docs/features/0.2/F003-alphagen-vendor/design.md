@@ -111,7 +111,10 @@ reports/generation/<run_id>/
 
 - `counts = {proposed, rejected: {unregistered_op, lookahead, reachability, duplicate_definition}, registered}`——逐级计数即 F007 漏斗的第一级分母；
 - `universe` + `hostname` + `vram_limit_gb` 三项一起回答「这个结论在什么条件下成立」：宇宙规模决定横截面 reward 的信噪比（`F008` 并行扩容中），机器与显存上限决定产能数字可不可比。跨运行比较前必须先比这三项；
-- `binding` 两种形态：`{"mode": "snapshot", "research_snapshot_id": "..."}`（F007 落地后）或 `{"mode": "explicit_tuples", "datasets": [{dataset, data_version, value_digest}]}`（过渡态，spec Q-002）。两种形态都必须在启动时逐项校验 `value_digest`。
+- `binding` 两种形态，**语义字段与 ADR-0007 的 `ResearchSnapshot` 逐项等价**，差别只在过渡态不落 `experiment_store` artifact：
+  - `{"mode": "snapshot", "research_snapshot_id": "..."}`（F007 落地后，即 ADR-0007 的 `snapshot_id`）；
+  - `{"mode": "explicit_tuples", "cutoff_time": "...", "members": [{dataset, data_version, value_digest, as_of_fidelity, event_time_min, event_time_max}], "symbol_map_digest": "...", "universe_calendar_digest": "..."}`（过渡态，spec Q-002）。
+  两种形态都必须在启动时逐项校验成员 `value_digest`，并校验 `cutoff_time` / `as_of_fidelity` / `symbol_map_digest` / `universe_calendar_digest` 存在且可解析；字段名与 ADR-0007 的成员契约一一对应，F007 落地后过渡路径原地替换为 `snapshot_id`，下游消费字段不变。
 
 **AlphaPoolDef**：`pool_id`（内容寻址）/ `members: [{factor_id, weight}]` / `run_id` / `pool_version`。成员集合变化即新 `pool_id`，不原地改写（DR-004）。
 
