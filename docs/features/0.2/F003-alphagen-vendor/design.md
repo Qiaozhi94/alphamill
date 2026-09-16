@@ -106,7 +106,7 @@ reports/generation/<run_id>/
 - `factor_id = <generator>_<definition_digest[:12]>`：人读前缀 + 内容后缀，**不含 run 序号**——同一表达式跨 run 重跑得到同一 `factor_id`（NFR-003）；运行归属由独立的 `run_id` 字段承载，不进入身份；
 - **禁止字段**：`ic`、`rank_ic`、`pnl`、`verdict`、`promoted` 等结论字段由 schema 白名单显式拒绝（AC-001）。
 
-**HypothesisDef**：`hypothesis_id` / `mechanism`（经济动机与作用机制）/ `data_columns` / `expected_holding_period` / `cost_sensitivity` / `source` / `generation`。内置 `mechanism_unknown` 条目供自动候选绑定，并在 FactorDef 上如实标记（PRD FR2.1）。
+**HypothesisDef**：`hypothesis_id` / `mechanism`（经济动机与作用机制）/ `data_columns` / `applicable_state`（适用状态/regime；catalog 与自动候选给显式默认值 `unspecified`，不隐式留空）/ `expected_holding_period` / `cost_sensitivity` / `source` / `generation`。内置 `mechanism_unknown` 条目供自动候选绑定，并在 FactorDef 上如实标记（PRD FR2.1）。
 
 **GenerationRun**：`run_id` / `generator` / `engine`（`vendor_commit`、`code_digest`、pin 栈版本）/ `binding` / `seed` / `device` / `hostname` / `vram_limit_gb` / `universe`（`pairs` 数与 `symbol_map_digest`）/ `tier_level`（L0/L1/L2）/ `window`（含重采样频率）/ `objective`（`turnover_penalty_lambda`、`reachability_min_trades_90d`）/ `counts` / `pool` / `started_at` / `finished_at` / `status` / `termination`。
 

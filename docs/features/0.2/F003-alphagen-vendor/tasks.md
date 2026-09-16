@@ -36,7 +36,7 @@ updated: 2026-09-14
 ### Phase 1：生成器平面骨架与人工种子后端（US-001，不依赖 AlphaGen）
 
 - [ ] T005 (`FR-001`, `IR-002`, `AC-001`): 实现 `Generator` 协议与 `GenerationRequest/Result/Counts`，含结论字段白名单拒绝 — verify: `tests/unit/test_f003_generator_contract.py`
-- [ ] T006 [P] (`DR-003`, `AC-009`): 实现 `HypothesisDef` schema 与 catalog，内置 `mechanism_unknown` 条目 — verify: `tests/unit/test_f003_hypotheses.py`
+- [ ] T006 [P] (`DR-003`, `AC-009`): 实现 `HypothesisDef` schema 与 catalog（含 `mechanism`、`applicable_state` 默认值），内置 `mechanism_unknown` 条目 — verify: `tests/unit/test_f003_hypotheses.py`
 - [ ] T007 (`DR-002`, `AC-009`): 实现 FactorDef 规范化 JSON、`definition_digest`、`factor_id` 生成与 `factor_store` 读写 — verify: `tests/unit/test_f003_factor_store.py`
 - [ ] T008 (`DR-001`, `TR-001`, `TR-002`, `AC-009`): 实现 `run_store`——GenerationRun manifest 原子写（`run.json` 最后写，含 `hostname` / `device` / `vram_limit_gb` / `universe`）与 `events.jsonl` append-only — verify: `tests/unit/test_f003_run_store.py`
 - [ ] T009 (`FR-003`, `AC-003`): 实现 `binding.py`：两种绑定形态解析、逐 dataset `value_digest` 校验、invalid 立即拒绝 — verify: `tests/unit/test_f003_binding.py`

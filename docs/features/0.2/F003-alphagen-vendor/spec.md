@@ -238,7 +238,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 - **DR-001**：`GenerationRun` 应当持久化快照绑定（`research_snapshot_id`，或过渡期的显式元组：`cutoff_time`、逐 dataset `(dataset, data_version, value_digest, as_of_fidelity, event_time_min, event_time_max)`、`symbol_map_digest`、`universe_calendar_digest`——字段语义与 ADR-0007 一致）、seed、生成器与引擎版本、配置摘要、device、hostname、宇宙规模（pair 数与 `symbol_map_digest`）、档位与逐级计数；**宇宙规模是候选质量结论的前提条件，必须随运行留痕**。
 - **DR-002**：`FactorDef` 应当以规范化 JSON 内容寻址持久化，`factor_id = <generator>_<definition_digest[:12]>`（**不含 run 序号**；运行归属由 `run_id` 承载，跨 run 重跑同一表达式得到同一 `factor_id`），并保存 `generator`、表达式原文、`params`、`scope`、`data_columns`、`hypothesis_id`、`definition_digest`、`run_id` 与生成来源引用；**不得**保存任何评测结论。
-- **DR-003**：`HypothesisDef` 应当至少记录经济动机、数据依赖、预期持有期、成本敏感性、来源与 generation；自动候选绑定 `mechanism_unknown` 假设并如实标记。
+- **DR-003**：`HypothesisDef` 应当至少记录经济动机、作用机制、数据依赖、适用状态/regime（`applicable_state`，缺失时给显式默认值而非留空）、预期持有期、成本敏感性、来源与 generation；自动候选绑定 `mechanism_unknown` 假设并如实标记。
 - **DR-004**：协同池 meta-factor 应当保存成员 `factor_id` 与权重、池版本与产出运行引用；成员集合变化必须产生新版本而非原地改写。
 
 ### 事件 / Trace 需求
@@ -302,7 +302,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 - [ ] **AC-006** (`FR-005`, `NFR-001`): 换手惩罚/可达性预筛生效——零交易型表达式不进池；在执行机上单次挖掘入册 ≥50 个通过自检候选 — tests: `tests/integration/test_f003_generation_run.py`
 - [ ] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
 - [ ] **AC-008** (`FR-007`, `DR-004`): 协同池导出为 meta-factor，成员 factor_id 与权重可反解，重算值与训练期记录容差内一致，成员变化产生新版本 — tests: `tests/integration/test_f003_alpha_pool.py`
-- [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设 — tests: `tests/integration/test_f003_generation_run.py`
+- [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空） — tests: `tests/integration/test_f003_generation_run.py`
 - [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；运行记录标注 device 与 hostname，开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`
 - [ ] **AC-011** (`NFR-004`, `IR-001`): 生成运行在无网络出口下完成；生成器写入证据台账/留出路径的尝试被拒绝；缺绑定的 mine 请求非零退出 — tests: `tests/integration/test_f003_boundaries.py`
 
