@@ -61,6 +61,8 @@ updated: 2026-09-17
 - [ ] T023 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 - [ ] T024 (`FR-001`, `FR-004`, `NFR-001`, `AC-001`, `AC-003`): 承接 SC-002 的并发与故障注入集成测试——同 ID 并发 claim 只有一个成功、崩溃后 lease 超时才可接管、finalize 原子性（失败不产生部分 `cohort_verdict`）、registration 幂等重试不重复计数 — verify: `tests/integration/test_f007_concurrency.py`
 
+- [ ] T025 (`FR-004`, `NFR-002`): 统计第二实现对照抽查（PRD FR3.7）——对高价值候选或统计实现变更，用独立实现（Vibe-Trading `quantlib_call` 或本仓手工第二实现）对照 BH-FDR/block bootstrap，**time-box 1 周**；对照对象、容差（估计量相对差 ≤1e-6，超出则显式记录差异与原因）与证据路径 `reports/second_impl/<experiment_id>/` 一并落档；超时不阻塞主链路 — verify: `tests/unit/evaluation/test_second_implementation.py`
+
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 > 编写早、执行晚：以下条目在 Phase 1 先以红灯立起（夹具与断言先写），收尾全量执行；
@@ -80,6 +82,7 @@ updated: 2026-09-17
 - `T009 -> T012`：cohort 级校正（BH-FDR/DSR/MinTRL）依赖成员级估计器实现；`T012 -> T013`：finalize CLI 依赖登记、收齐校验与 official population 投影实现。
 - `T007 -> T010/T011`：阶段状态模型是 rolling split 与事件/原子发布实现的输入；`T012/T014 -> T016`：全链控制需 canonical registry（登记/收齐）与 synthesis（漏斗/失败汇总）实现。
 - `T012/T013 -> T024`：并发 claim 与 finalize 原子性测试依赖登记与 CLI 实现。
+- `T009/T016 -> T025`：第二实现对照以成员级统计实现与全链控制证据为对照对象。
 - `T011,T012 -> T014,T015`：综合只消费已发布并登记的 canonical 证据。
 - `T005 [P]` 可与 T004 并行：分别修改隔离能力与纯身份模块，不共享状态。
 - `T027/T028/T029 -> T030`：三条旅程验收全绿后才回写 spec 验收证据与状态。

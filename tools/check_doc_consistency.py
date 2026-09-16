@@ -322,6 +322,16 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "`AC-001`, `AC-002`, `AC-003`, `AC-005`"),
         ),
     ),
+    TextCheck(
+        "second_implementation_has_task",
+        "F007-D016",
+        requires=(
+            (F007_TASKS, "第二实现对照抽查"),
+            (F007_TASKS, "time-box 1 周"),
+            (F007_TASKS, "test_second_implementation.py"),
+            (F007_SPEC, "第二实现抽查"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

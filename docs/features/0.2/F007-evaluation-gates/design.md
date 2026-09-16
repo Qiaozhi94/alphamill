@@ -290,7 +290,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 |---|---|---|---|
 | 官方总体存储 | 冻结 cohort + 不可变 event 文件；索引可重建 | 符合 ADR-0005 研究真相源，避免可手改双真相 | 数据量大后可加 SQLite 投影 |
 | preview/canonical 隔离 | 物理根目录 + capability 双重隔离 | 标签单隔离不足以防误写 | 不采用全局 env tier |
-| 方法统计 | 最小自研协议，第二实现只做对照 | 硬门需可控失败语义 | 不依赖 ml4t 配套包运行 |
+| 方法统计 | 最小自研协议，第二实现只做对照（T025，time-box 1 周，证据落 `reports/second_impl/<experiment_id>/`） | 硬门需可控失败语义 | 不依赖 ml4t 配套包运行 |
 | 固定 90 天的 regime 风险 | v0.2 记录 regime 并实现 rolling split；最终留出纪律不改 | 单窗口结论有条件性 | 按 ADR-0003 路线滚动化 |
 | 文件系统原子性 | temp 与目标必须同一文件系统；跨盘发布拒绝 | rename 才能提供可见性边界 | 对象存储后改 manifest commit protocol |
 
