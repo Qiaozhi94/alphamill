@@ -243,6 +243,14 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "`T012 -> T013`"),
         ),
     ),
+    TextCheck(
+        "full_chain_controls_have_predecessors",
+        "F007-D008",
+        requires=(
+            (F007_TASKS, "`T007 -> T010/T011`"),
+            (F007_TASKS, "`T012/T014 -> T016`"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
