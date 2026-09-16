@@ -102,7 +102,7 @@ reports/generation/<run_id>/
 **FactorDef（`schema_version: 1`）**：`factor_id` / `definition_digest` / `hypothesis_id` / `name` / `generator` / `generator_version` / `scope` / `expression` / `params` / `data_columns` / `feature_map_digest` / `run_id` / `created_at`。
 
 - `definition_digest = sha256(canonical_json(定义字段))`，规范化时**排除** `factor_id`、`run_id`、`created_at`——同一表达式在不同 run 得到同一 digest，用于重复定义识别（拒绝原因码 `duplicate_definition`）；
-- `factor_id = <generator>_r<run_seq>_<definition_digest[:8]>`：人读前缀 + 内容后缀，既可扫读也可校验；
+- `factor_id = <generator>_<definition_digest[:12]>`：人读前缀 + 内容后缀，**不含 run 序号**——同一表达式跨 run 重跑得到同一 `factor_id`（NFR-003）；运行归属由独立的 `run_id` 字段承载，不进入身份；
 - **禁止字段**：`ic`、`rank_ic`、`pnl`、`verdict`、`promoted` 等结论字段由 schema 白名单显式拒绝（AC-001）。
 
 **HypothesisDef**：`hypothesis_id` / `mechanism`（经济动机与作用机制）/ `data_columns` / `expected_holding_period` / `cost_sensitivity` / `source` / `generation`。内置 `mechanism_unknown` 条目供自动候选绑定，并在 FactorDef 上如实标记（PRD FR2.1）。
