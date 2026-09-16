@@ -146,7 +146,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 ### Requirement: AlphaGen vendor 卫生与可复现构建（`FR-002`）
 
-系统应当把 AlphaGen 核心子集置于 `factor_factory/generators/alphagen_vendor/`，丢弃上游 `requirements.txt` 并改用本仓 pin 的现代栈；vendor 目录内每处修改标注 `# [alphamill] <原因>`，`VENDORED.md` 记录上游 repo、commit hash、vendor 日期、修改清单与许可说明；胶水代码一律放在 vendor 目录之外。
+系统应当把 AlphaGen 核心子集置于 `factor_factory/generators/alphagen_vendor/`，丢弃上游 `requirements.txt` 并改用本仓 pin 的现代栈；vendor 目录内每处修改标注 `# [alphamill] <原因>`，`VENDORED.md` 记录上游 repo、commit hash、vendor 日期、修改清单与许可说明；并冻结**可复现的上游基线**（上游 commit 的逐文件 sha256 清单，随 vendor 入库），使"每处修改"能与基线逐文件比对，而不是只靠人工承认的修改清单；胶水代码一律放在 vendor 目录之外。
 
 #### Scenario: 未标注的 vendor 改动
 
@@ -302,7 +302,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 ### 验收清单
 
 - [ ] **AC-001** (`FR-001`, `IR-002`): 两个后端经同一 produce() 接口产出通过 schema 校验的 FactorDef；返回值含结论字段时校验失败；落盘 DTO 加载后得到的 FactorDef 可直接执行（compute 由表达式重建、meta 还原） — tests: `tests/unit/test_f003_generator_contract.py`
-- [ ] **AC-002** (`FR-002`): vendor 目录内每处改动带 alphamill 标注、VENDORED.md 记录上游 repo/commit/日期/修改清单/许可，且 vendor 不反向依赖胶水模块 — tests: `tests/unit/test_f003_vendor_hygiene.py`
+- [ ] **AC-002** (`FR-002`): vendor 目录内每处改动带 alphamill 标注、VENDORED.md 记录上游 repo/commit/日期/修改清单/许可，且**改动集合与冻结的上游基线逐文件比对一致（差异集合 = 标注集合）**，vendor 不反向依赖胶水模块 — tests: `tests/unit/test_f003_vendor_hygiene.py`
 - [ ] **AC-003** (`FR-003`, `DR-001`): 按显式绑定构造张量；invalid 版本或 digest 不符时拒绝启动并留 `rejected` 终态 run.json（含 termination/reason/时间戳与 DR-001 运行字段）；张量与 reader 行集在抽样点数值一致且不可交易时点掩码为不可用 — tests: `tests/integration/test_f003_lake_tensor.py`
 - [ ] **AC-004** (`FR-004`): 编译后的 compute 闭包与 vendor 张量求值在同一切片容差内一致；meta.expression 可反解为等价表达式；data_columns 由 feature_map 反解得到；落盘后加载的 FactorDef 可直接执行 — tests: `tests/unit/test_f003_alphagen_adapter.py`
 - [ ] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数；拒绝事件含表达式原文与原因码且可按 run 查询（TR-002） — tests: `tests/unit/test_f003_operator_registry.py`

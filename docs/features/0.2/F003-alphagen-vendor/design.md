@@ -81,7 +81,7 @@ src/alphamill/factor_factory/
 | 唯一真相源 | 候选定义 = `factors/<factor_id>.json`；运行事实 = `run.json`；两者之外不得出现第二份候选清单 |
 | PIT 宇宙 → F008 | `lake_tensor` 的横截面掩码只读消费 F008 的内容寻址宇宙台账（IR-002 的 `universe_at(T)` 与 digest、IR-003 的 `schema_version`）；F008 未落地时用显式 universe 配置并把其 digest 与来源写进 `run.json`，任何路径都不得用当前成员表回填历史（架构 §4.1.1 截面边界） |
 
-**vendor 子集边界（按功能定义，不预先钉死上游路径）**：取表达式与算子、张量求值器、线性协同池、RL 环境与 token 化四块；**明确丢弃** `alphagen_qlib/`（qlib 数据层）、上游 `requirements.txt`、上游自带的 `gplearn/` 与 `dso/`（仅在降级到 L2 时按需再取）。精确文件清单在 vendor 落地任务中按上游实际布局核对后写入 `VENDORED.md`——本设计不替代实地核对。
+**vendor 子集边界（按功能定义，不预先钉死上游路径）**：取表达式与算子、张量求值器、线性协同池、RL 环境与 token 化四块；**明确丢弃** `alphagen_qlib/`（qlib 数据层）、上游 `requirements.txt`、上游自带的 `gplearn/` 与 `dso/`（仅在降级到 L2 时按需再取）。精确文件清单在 vendor 落地任务中按上游实际布局核对后写入 `VENDORED.md`——本设计不替代实地核对。**上游基线 artifact**（上游 commit 的逐文件 sha256）随 vendor 入库为 `alphagen_vendor/_upstream_baseline.json`，vendor 卫生检查以它为准做逐文件比对，禁止只凭人工维护的修改清单（AC-002）。
 
 与 Kronos vendor 的差异：Kronos 是"上游 clone + pin commit"，`vendor/Kronos/` 不入 git；AlphaGen 是"vendor 进主仓"（ADR-0002），`alphagen_vendor/` **必须入 git**，因为上游冻结后本项目全权维护。
 
@@ -224,7 +224,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
 | `AC-001` | unit | `tests/unit/test_f003_generator_contract.py` | 两后端同一 schema；含 `ic`/`verdict` 等结论字段的结果被拒绝；落盘 DTO 加载后可执行（compute 重建、meta 还原） |
-| `AC-002` | unit | `tests/unit/test_f003_vendor_hygiene.py` | vendor 内无标注差异行报错；vendor 内 `import alphamill` 报错；`VENDORED.md` 五项齐备 |
+| `AC-002` | unit | `tests/unit/test_f003_vendor_hygiene.py` | vendor 内无标注差异行报错；差异集合与上游基线逐文件比对一致；vendor 内 `import alphamill` 报错；`VENDORED.md` 五项齐备 |
 | `AC-003` | integration | `tests/integration/test_f003_lake_tensor.py` | invalid/digest 不符拒绝启动；张量与 reader 抽样点容差内一致；不可交易时点掩码为不可用 |
 | `AC-004` | unit | `tests/unit/test_f003_alphagen_adapter.py` | 编译闭包与张量求值一致；表达式反解等价；`data_columns` 由 `feature_map` 反解；加载后的 FactorDef 可直接执行 |
 | `AC-005` | unit | `tests/unit/test_f003_operator_registry.py` | 启用算子全部登记；未登记/前视/非法跨 pair 候选按原因码计数拒绝 |
