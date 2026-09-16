@@ -74,7 +74,15 @@ def _review_spec(ac_line: str) -> str:
 
 
 REVIEW_DESIGN = "# d\n\n" + "\n\n".join(f"## {s}\n无" for s in vsl.DESIGN_SECTIONS) + "\n"
-REVIEW_TASKS = "# t\n\n" + "\n\n".join(f"## {s}\n无" for s in vsl.TASKS_SECTIONS) + "\n"
+REVIEW_TASKS_NO_TEST_GROUP = (
+    "# t\n\n" + "\n\n".join(f"## {s}\n无" for s in vsl.TASKS_SECTIONS) + "\n"
+)
+REVIEW_TASKS = REVIEW_TASKS_NO_TEST_GROUP.replace(
+    "## 3. 验证与验收任务\n无",
+    "## 3. 验证与验收任务\n\n"
+    "### [TEST] 组：层 2 旅程验收轨（必填）\n\n"
+    "- [ ] T009 [TEST] (`AC-1`): 旅程验收",
+)
 REVIEW_BACKLOG_ROW = "| F001-demo | 0.1 | review | [spec](docs/features/0.1/F001-demo/spec.md) |"
 
 
@@ -159,3 +167,29 @@ def test_backlog_planning_section_not_parsed_by_gate(tmp_path: pathlib.Path) -> 
     ok, errors = vsl.verify_repo(tmp_path)
     assert ok, errors
     assert not any("F099-ghost" in e for e in errors)
+
+
+def test_review_missing_test_group_rejected(tmp_path: pathlib.Path) -> None:
+    ac = "- [ ] **AC-1** (`FR-001`): 示例验收 tests: `tests/unit/test_demo.py`"
+    write_review_tree(tmp_path, _review_spec(ac))
+    (tmp_path / "docs" / "features" / "0.1" / "F001-demo" / "tasks.md").write_text(
+        REVIEW_TASKS_NO_TEST_GROUP, encoding="utf-8"
+    )
+    write_backlog(tmp_path, REVIEW_BACKLOG_ROW)
+    ok, errors = vsl.verify_repo(tmp_path)
+    assert not ok
+    assert any("[TEST] 组" in e for e in errors)
+
+
+def test_draft_missing_test_group_allowed(tmp_path: pathlib.Path) -> None:
+    ac = "- [ ] **AC-1** (`FR-001`): 示例验收 tests: `tests/unit/test_demo.py`"
+    write_review_tree(tmp_path, _review_spec(ac).replace("status: review", "status: draft"))
+    (tmp_path / "docs" / "features" / "0.1" / "F001-demo" / "tasks.md").write_text(
+        REVIEW_TASKS_NO_TEST_GROUP, encoding="utf-8"
+    )
+    write_backlog(
+        tmp_path,
+        "| F001-demo | 0.1 | draft | [spec](docs/features/0.1/F001-demo/spec.md) |",
+    )
+    ok, errors = vsl.verify_repo(tmp_path)
+    assert ok, errors

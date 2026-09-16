@@ -6,6 +6,8 @@
   - spec.md 是状态唯一真相源（design/tasks 不得声明独立 status）
   - gate v1：固定章节结构、Q/DQ 关闭、AC 引用第 4 节真实需求、
     review/done 的 tests 路径真实存在
+  - 进入开发流转（ready-for-development / in-progress / review）的 tasks.md
+    必须含 `### [TEST] 组`（层 2 旅程验收轨）
   - BACKLOG.md 与所有非 done Feature 双向集合一致
 
 纯函数 + CLI 分离，只用标准库；参考项目在此基础上抽了共享 spec_validation 模块
@@ -55,6 +57,10 @@ TASKS_SECTIONS = [
     "5. 明确后移",
 ]
 UNFINISHED_MARKERS = ("TODO", "TBD", "待补", "未补", "pending", "PENDING")
+# [TEST] 组是「进入代码开发前」的硬性要求：不含 done（历史 Feature 豁免，纳入会
+# 立刻破坏 F001/F004）与 draft（尚未进入流转）。
+TEST_GROUP_STATUSES = {"ready-for-development", "in-progress", "review"}
+TEST_GROUP_RE = re.compile(r"^###\s+\[TEST\]", re.M)
 REQ_RE = re.compile(r"\b(?:FR|DR|TR|IR|UX|NFR)-\d+\b")
 AC_RE = re.compile(r"^-\s+\[([ xX])\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
 Q_RE = re.compile(r"^-\s+\[([ xX])\]\s+[QD]Q?-\d+")
@@ -201,6 +207,8 @@ def check_feature(feat: dict, root: pathlib.Path, errors: list[str]):
             continue
         if re.match(r"^###\s+Phase", line.strip()) and not in_section2:
             tag("tasks.md 的 Phase 只能作为「2. 实现任务」下的三级标题")
+    if spec_fm.get("status") in TEST_GROUP_STATUSES and not TEST_GROUP_RE.search(tasks_clean):
+        tag("tasks.md 缺少必需的 [TEST] 组（层 2 旅程验收轨）")
     for line in tasks_clean.split("\n"):
         t = re.match(r"^-\s+\[([ xX])\]\s+(T\d+)", line)
         if t and t.group(1).lower() == "x" and any(m in line for m in UNFINISHED_MARKERS):
