@@ -126,7 +126,9 @@ cohort_verdict.json` 的确定性投影，不另建可手改真相表；SQLite/D
 ### 3.3 报告 schema
 
 `report.json` 包含 identity refs、stage results、rank IC/HAC uncertainty、quantile/decay、dedup、
-cost/capacity、sample-size/stability、structured failure 与成员诊断 verdict。cohort 级 BH-FDR/DSR
+cost/capacity、sample-size/stability、structured failure 与成员诊断 verdict、以及 `approximation`
+（NFR-004：preview 采样/缩窗时的显式近似标注，字段含 `is_approximate` 与 `reduced_dimensions[]`；
+canonical 恒为 `is_approximate=false`，不得因性能压力静默减少门禁或样本）。cohort 级 BH-FDR/DSR
 和可晋级 `promotion_verdict` 只存在于 `cohort_verdict.json`。每个阶段状态只能是
 `PASS | FAIL | UNDERPOWERED | INCOMPLETE | NOT_APPLICABLE`；`NOT_APPLICABLE` 需给原因，不能参与
 通过计数。
@@ -269,6 +271,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 | `AC-003` | unit + integration | `tests/unit/evaluation/test_required_statistics.py` | 估计器异常失败关闭，拒绝者在 cohort 分母；多成员 cohort 批量 fixture 验证分母完整 |
 | `AC-004` | unit + golden | `tests/unit/evaluation/test_cost_and_stability.py` | 三档成本、breakeven、rolling split、三级样本量（`underpowered`/`provisional`/`trustworthy`）与 dead 裁决 |
 | `AC-005` | integration + fault injection | `tests/integration/test_f007_atomic_publish.py` | 任一文件失败均无可见半成品/PASS |
+| `AC-011` | contract + integration | `tests/contract/test_f007_artifact_schemas.py` | `approximation` 标注存在；canonical 非近似；POSIX 逻辑路径；CLI 首屏字段快照 |
 | `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |
 | `AC-007` | integration + golden | `tests/integration/test_f007_synthesis.py` | 只读 canonical、五阶段漏斗、三栏输出、确定重建 |
 | `AC-008` | CLI integration | `tests/integration/test_f007_cli.py` | 非法 canonical 非零退出且 error code 稳定 |

@@ -303,6 +303,15 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "多成员 cohort 批量夹具"),
         ),
     ),
+    TextCheck(
+        "nfr004_approximation_covered",
+        "F007-D014",
+        requires=(
+            (F007_SPEC, "**AC-011** (`FR-006`, `NFR-004`)"),
+            (F007_DESIGN, "`approximation`"),
+            (F007_TASKS, "`approximation`"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
