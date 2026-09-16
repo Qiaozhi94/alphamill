@@ -241,7 +241,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 ### 数据 / 实体需求
 
-- **DR-001**：`GenerationRun` 应当持久化快照绑定（`research_snapshot_id`，或过渡期的显式元组：`schema_version`、`cutoff_time`、逐 dataset 成员映射 `{<dataset>: (data_version, value_digest, as_of_fidelity, event_time_min, event_time_max)}`、`symbol_map_digest`、`universe_calendar_digest` 与不可变 artifact 的 `provenance` 引用——字段与身份语义与 ADR-0007 一致）、seed、生成器与引擎版本、配置摘要、device、hostname、宇宙规模（pair 数与 `symbol_map_digest`）、档位与逐级计数；**宇宙规模是候选质量结论的前提条件，必须随运行留痕**。
+- **DR-001**：`GenerationRun` 应当持久化快照绑定（`research_snapshot_id`，或过渡期的显式元组：`schema_version`、`cutoff_time`、逐 dataset 成员映射 `{<dataset>: (data_version, value_digest, as_of_fidelity, event_time_min, event_time_max)}`、`symbol_map_digest`、`universe_calendar_digest` 与不可变 artifact 的 `provenance` 引用——字段与身份语义与 ADR-0007 一致）、seed、生成器与引擎版本、配置摘要（canonical config artifact 与 `config_digest`）、device、hostname、宇宙规模（pair 数与 `symbol_map_digest`）、档位与逐级计数；**宇宙规模是候选质量结论的前提条件，必须随运行留痕**。
 - **DR-002**：`FactorDef` 应当以规范化 JSON 内容寻址持久化，`factor_id = <generator>_<definition_digest[:12]>`（**不含 run 序号**；运行归属由 `run_id` 承载，跨 run 重跑同一表达式得到同一 `factor_id`），并保存 `generator`、表达式原文、`params`、`scope`、`data_columns`、`hypothesis_id`、`definition_digest`、`run_id` 与生成来源引用；**不得**保存任何评测结论。
 - **DR-003**：`HypothesisDef` 应当至少记录经济动机、作用机制、数据依赖、适用状态/regime（`applicable_state`，缺失时给显式默认值而非留空）、预期持有期、成本敏感性、来源与 generation；自动候选绑定 `mechanism_unknown` 假设并如实标记。
 - **DR-004**：协同池 meta-factor 应当持久化为可执行 `FactorDef`（`generator="pool"`），定义中保存成员 `factor_id` 与权重、池版本与产出运行引用，加载后 `compute` 可按成员 `FactorDef` 重算；成员集合或权重变化必须产生新 `factor_id` 版本而非原地改写。
@@ -261,7 +261,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 - **NFR-001**：产能：单次挖掘运行应当在执行机的一个夜间训练窗口（22:00–06:30，≤8.5h）内产出 ≥50 个通过生成侧自检的候选（M2 出口量化线）。
 - **NFR-002**：资源：挖掘训练按架构 §7.1 的时段表在夜槽内以 ≤6GB 独占运行（当前执行机 RTX 4060 Laptop 8GB 的标定值），显存上限可配并写入运行记录；启动前自检可用显存，低于上限或与在跑任务撞车时进单槽 FIFO 队列，不允许并行抢卡。**FIFO 须可验证**：入队 / 取锁 / 释放 / 等待超时各写一条带 `queue_seq`、`run_id`、时间戳的状态记录；先入队者先取锁，释放后由队首等待者取得；等待超过可配超时则留 `REJECTED` 终态（`termination=queue_timeout`），不无限挂起。
-- **NFR-003**：可复现：相同 `(seed, 快照绑定, code digest, 配置摘要)` 重跑应当得到相同的 factor_id 集合与相同的协同池成员。
+- **NFR-003**：可复现：相同 `(seed, 快照绑定, code digest, config_digest)` 重跑应当得到相同的 factor_id 集合与相同的协同池成员。配置摘要定义为 canonical config artifact（键排序、排除时间戳/主机字段）的 sha256，artifact 随运行落盘、可重放；RNG 由 `seed` 稳定派生，训练侧开启 torch 确定性开关；**CPU/GPU 差异只允许影响浮点末位、不改变候选集合**——本项断言的是集合与池成员一致（跨 device 亦然），不承诺逐位数值相同。
 - **NFR-004**：安全 / 边界：生成运行在**进程级 egress guard** 下执行（runner 入口替换 socket 构造函数、只放行 AF_UNIX；这是进程级护栏，**不等于内核级网络隔离**——本 feature 不引入 netns/容器，如实声明）；写路径白名单限定 `reports/generation/<run_id>/`，生成器进程不具备写入证据台账、留出数据或晋级状态的能力（AI 权限红线、ADR-0003）。两类护栏都 **fail-closed**：护栏安装失败或白名单无法生效即拒绝启动，不降级为"仅警告"。
 - **NFR-005**：兼容性：执行机的 WSL2 + CUDA 为主路径；开发机无 GPU，只允许 CPU 回退用于单元与契约测试；运行记录必须标注 `device` 与 hostname，开发机运行不得用于产能或显存结论。
 
@@ -305,12 +305,12 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 - [ ] **AC-002** (`FR-002`): vendor 目录内每处改动带 alphamill 标注、VENDORED.md 记录上游 repo/commit/日期/修改清单/许可，且 vendor 不反向依赖胶水模块 — tests: `tests/unit/test_f003_vendor_hygiene.py`
 - [ ] **AC-003** (`FR-003`, `DR-001`): 按显式绑定构造张量；invalid 版本或 digest 不符时拒绝启动并留 `rejected` 终态 run.json（含 termination/reason/时间戳与 DR-001 运行字段）；张量与 reader 行集在抽样点数值一致且不可交易时点掩码为不可用 — tests: `tests/integration/test_f003_lake_tensor.py`
 - [ ] **AC-004** (`FR-004`): 编译后的 compute 闭包与 vendor 张量求值在同一切片容差内一致；meta.expression 可反解为等价表达式；data_columns 由 feature_map 反解得到；落盘后加载的 FactorDef 可直接执行 — tests: `tests/unit/test_f003_alphagen_adapter.py`
-- [ ] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数 — tests: `tests/unit/test_f003_operator_registry.py`
+- [ ] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数；拒绝事件含表达式原文与原因码且可按 run 查询（TR-002） — tests: `tests/unit/test_f003_operator_registry.py`
 - [ ] **AC-006** (`FR-005`, `NFR-001`): 换手惩罚/可达性预筛生效——零交易型表达式不进池；成本后收益预筛参数（`cost_model`、`min_after_cost_return`）写入 run.json 的 objective；在执行机上单次挖掘入册 ≥50 个通过自检候选 — tests: `tests/integration/test_f003_generation_run.py`
 - [ ] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；2 日 time-box 只裁 L0 锁定或 L1 降级，L2 须 L1 连续 2 周判据（ADR-0001）；ADR-0001 两条 M2 冒烟义务（逐级计数自第一天入库、奖励频率抽查）可核验，下游漏斗级以 owner=F007/not_yet_available 显式占位；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
 - [ ] **AC-008** (`FR-007`, `DR-004`): 协同池导出为 meta-factor 并持久化为可执行 FactorDef（`generator=pool`，加载后可直接重算），成员 factor_id 与权重可反解，重算值与训练期记录容差内一致，成员或权重变化产生新 `factor_id` 版本 — tests: `tests/integration/test_f003_alpha_pool.py`
-- [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空） — tests: `tests/integration/test_f003_generation_run.py`
-- [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；运行记录标注 device 与 hostname，开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`
+- [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空）；FactorDef 以内容寻址 JSON 持久化且不含结论字段（DR-002）；HypothesisDef 字段齐备（DR-003）；completed 运行的 run_completed 事件可查（TR-001）；重跑得到相同协同池成员（NFR-003）；配置摘要以 canonical config artifact + `config_digest` 落盘（见 NFR-003） — tests: `tests/integration/test_f003_generation_run.py`
+- [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；FIFO 先入队先取锁、释放后队首取得、等待超时留 `queue_timeout` 终态；运行记录持久化 `device` / `hostname` / `kronos_offload` 观测（含卸载契约不可用时的如实标记），开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`
 - [ ] **AC-011** (`NFR-004`, `IR-001`): egress guard 安装后出网尝试被拒绝（socket 构造被替换、只放行 AF_UNIX；断言范围为**进程级护栏，非内核隔离**）、护栏缺失时拒绝启动；写 `reports/generation/<run_id>/` 之外路径（证据台账/留出/晋级状态）的尝试被拒绝；缺绑定的 `mine` 请求非零退出并留 `rejected` 终态 run.json — tests: `tests/integration/test_f003_boundaries.py`, `tests/unit/test_f003_cli_contract.py`
 - [ ] **AC-012** (`IR-003`): `GenerationRun` manifest 与 FactorDef JSON 均持久化 `schema_version`；`show` 遇到未知 `schema_version` 以非零退出拒绝，不做兼容性猜测 — tests: `tests/unit/test_f003_cli_contract.py`
 

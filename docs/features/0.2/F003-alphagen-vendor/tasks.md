@@ -67,7 +67,7 @@ updated: 2026-09-14
 - [ ] T025 (`NFR-002`, `AC-010`): 实现 `gpu_slot`——显存自检（上限可配，不写死常数）、flock 单槽 FIFO（`queue_seq` / 取锁 / 释放 / 超时状态记录）、训练窗口校验、`--allow-cpu` / `--allow-offhours` 显式开关，运行记录写 `hostname` / `device` / `kronos_offload` 观测；训练窗口开始时按 F004 运行时契约发起 Kronos 卸载请求（卸载动作 owner 是 F004；契约不可用时记 `offload_contract_unavailable` 并保持 FIFO 等待，不 kill 进程） — verify: `tests/unit/test_f003_gpu_slot.py`
 - [ ] T026 (`FR-007`, `DR-004`, `AC-008`): 实现协同池导出为可执行 FactorDef（`generator=pool`，加载后可按成员重算）与 `pool_store`，成员权重可反解且重算一致，成员或权重变化产生新 `factor_id` — verify: `tests/integration/test_f003_alpha_pool.py`
 - [ ] T027 (`IR-001`, `FR-001`, `AC-011`): 实现 CLI `mine` 子命令与全部启动期拒绝条件（缺绑定/invalid/档位不明/窗口外/无 CUDA） — verify: `tests/unit/test_f003_cli_contract.py`
-- [ ] T028 (`NFR-003`, `AC-009`): 实现并验证可复现性——同 `(seed, binding, code_digest, config)` 重跑得到相同 factor_id 集合与相同池成员 — verify: `tests/integration/test_f003_generation_run.py`
+- [ ] T028 (`NFR-003`, `AC-009`): 实现并验证可复现性——canonical config artifact 与 `config_digest` 落盘、seed 稳定派生、torch 确定性开关；同 `(seed, binding, code_digest, config_digest)` 重跑得到相同 factor_id 集合与相同池成员 — verify: `tests/integration/test_f003_generation_run.py`
 - [ ] T029 (`NFR-001`, `AC-006`): 在执行机跑一次完整挖掘运行，入册 ≥50 个通过自检候选并记录逐级计数、hostname 与设备 — verify: `tests/integration/test_f003_generation_run.py`
 
 ## 3. 验证与验收任务
