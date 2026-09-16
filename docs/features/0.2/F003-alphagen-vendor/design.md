@@ -105,6 +105,7 @@ reports/generation/<run_id>/
 - `definition_digest = sha256(canonical_json(定义字段))`，规范化时**排除** `factor_id`、`run_id`、`created_at`——同一表达式在不同 run 得到同一 digest，用于重复定义识别（拒绝原因码 `duplicate_definition`）；
 - `factor_id = <generator>_<definition_digest[:12]>`：人读前缀 + 内容后缀，**不含 run 序号**——同一表达式跨 run 重跑得到同一 `factor_id`（NFR-003）；运行归属由独立的 `run_id` 字段承载，不进入身份；
 - **禁止字段**：`ic`、`rank_ic`、`pnl`、`verdict`、`promoted` 等结论字段由 schema 白名单显式拒绝（AC-001）。
+- **加载契约（可执行恢复）**：落盘 DTO 与架构 §4.1 的可执行 `FactorDef` 是**同一对象的两种形态**——磁盘只存定义字段，加载时由 `alphagen_adapter` 依据 `expression` 与校验过 digest 的 `feature_map` 重建 `compute` 闭包，并还原 `meta`（含 `meta["expression"]` 与假设来源）；`factor_store.load()` 必须返回可直接执行的对象，不得要求调用方自行重新编译（AC-001/AC-004）。
 
 **HypothesisDef**：`hypothesis_id` / `mechanism`（经济动机与作用机制）/ `data_columns` / `applicable_state`（适用状态/regime；catalog 与自动候选给显式默认值 `unspecified`，不隐式留空）/ `expected_holding_period` / `cost_sensitivity` / `source` / `generation`。内置 `mechanism_unknown` 条目供自动候选绑定，并在 FactorDef 上如实标记（PRD FR2.1）。
 
@@ -217,10 +218,10 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
-| `AC-001` | unit | `tests/unit/test_f003_generator_contract.py` | 两后端同一 schema；含 `ic`/`verdict` 等结论字段的结果被拒绝 |
+| `AC-001` | unit | `tests/unit/test_f003_generator_contract.py` | 两后端同一 schema；含 `ic`/`verdict` 等结论字段的结果被拒绝；落盘 DTO 加载后可执行（compute 重建、meta 还原） |
 | `AC-002` | unit | `tests/unit/test_f003_vendor_hygiene.py` | vendor 内无标注差异行报错；vendor 内 `import alphamill` 报错；`VENDORED.md` 五项齐备 |
 | `AC-003` | integration | `tests/integration/test_f003_lake_tensor.py` | invalid/digest 不符拒绝启动；张量与 reader 抽样点容差内一致；不可交易时点掩码为不可用 |
-| `AC-004` | unit | `tests/unit/test_f003_alphagen_adapter.py` | 编译闭包与张量求值一致；表达式反解等价；`data_columns` 由 `feature_map` 反解 |
+| `AC-004` | unit | `tests/unit/test_f003_alphagen_adapter.py` | 编译闭包与张量求值一致；表达式反解等价；`data_columns` 由 `feature_map` 反解；加载后的 FactorDef 可直接执行 |
 | `AC-005` | unit | `tests/unit/test_f003_operator_registry.py` | 启用算子全部登记；未登记/前视/非法跨 pair 候选按原因码计数拒绝 |
 | `AC-006` | integration | `tests/integration/test_f003_generation_run.py` | 零变号表达式被可达性预筛拒绝；一次运行入册 ≥50（在执行机上判定） |
 | `AC-007` | integration | `tests/integration/test_f003_smoke_gate.py` | 四条判据逐条二元判定并入 manifest；任一触发即降级裁决；L1→L0 回切请求被拒 |
