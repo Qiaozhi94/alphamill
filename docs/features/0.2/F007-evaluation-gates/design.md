@@ -283,7 +283,12 @@ F005 前端**只经** `src/alphamill/api/` 的统一只读 API 消费 report、c
 | `AC-004` | unit + golden | `tests/unit/evaluation/test_cost_and_stability.py` | 三档成本、breakeven、rolling split、三级样本量（`underpowered`/`provisional`/`trustworthy`）与 dead 裁决 |
 | `AC-005` | integration + fault injection | `tests/integration/test_f007_atomic_publish.py` | 任一文件失败均无可见半成品/PASS |
 | `AC-011` | contract + integration | `tests/contract/test_f007_artifact_schemas.py` | `approximation` 标注存在；canonical 非近似；POSIX 逻辑路径；CLI 首屏字段快照 |
-| `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |
+| `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`tests/unit/experiment_store/test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |
+| 输入契约（AC-006/AC-008） | contract | `tests/contract/test_f007_upstream_contracts.py` | F002/F003/F008 上游契约摄入与 `source=placeholder` 分层 |
+| `AC-003` cohort 登记 | integration | `tests/integration/test_f007_canonical_registry.py` | 冻结 cohort、收齐校验、原子 finalize、official population 可重建 |
+| `AC-003` 全链控制 | integration | `tests/integration/test_f007_controls.py` | 正控制/白噪声/泄漏四类 fixture；多成员分母完整 |
+| 变异证据 | mutation | `tests/mutation/test_f007_gate_mutations.py` | 定向 mutant 全部被杀死；`reports/mutation/f007/mutation_report.json` |
+| 第二实现对照 | unit | `tests/unit/evaluation/test_second_implementation.py` | 独立实现与自研统计在既定容差内一致 |
 | `AC-007` | integration + golden | `tests/integration/test_f007_synthesis.py` | 只读 canonical、五阶段漏斗、三栏输出、确定重建 |
 | `AC-008` | CLI integration | `tests/integration/test_f007_cli.py` | 非法 canonical 非零退出且 error code 稳定；`signals_log` 的 `source=placeholder` 在 canonical 被拒、preview 标注 |
 | `AC-001`/`AC-004` 真实环境 | real-env integration（执行机） | `tests/integration/test_f007_controls_real.py`，`ALPHAMILL_INTEGRATION=1` | 绑定不可变 snapshot ID/digest、记录 hostname；与 fixture 控制分属不同命令 |

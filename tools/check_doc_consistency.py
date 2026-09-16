@@ -508,10 +508,33 @@ def check_active_feature_indexes(root: pathlib.Path) -> list[tuple[str, str]]:
     return errors
 
 
+TEST_FILE_RE = re.compile(r"tests/[A-Za-z0-9_./-]+\.py")
+
+
+def check_f007_design_test_map_covers_tasks(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F007-D020：tasks 声明的测试文件必须能在 design §8 映射表里找到。
+
+    单向校验（tasks ⊆ design）：design 允许比 tasks 多列后备方案，反之则说明
+    tasks 的 verify 载体没有落进设计映射，测试面无人负责。
+    """
+    errors: list[tuple[str, str]] = []
+    design_map = set(TEST_FILE_RE.findall(read(root, F007_DESIGN)))
+    for path in sorted(set(TEST_FILE_RE.findall(read(root, F007_TASKS)))):
+        if path not in design_map:
+            errors.append(
+                (
+                    "f007_design_test_map_covers_tasks",
+                    f"design §8 未映射 tasks 使用的测试文件 {path}",
+                )
+            )
+    return errors
+
+
 CUSTOM_CHECKS = (
     check_f007_declares_f003,
     check_ac_body_covers_clauses,
     check_active_feature_indexes,
+    check_f007_design_test_map_covers_tasks,
 )
 
 

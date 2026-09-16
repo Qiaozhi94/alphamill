@@ -140,3 +140,15 @@ def test_ac_body_coverage_goes_red(tmp_path: pathlib.Path) -> None:
         encoding="utf-8",
     )
     assert cdc.AC_FINDING in _check_ids(cdc.check_ac_body_covers_clauses(tmp_path))
+
+
+def test_f007_design_test_map_goes_red_on_unmapped_test(tmp_path: pathlib.Path) -> None:
+    _materialize(tmp_path, set())
+    tasks = tmp_path / cdc.F007_TASKS
+    tasks.write_text(
+        tasks.read_text(encoding="utf-8")
+        + "\n- [ ] T099: 幽灵用例 — verify: `tests/unit/evaluation/test_ghost_unmapped.py`\n",
+        encoding="utf-8",
+    )
+    errors = cdc.check_f007_design_test_map_covers_tasks(tmp_path)
+    assert "tests/unit/evaluation/test_ghost_unmapped.py" in " ".join(msg for _, msg in errors)
