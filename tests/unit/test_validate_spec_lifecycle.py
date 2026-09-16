@@ -83,6 +83,12 @@ REVIEW_TASKS = REVIEW_TASKS_NO_TEST_GROUP.replace(
     "### [TEST] 组：层 2 旅程验收轨（必填）\n\n"
     "- [ ] T009 [TEST] (`AC-1`): 旅程验收",
 )
+REVIEW_TASKS_TEST_GROUP_IN_SECTION5 = REVIEW_TASKS_NO_TEST_GROUP.replace(
+    "## 5. 明确后移\n无",
+    "## 5. 明确后移\n\n"
+    "### [TEST] 组：层 2 旅程验收轨（必填）\n\n"
+    "- [ ] T009 [TEST] (`AC-1`): 放错章节不算数",
+)
 REVIEW_BACKLOG_ROW = "| F001-demo | 0.1 | review | [spec](docs/features/0.1/F001-demo/spec.md) |"
 
 
@@ -193,3 +199,16 @@ def test_draft_missing_test_group_allowed(tmp_path: pathlib.Path) -> None:
     )
     ok, errors = vsl.verify_repo(tmp_path)
     assert ok, errors
+
+
+def test_test_group_in_wrong_section_rejected(tmp_path: pathlib.Path) -> None:
+    """R2-007：[TEST] 标题出现在第 3 节之外不算数（放错章节必须判红）。"""
+    ac = "- [ ] **AC-1** (`FR-001`): 示例验收 tests: `tests/unit/test_demo.py`"
+    write_review_tree(tmp_path, _review_spec(ac))
+    (tmp_path / "docs" / "features" / "0.1" / "F001-demo" / "tasks.md").write_text(
+        REVIEW_TASKS_TEST_GROUP_IN_SECTION5, encoding="utf-8"
+    )
+    write_backlog(tmp_path, REVIEW_BACKLOG_ROW)
+    ok, errors = vsl.verify_repo(tmp_path)
+    assert not ok
+    assert any("[TEST] 组" in e for e in errors)
