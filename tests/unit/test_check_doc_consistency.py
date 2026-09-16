@@ -17,7 +17,14 @@ from tools import check_doc_consistency as cdc
 
 REPO = cdc.ROOT
 TEXT_CHECK_IDS = [c.check_id for c in cdc.TEXT_CHECKS]
-ALL_DOC_FILES = {cdc.SPEC, cdc.DESIGN, cdc.TASKS, cdc.F007_SPEC}
+ALL_DOC_FILES = {
+    cdc.SPEC,
+    cdc.DESIGN,
+    cdc.TASKS,
+    cdc.F007_SPEC,
+    cdc.F007_DESIGN,
+    cdc.F007_TASKS,
+}
 
 
 def _materialize(tmp_path: pathlib.Path, rels: set[str]) -> None:

@@ -6,7 +6,7 @@ related_features: [F002, F004]
 topics: [evaluation, validation, evidence, experiments]
 doc_kind: tasks
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-17
 ---
 
 # F007：统一评测台与证据门禁 - 任务
@@ -59,7 +59,16 @@ updated: 2026-09-13
 - [ ] T021 (`AC-002`, `AC-005`): 运行 F007 定向变异并确认每个 mutant 被门禁杀死 — verify: `pytest -q tests/mutation/test_f007_gate_mutations.py`
 - [ ] T022 (`AC-001`, `AC-003`, `AC-004`, `AC-007`): 在不可变 crypto fixture 跑四类正负控制并归档 manifest — verify: `pytest -q tests/integration/test_f007_controls.py`
 - [ ] T023 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
-- [ ] T024: 回写 spec 的真实 tests/验收证据、BACKLOG 和 feature 状态 — verify: `python3 tools/verify.py`
+### [TEST] 组：层 2 旅程验收轨（必填）
+
+> 编写早、执行晚：以下条目在 Phase 1 先以红灯立起（夹具与断言先写），收尾全量执行；
+> 每个旅程步骤至少一条可执行断言。缺失该组时 SDD Flow T3 开工门禁拒绝流转。
+
+- [ ] T027 [TEST] (`US-001`, `AC-001`, `AC-011`): 旅程 US-001 端到端验收——固定 fixture 连跑两次 preview：报告在排除 provenance 时间戳后稳定、canonical 台账与留出预算台账均零行、preview 越权写 official population/留出被拒并留 `evaluation.gate_rejected`、CLI 首屏含 tier/data digest/首个失败原因、近似标注在报告中显式可见 — verify: `pytest -q tests/integration/test_f007_execution_tiers.py tests/integration/test_f007_cli.py`
+- [ ] T028 [TEST] (`US-002`, `AC-002`, `AC-003`, `AC-004`, `AC-009`, `AC-010`, `AC-012`): 旅程 US-002 端到端验收——冻结 cohort 后跑正控制/白噪声/故意泄漏 canonical：正控制五阶段完整且样本量三级裁决正确、白噪声被统计门拦截、泄漏被方法论门拦截；成员未收齐时 finalize 非零且 cohort 保持 OPEN；拒绝者仍入分母（多成员批量夹具）；必需估计器异常时 stage 不为 PASS 且 `promotion_verdict` 不为 `promising`；manifest 记录三层无前视状态，最终确认窗统计量不出现在任何 Agent 可读产物 — verify: `pytest -q tests/unit/evaluation/test_required_statistics.py tests/unit/evaluation/test_cost_and_stability.py tests/unit/validation/test_methodology_gate.py tests/integration/test_f007_controls.py`
+- [ ] T029 [TEST] (`US-003`, `AC-005`, `AC-007`, `AC-008`): 旅程 US-003 端到端验收——从 finalized canonical ledger 确定性重建 synthesis：拒绝者进入漏斗分母、五阶段损失按 stage/owner/mechanism 三维聚合、事实/推断/建议三栏齐备；只有 preview 产物时输出空 canonical 结果；report/curves 标量互推在容差内一致 — verify: `pytest -q tests/integration/test_f007_synthesis.py tests/contract/test_f007_artifact_schemas.py`
+
+- [ ] T030: 回写 spec 的真实 tests/验收证据、BACKLOG 和 feature 状态 — verify: `python3 tools/verify.py`
 
 ## 4. 依赖与并行关系
 
@@ -68,6 +77,7 @@ updated: 2026-09-13
 - `T008,T009,T010 -> T011,T016,T017`：先有可独立测试的门，再组装 canonical 全链。
 - `T011,T012 -> T014,T015`：综合只消费已发布并登记的 canonical 证据。
 - `T005 [P]` 可与 T004 并行：分别修改隔离能力与纯身份模块，不共享状态。
+- `T027/T028/T029 -> T030`：三条旅程验收全绿后才回写 spec 验收证据与状态。
 
 ## 5. 明确后移
 

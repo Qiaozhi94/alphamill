@@ -26,6 +26,8 @@ SPEC = "docs/features/0.2/F003-alphagen-vendor/spec.md"
 DESIGN = "docs/features/0.2/F003-alphagen-vendor/design.md"
 TASKS = "docs/features/0.2/F003-alphagen-vendor/tasks.md"
 F007_SPEC = "docs/features/0.2/F007-evaluation-gates/spec.md"
+F007_DESIGN = "docs/features/0.2/F007-evaluation-gates/design.md"
+F007_TASKS = "docs/features/0.2/F007-evaluation-gates/tasks.md"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -162,6 +164,18 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         "vendor_hygiene_has_upstream_baseline",
         "F003-D021",
         requires=((SPEC, "上游基线"), (TASKS, "_upstream_baseline.json")),
+    ),
+    # ---- F007 文档检视 Round 1 修复断言（finding id 前缀 F007-D）----
+    TextCheck(
+        "f007_test_group_present",
+        "F007-D001",
+        requires=(
+            (F007_TASKS, "### [TEST] 组：层 2 旅程验收轨"),
+            (F007_TASKS, "T027 [TEST]"),
+            (F007_TASKS, "T029 [TEST]"),
+            (F007_TASKS, "T030: 回写 spec"),
+        ),
+        forbids=((F007_TASKS, "- [ ] T024: 回写 spec"),),
     ),
 )
 
