@@ -22,7 +22,7 @@ updated: 2026-09-17
 
 ## 1. 前置条件
 
-- [ ] T001 (`DR-001`, `IR-002`, `AC-006`): 固定 F002 dataset/version/value-digest reader 与不可变 symbol-map ref，并实现 ADR-0007 ResearchSnapshot builder/reader contract；builder 只接收显式 universe/calendar artifact，验证其内容摘要并在 provenance 保留不可变引用；preview latest 必须先冻结，canonical 只收 snapshot ID — verify: `tests/contract/test_f007_upstream_contracts.py`、`tests/unit/experiment_store/test_research_snapshot.py`
+- [ ] T001 (`DR-001`, `IR-002`, `AC-006`): 固定 F002 dataset/version/value-digest reader 与不可变 symbol-map ref，并实现 ADR-0007 ResearchSnapshot builder/reader contract；builder 只接收显式 universe/calendar artifact，验证其内容摘要并在 provenance 保留不可变引用；preview latest 必须先冻结，canonical 只收 snapshot ID；同时实现 F003 上游只读摄入契约（`generation.run_completed`/`generation.candidate_rejected`、算子能力登记表、协同池 `FactorDef`）— verify: `tests/contract/test_f007_upstream_contracts.py`、`tests/unit/experiment_store/test_research_snapshot.py`
 - [ ] T002 (`FR-004`, `FR-005`): 预注册 v1 方法/阈值/cohort schema 与两个正控制、白噪声、泄漏负控制 — verify: `tests/fixtures/f007/README.md`
 - [ ] T003 (`NFR-003`): 为 preview、canonical writer 和留出 reader 建立 capability 测试夹具 — verify: `tests/integration/test_f007_execution_tiers.py`
 
@@ -46,7 +46,7 @@ updated: 2026-09-17
 
 ### Phase 3：综合、控制与契约交付
 
-- [ ] T014 (`FR-006`, `AC-007`): 实现只消费 canonical 的 synthesis builder 与五阶段/三维失败汇总 — verify: `tests/integration/test_f007_synthesis.py`
+- [ ] T014 (`FR-006`, `AC-007`): 实现只消费 canonical 的 synthesis builder 与五阶段/三维失败汇总；漏斗第一级只读摄取 F003 的 `generation.run_completed`（仅 `status=completed`）与 `generation.candidate_rejected`（按原因码） — verify: `tests/integration/test_f007_synthesis.py`
 - [ ] T015 (`FR-006`, `UX-002`, `AC-005`): 实现 report/curves/synthesis schema reader 并验证曲线-标量互推 — verify: `tests/contract/test_f007_artifact_schemas.py`
 - [ ] T016 (`FR-003`, `FR-004`, `FR-005`, `AC-003`): 跑正控制、白噪声与故意泄漏 golden，全链记录拒绝者 — verify: `tests/integration/test_f007_controls.py`
 - [ ] T017 (`FR-001`, `FR-002`, `NFR-003`): 对 future-fill、embargo、guard 注册、preview writer、异常吞噬与 publish 完整性运行定向变异 — verify: `tests/mutation/test_f007_gate_mutations.py`

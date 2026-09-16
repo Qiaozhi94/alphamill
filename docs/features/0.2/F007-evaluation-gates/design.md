@@ -2,11 +2,11 @@
 kind: feature
 id: F007
 version: "0.2"
-related_features: [F002, F004]
+related_features: [F002, F003, F004]
 topics: [evaluation, validation, evidence, experiments]
 doc_kind: design
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-17
 ---
 
 # F007：统一评测台与证据门禁 - 设计
@@ -22,6 +22,7 @@ updated: 2026-09-13
 - **行为契约**：`spec.md` FR-001~FR-006、DR-001~DR-004、TR-001~TR-003、IR-001~IR-003
 - **PRD / Architecture**：PRD FR3/FR7；架构 §4.2/§4.5
 - **ADR / 上游 Contract**：ADR-0003、ADR-0005、ADR-0006、ADR-0007；F002 dataset/version/value digest
+- **F003 生成侧 Contract（只读摄入）**：`generation.run_completed`（仅 `status=completed` 的运行）与 `generation.candidate_rejected`（漏斗第一级）；算子能力登记表（FR-002 的方法论守卫已登记能力清单来源）；协同池 meta-factor（`generator="pool"` 的可执行 `FactorDef`）
 - **实现约束**：研究只读有效 Parquet；执行层级显式传参；Agent 无 canonical writer/留出能力；
   必需门失败关闭；不引入 ml4t 运行时依赖
 
@@ -61,6 +62,7 @@ SynthesisBuilder ── finalized canonical cohort manifests + curves ── syn
 - `src/alphamill/validation/methodology_gate.py`：能力清单、静态检查与运行时边界检查；
 - `src/alphamill/factor_factory/bench/`：信号、统计、成本、稳定性与 artifact schema；
 - `src/alphamill/evaluation/cli.py`：薄入口，不承载裁决逻辑。
+- `src/alphamill/evaluation/upstream_contracts.py`：只读摄入 F003 的 `generation.*` 事件、算子能力登记表与协同池 `FactorDef`；F007 不写 F003 运行记录，也不解析 vendor 内部结构。
 
 依赖方向固定为 CLI → orchestration → domain evaluators/store ports → F002 reader/filesystem。
 bench 不读取环境变量、不决定 tier/窗口/cohort，也不写 official population。synthesis 不访问 preview。
@@ -164,6 +166,13 @@ verdict 和 artifact URI；领域错误输出稳定 error code，不输出 PASS-
 
 稳定错误码：`E_INPUT_INVALID`、`E_DATA_DIGEST_MISMATCH`、`E_METHODOLOGY_REJECTED`、
 `E_REQUIRED_METRIC_FAILED`、`E_CANONICAL_FORBIDDEN`、`E_COHORT_FROZEN`、`E_PUBLISH_INCOMPLETE`。
+
+### 上游 Contract（F003）
+
+- **漏斗第一级只读摄入**：`generation.run_completed` 只在 `status=completed` 的运行上消费；`generation.candidate_rejected` 按原因码（未登记算子 / 前视 / 可达性不足 / 重复定义）计数。两者共同构成漏斗第一级，拒绝者仍计入分母。
+- **算子能力登记表**：装载为方法论门的「已登记能力」清单；未登记 capability 默认拒绝（FR-002），因此守卫覆盖面随登记表单调增强。
+- **协同池**：以 `generator="pool"` 的可执行 `FactorDef` 与普通因子走同一评测路径，不因来源或聚合形态获得豁免；其成员 `factor_id` 与权重作为 provenance 进入 manifest。
+- 摄入只读且按 `schema_version` 消费：F007 不写 F003 侧记录，也不读取 vendor 内部结构。
 
 ### Event / Trace Contract
 

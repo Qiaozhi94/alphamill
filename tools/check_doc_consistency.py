@@ -177,6 +177,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         ),
         forbids=((F007_TASKS, "- [ ] T024: 回写 spec"),),
     ),
+    TextCheck(
+        "f007_ingests_f003_contracts",
+        "F007-D002",
+        requires=(
+            (F007_DESIGN, "generation.run_completed"),
+            (F007_DESIGN, "generation.candidate_rejected"),
+            (F007_DESIGN, "算子能力登记表"),
+            (F007_TASKS, "generation.candidate_rejected"),
+        ),
+        forbids=((F007_DESIGN, "related_features: [F002, F004]"),),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
