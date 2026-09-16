@@ -100,7 +100,7 @@ updated: 2026-09-14
 
 - ResearchSnapshot 的实现与 `research_snapshot_id` 唯一绑定形态 → `F007`：身份归 `experiment_store/`，F003 过渡期用显式元组绑定（spec Q-002）。
 - 因子注册表的评测摘要回写、`|ρ|>0.99` 查重与生命周期状态机 → `F007` / `F006`：依赖评测结论，生成器不持有。
-- 漏斗逐级入库与多重检验 cohort 记账 → `F007`：F003 只产 `generation.*` 事件作为第一级数据源。
+- 漏斗逐级入库（纯度门之后各级）与多重检验 cohort 记账 → `F007`：F003 只产 `generation.*` 事件作为第一级数据源，并在当日冒烟 manifest 中以 `owner=F007` + `state=not_yet_available` 显式占位（ADR-0001 两条 M2 义务之一），不静默省略或记 0。
 - 宇宙扩容 30~50 对与新 pair 质量流程（FR1.5）→ `F008`：**并行推进而非后移**（spec Q-001 已裁决），本 feature 只消费其产出的宇宙，不实现扩容本身。
 - 批量移植 GTJA191 / WQ101 公式库作为种子宇宙 → 后续 Feature：需先做 crypto 24/7 窗口重定义与 A 股专有因子剔除。
 - 模型族级联与 DML 诊断 → 独立研究 Feature（`F007` spec §3 已把它指向 F003 或独立立项；本 spec 不纳入范围）。

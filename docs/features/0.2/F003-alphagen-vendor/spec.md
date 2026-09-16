@@ -71,7 +71,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 **为什么是这个优先级**：ADR-0001 的选型结论依赖这个闸门；闸门不跑，M2 的全部批量能力承诺都建立在未验证假设上。单人 time-box 最容易自我豁免，因此判据必须是自动判定的二元项。
 
-**独立测试**：在最小数据切片上执行 `alphamill-generate smoke`，检查 ADR-0001 的 **L1 三条判据**逐条产出 `pass/fail` 与时间戳，并写入当日冒烟 manifest。
+**独立测试**：在最小数据切片上执行 `alphamill-generate smoke`，检查 ADR-0001 的 **L1 三条判据**逐条产出 `pass/fail` 与时间戳，并核验 ADR-0001 的两条 M2 义务（逐级计数自第一天入库、奖励频率抽查）已写入当日冒烟 manifest。
 
 **验收场景**：
 
@@ -212,6 +212,11 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 系统应当把 ADR-0001 的切换判据实现为自动判定的二元项：2 个工作日 time-box 内只输出「主引擎锁定 L0」或「降级到 L1」的裁决，并把裁决、触发判据与时间戳写入当日冒烟 manifest；**L1→L2 的降级不由 time-box 裁决**，只在 L1 连续 2 周满足 ADR-0001 判据（周候选 <50 或零候选通过无前视审计）时触发；降级不自动回切，回切须重开一轮 time-box。
 
+冒烟期同时履行 ADR-0001「M2 冒烟验收」的两条义务，不推迟到"以后补"：
+
+1. **漏斗逐级计数自第一天入库**：F003 负责生成侧第一级（`proposed`／各拒绝原因码／`registered`）写入 `run.json` 与 `generation.*` 事件；纯度门之后的下游各级在当日冒烟 manifest 中按 `owner=F007` + `state=not_yet_available` **显式占位**（不得省略、不得记为 0），交接契约为 `generation.*` 事件与算子能力清单（见 §5 明确后移）；
+2. **奖励频率维度抽查**：对首批候选抽查换手惩罚／≥30 笔 90 天可达性预筛是否生效、IC 最优解是否机制性偏向零交易/持仓型表达式，抽查记录写入当日冒烟 manifest。
+
 #### Scenario: time-box 用尽
 
 - GIVEN 第 2 个工作日结束时仍未跑通 1 个 PPO epoch
@@ -302,7 +307,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 - [ ] **AC-004** (`FR-004`): 编译后的 compute 闭包与 vendor 张量求值在同一切片容差内一致；meta.expression 可反解为等价表达式；data_columns 由 feature_map 反解得到；落盘后加载的 FactorDef 可直接执行 — tests: `tests/unit/test_f003_alphagen_adapter.py`
 - [ ] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数 — tests: `tests/unit/test_f003_operator_registry.py`
 - [ ] **AC-006** (`FR-005`, `NFR-001`): 换手惩罚/可达性预筛生效——零交易型表达式不进池；在执行机上单次挖掘入册 ≥50 个通过自检候选 — tests: `tests/integration/test_f003_generation_run.py`
-- [ ] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；2 日 time-box 只裁 L0 锁定或 L1 降级，L2 须 L1 连续 2 周判据（ADR-0001）；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
+- [ ] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；2 日 time-box 只裁 L0 锁定或 L1 降级，L2 须 L1 连续 2 周判据（ADR-0001）；ADR-0001 两条 M2 冒烟义务（逐级计数自第一天入库、奖励频率抽查）可核验，下游漏斗级以 owner=F007/not_yet_available 显式占位；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
 - [ ] **AC-008** (`FR-007`, `DR-004`): 协同池导出为 meta-factor，成员 factor_id 与权重可反解，重算值与训练期记录容差内一致，成员变化产生新版本 — tests: `tests/integration/test_f003_alpha_pool.py`
 - [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空） — tests: `tests/integration/test_f003_generation_run.py`
 - [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；运行记录标注 device 与 hostname，开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`

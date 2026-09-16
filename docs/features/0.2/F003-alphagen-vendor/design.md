@@ -113,7 +113,7 @@ reports/generation/<run_id>/
 
 **GenerationRun**：`schema_version` / `run_id` / `generator` / `engine`（`vendor_commit`、`code_digest`、pin 栈版本）/ `binding` / `seed` / `device` / `hostname` / `vram_limit_gb` / `universe`（`pairs` 数与 `symbol_map_digest`）/ `tier_level`（L0/L1/L2）/ `window`（含重采样频率）/ `objective`（`turnover_penalty_lambda`、`reachability_min_trades_90d`、`cost_model`、`min_after_cost_return`）/ `counts` / `pool` / `started_at` / `finished_at` / `status` / `termination`。
 
-- `counts = {proposed, rejected: {unregistered_op, lookahead, reachability, duplicate_definition}, registered}`——逐级计数即 F007 漏斗的第一级分母；
+- `counts = {proposed, rejected: {unregistered_op, lookahead, reachability, duplicate_definition}, registered}`——逐级计数即 F007 漏斗的第一级分母；冒烟期该计数自第一天起入库，纯度门之后的下游各级在当日冒烟 manifest 中按 `owner=F007` + `state=not_yet_available` 显式占位（ADR-0001「M2 冒烟验收」义务，不得省略或记 0）；
 - `universe` + `hostname` + `vram_limit_gb` 三项一起回答「这个结论在什么条件下成立」：宇宙规模决定横截面 reward 的信噪比（`F008` 并行扩容中），机器与显存上限决定产能数字可不可比。跨运行比较前必须先比这三项；
 - `binding` 两种形态，**语义字段与 ADR-0007 的 `ResearchSnapshot` 逐项对齐**（同一语义集合，差别只在过渡态不落 `experiment_store` artifact）：
   - `{"mode": "snapshot", "research_snapshot_id": "..."}`（F007 落地后，即 ADR-0007 的 `snapshot_id`）；
@@ -205,7 +205,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 
 - 结构化日志（JSONL）：运行阶段切换、取锁/排队、显存自检结果、每 N 个候选的拒绝原因分布；
 - 运行摘要指标（写入 `run.json`，不进 Grafana 口径）：入册候选数、各拒绝原因码计数、训练吞吐（steps/s）、显存峰值、总耗时、device、档位；
-- 冒烟闸门：每条判据的 `pass/fail` + 时间戳 + 证据指针写当日冒烟 manifest，裁决结论人可读、机器可解析；
+- 冒烟闸门：每条判据的 `pass/fail` + 时间戳 + 证据指针写当日冒烟 manifest，裁决结论人可读、机器可解析；manifest 同时承载 ADR-0001 两条 M2 义务的证据（生成侧逐级计数、奖励频率抽查），下游漏斗级以 `owner=F007` + `state=not_yet_available` 占位；
 - 运维可见性：`alphamill-generate show` 即诊断入口，不引入新的看板。
 
 ## 7. 失败、恢复、安全与兼容
