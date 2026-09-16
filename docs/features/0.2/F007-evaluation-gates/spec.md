@@ -149,7 +149,7 @@ AlphaMill 已定义严格的产品门槛，但还没有可运行的统一评测�
 
 ### Requirement: 分阶段证据与失败语义（`FR-003`）
 
-系统应当按信号质量、组合转换、成本/容量、时序稳定、执行实现五阶段记录结果；FactorDef 运行
+系统应当按信号质量、组合转换、成本/容量、时序稳定、执行实现五阶段记录结果（阶段 ID 冻结为 `signal_quality`、`portfolio_transform`、`cost_capacity`、`temporal_stability`、`execution_implementation`，与 design §3.3 同一清单）；FactorDef 运行
 可将尚不适用的后续阶段显式记为 `NOT_APPLICABLE`，不得记为 PASS。必需输入/指标/实现失败时
 运行必须 `INCOMPLETE/FAIL`。阶段状态与晋升/成本 verdict 是**两层独立枚举**，不得互相替代：
 阶段状态（`PASS`/`FAIL`/`UNDERPOWERED`/`INCOMPLETE`/`NOT_APPLICABLE`）只描述单阶段结果，
@@ -291,6 +291,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 - [ ] **AC-008** (`IR-001`, `IR-002`, `IR-003`, `DR-007`): CLI/schema 契约能拒绝非法 canonical 请求并返回结构化失败；`source=placeholder` 的 Kronos 信号源自 canonical 被拒（`E_INPUT_INVALID`）、preview 显式标注，适配 provenance 完整
 - [ ] **AC-009** (`FR-007`): 三层无前视状态逐层进入 manifest；L1 fail-closed 生效（未来算子负例被拒）；L2/L3 非 `PASS` 时阻断晋级且拒绝事件携带缺失层与 owner；任何情况下不得把缺失层记为 PASS 或静默省略
 - [ ] **AC-011** (`FR-006`, `NFR-004`): preview 的采样/缩窗在报告 `approximation` 字段显式标注（`is_approximate` 与缩减维度可核），canonical 不因性能压力静默减少门禁或样本
+- [ ] **AC-012** (`FR-003`): 五阶段 ID 与失败三维 schema 冻结并可校验——stage 取值限于 `signal_quality`/`portfolio_transform`/`cost_capacity`/`temporal_stability`/`execution_implementation`，`failure_taxonomy` 记录含 stage/owner/mechanism/error_code/evidence_refs，synthesis 按三维聚合且拒绝枚举外取值
 - [ ] **AC-010** (`NFR-003`, `IR-003`): 最终确认窗统计量不出现在任何 Agent/preview 可读的 report/manifest/synthesis；越权读取或写入 fail-closed 并留拒绝事件
 
 ## 7. 测试、依赖与决策

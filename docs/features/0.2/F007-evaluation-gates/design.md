@@ -147,6 +147,22 @@ canonical 恒为 `is_approximate=false`，不得因性能压力静默减少门�
 | 成员晋升裁决 | `promotion_verdict` | `promising \| dead \| underpowered \| incomplete` | 只在 `cohort_verdict.json`，cohort FINALIZED 后才产生 |
 | cohort 状态 | `cohort_verdict.status` | `OPEN \| FINALIZED` | 承诺成员未收齐时恒为 `OPEN`，不产生可晋级结论 |
 
+**五阶段 ID（冻结；spec FR-003 引用同一清单）**：
+
+| `stage_id` | 名称 | `owner` | 因子运行的适用性 |
+|---|---|---|---|
+| `signal_quality` | 信号质量 | `signal` | 必填 |
+| `portfolio_transform` | 组合转换 | `portfolio` | 可为 `NOT_APPLICABLE`（需给原因） |
+| `cost_capacity` | 成本/容量 | `cost` | 必填 |
+| `temporal_stability` | 时序稳定 | `statistics` | 必填 |
+| `execution_implementation` | 执行实现 | `execution` | 可为 `NOT_APPLICABLE`（需给原因） |
+
+**失败维度 schema（`failure_taxonomy`，三维）**：每条失败记录必填
+`{stage, owner, mechanism, error_code, first_seen, evidence_refs}`。`stage` 取上表枚举；
+`owner` ∈ `data | signal | method | statistics | cost | execution | infra`；
+`mechanism` ∈ `missing_input | invalid_input | capability_unguarded | lookahead | estimator_failure | publish_failure | underpowered | cost_negative`。
+synthesis 按 `(stage, owner, mechanism)` 三维聚合；出现枚举外的取值即失败关闭。
+
 `curves.parquet` 最小列集沿用架构 §4.2：UTC time、成本后权益、回撤、q1~q5/long-short 累计收益、
 各 horizon rolling IC；列 metadata 记录 schema/return convention/window。标量摘要必须能从侧车
 在容差内重算。

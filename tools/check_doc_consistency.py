@@ -362,6 +362,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "最终确认窗"),
         ),
     ),
+    TextCheck(
+        "stage_ids_and_failure_dimensions_frozen",
+        "F007-D021",
+        requires=(
+            (F007_SPEC, "`signal_quality`"),
+            (F007_SPEC, "**AC-012**"),
+            (F007_DESIGN, "`execution_implementation`"),
+            (F007_DESIGN, "failure_taxonomy"),
+            (F007_TASKS, "failure_taxonomy"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
