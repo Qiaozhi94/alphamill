@@ -258,6 +258,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 | `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |
 | `AC-007` | integration + golden | `tests/integration/test_f007_synthesis.py` | 只读 canonical、五阶段漏斗、三栏输出、确定重建 |
 | `AC-008` | CLI integration | `tests/integration/test_f007_cli.py` | 非法 canonical 非零退出且 error code 稳定 |
+| `AC-001`/`AC-004` 真实环境 | real-env integration（执行机） | `tests/integration/test_f007_controls_real.py`，`ALPHAMILL_INTEGRATION=1` | 绑定不可变 snapshot ID/digest、记录 hostname；与 fixture 控制分属不同命令 |
 | `AC-009` | unit + integration | `tests/unit/validation/test_methodology_gate.py`、`tests/integration/test_f007_execution_tiers.py` | 三层状态入 manifest；L2/L3 缺失时阻断晋级 |
 
 另以 funding carry/BTC-ETH 截面动量、白噪声、故意 future-fill 四类 fixture 做端到端 golden；

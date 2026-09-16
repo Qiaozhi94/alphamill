@@ -294,7 +294,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 - 单元测试：身份规范化、时间切分、统计估计器、成本公式、状态机与 schema。
 - 集成测试：F002 fixture → FactorDef → report/curves/manifest/ledger/synthesis 全链路。
 - 变异/属性测试：故意改变 future-fill、embargo、fit 范围、preview writer、codec 与异常吞噬逻辑，确认门禁变红。
-- 真实环境验证：在本机不可变 crypto 快照运行两个正控制；不需要交易所或 Freqtrade 联机。
+- 真实环境验证：在**执行机**的不可变 crypto 快照上以 `ALPHAMILL_INTEGRATION=1` 独立取证——独立命令 `tests/integration/test_f007_controls_real.py`，绑定 snapshot ID 与 `value_digest`，记录 hostname 与 `device=cpu`，证据落 `reports/f007/real_env/<run_id>/`；不得与 fixture 控制（`tests/integration/test_f007_controls.py`）共用同一命令或同一夹具充当真实环境证据（SOP §3）。
 
 ### 依赖
 

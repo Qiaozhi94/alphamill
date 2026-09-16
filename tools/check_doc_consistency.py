@@ -251,6 +251,16 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "`T012/T014 -> T016`"),
         ),
     ),
+    TextCheck(
+        "real_env_task_has_distinct_evidence",
+        "F007-D009",
+        requires=(
+            (F007_TASKS, "ALPHAMILL_INTEGRATION=1"),
+            (F007_TASKS, "test_f007_controls_real.py"),
+            (F007_SPEC, "ALPHAMILL_INTEGRATION=1"),
+            (F007_DESIGN, "test_f007_controls_real.py"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
