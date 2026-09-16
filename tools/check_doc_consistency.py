@@ -294,6 +294,15 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_DESIGN, "SC-002"),
         ),
     ),
+    TextCheck(
+        "ac003_multi_member_batch",
+        "F007-D013",
+        requires=(
+            (F007_SPEC, "多成员 cohort 批量夹具"),
+            (F007_DESIGN, "多成员 cohort 批量 fixture"),
+            (F007_TASKS, "多成员 cohort 批量夹具"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

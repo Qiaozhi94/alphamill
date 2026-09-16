@@ -266,7 +266,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 |---|---|---|---|
 | `AC-001` | integration + mutation | `tests/integration/test_f007_execution_tiers.py` | preview 无 canonical/holdout 写能力，越权必红 |
 | `AC-002` | unit + property + mutation | `tests/unit/validation/test_methodology_gate.py` | label endpoint/PIT/max horizon/train-only fit/future-fill 全覆盖 |
-| `AC-003` | unit + integration | `tests/unit/evaluation/test_required_statistics.py` | 估计器异常失败关闭，拒绝者在 cohort 分母 |
+| `AC-003` | unit + integration | `tests/unit/evaluation/test_required_statistics.py` | 估计器异常失败关闭，拒绝者在 cohort 分母；多成员 cohort 批量 fixture 验证分母完整 |
 | `AC-004` | unit + golden | `tests/unit/evaluation/test_cost_and_stability.py` | 三档成本、breakeven、rolling split、三级样本量（`underpowered`/`provisional`/`trustworthy`）与 dead 裁决 |
 | `AC-005` | integration + fault injection | `tests/integration/test_f007_atomic_publish.py` | 任一文件失败均无可见半成品/PASS |
 | `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |

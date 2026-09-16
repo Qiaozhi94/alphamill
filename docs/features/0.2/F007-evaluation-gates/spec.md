@@ -172,7 +172,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 - GIVEN cohort 内一个候选在成本门被拒绝
 - WHEN 计算 cohort 多重检验与漏斗
-- THEN 该候选仍计入试验总数，诊断性重算不重复计数
+- THEN 该候选仍计入试验总数，多成员 cohort 的批量分母完整、诊断性重算不重复计数
 
 ### Requirement: 成本、容量与时间稳定性（`FR-005`）
 
@@ -282,7 +282,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 
 - [ ] **AC-001** (`FR-001`, `DR-004`, `DR-005`, `NFR-003`): preview 越权被拒绝，正式台账与留出预算台账零变化（含「台账零行」正向断言与 preview 越权写入留出预算的负例）
 - [ ] **AC-002** (`FR-002`): label endpoint、per-pair 日历、最大 horizon、train-only fit 与 future-aware 算子负例全部被拦截
-- [ ] **AC-003** (`FR-003`, `FR-004`): 必需统计失败关闭；拒绝者仍进入试验分母，成员未收齐时 cohort 不能 finalize 或晋级
+- [ ] **AC-003** (`FR-003`, `FR-004`): 必需统计失败关闭；拒绝者仍进入试验分母，成员未收齐时 cohort 不能 finalize 或晋级；**多成员 cohort 批量夹具**上被拒成员仍在分母、诊断性重算不重复计数
 - [ ] **AC-004** (`FR-005`): 三档成本、breakeven/换手/持有期和 rolling stability 完整，成本不存活者为 dead；样本量三级裁决正确（`<30` → `underpowered` 不判 PASS/FAIL、`30~69` → `provisional` 仅缩减仓位 paper、`≈≥69` → `trustworthy` 才可完整判定）
 - [ ] **AC-005** (`FR-006`, `DR-003`, `NFR-001`): report/curves/manifest 原子发布，失败注入不产生半个 PASS
 - [ ] **AC-006** (`DR-001`, `DR-002`, `DR-006`, `NFR-002`): ResearchSnapshot 跨路径/codec 身份稳定；动态 latest 先冻结；成员/cutoff/映射日历或实验语义变化使相应身份变化并可 supersede；universe（F008 digest + `universe_at(T)`）与 calendar 两个 artifact 引用分别校验，缺失或 digest 不符即拒绝发布
