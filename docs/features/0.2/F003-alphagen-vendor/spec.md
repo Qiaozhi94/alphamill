@@ -44,7 +44,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 ### 非目标
 
-- 本 feature 不做证据评测、统计裁决、多重检验、成本门与漏斗记账——评测权归 `F007`，生成器只产候选（ADR-0003、PRD AI 权限红线）；
+- 本 feature 不做证据评测、统计裁决、多重检验与**成本裁决**（三档成本结论与 `cost_model_version` 归 `F007`）——生成侧只做可配参数下的**成本后收益预筛**，不产 verdict；漏斗记账见 FR-006 的第一级义务（评测权归 `F007`，生成器只产候选，ADR-0003、PRD AI 权限红线）；
 - 本 feature 不做 PortfolioDef 构建、权重与组合门 → FR4 / M3 Feature；
 - 本 feature 不做宇宙扩容（30~50 对，FR1.5）——那是数据面工作，已分配 `F008` 与本 feature **并行**推进（Q-001 裁决）；
 - 本 feature 不追随 AlphaGen 上游：vendor 后由本项目全权维护，**永不 fork**（ADR-0002）。
@@ -102,13 +102,13 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 - 快照绑定的湖→张量数据面（读 F002 reader，point-in-time 宇宙掩码取 F008 的 `universe_at(T)` 与内容寻址台账 digest，特征列→张量通道 `feature_map`）；
 - 表达式 token 序列 ↔ FactorDef 适配层（闭包编译、表达式原文可反解、`data_columns` 反解、截面边界）；
 - 算子能力登记表与生成侧自检（未登记算子/前视/跨 pair 非法算子直接拒绝并计数）；
-- 目标对齐（换手惩罚或 ≥30 笔/90 天可达性前置筛选）与其参数入档；
+- 目标对齐（换手惩罚、≥30 笔/90 天可达性预筛与成本后收益预筛）与其参数入档；
 - 冒烟闸门、二元降级判据（time-box 内只裁 L0/L1）、L1/L2 降级阶梯定义与裁决记录；
 - FactorDef / HypothesisDef / GenerationRun 的定义级持久化与 CLI 入口。
 
 ### 范围外
 
-- RankIC/IC 衰减/分位数/成本门/多重检验/样本量裁决与任何 verdict → `F007`；
+- RankIC/IC 衰减/分位数/成本门三档裁决/多重检验/样本量裁决与任何 verdict → `F007`；F003 只保留参数化的成本后收益预筛（不产成本裁决）；
 - ResearchSnapshot 的实现（归 `experiment_store/`，随 `F007` 落地）——F003 只消费绑定，冒烟期用显式元组过渡（Q-002）；过渡元组须携带与 ADR-0007 对齐的语义字段（`schema_version`、`cutoff_time`、逐 dataset `as_of_fidelity`/`event_time_min`/`event_time_max`、`symbol_map_digest`、`universe_calendar_digest` 与不可变 artifact 的 provenance 引用），仅不落 snapshot artifact；F007 落地时须先发布 `ResearchSnapshot` 再替换为 `snapshot_id`（ADR-0007 决策 4/5）；
 - 因子注册表的评测摘要回写、`|ρ|>0.99` 查重与生命周期状态机 → `F007` / `F006`；
 - 宇宙扩容 30~50 对与新 pair 质量流程（FR1.5）→ `F008`（并行推进，不阻塞本 feature 的接口与闸门交付）；
@@ -194,7 +194,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 ### Requirement: 生成侧能力边界与目标对齐（`FR-005`）
 
-系统应当维护算子能力登记表（时序/截面语义、窗口语义、crypto 24/7 日历下的窗口换算），对每个候选执行生成侧自检：引用未登记算子、隐含前视、未支持的跨 pair 算子或不满足 ≥30 笔/90 天可达性预筛的候选一律拒绝并计数；奖励或前置筛选应当同时考虑预测证据与换手，禁止只优化 RankIC。
+系统应当维护算子能力登记表（时序/截面语义、窗口语义、crypto 24/7 日历下的窗口换算），对每个候选执行生成侧自检：引用未登记算子、隐含前视、未支持的跨 pair 算子或不满足 ≥30 笔/90 天可达性预筛的候选一律拒绝并计数；奖励或前置筛选应当同时考虑预测证据、换手、≥30 笔/90 天可达性**与成本后收益**（按可配成本参数计算，参数与口径写入运行记录），禁止只优化 RankIC。成本后收益在此是**预筛信号而非成本裁决**——三档成本结论与 `cost_model_version` 归 `F007`（ADR-0003）。
 
 #### Scenario: 零交易型表达式
 
@@ -306,7 +306,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 - [ ] **AC-003** (`FR-003`, `DR-001`): 按显式绑定构造张量；invalid 版本或 digest 不符时拒绝启动并留 `rejected` 终态 run.json（含 termination/reason/时间戳与 DR-001 运行字段）；张量与 reader 行集在抽样点数值一致且不可交易时点掩码为不可用 — tests: `tests/integration/test_f003_lake_tensor.py`
 - [ ] **AC-004** (`FR-004`): 编译后的 compute 闭包与 vendor 张量求值在同一切片容差内一致；meta.expression 可反解为等价表达式；data_columns 由 feature_map 反解得到；落盘后加载的 FactorDef 可直接执行 — tests: `tests/unit/test_f003_alphagen_adapter.py`
 - [ ] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数 — tests: `tests/unit/test_f003_operator_registry.py`
-- [ ] **AC-006** (`FR-005`, `NFR-001`): 换手惩罚/可达性预筛生效——零交易型表达式不进池；在执行机上单次挖掘入册 ≥50 个通过自检候选 — tests: `tests/integration/test_f003_generation_run.py`
+- [ ] **AC-006** (`FR-005`, `NFR-001`): 换手惩罚/可达性预筛生效——零交易型表达式不进池；成本后收益预筛参数（`cost_model`、`min_after_cost_return`）写入 run.json 的 objective；在执行机上单次挖掘入册 ≥50 个通过自检候选 — tests: `tests/integration/test_f003_generation_run.py`
 - [ ] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；2 日 time-box 只裁 L0 锁定或 L1 降级，L2 须 L1 连续 2 周判据（ADR-0001）；ADR-0001 两条 M2 冒烟义务（逐级计数自第一天入库、奖励频率抽查）可核验，下游漏斗级以 owner=F007/not_yet_available 显式占位；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
 - [ ] **AC-008** (`FR-007`, `DR-004`): 协同池导出为 meta-factor，成员 factor_id 与权重可反解，重算值与训练期记录容差内一致，成员变化产生新版本 — tests: `tests/integration/test_f003_alpha_pool.py`
 - [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空） — tests: `tests/integration/test_f003_generation_run.py`
@@ -336,6 +336,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 | 第二独立后端选谁 | 人工 crypto 原生种子后端（FR2.2 的"人工"分支） | 与 AlphaGen 风险解耦，冒烟失败也能交付 FR2.2；顺带为 F007 提供正控制因子 | vendor 自带 gplearn/dso 仅在降级到 L2 时启用 |
 | 是否等 F007 的 ResearchSnapshot | 不等：冒烟与挖掘期用显式元组绑定并标注过渡态，元组携带 `schema_version`／`cutoff_time`／`as_of_fidelity`／`event_time` 范围／`symbol_map_digest`／`universe_calendar_digest` 与 artifact provenance（与 ADR-0007 语义对齐） | ResearchSnapshot 归 `experiment_store/`，在 F003 内重复实现会产生第二真相源；若只带 `(dataset, data_version, value_digest)` 会丢失 PIT、映射与 provenance 语义，过渡态与正式身份不可互换 | F007 落地时先构造并发布 `ResearchSnapshot` 再切 `research_snapshot_id`（ADR-0007 决策 4/5），过渡路径删除 |
 | 冒烟的 IC 对齐会不会变成影子评测台 | 只做数值一致性回归（vendor 张量 IC vs pandas 参考实现），不产 verdict、不写台账 | 评测权唯一属 F007（ADR-0003 门禁不降级） | F007 落地后该检查退化为 vendor 回归测试 |
+| 生成侧要不要成本后收益 | 要：按可配成本参数（taker/maker/零成本）做预筛并把参数写进 `run.json` 的 `objective`，但不产成本裁决 | PRD FR2.3 要求目标对齐同时考虑成本后收益；ADR-0003 禁止生成器自裁决，成本门真相源在 F007（FR3.2 的 `cost_model_version` 与三档结论） | F007 落地后生成侧改为引用其 `cost_model_version`，预筛口径与其对齐 |
 | 批量移植 GTJA191 / WQ101 作种子 | 不做：只手写少量 crypto 原生种子（funding carry、basis、OI 变化、截面动量、波动） | 公式库假设 A 股日频，含行业/市值/财报依赖，crypto 24/7 需重定义窗口 | 批量种子宇宙后移到独立 Feature |
 | 横截面 reward 在 6~12 对上噪声大 | 接口与闸门验收允许 6 对；**产出质量结论**必须标注宇宙规模前提，并在 `F008` 落地后用扩容宇宙复跑一次对照 | ADR-0001 后果条：宇宙扩容是产出质量前提；小宇宙下 ADR-0001 的 L2 判据（连续 2 周候选 <50）也会失真 | `F008` 与本 feature 并行（Q-001 已裁决） |
 | AlphaGen 无 LICENSE | 个人私有使用，非阻塞；`VENDORED.md` 如实记录许可状态 | ADR-0001 已裁决 | 若未来公开分发或商业化，须先向作者澄清 |

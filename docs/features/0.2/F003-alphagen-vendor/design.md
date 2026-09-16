@@ -55,7 +55,7 @@ src/alphamill/factor_factory/
 │   ├── lake_tensor.py        # 快照绑定 → (T×P×F) 张量 + PIT 掩码 + feature_map（FR-003；掩码消费 F008 `universe_at(T)`）
 │   ├── operator_registry.py  # 算子能力登记表（FR-005；F007 FR-002 的消费源）
 │   ├── purity.py             # 生成侧 AST 自检与拒绝原因码（FR-005）
-│   ├── objective.py          # 换手惩罚 / ≥30 笔 90 天可达性预筛（FR-005）
+│   ├── objective.py          # 换手惩罚 / ≥30 笔可达性 / 成本后收益预筛（FR-005；成本裁决归 F007）
 │   ├── alphagen_adapter.py   # 表达式 token ↔ FactorDef.compute（FR-004，架构 §4.1.1）
 │   ├── alphagen_runner.py    # sb3/gymnasium 训练编排 + 协同池导出（FR-006, FR-007）
 │   ├── gpu_slot.py           # 显存自检 + 单槽 FIFO + 训练窗口校验（NFR-002）
@@ -225,7 +225,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 | `AC-003` | integration | `tests/integration/test_f003_lake_tensor.py` | invalid/digest 不符拒绝启动；张量与 reader 抽样点容差内一致；不可交易时点掩码为不可用 |
 | `AC-004` | unit | `tests/unit/test_f003_alphagen_adapter.py` | 编译闭包与张量求值一致；表达式反解等价；`data_columns` 由 `feature_map` 反解；加载后的 FactorDef 可直接执行 |
 | `AC-005` | unit | `tests/unit/test_f003_operator_registry.py` | 启用算子全部登记；未登记/前视/非法跨 pair 候选按原因码计数拒绝 |
-| `AC-006` | integration | `tests/integration/test_f003_generation_run.py` | 零变号表达式被可达性预筛拒绝；一次运行入册 ≥50（在执行机上判定） |
+| `AC-006` | integration | `tests/integration/test_f003_generation_run.py` | 零变号表达式被可达性预筛拒绝；成本后收益预筛参数（`cost_model`/`min_after_cost_return`）入 `run.json` 的 `objective`；一次运行入册 ≥50（在执行机上判定） |
 | `AC-007` | integration | `tests/integration/test_f003_smoke_gate.py` | L1 三条判据逐条二元判定并入 manifest；任一触发即 L1 降级裁决；time-box 不裁 L2（L2 须 L1 连续 2 周判据）；L1→L0 回切请求被拒 |
 | `AC-008` | integration | `tests/integration/test_f003_alpha_pool.py` | 池成员与权重可反解；按成员重算与记录容差内一致；成员变化产生新 `pool_id` |
 | `AC-009` | integration | `tests/integration/test_f003_generation_run.py` | 同 `(seed, binding, code_digest, config)` 重跑 factor_id 集合相同；自动候选绑定 `mechanism_unknown` |
