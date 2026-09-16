@@ -118,7 +118,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 ### 边界场景
 
 - 快照绑定指向 `invalid` 或缺失 `value_digest` 的 data_version：拒绝启动，不做"先跑再说"。
-- 训练窗口外或可用显存低于预算时启动挖掘：进单槽 FIFO 队列等待，绝不与 Kronos 常驻推理并行赌 OOM。
+- 训练窗口外或可用显存低于预算时启动挖掘：进单槽 FIFO 队列等待，绝不与 Kronos 常驻推理并行赌 OOM。夜槽开始时先卸载 Kronos 常驻推理（**live owner = F003**，经 F004 交付的容器编排控制）并校验显存释放，失败即留在队列。
 - vendor 代码尝试联网（下载数据/权重）：生成运行在**进程级** egress guard 下执行，任何 egress 尝试视为失败（护栏缺失即拒绝启动；不等价于内核级网络隔离）。
 - 表达式引用了未登记算子或未在 `feature_map` 中的特征：生成侧拒绝该候选并计数，不静默丢弃、不降级为"可用"。
 - 冒烟闸门 time-box 到期而判据未达标：输出降级裁决；不允许以"再给一天"延期。
@@ -310,7 +310,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 - [ ] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；2 日 time-box 只裁 L0 锁定或 L1 降级，L2 须 L1 连续 2 周判据（ADR-0001）；ADR-0001 两条 M2 冒烟义务（逐级计数自第一天入库、奖励频率抽查）可核验，下游漏斗级以 owner=F007/not_yet_available 显式占位；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
 - [ ] **AC-008** (`FR-007`, `DR-004`): 协同池导出为 meta-factor 并持久化为可执行 FactorDef（`generator=pool`，加载后可直接重算），成员 factor_id 与权重可反解，重算值与训练期记录容差内一致，成员或权重变化产生新 `factor_id` 版本 — tests: `tests/integration/test_f003_alpha_pool.py`
 - [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空）；FactorDef 以内容寻址 JSON 持久化且不含结论字段（DR-002）；HypothesisDef 字段齐备（DR-003）；completed 运行的 run_completed 事件可查（TR-001）；重跑得到相同协同池成员（NFR-003）；配置摘要以 canonical config artifact + `config_digest` 落盘（见 NFR-003） — tests: `tests/integration/test_f003_generation_run.py`
-- [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；FIFO 先入队先取锁、释放后队首取得、等待超时留 `queue_timeout` 终态；运行记录持久化 `device` / `hostname` / `kronos_offload` 观测（含卸载契约不可用时的如实标记），开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`
+- [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；FIFO 每类状态记录含 `queue_seq`/`run_id`/时间戳，先入队先取锁、释放后队首取得、等待超时留 `queue_timeout` 终态；夜槽卸载 Kronos（live owner = F003，经 F004 交付的容器编排控制、校验显存释放，失败即 fail-closed 留队列）且运行记录持久化 `device` / `hostname` / `kronos_offload`，开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`
 - [ ] **AC-011** (`NFR-004`, `IR-001`): egress guard 安装后出网尝试被拒绝（socket 构造被替换、只放行 AF_UNIX；断言范围为**进程级护栏，非内核隔离**）、护栏缺失时拒绝启动；写 `reports/generation/<run_id>/` 之外路径（证据台账/留出/晋级状态）的尝试被拒绝；缺绑定的 `mine` 请求非零退出并留 `rejected` 终态 run.json — tests: `tests/integration/test_f003_boundaries.py`, `tests/unit/test_f003_cli_contract.py`
 - [ ] **AC-012** (`IR-003`): `GenerationRun` manifest 与 FactorDef JSON 均持久化 `schema_version`；`show` 遇到未知 `schema_version` 以非零退出拒绝，不做兼容性猜测 — tests: `tests/unit/test_f003_cli_contract.py`
 
@@ -341,7 +341,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 | 横截面 reward 在 6~12 对上噪声大 | 接口与闸门验收允许 6 对；**产出质量结论**必须标注宇宙规模前提，并在 `F008` 落地后用扩容宇宙复跑一次对照 | ADR-0001 后果条：宇宙扩容是产出质量前提；小宇宙下 ADR-0001 的 L2 判据（连续 2 周候选 <50）也会失真 | `F008` 与本 feature 并行（Q-001 已裁决） |
 | AlphaGen 无 LICENSE | 个人私有使用，非阻塞；`VENDORED.md` 如实记录许可状态 | ADR-0001 已裁决 | 若未来公开分发或商业化，须先向作者澄清 |
 | 上游核心冻结、requirements 腐化 | 丢弃上游 requirements，自定 pin 现代栈；冒烟即闸门控制现代化成本 | ADR-0001/ADR-0002 | 超 time-box 即降级，不沉没成本 |
-| 单卡三负载抢占 | 时段表 + 单槽 FIFO（带 `queue_seq`/超时的可验证协议）+ 启动前显存自检 | 架构 §7.1：队列赢，绝不并行赌 OOM——Kronos 常驻与挖掘训练在同一张卡上 | Kronos 卸载入口属 F004 运行时且当前尚无控制契约 → 登记在 tasks §5 明确后移；F003 不 kill 进程，FIFO 协议由两个并发挖掘运行独立取证 |
+| 单卡三负载抢占 | 时段表 + 单槽 FIFO（带 `queue_seq`/超时的可验证协议）+ 启动前显存自检 | 架构 §7.1：队列赢，绝不并行赌 OOM——Kronos 常驻与挖掘训练在同一张卡上 | 夜槽卸载的 live owner = F003（经 F004 交付的容器编排控制，失败 fail-closed 留队列）；FIFO 协议由两个并发挖掘运行独立取证 |
 | 开发机无 GPU | **预期状态，不是阻塞**：`qiaozhi-gp` 是 AMD iGPU 掌机，只跑编码/单元/门禁；挖掘训练、显存与产能证据一律在 `qiaozhi-lt` 取，验收证据记录 hostname 与设备 | 架构 §7.1 机器边界；`docs/SOP.md` §3：开发机 skip 不是证据也不是失败 | 执行机实测可用显存在 tasks T004 标定 |
 | 执行机后续整体迁移到 `qiaozhi-lab` | F003 只面向**当前执行机 `qiaozhi-lt`** 验收；显存上限、时段表与产能结论都标注取证机器，迁移后重跑而非继承 | 迁移同时换平台（Win11+WSL2 → 原生 Ubuntu）与换架构（Blackwell sm_120 需 CUDA 12.8+ 的 torch 构建），沿用旧结论会失真 | 迁移动作按独立 Feature 立项（架构 §7.1） |
 

@@ -117,7 +117,7 @@ reports/generation/<run_id>/
 - `universe` + `hostname` + `vram_limit_gb` 三项一起回答「这个结论在什么条件下成立」：宇宙规模决定横截面 reward 的信噪比（`F008` 并行扩容中），机器与显存上限决定产能数字可不可比。跨运行比较前必须先比这三项；
 - `binding` 两种形态，**语义字段与 ADR-0007 的 `ResearchSnapshot` 逐项对齐**（同一语义集合，差别只在过渡态不落 `experiment_store` artifact）：
   - `{"mode": "snapshot", "research_snapshot_id": "..."}`（F007 落地后，即 ADR-0007 的 `snapshot_id`）；
-  - `{"mode": "explicit_tuples", "schema_version": 1, "cutoff_time": "...", "members": {"<dataset>": {data_version, value_digest, as_of_fidelity, event_time_min, event_time_max}}, "symbol_map_digest": "...", "universe_calendar_digest": "...", "provenance": {member_manifest_paths, symbol_map_path, universe_calendar_path}}`（过渡态，spec Q-002）。
+  - `{"mode": "explicit_tuples", "schema_version": 1, "cutoff_time": "...", "members": {"<dataset>": {data_version, value_digest, as_of_fidelity, event_time_min, event_time_max}}, "symbol_map_digest": "...", "universe_calendar_digest": "...", "provenance": {created_at, artifact_path, member_manifest_paths, symbol_map_path, universe_calendar_path}}`（过渡态，spec Q-002）。
   两种形态都必须在启动时逐项校验成员 `value_digest`，并校验 `cutoff_time` / `as_of_fidelity` / `symbol_map_digest` / `universe_calendar_digest` 与 `provenance` 中的不可变 artifact 引用存在且可解析。字段与 ADR-0007 的成员/身份契约一一对应；**F007 落地不是纯字段改名**——须先由 `experiment_store` 构造并发布 `ResearchSnapshot`（ADR-0007 决策 4/5），再把过渡元组替换为 `research_snapshot_id`，下游消费字段不变。
 - **配置与确定性（NFR-003）**：`config_digest = sha256(canonical_json(config))`（键排序、排除时间戳与主机字段）；canonical config artifact 落盘到 `reports/generation/<run_id>/config.json`，使"配置摘要"可**重放**而不只是一个哈希。RNG 由 `seed` 经稳定派生函数生成各组件子种子，不依赖全局 `random` 状态；训练侧显式开启 torch 确定性开关。CPU/GPU 差异只允许影响浮点末位，不允许改变候选集合——NFR-003 断言的是 `factor_id` 集合与池成员一致（跨 device 亦然），不承诺逐位数值相同。
 
@@ -159,10 +159,10 @@ CLI `alphamill-generate`（IR-001）：
 |---|---|---|
 | `smoke --day {1,2} --binding <file> [--window <preset>] [--config <file>] [--quota K]` | 逐条判定 ADR-0001 冒烟判据并写当日 manifest | 缺绑定；判据脚本无法执行 |
 | `mine --generator <name> --binding <file> --seed N [--quota K] [--window <preset>] [--config <file>]` | 完整挖掘运行 | 缺绑定 / 绑定 invalid / digest 不符 / 档位不明 / 窗口外且无 `--allow-offhours` / 无 CUDA 且无 `--allow-cpu` |
-| `seed --generator manual --binding <file> [--seed N] [--config <file>]` | 人工种子后端产出 | 同上（不含 GPU 相关项） |
+| `seed --generator manual --binding <file> --seed N [--config <file>]` | 人工种子后端产出 | 同上（不含 GPU 相关项） |
 | `show --run <id> \| --factor <id>` | 只读打印产物 | 产物不存在或 schema 版本不识别 |
 
-**强制字段的构造**：`GenerationRequest` 的每个字段都必须能由 CLI 拼出——`binding`（以及 `mine` 的 `seed`）必填；`--window` 缺省取内置 preset `default_1h_2y`（其展开后的 `start`/`end`/`resample` 写入 canonical config artifact）；`--config` 缺省取内置默认 config（内容与 `config_digest` 写入 `run.json`）；`--quota` 缺省取内置默认值。默认值一律来自代码内常量并随运行留痕，不要求调用方记忆，也不允许"缺字段就静默用零值"。
+**强制字段的构造**：`GenerationRequest` 的每个字段都必须能由 CLI 拼出——`binding` 与 `seed`（`mine` / `seed` 两个子命令都必填，禁止隐式默认 seed）必填；`--window` 缺省取内置 preset `default_1h_2y`（其展开后的 `start`/`end`/`resample` 写入 canonical config artifact）；`--config` 缺省取内置默认 config（内容与 `config_digest` 写入 `run.json`）；`--quota` 缺省取内置默认值。默认值一律来自代码内常量并随运行留痕，不要求调用方记忆，也不允许"缺字段就静默用零值"。
 
 适配契约（架构 §4.1.1，FR-004）：表达式 token 序列 → 闭包编译为 `FactorDef.compute`；表达式原文入 `meta["expression"]` 保证可反解；`feature_map: {数据列名 → 张量通道}` 反解出 `data_columns`；`time_series` 输入单 pair Frame，`cross_sectional` 输入带 PIT 宇宙掩码的面板。`feature_map` 本身内容寻址（`feature_map_digest`），改变映射即改变候选身份。
 
@@ -198,7 +198,7 @@ mine/seed 调用
 - **CPU 回退**：无 CUDA 时必须显式 `--allow-cpu`，否则拒绝启动——防止"静默跑了一夜 CPU"；CPU 运行在 `run.json` 标 `device=cpu` 与 `hostname`，产能与显存类断言对该运行不成立（spec NFR-005）。开发机只走这条路径，且只用于单元与契约测试；
 - **checkpoint**：训练每 N steps 落 `checkpoints/`；崩溃后重跑以相同 `(seed, binding, code_digest, config_digest)` 从头复算即可得到相同候选集（NFR-003），checkpoint 只用于省时，不参与身份；
 - **优雅停机与失败终态**：SIGTERM 走正常收尾——保留已产候选供 `show` 诊断（**不写 `pool.json`**），写 `status=partial` + `termination=early` 的终态 `run.json`，且**不发** `generation.run_completed`；非受控异常写 `status=failed` + `termination=<异常类>` 的终态 `run.json`（若该次写出本身失败，则目录视为未完成）；只有完整原子运行写 `status=completed` + `generation.run_completed`；下游只消费 `status=completed` 的运行；
-- **与 Kronos 的协同（live owner 与取证）**：训练夜槽内 Kronos 应卸载（架构 §7.1）。**卸载动作的 owner 是 F004 运行时**（服务控制入口由它提供）；F003 侧只拥有「编排请求 + 结果观测」任务——训练窗口开始时发起卸载请求，并把 `kronos_offload: {requested_at, observed_state, vram_before_gb, vram_after_gb}` 写进 `run.json`，绝不主动杀别人的进程。若卸载控制契约尚不可用（F004 已收口且把 GPU 直通后移，见 tasks §5），F003 **不降级为并行抢卡**：保持在单槽 FIFO 中等待显存达标，并把 `offload_contract_unavailable` 如实记入运行记录；此时 FIFO 协议仍可由两个并发挖掘运行独立取证。
+- **与 Kronos 的协同（live owner = F003 编排）**：训练夜槽内 Kronos 常驻推理必须卸载（架构 §7.1 时段表）。**该窗口切换的 live owner 是 F003**：进入夜槽前由 `gpu_slot` / 训练编排经 F004 交付的服务生命周期（容器编排控制）优雅停止 `kronos-signal`，确认显存释放后才取锁训练，窗口结束后恢复；F003 不向未知进程发 signal、也不接管 F004 的服务定义。全过程把 `kronos_offload: {requested_at, stop_result, vram_before_gb, vram_after_gb, restored_at}` 写进 `run.json`。停止失败或显存未释放 → **fail-closed**：留在单槽 FIFO 等待并记原因，绝不与常驻推理并行抢卡。F004 交付未部署（该服务不存在）→ 记 `offload_not_needed`。FIFO 协议本身仍可由两个并发挖掘运行独立取证。
 
 ## 6. UI 与可观测性
 
@@ -232,7 +232,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 | `AC-007` | integration | `tests/integration/test_f003_smoke_gate.py` | L1 三条判据逐条二元判定并入 manifest；任一触发即 L1 降级裁决；time-box 不裁 L2（L2 须 L1 连续 2 周判据）；L1→L0 回切请求被拒 |
 | `AC-008` | integration | `tests/integration/test_f003_alpha_pool.py` | 池持久化为可执行 FactorDef（`generator=pool`，加载后可直接重算）；成员与权重可反解；按成员重算与记录容差内一致；成员/权重变化产生新 `factor_id` |
 | `AC-009` | integration | `tests/integration/test_f003_generation_run.py` | 同 `(seed, binding, code_digest, config_digest)` 重跑 factor_id 集合与池成员相同；config artifact 落盘可重放；自动候选绑定 `mechanism_unknown` 且 `applicable_state` 有默认值 |
-| `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 显存低于上限/时段撞车进队列不并行；FIFO 先入队先取锁、释放后队首取得、超时留 `queue_timeout` 终态；无 CUDA 且无 `--allow-cpu` 拒绝启动；运行标注 `device`/`hostname` 与 `kronos_offload` 观测 |
+| `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 显存低于上限/时段撞车进队列不并行；FIFO 每类状态记录含 `queue_seq`/`run_id`/时间戳，先入队先取锁、释放后队首取得、超时留 `queue_timeout` 终态；夜槽 Kronos 卸载由 F003 经 F004 服务生命周期完成并校验显存释放（失败 fail-closed 留队列）；运行标注 `device`/`hostname`/`kronos_offload` |
 | `AC-011` | integration | `tests/integration/test_f003_boundaries.py`, `tests/unit/test_f003_cli_contract.py` | 进程级 egress guard 拦截出网尝试（非内核隔离）、护栏缺失拒绝启动；写 `reports/generation/<run_id>/` 之外路径被拒；缺绑定 `mine` 非零退出 |
 | `AC-012` | unit | `tests/unit/test_f003_cli_contract.py` | `run.json` 与 `factors/*.json` 均带 `schema_version`；`show` 遇未知 `schema_version` 非零退出，不猜测兼容 |
 

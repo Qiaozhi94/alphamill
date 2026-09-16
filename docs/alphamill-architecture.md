@@ -259,7 +259,7 @@ class FactorDef:
     factor_id: str            # 如 "alphagen_gen042_f003"
     hypothesis_id: str        # 指向 HypothesisDef；自动公式可指向 mechanism_unknown 假设
     name: str
-    generator: str            # alphagen / genetic / expression / manual / kronos
+    generator: str            # alphagen / genetic / expression / manual / kronos / pool（协同池 meta-factor）
     scope: Literal["time_series", "cross_sectional"]
     params: dict
     # 可调用：输入单 pair Frame 或 point-in-time 多 pair PanelFrame，输出同粒度信号；
@@ -268,6 +268,10 @@ class FactorDef:
     data_columns: list[str]   # 依赖的数据列（用于数据可用性检查）
     meta: dict                # LaTeX 定义、假设来源、生成器版本等
 ```
+
+**协同池 meta-factor 也是 `FactorDef`**（`generator="pool"`，`scope="cross_sectional"`）：成员
+`factor_id` 与权重放在 `params`/`meta`，`compute` 由成员 `FactorDef` 与权重重算，加载即可执行；
+成员集合或权重变化产生新 `factor_id`，不原地改写（契约详见 F003 FR-007 / DR-004）。
 
 #### 4.1.1 AlphaGen 适配契约（表达式树/张量世界 ↔ FactorDef pandas 世界）
 
