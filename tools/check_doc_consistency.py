@@ -224,6 +224,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "三层无前视状态"),
         ),
     ),
+    TextCheck(
+        "sample_size_three_tiers",
+        "F007-D006",
+        requires=(
+            (F007_SPEC, "sample_tier=underpowered"),
+            (F007_SPEC, "provisional"),
+            (F007_SPEC, "trustworthy"),
+            (F007_DESIGN, "三级（ADR-0003 样本量门槛）"),
+            (F007_TASKS, "三级样本量"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

@@ -128,6 +128,10 @@ cost/capacity、sample-size/stability、structured failure 与成员诊断 verdi
 `PASS | FAIL | UNDERPOWERED | INCOMPLETE | NOT_APPLICABLE`；`NOT_APPLICABLE` 需给原因，不能参与
 通过计数。
 
+`sample_tier` 三级（ADR-0003 样本量门槛）：`underpowered`（<30 笔，不判 PASS 也不判 FAIL）、
+`provisional`（30~69 笔，最多临时 PASS、仅允许缩减仓位 paper）、`trustworthy`（≈≥69 笔，才允许完整
+成本后 PASS/FAIL 判定）。`underpowered` / `provisional` 都不得计入北极星判据。
+
 `curves.parquet` 最小列集沿用架构 §4.2：UTC time、成本后权益、回撤、q1~q5/long-short 累计收益、
 各 horizon rolling IC；列 metadata 记录 schema/return convention/window。标量摘要必须能从侧车
 在容差内重算。
@@ -230,7 +234,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 ## 7. 失败、恢复、安全与兼容
 
 - 校验与失败映射：snapshot 成员/摘要/cutoff/映射日历不符 → `INCOMPLETE`；方法论/纯度门 → `FAIL`；统计估计器异常 →
-  `INCOMPLETE`；证据不足 → `UNDERPOWERED`；成本不存活 → `FAIL/dead`。
+  `INCOMPLETE`；证据不足 → `UNDERPOWERED`（样本 `<30`，`sample_tier=underpowered`）；`30~69` 记 `provisional`，只允许缩减仓位 paper 且不得进入北极星判据；成本不存活 → `FAIL/dead`。
 - 重启与恢复：只消费完整发布目录；temp/无 registration 的目录不可见；同 ID 重试不重复计数。
 - 权限边界：canonical writer 和留出 reader 作为显式 capability 注入；preview/Agent 构造器没有
   这些接口。任何环境变量只能提供普通路径默认值，不能升级 tier/权限。
@@ -249,7 +253,7 @@ failure taxonomy 或 verdict。Grafana 只监控评测任务健康，不承载�
 | `AC-001` | integration + mutation | `tests/integration/test_f007_execution_tiers.py` | preview 无 canonical/holdout 写能力，越权必红 |
 | `AC-002` | unit + property + mutation | `tests/unit/validation/test_methodology_gate.py` | label endpoint/PIT/max horizon/train-only fit/future-fill 全覆盖 |
 | `AC-003` | unit + integration | `tests/unit/evaluation/test_required_statistics.py` | 估计器异常失败关闭，拒绝者在 cohort 分母 |
-| `AC-004` | unit + golden | `tests/unit/evaluation/test_cost_and_stability.py` | 三档成本、breakeven、rolling split 与 dead 裁决 |
+| `AC-004` | unit + golden | `tests/unit/evaluation/test_cost_and_stability.py` | 三档成本、breakeven、rolling split、三级样本量（`underpowered`/`provisional`/`trustworthy`）与 dead 裁决 |
 | `AC-005` | integration + fault injection | `tests/integration/test_f007_atomic_publish.py` | 任一文件失败均无可见半成品/PASS |
 | `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |
 | `AC-007` | integration + golden | `tests/integration/test_f007_synthesis.py` | 只读 canonical、五阶段漏斗、三栏输出、确定重建 |

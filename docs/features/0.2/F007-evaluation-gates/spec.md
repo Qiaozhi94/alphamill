@@ -176,6 +176,13 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 系统应当输出零成本/maker/taker 三档、资金费率、breakeven cost、换手、持有期与适用的容量代理，
 并以 purged/embargoed rolling split 记录选择期到留出的稳定性；成本后不为正时 verdict 为 `dead`。
+样本量按三级裁决（ADR-0003「样本量门槛」与 PRD FR3.5）：样本 `<30` 为 `sample_tier=underpowered`（不判 PASS 也不判 FAIL，触发扩宇宙/延长窗口）；`30~69` 为 `provisional`（最多临时 PASS，仅允许缩减仓位进入 paper 并延长观察，不构成可信判定）；`≈≥69` 为 `trustworthy`（才允许完整成本后 PASS/FAIL 判定并计入北极星判据）。
+
+#### Scenario: 欠功效与临时 PASS 分离
+
+- GIVEN 成本后均为正的三个候选，样本量分别为 25 / 50 / 80 笔
+- WHEN canonical 裁决
+- THEN 分别得 `sample_tier=underpowered` / `provisional` / `trustworthy`；`provisional` 不得被任何实盘前置引述，`underpowered` 不得记为 PASS
 
 #### Scenario: 高 IC 但成本不存活
 
@@ -273,7 +280,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 - [ ] **AC-001** (`FR-001`, `DR-004`, `NFR-003`): preview 越权被拒绝，正式台账与留出预算零变化
 - [ ] **AC-002** (`FR-002`): label endpoint、per-pair 日历、最大 horizon、train-only fit 与 future-aware 算子负例全部被拦截
 - [ ] **AC-003** (`FR-003`, `FR-004`): 必需统计失败关闭；拒绝者仍进入试验分母，成员未收齐时 cohort 不能 finalize 或晋级
-- [ ] **AC-004** (`FR-005`): 三档成本、breakeven/换手/持有期和 rolling stability 完整，成本不存活者为 dead
+- [ ] **AC-004** (`FR-005`): 三档成本、breakeven/换手/持有期和 rolling stability 完整，成本不存活者为 dead；样本量三级裁决正确（`<30` → `underpowered` 不判 PASS/FAIL、`30~69` → `provisional` 仅缩减仓位 paper、`≈≥69` → `trustworthy` 才可完整判定）
 - [ ] **AC-005** (`FR-006`, `DR-003`, `NFR-001`): report/curves/manifest 原子发布，失败注入不产生半个 PASS
 - [ ] **AC-006** (`DR-001`, `DR-002`, `DR-006`, `NFR-002`): ResearchSnapshot 跨路径/codec 身份稳定；动态 latest 先冻结；成员/cutoff/映射日历或实验语义变化使相应身份变化并可 supersede；universe（F008 digest + `universe_at(T)`）与 calendar 两个 artifact 引用分别校验，缺失或 digest 不符即拒绝发布
 - [ ] **AC-007** (`FR-006`, `UX-002`): synthesis 只消费 canonical，输出五阶段漏斗且事实/推断/建议分栏
