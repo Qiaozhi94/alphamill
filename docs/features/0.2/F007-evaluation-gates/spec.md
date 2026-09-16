@@ -228,7 +228,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 - **TR-001**：运行状态变化应写 `evaluation.run_state_changed`，包含 experiment_id、tier、from/to、stage、reason 与 evidence refs。
 - **TR-002**：preview 越权、方法论失败和必需指标失败应写 `evaluation.gate_rejected`，可按 cohort/object/stage 查询。
-- **TR-003**：canonical population 登记应使用 experiment_id 幂等键并引用 manifest ID。
+- **TR-003**：canonical population 登记应使用 `evaluation.registered` 事件（以 experiment_id 为幂等键）并引用 manifest ID；canonical 产物物理落 `reports/bench/`，与 preview 的 `reports/preview/` 物理隔离。
 
 ### API / 接口需求
 
@@ -261,8 +261,11 @@ cohort OPEN -> FINALIZED          全部承诺成员已终态，cohort 级校正
 preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 ```
 
-不变量：
+状态与物理/事件映射：preview 落 `reports/preview/`，`PREVIEW_DONE` 为隔离终态；canonical 落
+`reports/bench/`，`REGISTERED` 对应 `evaluation.registered` 事件（`TR-003`）；`FINALIZED` 对应
+`cohort_verdict.json` 原子写出。
 
+不变量：
 - preview 永远不能转写为 canonical；晋级意图必须以冻结上下文重新执行 canonical。
 - 任何 PASS/promising 都必须能追到完整 manifest、规则版本、data value digest 和 code/build digest。
 - canonical 成员登记不等于晋级；cohort 未 FINALIZED 时不得产生可晋级结论。

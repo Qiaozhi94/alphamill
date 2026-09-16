@@ -118,7 +118,8 @@ BH-FDR/有效独立数 DSR 等 cohort 级指标并原子写 `cohort_verdict.json
 cohort_verdict.json` 的确定性投影，不另建可手改真相表；SQLite/DuckDB 索引若存在，删除后必须
 能完全重建。
 
-每个 canonical artifact 目录只写一次。publisher 先在同一文件系统的 sibling temp 目录完成
+每个 canonical artifact 目录只写一次。canonical 物理落 `reports/bench/`，spec 生命周期 `REGISTERED`
+对应 `evaluation.registered` 事件，`PREVIEW_DONE` 对应 `reports/preview/` 的隔离终态。publisher 先在同一文件系统的 sibling temp 目录完成
 文件写入、schema/hash/曲线-标量互推校验，再原子 rename；`registration.json` 最后生成。失败目录
 保留在 quarantine 或清理为未发布 attempt，消费者只认带完整 manifest+registration 的目录。
 

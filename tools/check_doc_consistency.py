@@ -395,6 +395,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         ),
         forbids=((F007_DESIGN, "开工门禁（SDD Flow T3）会拒绝缺失该组的流转"),),
     ),
+    TextCheck(
+        "state_vocab_and_bench_mapping_aligned",
+        "F007-D024",
+        requires=(
+            (F007_SPEC, "`evaluation.registered`"),
+            (F007_SPEC, "`reports/bench/`"),
+            (F007_SPEC, "`PREVIEW_DONE`"),
+            (F007_DESIGN, "`reports/bench/`"),
+            (F007_DESIGN, "`evaluation.registered`"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
