@@ -298,7 +298,7 @@ F005 前端**只经** `src/alphamill/api/` 的统一只读 API 消费 report、c
 | `AC-003` | unit + integration | `tests/unit/evaluation/test_required_statistics.py` | 估计器异常失败关闭，拒绝者在 cohort 分母；多成员 cohort 批量 fixture 验证分母完整 |
 | `AC-004` | unit + golden | `tests/unit/evaluation/test_cost_and_stability.py` | 三档成本、breakeven、rolling split、三级样本量（`underpowered`/`provisional`/`trustworthy`）与 dead 裁决 |
 | `AC-005` | integration + fault injection | `tests/integration/test_f007_atomic_publish.py` | 任一文件失败均无可见半成品/PASS |
-| `AC-011` | contract + integration | `tests/contract/test_f007_artifact_schemas.py` | `approximation` 标注存在；canonical 非近似；POSIX 逻辑路径；CLI 首屏字段快照 |
+| `AC-011` | contract + integration | `tests/contract/test_f007_artifact_schemas.py`、`tests/integration/test_f007_cli.py` | `approximation` 标注存在；canonical 非近似；POSIX 逻辑路径；CLI 首屏字段快照 |
 | `AC-006` | property + integration | `tests/unit/experiment_store/test_research_snapshot.py`、`tests/unit/experiment_store/test_identity.py` | latest 先冻结；codec/path 不入身份，成员/cutoff/映射日历进入 snapshot 身份 |
 | 输入契约（AC-006/AC-008） | contract | `tests/contract/test_f007_upstream_contracts.py` | F002/F003/F008 上游契约摄入与 `source=placeholder` 分层 |
 | `AC-003` cohort 登记 | integration | `tests/integration/test_f007_canonical_registry.py` | 冻结 cohort、收齐校验、原子 finalize、official population 可重建 |

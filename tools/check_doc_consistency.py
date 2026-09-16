@@ -307,7 +307,8 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         "nfr004_approximation_covered",
         "F007-D014",
         requires=(
-            (F007_SPEC, "**AC-011** (`FR-006`, `NFR-004`)"),
+            (F007_SPEC, "NFR-004"),
+            (F007_SPEC, "`approximation`"),
             (F007_DESIGN, "`approximation`"),
             (F007_TASKS, "`approximation`"),
         ),
@@ -371,6 +372,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_DESIGN, "`execution_implementation`"),
             (F007_DESIGN, "failure_taxonomy"),
             (F007_TASKS, "failure_taxonomy"),
+        ),
+    ),
+    TextCheck(
+        "nfr005_ux001_traceable",
+        "F007-D022",
+        requires=(
+            (F007_SPEC, "**AC-011** (`NFR-004`, `NFR-005`, `UX-001`)"),
+            (F007_SPEC, "POSIX 逻辑路径"),
+            (F007_TASKS, "POSIX 逻辑路径断言"),
+            (F007_TASKS, "首个失败原因（快照测试锁定）"),
+            (F007_DESIGN, "POSIX"),
         ),
     ),
 )

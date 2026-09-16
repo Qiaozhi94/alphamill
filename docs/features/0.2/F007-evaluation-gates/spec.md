@@ -290,7 +290,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 - [ ] **AC-007** (`FR-006`, `UX-002`): synthesis 只消费 canonical，输出五阶段漏斗且事实/推断/建议分栏
 - [ ] **AC-008** (`IR-001`, `IR-002`, `IR-003`, `DR-007`): CLI/schema 契约能拒绝非法 canonical 请求并返回结构化失败；`source=placeholder` 的 Kronos 信号源自 canonical 被拒（`E_INPUT_INVALID`）、preview 显式标注，适配 provenance 完整
 - [ ] **AC-009** (`FR-007`): 三层无前视状态逐层进入 manifest；L1 fail-closed 生效（未来算子负例被拒）；L2/L3 非 `PASS` 时阻断晋级且拒绝事件携带缺失层与 owner；任何情况下不得把缺失层记为 PASS 或静默省略
-- [ ] **AC-011** (`FR-006`, `NFR-004`): preview 的采样/缩窗在报告 `approximation` 字段显式标注（`is_approximate` 与缩减维度可核），canonical 不因性能压力静默减少门禁或样本
+- [ ] **AC-011** (`NFR-004`, `NFR-005`, `UX-001`): preview 的采样/缩窗在报告 `approximation` 字段显式标注（`is_approximate` 与缩减维度可核），canonical 不因性能压力静默减少门禁或样本；产物路径与 manifest 只用 POSIX 逻辑路径/URI（Windows/WSL 物理路径只进 provenance）；CLI 首屏含 tier/cohort/data+code digest/state/verdict 与首个失败原因（快照测试锁定）
 - [ ] **AC-012** (`FR-003`): 五阶段 ID 与失败三维 schema 冻结并可校验——stage 取值限于 `signal_quality`/`portfolio_transform`/`cost_capacity`/`temporal_stability`/`execution_implementation`，`failure_taxonomy` 记录含 stage/owner/mechanism/error_code/evidence_refs，synthesis 按三维聚合且拒绝枚举外取值
 - [ ] **AC-010** (`NFR-003`, `IR-003`): 最终确认窗统计量不出现在任何 Agent/preview 可读的 report/manifest/synthesis；越权读取或写入 fail-closed 并留拒绝事件
 
