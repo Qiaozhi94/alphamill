@@ -37,12 +37,12 @@ updated: 2026-09-14
 
 - [ ] T005 (`FR-001`, `IR-002`, `AC-001`): 实现 `Generator` 协议与 `GenerationRequest/Result/Counts`，含结论字段白名单拒绝 — verify: `tests/unit/test_f003_generator_contract.py`
 - [ ] T006 [P] (`DR-003`, `AC-009`): 实现 `HypothesisDef` schema 与 catalog（含 `mechanism`、`applicable_state` 默认值），内置 `mechanism_unknown` 条目 — verify: `tests/unit/test_f003_hypotheses.py`
-- [ ] T007 (`DR-002`, `AC-009`): 实现 FactorDef 规范化 JSON、`definition_digest`、`factor_id` 生成与 `factor_store` 读写 — verify: `tests/unit/test_f003_factor_store.py`
-- [ ] T008 (`DR-001`, `TR-001`, `TR-002`, `AC-009`): 实现 `run_store`——GenerationRun manifest 原子写（`run.json` 最后写，含 `hostname` / `device` / `vram_limit_gb` / `universe`）与 `events.jsonl` append-only — verify: `tests/unit/test_f003_run_store.py`
+- [ ] T007 (`DR-002`, `AC-009`): 实现 FactorDef 规范化 JSON（带 `schema_version`）、`definition_digest`、`factor_id` 生成与 `factor_store` 读写（`load()` 由表达式 + `feature_map` 重建可执行 `compute`） — verify: `tests/unit/test_f003_factor_store.py`
+- [ ] T008 (`DR-001`, `TR-001`, `TR-002`, `AC-009`, `AC-012`): 实现 `run_store`——GenerationRun manifest（带 `schema_version`）原子写（终态 `run.json` 最后写，含 `hostname` / `device` / `vram_limit_gb` / `universe`）与 `events.jsonl` append-only — verify: `tests/unit/test_f003_run_store.py`
 - [ ] T009 (`FR-003`, `AC-003`): 实现 `binding.py`：两种绑定形态解析、逐 dataset `value_digest` 校验、invalid 立即拒绝 — verify: `tests/unit/test_f003_binding.py`
 - [ ] T010 (`US-001`, `FR-001`, `AC-001`): 实现人工 crypto 原生种子后端（funding carry、basis、OI 变化、截面动量、波动），每个种子绑定真实 `HypothesisDef` — verify: `tests/unit/test_f003_manual_seeds.py`
 - [ ] T011 (`NFR-004`, `AC-011`): 实现 `egress_guard` 与写路径白名单（只允许 `reports/generation/<run_id>/`） — verify: `tests/integration/test_f003_boundaries.py`
-- [ ] T012 (`IR-001`, `AC-011`): 实现 CLI `seed` / `show` 子命令与缺绑定的非零拒绝 — verify: `tests/unit/test_f003_cli_contract.py`
+- [ ] T012 (`IR-001`, `AC-011`, `AC-012`): 实现 CLI `seed` / `show` 子命令与缺绑定的非零拒绝、未知 `schema_version` 的拒绝 — verify: `tests/unit/test_f003_cli_contract.py`
 
 ### Phase 2：AlphaGen vendor 与冒烟闸门（US-002，2 个工作日 time-box）
 

@@ -305,6 +305,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 - [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空） — tests: `tests/integration/test_f003_generation_run.py`
 - [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；运行记录标注 device 与 hostname，开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`
 - [ ] **AC-011** (`NFR-004`, `IR-001`): 生成运行在无网络出口下完成；生成器写入证据台账/留出路径的尝试被拒绝；缺绑定的 mine 请求非零退出 — tests: `tests/integration/test_f003_boundaries.py`
+- [ ] **AC-012** (`IR-003`): `GenerationRun` manifest 与 FactorDef JSON 均持久化 `schema_version`；`show` 遇到未知 `schema_version` 以非零退出拒绝，不做兼容性猜测 — tests: `tests/unit/test_f003_cli_contract.py`
 
 ## 7. 测试、依赖与决策
 

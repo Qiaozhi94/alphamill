@@ -109,7 +109,7 @@ reports/generation/<run_id>/
 
 **HypothesisDef**：`hypothesis_id` / `mechanism`（经济动机与作用机制）/ `data_columns` / `applicable_state`（适用状态/regime；catalog 与自动候选给显式默认值 `unspecified`，不隐式留空）/ `expected_holding_period` / `cost_sensitivity` / `source` / `generation`。内置 `mechanism_unknown` 条目供自动候选绑定，并在 FactorDef 上如实标记（PRD FR2.1）。
 
-**GenerationRun**：`run_id` / `generator` / `engine`（`vendor_commit`、`code_digest`、pin 栈版本）/ `binding` / `seed` / `device` / `hostname` / `vram_limit_gb` / `universe`（`pairs` 数与 `symbol_map_digest`）/ `tier_level`（L0/L1/L2）/ `window`（含重采样频率）/ `objective`（`turnover_penalty_lambda`、`reachability_min_trades_90d`）/ `counts` / `pool` / `started_at` / `finished_at` / `status` / `termination`。
+**GenerationRun**：`schema_version` / `run_id` / `generator` / `engine`（`vendor_commit`、`code_digest`、pin 栈版本）/ `binding` / `seed` / `device` / `hostname` / `vram_limit_gb` / `universe`（`pairs` 数与 `symbol_map_digest`）/ `tier_level`（L0/L1/L2）/ `window`（含重采样频率）/ `objective`（`turnover_penalty_lambda`、`reachability_min_trades_90d`、`cost_model`、`min_after_cost_return`）/ `counts` / `pool` / `started_at` / `finished_at` / `status` / `termination`。
 
 - `counts = {proposed, rejected: {unregistered_op, lookahead, reachability, duplicate_definition}, registered}`——逐级计数即 F007 漏斗的第一级分母；
 - `universe` + `hostname` + `vram_limit_gb` 三项一起回答「这个结论在什么条件下成立」：宇宙规模决定横截面 reward 的信噪比（`F008` 并行扩容中），机器与显存上限决定产能数字可不可比。跨运行比较前必须先比这三项；
@@ -229,6 +229,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 | `AC-009` | integration | `tests/integration/test_f003_generation_run.py` | 同 `(seed, binding, code_digest, config)` 重跑 factor_id 集合相同；自动候选绑定 `mechanism_unknown` |
 | `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 显存低于上限/时段撞车进队列不并行；FIFO 先入队先取锁、释放后队首取得、超时留 `queue_timeout` 终态；无 CUDA 且无 `--allow-cpu` 拒绝启动；运行标注 `device`/`hostname` 与 `kronos_offload` 观测 |
 | `AC-011` | integration | `tests/integration/test_f003_boundaries.py` | egress guard 拦截出网；写 `reports/generation/<run_id>/` 之外路径被拒；缺绑定 `mine` 非零退出 |
+| `AC-012` | unit | `tests/unit/test_f003_cli_contract.py` | `run.json` 与 `factors/*.json` 均带 `schema_version`；`show` 遇未知 `schema_version` 非零退出，不猜测兼容 |
 
 真实环境场景：冒烟闸门 time-box 实跑（US-002）与训练窗口实测（显存峰值、耗时、入册数）必须在**执行机**上执行并记录 hostname 与设备，不得以 skip 代替证据（`docs/SOP.md` §3 机器边界）。开发机上这些用例按「本机无该能力」跳过是预期行为，不算证据也不算失败；**任何情况下不以开发机的 CPU 结果冒充执行机 GPU 结论**。执行机迁移到 5070 Ti 后，依赖显存与耗时的用例必须在新机重跑，不继承旧机结论。
 
