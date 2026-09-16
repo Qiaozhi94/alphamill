@@ -262,8 +262,9 @@ F005 前端**只经** `src/alphamill/api/` 的统一只读 API 消费 report、c
 - 校验与失败映射：snapshot 成员/摘要/cutoff/映射日历不符 → `INCOMPLETE`；方法论/纯度门 → `FAIL`；统计估计器异常 →
   `INCOMPLETE`；证据不足 → `UNDERPOWERED`（样本 `<30`，`sample_tier=underpowered`）；`30~69` 记 `provisional`，只允许缩减仓位 paper 且不得进入北极星判据；成本不存活 → `FAIL/dead`。
 - 重启与恢复：只消费完整发布目录；temp/无 registration 的目录不可见；同 ID 重试不重复计数。
-- 权限边界：canonical writer 和留出 reader 作为显式 capability 注入；preview/Agent 构造器没有
-  这些接口。任何环境变量只能提供普通路径默认值，不能升级 tier/权限。
+- 权限边界：canonical writer、留出 reader 与**最终确认窗 reader** 作为显式 capability 注入；preview/Agent 构造器没有
+  这些接口。最终确认窗的任何统计量不得写入 Agent/preview 可读的 report/manifest/synthesis，违规即失败关闭
+  （`E_CANONICAL_FORBIDDEN`）。任何环境变量只能提供普通路径默认值，不能升级 tier/权限。
 - 兼容：逻辑 artifact URI 与物理路径分离；Windows/WSL 路径只进 provenance；schema reader
   允许当前版与前一版，未知高版本失败关闭。
 
@@ -288,6 +289,7 @@ F005 前端**只经** `src/alphamill/api/` 的统一只读 API 消费 report、c
 | `AC-001`/`AC-004` 真实环境 | real-env integration（执行机） | `tests/integration/test_f007_controls_real.py`，`ALPHAMILL_INTEGRATION=1` | 绑定不可变 snapshot ID/digest、记录 hostname；与 fixture 控制分属不同命令 |
 | `AC-009` | unit + integration | `tests/unit/validation/test_methodology_gate.py`、`tests/integration/test_f007_execution_tiers.py` | 三层状态入 manifest；L2/L3 缺失时阻断晋级 |
 | `SC-002` | integration + fault injection | `tests/integration/test_f007_concurrency.py` | 同 ID 并发 claim、崩溃后 lease 接管、finalize 原子性、registration 幂等 |
+| `AC-010` | integration + mutation | `tests/integration/test_f007_execution_tiers.py` | 最终确认窗统计量不出现在 Agent/preview 可读产物；越权 fail-closed |
 
 另以 funding carry/BTC-ETH 截面动量、白噪声、故意 future-fill 四类 fixture 做端到端 golden；
 对 guard 注册表、异常吞噬、preview writer、embargo 比较符与 artifact 完整性各做一次定向变异，

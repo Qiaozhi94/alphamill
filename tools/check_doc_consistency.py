@@ -351,6 +351,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_DESIGN, "不得成为前端直读路径"),
         ),
     ),
+    TextCheck(
+        "final_confirmation_window_hidden",
+        "F007-D019",
+        requires=(
+            (F007_SPEC, "**AC-010** (`NFR-003`, `IR-003`)"),
+            (F007_SPEC, "最终确认窗"),
+            (F007_SPEC, "fail-closed"),
+            (F007_DESIGN, "最终确认窗"),
+            (F007_TASKS, "最终确认窗"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

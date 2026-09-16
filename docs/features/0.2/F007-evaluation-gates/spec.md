@@ -234,7 +234,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 - **IR-001**：CLI 应提供 preview、canonical、finalize-cohort 与 synthesis 四个显式子命令；拒绝缺失 cohort/规则版本的 canonical 请求，也拒绝在成员未收齐时 finalize。
 - **IR-002**：canonical 评测只接受已发布 ResearchSnapshot ID 和可解析的 FactorDef/冻结 PortfolioDef 引用；preview 请求 latest 时必须显式提供不可变 symbol-map ref、**F008** universe artifact 引用与 calendar artifact 输入，builder **分别**校验 universe 的 `universe_at(T)` 语义与 calendar schema 后内容寻址冻结并返回 snapshot ID；任何 tier 都不直接接受任意数据库查询，缺失任一 artifact 即失败关闭。
-- **IR-003**：机器输出应使用版本化 schema，并返回 experiment_id、状态、verdict、artifact refs 和结构化 failure。
+- **IR-003**：机器输出应使用版本化 schema，并返回 experiment_id、状态、verdict、artifact refs 和结构化 failure；Agent/preview 可读产物不含最终确认窗的任何统计量（fail-closed）。
 
 ### UX 需求
 
@@ -245,7 +245,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 - **NFR-001**：可靠性：canonical 登记与证据发布必须幂等、原子或可检测为未完成，崩溃后不得出现半个 PASS。
 - **NFR-002**：可复现：固定 ResearchSnapshot 与其他语义输入跨路径/Parquet 编码重跑得到相同 snapshot/experiment ID 与数值容差内相同报告。
-- **NFR-003**：安全：Agent 与 preview 上下文没有 canonical writer、留出读取或晋级能力。
+- **NFR-003**：安全：Agent 与 preview 上下文没有 canonical writer、留出读取或晋级能力；**最终确认窗**统计量不得出现于任何 Agent/preview 可读的 report/manifest/synthesis，越权读取或写入即 fail-closed 并留拒绝事件（ADR-0003 复盘循环窥探防护）。
 - **NFR-004**：性能：preview 可采样/缩窗但必须显式标注近似；canonical 不因性能压力静默减少门禁或样本。
 - **NFR-005**：兼容性：产物路径和 manifest 使用 POSIX 逻辑路径/URI，Windows/WSL 物理路径只进 provenance。
 
@@ -291,6 +291,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 - [ ] **AC-008** (`IR-001`, `IR-002`, `IR-003`, `DR-007`): CLI/schema 契约能拒绝非法 canonical 请求并返回结构化失败；`source=placeholder` 的 Kronos 信号源自 canonical 被拒（`E_INPUT_INVALID`）、preview 显式标注，适配 provenance 完整
 - [ ] **AC-009** (`FR-007`): 三层无前视状态逐层进入 manifest；L1 fail-closed 生效（未来算子负例被拒）；L2/L3 非 `PASS` 时阻断晋级且拒绝事件携带缺失层与 owner；任何情况下不得把缺失层记为 PASS 或静默省略
 - [ ] **AC-011** (`FR-006`, `NFR-004`): preview 的采样/缩窗在报告 `approximation` 字段显式标注（`is_approximate` 与缩减维度可核），canonical 不因性能压力静默减少门禁或样本
+- [ ] **AC-010** (`NFR-003`, `IR-003`): 最终确认窗统计量不出现在任何 Agent/preview 可读的 report/manifest/synthesis；越权读取或写入 fail-closed 并留拒绝事件
 
 ## 7. 测试、依赖与决策
 
