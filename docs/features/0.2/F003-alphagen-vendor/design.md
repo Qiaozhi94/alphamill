@@ -187,12 +187,12 @@ mine/seed 调用
 
 并发与恢复：
 
-- **单槽 FIFO**：`gpu_slot` 用文件锁实现执行机内独占；等待者按取锁顺序排队。架构 §7.1 的硬规则——「队列赢，绝不并行赌 OOM」——落在这里。Kronos 常驻与挖掘训练共用同一张卡，训练夜槽内 Kronos 卸载（该动作属 F004 运行时）；
+- **单槽 FIFO（可验证协议）**：`gpu_slot` 用文件锁（`reports/.locks/gpu.slot`）实现执行机内独占，配一个 append-only 队列记录 `reports/.locks/gpu.queue`；每次入队 / 取锁 / 释放 / 等待超时写一条 `{queue_seq, run_id, ts, event, vram_free_gb}`，其中 `queue_seq` 单调递增、先入队者先取锁、释放后由队首等待者取得。等待超过可配超时（默认 30min）即释放队位并写 `termination=queue_timeout` 的终态 `run.json`，不无限挂起。架构 §7.1 的硬规则——「队列赢，绝不并行赌 OOM」——落在这里，协议本身用两个并发挖掘运行即可取证（不依赖 GPU 或 Kronos）；
 - **显存自检**：取锁后、建张量前读可用显存，低于配置上限即释放锁并回到队列（不强行启动）。上限**可配不写死**：当前执行机（4060 8GB）按 §7.1 标定为 ≤6GB，迁移到 5070 Ti 时改配置而非改代码，实际取值写进 `run.json`；
 - **CPU 回退**：无 CUDA 时必须显式 `--allow-cpu`，否则拒绝启动——防止"静默跑了一夜 CPU"；CPU 运行在 `run.json` 标 `device=cpu` 与 `hostname`，产能与显存类断言对该运行不成立（spec NFR-005）。开发机只走这条路径，且只用于单元与契约测试；
 - **checkpoint**：训练每 N steps 落 `checkpoints/`；崩溃后重跑以相同 `(seed, binding, code_digest, config)` 从头复算即可得到相同候选集（NFR-003），checkpoint 只用于省时，不参与身份；
 - **优雅停机**：SIGTERM 走正常收尾（导出已产候选与池），`status=completed` + `termination=early`；非受控异常为 `FAILED`，此时 `run.json` 不写出，目录内残留物被下次 `show` 视为未完成运行（与 F002 的"manifest 最后写"同构）；
-- **与 Kronos 的协同**：训练夜槽内 Kronos 应卸载（架构 §7.1），该动作属 F004 运行时；F003 只做被动防御——显存不足即排队，绝不主动杀别人的进程。
+- **与 Kronos 的协同（live owner 与取证）**：训练夜槽内 Kronos 应卸载（架构 §7.1）。**卸载动作的 owner 是 F004 运行时**（服务控制入口由它提供）；F003 侧只拥有「编排请求 + 结果观测」任务——训练窗口开始时发起卸载请求，并把 `kronos_offload: {requested_at, observed_state, vram_before_gb, vram_after_gb}` 写进 `run.json`，绝不主动杀别人的进程。若卸载控制契约尚不可用（F004 已收口且把 GPU 直通后移，见 tasks §5），F003 **不降级为并行抢卡**：保持在单槽 FIFO 中等待显存达标，并把 `offload_contract_unavailable` 如实记入运行记录；此时 FIFO 协议仍可由两个并发挖掘运行独立取证。
 
 ## 6. UI 与可观测性
 
@@ -226,7 +226,7 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 | `AC-007` | integration | `tests/integration/test_f003_smoke_gate.py` | 四条判据逐条二元判定并入 manifest；任一触发即降级裁决；L1→L0 回切请求被拒 |
 | `AC-008` | integration | `tests/integration/test_f003_alpha_pool.py` | 池成员与权重可反解；按成员重算与记录容差内一致；成员变化产生新 `pool_id` |
 | `AC-009` | integration | `tests/integration/test_f003_generation_run.py` | 同 `(seed, binding, code_digest, config)` 重跑 factor_id 集合相同；自动候选绑定 `mechanism_unknown` |
-| `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 显存低于上限/时段撞车进队列不并行；无 CUDA 且无 `--allow-cpu` 拒绝启动；运行标注 `device` 与 `hostname` |
+| `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 显存低于上限/时段撞车进队列不并行；FIFO 先入队先取锁、释放后队首取得、超时留 `queue_timeout` 终态；无 CUDA 且无 `--allow-cpu` 拒绝启动；运行标注 `device`/`hostname` 与 `kronos_offload` 观测 |
 | `AC-011` | integration | `tests/integration/test_f003_boundaries.py` | egress guard 拦截出网；写 `reports/generation/<run_id>/` 之外路径被拒；缺绑定 `mine` 非零退出 |
 
 真实环境场景：冒烟闸门 time-box 实跑（US-002）与训练窗口实测（显存峰值、耗时、入册数）必须在**执行机**上执行并记录 hostname 与设备，不得以 skip 代替证据（`docs/SOP.md` §3 机器边界）。开发机上这些用例按「本机无该能力」跳过是预期行为，不算证据也不算失败；**任何情况下不以开发机的 CPU 结果冒充执行机 GPU 结论**。执行机迁移到 5070 Ti 后，依赖显存与耗时的用例必须在新机重跑，不继承旧机结论。

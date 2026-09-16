@@ -64,7 +64,7 @@ updated: 2026-09-14
 
 ### Phase 4：批量挖掘、协同池与产能
 
-- [ ] T025 (`NFR-002`, `AC-010`): 实现 `gpu_slot`——显存自检（上限可配，不写死常数）、flock 单槽 FIFO、训练窗口校验、`--allow-cpu` / `--allow-offhours` 显式开关，运行记录写 `hostname` 与 `device` — verify: `tests/unit/test_f003_gpu_slot.py`
+- [ ] T025 (`NFR-002`, `AC-010`): 实现 `gpu_slot`——显存自检（上限可配，不写死常数）、flock 单槽 FIFO（`queue_seq` / 取锁 / 释放 / 超时状态记录）、训练窗口校验、`--allow-cpu` / `--allow-offhours` 显式开关，运行记录写 `hostname` / `device` / `kronos_offload` 观测；训练窗口开始时按 F004 运行时契约发起 Kronos 卸载请求（卸载动作 owner 是 F004；契约不可用时记 `offload_contract_unavailable` 并保持 FIFO 等待，不 kill 进程） — verify: `tests/unit/test_f003_gpu_slot.py`
 - [ ] T026 (`FR-007`, `DR-004`, `AC-008`): 实现协同池导出为 meta-factor 与 `pool_store`，成员权重可反解且重算一致，成员变化产生新 `pool_id` — verify: `tests/integration/test_f003_alpha_pool.py`
 - [ ] T027 (`IR-001`, `FR-001`, `AC-011`): 实现 CLI `mine` 子命令与全部启动期拒绝条件（缺绑定/invalid/档位不明/窗口外/无 CUDA） — verify: `tests/unit/test_f003_cli_contract.py`
 - [ ] T028 (`NFR-003`, `AC-009`): 实现并验证可复现性——同 `(seed, binding, code_digest, config)` 重跑得到相同 factor_id 集合与相同池成员 — verify: `tests/integration/test_f003_generation_run.py`
@@ -92,6 +92,7 @@ updated: 2026-09-14
 - `T014 -> T015`：先声明 `mining` extra，再扩展 pin 门禁。
 - `T020 -> T021 -> T024 -> T029`：数据面 → 适配 → 目标对齐 → 批量产出。
 - `T025 -> T027 -> T029`：调度就位后才允许完整挖掘运行。
+- `T025` 内的 Kronos 卸载编排只发请求并记录观测（卸载动作 owner 是 F004 运行时）；FIFO 协议用两个并发挖掘运行独立取证，不依赖 F004 是否提供卸载入口。
 - `T029 -> T035`：先有 6 对宇宙的基线运行，`F008` 落地后才有可对照的第二次运行；`F008` 不阻塞 T001–T034 的任何一项。
 - `T006 [P]`：只改假设模块，与接口/存储任务无共享状态。
 
@@ -104,3 +105,4 @@ updated: 2026-09-14
 - 批量移植 GTJA191 / WQ101 公式库作为种子宇宙 → 后续 Feature：需先做 crypto 24/7 窗口重定义与 A 股专有因子剔除。
 - 模型族级联与 DML 诊断 → 独立研究 Feature（`F007` spec §3 已把它指向 F003 或独立立项；本 spec 不纳入范围）。
 - 执行机从 `qiaozhi-lt` 整体迁移到 `qiaozhi-lab`（RTX 5070 Ti）→ 独立 Feature：不只是换卡，还包括 Win11+WSL2 → 原生 Ubuntu 的平台迁移（docker 编排、路径、自启、备份通道）与 Blackwell sm_120 的 torch 构建切换；F003 只面向当前执行机验收，迁移时重标显存上限与时段表，并按 `docs/SOP.md` §3 重跑依赖机器能力的验收项。
+- Kronos 训练窗口卸载的服务控制入口（含显存释放确认）→ `F004` / v0.2.x 后续评估：卸载动作 owner 是 F004 运行时，而 F004 已收口且把 GPU 直通与性能优化后移，当前不存在该控制契约；F003 期间只做被动防御（单槽 FIFO 等待显存达标、绝不 kill 进程）并如实记录 `offload_contract_unavailable`，FIFO 协议本身不依赖该入口。
