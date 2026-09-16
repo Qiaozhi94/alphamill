@@ -124,7 +124,7 @@ def test_f007_upstream_declaration_goes_red(tmp_path: pathlib.Path) -> None:
     shutil.copyfile(REPO / cdc.F007_SPEC, target)
     target.write_text(
         target.read_text(encoding="utf-8").replace(
-            "related_features: [F002, F003, F004]", "related_features: [F002, F004]"
+            "related_features: [F002, F003, F004, F008]", "related_features: [F002, F004, F008]"
         ),
         encoding="utf-8",
     )
