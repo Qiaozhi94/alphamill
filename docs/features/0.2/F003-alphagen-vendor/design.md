@@ -179,7 +179,7 @@ append-only `events.jsonl`，每行一个事件，含 `event_type` / `ts` / `run
 
 ```text
 mine/seed 调用
-  → 解析并校验绑定（每个 dataset 逐项 value_digest 比对；invalid 立即 REJECTED）
+  → 解析并校验绑定（每个 dataset 逐项 value_digest 比对；invalid 立即 `rejected`）
   → 能力自检（device / mining extra 是否装齐 / egress guard 安装 / lake_root 可读）
   → 申请 GPU 单槽（flock 独占 reports/.locks/gpu.slot；不可得则 QUEUED 等待）
   → 训练窗口校验（22:00–06:30；窗口外需 --allow-offhours）
@@ -259,5 +259,5 @@ UI：不适用——本 feature 无页面。候选与产能的只读呈现归 `F
 - [x] DQ-001: vendor 的精确文件清单如何确定？ — 决策：不在设计期钉死上游路径（本设计只按功能定义子集边界），由 vendor 落地任务按上游实际布局核对后写入 `VENDORED.md`
 - [x] DQ-002: sb3 / gymnasium 现代栈能否驱动 vendor 的 RL 环境？ — 决策：按"需要小改 env wrapper（gym→gymnasium）"的假设推进，适配动作作为冒烟第 1 天任务；第 1 天结束仍未跑通最小训练循环即触发 ADR-0001 的 L1 判据，不追加时间
 - [x] DQ-003: 特征张量规模与显存预算如何分配？ — 决策：默认重采样 1h（估算见 §9），1m 仅按需切窗；显存上限可配不写死（当前执行机按 §7.1 标定为 ≤6GB），实际取值写入 `run.json`，取锁后、建张量前自检——特征张量本身只占几十 MB，预算主要由 PPO 网络与 batch 决定
-- [x] DQ-004: 协同池成员变化如何版本化？ — 决策：池定义内容寻址，成员集合变化即新 `pool_id`，不原地改写
+- [x] DQ-004: 协同池成员变化如何版本化？ — 决策：池定义内容寻址，成员集合或权重变化即新 `factor_id`，不原地改写
 - [x] DQ-005: 生成运行的产物放哪？ — 决策：`reports/generation/<run_id>/`（架构已定义 `reports/` 为运行产物目录），目录入 `.gitignore`，`run.json` 最后写实现原子可见性

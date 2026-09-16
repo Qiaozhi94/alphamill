@@ -260,7 +260,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 ### 非功能需求
 
 - **NFR-001**：产能：单次挖掘运行应当在执行机的一个夜间训练窗口（22:00–06:30，≤8.5h）内产出 ≥50 个通过生成侧自检的候选（M2 出口量化线）。
-- **NFR-002**：资源：挖掘训练按架构 §7.1 的时段表在夜槽内以 ≤6GB 独占运行（当前执行机 RTX 4060 Laptop 8GB 的标定值），显存上限可配并写入运行记录；启动前自检可用显存，低于上限或与在跑任务撞车时进单槽 FIFO 队列，不允许并行抢卡。**FIFO 须可验证**：入队 / 取锁 / 释放 / 等待超时各写一条带 `queue_seq`、`run_id`、时间戳的状态记录；先入队者先取锁，释放后由队首等待者取得；等待超过可配超时则留 `REJECTED` 终态（`termination=queue_timeout`），不无限挂起。
+- **NFR-002**：资源：挖掘训练按架构 §7.1 的时段表在夜槽内以 ≤6GB 独占运行（当前执行机 RTX 4060 Laptop 8GB 的标定值），显存上限可配并写入运行记录；启动前自检可用显存，低于上限或与在跑任务撞车时进单槽 FIFO 队列，不允许并行抢卡。**FIFO 须可验证**：入队 / 取锁 / 释放 / 等待超时各写一条带 `queue_seq`、`run_id`、时间戳的状态记录；先入队者先取锁，释放后由队首等待者取得；等待超过可配超时则留 `rejected` 终态（`termination=queue_timeout`），不无限挂起。
 - **NFR-003**：可复现：相同 `(seed, 快照绑定, code digest, config_digest)` 重跑应当得到相同的 factor_id 集合与相同的协同池成员。配置摘要定义为 canonical config artifact（键排序、排除时间戳/主机字段）的 sha256，artifact 随运行落盘、可重放；RNG 由 `seed` 稳定派生，训练侧开启 torch 确定性开关；**CPU/GPU 差异只允许影响浮点末位、不改变候选集合**——本项断言的是集合与池成员一致（跨 device 亦然），不承诺逐位数值相同。
 - **NFR-004**：安全 / 边界：生成运行在**进程级 egress guard** 下执行（runner 入口替换 socket 构造函数、只放行 AF_UNIX；这是进程级护栏，**不等于内核级网络隔离**——本 feature 不引入 netns/容器，如实声明）；写路径白名单限定 `reports/generation/<run_id>/`，生成器进程不具备写入证据台账、留出数据或晋级状态的能力（AI 权限红线、ADR-0003）。两类护栏都 **fail-closed**：护栏安装失败或白名单无法生效即拒绝启动，不降级为"仅警告"。
 - **NFR-005**：兼容性：执行机的 WSL2 + CUDA 为主路径；开发机无 GPU，只允许 CPU 回退用于单元与契约测试；运行记录必须标注 `device` 与 hostname，开发机运行不得用于产能或显存结论。
@@ -269,11 +269,11 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 ```text
 生成运行（四种终态 `completed` / `rejected` / `failed` / `partial`，均写终态 `run.json`）：
-QUEUED    -> RUNNING    取得 GPU 单槽 + 快照绑定校验通过 + 时段允许
-QUEUED    -> REJECTED   绑定缺失/invalid、digest 不符、档位不明、队列等待超时（写终态 run.json）
-RUNNING   -> COMPLETED  候选集与 GenerationRun manifest 原子写出；仅本态发 run_completed、可被下游消费
-RUNNING   -> FAILED     训练/求值/写出异常；写终态 run.json，已产候选不入册
-RUNNING   -> PARTIAL    SIGTERM 优雅停机；保留已产候选供诊断，不写 pool.json、不发 run_completed
+queued    -> running    取得 GPU 单槽 + 快照绑定校验通过 + 时段允许
+queued    -> rejected   绑定缺失/invalid、digest 不符、档位不明、队列等待超时（写终态 run.json）
+running   -> completed  候选集与 GenerationRun manifest 原子写出；仅本态发 run_completed、可被下游消费
+running   -> failed     训练/求值/写出异常；写终态 run.json，已产候选不入册
+running   -> partial    SIGTERM 优雅停机；保留已产候选供诊断，不写 pool.json、不发 run_completed
 
 引擎档位（ADR-0001 降级阶梯，单向）：
 L0 AlphaGen RL -> L1 表达式求值器 + 自写搜索   任一 L1 判据触发（2 日 time-box 内，自动判定）
@@ -319,7 +319,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 ### 测试策略
 
 - 单元测试：生成器接口 schema 与结论字段拒绝、算子能力登记表与自检原因码、表达式↔FactorDef 适配与反解、vendor 卫生检查、GPU 单槽与显存自检；
-- 集成测试：真实 F002 湖快照上的张量构造与一致性比对、完整挖掘运行（计数/可复现/产能）、协同池导出与重算、冒烟闸门判据、边界（无网络出口、越权写入、缺绑定拒绝）；
+- 集成测试：真实 F002 湖快照上的张量构造与一致性比对、完整挖掘运行（计数/可复现/产能）、协同池导出与重算、冒烟闸门判据、边界（进程级 egress 护栏、越权写入、缺绑定拒绝）；
 - 真实环境 / 手动验证：GPU 直通下的 PPO 训练窗口实测（显存峰值、单次运行耗时、入册候选数）与冒烟闸门 time-box 实跑；CI 无 GPU 时相应用例走 CPU 回退或按环境开关判红，不以 skip 代替证据（`docs/SOP.md` §3）；
 - 不做的：任何 RankIC/成本/统计显著性的**裁决性**测试——那是 `F007` 的验收面；F003 只做 vendor 张量 IC 与 pandas 参考实现之间的数值一致性回归。
 
