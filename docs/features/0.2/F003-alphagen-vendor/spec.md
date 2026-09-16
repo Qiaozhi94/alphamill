@@ -318,7 +318,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 ### 依赖
 
 - 上游 Feature / Contract：F002 的 `data_bridge.reader.read()` 与 `(dataset, data_version, value_digest)` 身份、`symbol_map`；ADR-0007 的 `ResearchSnapshot` 语义字段（`cutoff_time`、`as_of_fidelity`、`event_time_min/max`、`symbol_map_digest`、`universe_calendar_digest`）——过渡期由显式元组承载同一语义；F001 的 `src/alphamill/` 布局；架构 §4.1/§4.1.1 的 FactorDef 与适配契约、§7.1 的机器边界与 GPU 槽位。**并行依赖**：`F008` 宇宙扩容——PIT 掩码消费其 IR-002 的 `universe_at(T)` 与内容寻址台账 digest（IR-003 的 `schema_version`），不阻塞接口与冒烟闸门，但候选质量结论以其落地后的宇宙为准；F008 未落地时掩码用显式 universe 配置并在运行记录里留 digest 与来源。
-- 下游消费者：`F007`（把 FactorDef 与协同池作为评测输入，把 `generation.candidate_rejected` 作为漏斗第一级）、`F005`（只读展示候选与产能）、FR4/M3 组合构建。
+- 下游消费者：`F007`（把 FactorDef 与协同池作为评测输入，把 `generation.candidate_rejected` 作为漏斗第一级，把算子能力登记表作为 FR-002 的已登记算子能力清单消费）、`F005`（只读展示候选与产能）、FR4/M3 组合构建。
 - 外部 / 环境依赖：AlphaGen 上游仓库（vendor 时点 clone，之后不跟随）；torch 2.x / numpy 2.x / pandas 2.x / gymnasium / stable-baselines3，全部 pin；执行机提供挖掘训练的 CUDA 运行时（当前 `qiaozhi-lt`：Win11+WSL2 + RTX 4060 Laptop 8GB，按架构 §7.1 时段表；湖与训练同机，无跨机传输）；宇宙规模当前为 6 对（见 Q-001）。
 
 ### 决策与风险

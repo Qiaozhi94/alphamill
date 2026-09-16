@@ -4,7 +4,7 @@ id: F007
 version: "0.2"
 status: draft
 gate_version: 1
-related_features: [F002, F004]
+related_features: [F002, F003, F004]
 topics: [evaluation, validation, evidence, experiments]
 doc_kind: spec
 created: 2026-09-13
@@ -19,7 +19,7 @@ updated: 2026-09-13
 
 - **PRD 来源**：`docs/alphamill-prd.md` FR3、FR7.1~FR7.5、M1
 - **架构来源**：`docs/alphamill-architecture.md` §2.1、§4.0、§4.2、§4.5
-- **上游 Contract 来源**：F002 `(dataset, DataVersion, value_digest)`；F004/Kronos 与人工因子产出的 `FactorDef`
+- **上游 Contract 来源**：F002 `(dataset, DataVersion, value_digest)`；F004/Kronos 与人工因子产出的 `FactorDef`；**F003** 的 `generation.run_completed` / `generation.candidate_rejected` 事件（漏斗第一级数据源，只有 `status=completed` 的运行才发完成事件）、算子能力登记表（FR-002 已登记算子能力清单的消费源）与协同池 meta-factor
 - **上游决策**：ADR-0003（门禁不降级）、ADR-0005（曲线侧车）、ADR-0006（证据边界与身份）、ADR-0007（ResearchSnapshot）
 - **功能类型**：backend / workflow / validation / data-model
 - **规格模式**：full

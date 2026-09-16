@@ -58,7 +58,7 @@ updated: 2026-09-14
 
 - [ ] T020 (`FR-003`, `AC-003`): 实现 `lake_tensor` 完整路径——多 dataset 合并、重采样（默认 1h）、PIT 宇宙掩码（消费 F008 `universe_at(T)` 与台账 digest；F008 未落地时用显式 universe 配置并把 digest 与来源写进 `run.json`）、`feature_map` 与其 digest — verify: `tests/integration/test_f003_lake_tensor.py`
 - [ ] T021 (`FR-004`, `AC-004`): 实现 `alphagen_adapter`——token 序列编译闭包、`meta["expression"]` 反解、`data_columns` 经 `feature_map` 反解、截面边界（no-signal 语义） — verify: `tests/unit/test_f003_alphagen_adapter.py`
-- [ ] T022 (`FR-005`, `AC-005`): 实现算子能力登记表（时序/截面语义、窗口语义、crypto 24/7 窗口换算），并导出为 `F007` 可消费的能力清单 — verify: `tests/unit/test_f003_operator_registry.py`
+- [ ] T022 (`FR-005`, `AC-005`): 实现算子能力登记表（时序/截面语义、窗口语义、crypto 24/7 窗口换算），并导出为 `F007` 可消费的版本化能力清单（含 `schema_version`；`F007` FR-002 的已登记算子能力消费源） — verify: `tests/unit/test_f003_operator_registry.py`
 - [ ] T023 (`FR-005`, `TR-002`, `AC-005`): 实现生成侧 AST 自检与四类拒绝原因码（`unregistered_op` / `lookahead` / `reachability` / `duplicate_definition`）计数 — verify: `tests/unit/test_f003_operator_registry.py`
 - [ ] T024 (`FR-005`, `AC-006`): 实现目标对齐——换手惩罚与 ≥30 笔/90 天可达性预筛，参数写入 `run.json` 的 `objective` — verify: `tests/unit/test_f003_objective.py`
 
