@@ -18,6 +18,8 @@ updated: 2026-09-17
 - 行为与验收真相源：`spec.md`。
 - 技术方案与边界：`design.md`。
 - 每项任务完成并跑对应 verify 后立即勾选；契约变化先修三件套。
+- `[TEST]` 组（§3）是开发前置门：从 US-001/US-002/US-003 旅程步骤派生（每步骤 ≥1 条可执行断言），编写早（Phase 1 先立红灯）、执行晚（收尾全量跑）；缺失即被 SDD Flow T3 拒绝流转。
+- 属性测试与变异证据可复现：属性测试固定 seed 并约束输入生成器（见 design §8），变异结果写 `reports/mutation/f007/mutation_report.json`。
 - canonical writer、留出访问、统计失败语义与 artifact 发布属于高风险路径，必须变异验证。
 
 ## 1. 前置条件

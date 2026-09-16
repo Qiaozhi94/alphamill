@@ -385,6 +385,16 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_DESIGN, "POSIX"),
         ),
     ),
+    TextCheck(
+        "design_no_task_directives",
+        "F007-D023",
+        requires=(
+            (F007_DESIGN, "约束的落地形态与执行规则见 `tasks.md`"),
+            (F007_TASKS, "编写早"),
+            (F007_TASKS, "组（§3）是开发前置门"),
+        ),
+        forbids=((F007_DESIGN, "开工门禁（SDD Flow T3）会拒绝缺失该组的流转"),),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
