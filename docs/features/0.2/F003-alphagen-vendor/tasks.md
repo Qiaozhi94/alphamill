@@ -56,7 +56,7 @@ updated: 2026-09-14
 
 ### Phase 3：完整数据面、适配器与生成侧自检
 
-- [ ] T020 (`FR-003`, `AC-003`): 实现 `lake_tensor` 完整路径——多 dataset 合并、重采样（默认 1h）、PIT 宇宙掩码、`feature_map` 与其 digest — verify: `tests/integration/test_f003_lake_tensor.py`
+- [ ] T020 (`FR-003`, `AC-003`): 实现 `lake_tensor` 完整路径——多 dataset 合并、重采样（默认 1h）、PIT 宇宙掩码（消费 F008 `universe_at(T)` 与台账 digest；F008 未落地时用显式 universe 配置并把 digest 与来源写进 `run.json`）、`feature_map` 与其 digest — verify: `tests/integration/test_f003_lake_tensor.py`
 - [ ] T021 (`FR-004`, `AC-004`): 实现 `alphagen_adapter`——token 序列编译闭包、`meta["expression"]` 反解、`data_columns` 经 `feature_map` 反解、截面边界（no-signal 语义） — verify: `tests/unit/test_f003_alphagen_adapter.py`
 - [ ] T022 (`FR-005`, `AC-005`): 实现算子能力登记表（时序/截面语义、窗口语义、crypto 24/7 窗口换算），并导出为 `F007` 可消费的能力清单 — verify: `tests/unit/test_f003_operator_registry.py`
 - [ ] T023 (`FR-005`, `TR-002`, `AC-005`): 实现生成侧 AST 自检与四类拒绝原因码（`unregistered_op` / `lookahead` / `reachability` / `duplicate_definition`）计数 — verify: `tests/unit/test_f003_operator_registry.py`
@@ -87,6 +87,7 @@ updated: 2026-09-14
 - `T005 -> T010`、`T005 -> T013`：接口先定，两个后端都按同一协议实现。
 - `T007 -> T008 -> T029`：候选持久化 → 运行记录 → 产能计数。
 - `T009 -> T020`：绑定校验是数据面的启动前置。
+- `F008.IR-002 -> T020`：PIT 掩码依赖 F008 的内容寻址宇宙台账（`universe_at(T)` 与 digest、IR-003 的 `schema_version`）；F008 未落地前 T020 用显式 universe 配置并在 `run.json` 记录 digest 与来源，任何情况下都不得用当前成员表回填历史。
 - `T013 -> T016 -> T017 -> T018 -> T019`：冒烟闸门是严格串行的 time-box 序列。
 - `T014 -> T015`：先声明 `mining` extra，再扩展 pin 门禁。
 - `T020 -> T021 -> T024 -> T029`：数据面 → 适配 → 目标对齐 → 批量产出。

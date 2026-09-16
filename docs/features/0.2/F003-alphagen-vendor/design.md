@@ -52,7 +52,7 @@ src/alphamill/factor_factory/
 ├── generators/
 │   ├── base.py               # Generator 协议 + GenerationRequest/Result/Counts（FR-001）
 │   ├── binding.py            # SnapshotBinding：research_snapshot_id | 显式元组（FR-003, Q-002）
-│   ├── lake_tensor.py        # 快照绑定 → (T×P×F) 张量 + PIT 掩码 + feature_map（FR-003）
+│   ├── lake_tensor.py        # 快照绑定 → (T×P×F) 张量 + PIT 掩码 + feature_map（FR-003；掩码消费 F008 `universe_at(T)`）
 │   ├── operator_registry.py  # 算子能力登记表（FR-005；F007 FR-002 的消费源）
 │   ├── purity.py             # 生成侧 AST 自检与拒绝原因码（FR-005）
 │   ├── objective.py          # 换手惩罚 / ≥30 笔 90 天可达性预筛（FR-005）
@@ -79,6 +79,7 @@ src/alphamill/factor_factory/
 | 生成器 → 证据 | 无。生成器进程只被允许写 `reports/generation/<run_id>/` 前缀；F007 台账、留出目录不在其可写集合（NFR-004） |
 | 后端 → 接口 | 后端只实现 `Generator` 协议；配置差异走 `GenerationRequest.config`，不得让调用方分支 |
 | 唯一真相源 | 候选定义 = `factors/<factor_id>.json`；运行事实 = `run.json`；两者之外不得出现第二份候选清单 |
+| PIT 宇宙 → F008 | `lake_tensor` 的横截面掩码只读消费 F008 的内容寻址宇宙台账（IR-002 的 `universe_at(T)` 与 digest、IR-003 的 `schema_version`）；F008 未落地时用显式 universe 配置并把其 digest 与来源写进 `run.json`，任何路径都不得用当前成员表回填历史（架构 §4.1.1 截面边界） |
 
 **vendor 子集边界（按功能定义，不预先钉死上游路径）**：取表达式与算子、张量求值器、线性协同池、RL 环境与 token 化四块；**明确丢弃** `alphagen_qlib/`（qlib 数据层）、上游 `requirements.txt`、上游自带的 `gplearn/` 与 `dso/`（仅在降级到 L2 时按需再取）。精确文件清单在 vendor 落地任务中按上游实际布局核对后写入 `VENDORED.md`——本设计不替代实地核对。
 
@@ -176,7 +177,7 @@ mine/seed 调用
   → 能力自检（device / mining extra 是否装齐 / egress guard 安装 / lake_root 可读）
   → 申请 GPU 单槽（flock 独占 reports/.locks/gpu.slot；不可得则 QUEUED 等待）
   → 训练窗口校验（22:00–06:30；窗口外需 --allow-offhours）
-  → lake_tensor 构造张量（默认重采样 1h）
+  → lake_tensor 构造张量（默认重采样 1h；PIT 掩码按 F008 `universe_at(T)`，F008 未落地时按显式 universe digest）
   → 后端 produce()：训练 / 枚举 → 候选表达式
       → 逐候选：operator_registry 校验 → purity 自检 → objective 预筛 → 编译 FactorDef
       → 通过者入池参与协同池增量 IC 选择
