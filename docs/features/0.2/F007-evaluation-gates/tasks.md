@@ -24,7 +24,7 @@ updated: 2026-09-17
 
 - [ ] T001 (`DR-001`, `IR-002`, `AC-006`): 固定 F002 dataset/version/value-digest reader 与不可变 symbol-map ref，并实现 ADR-0007 ResearchSnapshot builder/reader contract；builder 只接收显式 universe/calendar artifact，验证其内容摘要并在 provenance 保留不可变引用；preview latest 必须先冻结，canonical 只收 snapshot ID；builder 区分 `--universe`（F008 台账 digest，`universe_at(T)` 语义）与 `--calendar`（本 Feature calendar JSON）两个独立引用并分别校验；同时实现 F003 上游只读摄入契约（`generation.run_completed`/`generation.candidate_rejected`、算子能力登记表、协同池 `FactorDef`）与 F008 universe artifact 的 digest 加载及 `universe_at(T)` 语义校验 — verify: `tests/contract/test_f007_upstream_contracts.py`、`tests/unit/experiment_store/test_research_snapshot.py`
 - [ ] T002 (`FR-004`, `FR-005`): 预注册 v1 方法/阈值/cohort schema 与两个正控制、白噪声、泄漏负控制 — verify: `tests/fixtures/f007/README.md`
-- [ ] T003 (`NFR-003`): 为 preview、canonical writer 和留出 reader 建立 capability 测试夹具 — verify: `tests/integration/test_f007_execution_tiers.py`
+- [ ] T003 (`NFR-003`, `AC-001`, `AC-010`): 为 preview、canonical writer、留出 reader 与留出预算台账 writer 建立 capability 测试夹具（含 preview 越权写台账的负例） — verify: `tests/integration/test_f007_execution_tiers.py`
 
 ## 2. 实现任务
 
@@ -41,7 +41,7 @@ updated: 2026-09-17
 - [ ] T009 (`FR-004`, `AC-003`): 实现成员级 HAC IC/block bootstrap 与 cohort 级 BH-FDR、有效独立数 DSR、MinTRL，异常统一失败关闭 — verify: `tests/unit/evaluation/test_required_statistics.py`
 - [ ] T010 (`FR-005`, `AC-004`): 实现 purged/embargoed rolling split、三级样本量裁决（`underpowered`/`provisional`/`trustworthy`）和稳定性报告 — verify: `tests/unit/evaluation/test_cost_and_stability.py`
 - [ ] T011 (`DR-003`, `TR-001`, `TR-002`, `AC-005`): 实现 run 事件、report/curves/manifest 同盘原子发布与恢复 — verify: `tests/integration/test_f007_atomic_publish.py`
-- [ ] T012 (`FR-004`, `DR-004`, `TR-003`, `NFR-001`): 实现冻结 cohort、成员 registration、收齐校验、原子 finalize 与 official population 可重建投影 — verify: `tests/integration/test_f007_canonical_registry.py`
+- [ ] T012 (`FR-004`, `DR-004`, `DR-005`, `TR-003`, `NFR-001`): 实现冻结 cohort、成员 registration、收齐校验、原子 finalize 与 official population 可重建投影；同时实现 append-only 留出预算台账（`holdout_budget/ledger.jsonl`，仅 canonical capability 可追加，preview 越权写入即失败关闭并写 `evaluation.gate_rejected`） — verify: `tests/integration/test_f007_canonical_registry.py`
 - [ ] T013 (`IR-001`, `IR-002`, `AC-008`): 实现 canonical/finalize-cohort CLI，缺上下文或成员未收齐时非零拒绝 — verify: `tests/integration/test_f007_cli.py`
 
 ### Phase 3：综合、控制与契约交付

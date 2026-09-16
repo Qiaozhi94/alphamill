@@ -34,7 +34,7 @@ updated: 2026-09-17
 
 - 前端：无；F005 后续读取版本化 artifact/schema。
 - 后端 / API：新增 `alphamill.evaluation` CLI 与编排服务，不新增 HTTP 写入口。
-- 存储：`reports/preview/` 与 `reports/bench/` 隔离；`reports/cohorts/` 保存预注册 cohort 和事件。
+- 存储：`reports/preview/` 与 `reports/bench/` 隔离；`reports/cohorts/` 保存预注册 cohort 和事件；`reports/holdout_budget/ledger.jsonl` 为 append-only 留出预算台账（只有 canonical capability 可追加）。
 - Runtime：单次运行无守护进程；同 ID 通过原子 claim 幂等，失败可重试。
 - Event / Evidence：report、curves、manifest、registration event、synthesis；全部 schema versioned。
 - 文档 / 配置：新增方法/阈值配置 schema；阈值值由预注册 config 持有，不硬编码在评测函数。
@@ -99,6 +99,7 @@ codec/row-group、文件 SHA、主机、PID、开始/结束时间与 duration �
 ```text
 reports/
 ├── research_snapshots/<snapshot_id>/manifest.json
+├── holdout_budget/ledger.jsonl
 ├── preview/<experiment_id>/<attempt_id>/{manifest.json,report.json,curves.parquet,events.jsonl}
 ├── bench/<object_id>/<research_snapshot_id>/<experiment_id>/{manifest.json,report.json,curves.parquet,events.jsonl,registration.json}
 └── cohorts/<cohort_id>/
@@ -107,6 +108,8 @@ reports/
     ├── cohort_verdict.json
     └── synthesis/<synthesis_id>/synthesis_report.json
 ```
+
+`holdout_budget/ledger.jsonl` 是 append-only 追加台账（`DR-005`）：每行一次留出评估，仅 canonical capability 持有 append 句柄；preview/Agent 构造器不注入该句柄，越权追加即失败关闭并写 `evaluation.gate_rejected`。台账不提供 UPDATE/DELETE 路径。
 
 `cohort.json` 在首个 canonical 运行前冻结，内容含 hypothesis family、全部候选承诺/纳入规则、
 选择阶段、窗口、阈值和方法版本。每个承诺成员无论 PASS、FAIL、UNDERPOWERED 或 INCOMPLETE

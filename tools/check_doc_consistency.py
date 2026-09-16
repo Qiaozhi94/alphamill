@@ -261,6 +261,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_DESIGN, "test_f007_controls_real.py"),
         ),
     ),
+    TextCheck(
+        "holdout_budget_ledger_exists",
+        "F007-D010",
+        requires=(
+            (F007_SPEC, "DR-005"),
+            (F007_SPEC, "HoldoutBudgetLedger"),
+            (F007_DESIGN, "holdout_budget/ledger.jsonl"),
+            (F007_TASKS, "DR-005"),
+            (F007_TASKS, "留出预算台账"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

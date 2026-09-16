@@ -133,8 +133,8 @@ AlphaMill 已定义严格的产品门槛，但还没有可运行的统一评测�
 #### Scenario: preview 越权写入
 
 - GIVEN 一个 preview 运行上下文
-- WHEN 代码尝试登记 official population 或访问留出
-- THEN 操作失败，canonical 台账无变化并写入拒绝事件
+- WHEN 代码尝试登记 official population、追加留出预算台账或访问留出
+- THEN 操作失败，canonical 台账与留出预算台账均无变化并写入拒绝事件
 
 ### Requirement: 方法论递增守卫（`FR-002`）
 
@@ -219,6 +219,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 - **DR-006**：`UniverseCalendarBinding` 应当把 universe 与 calendar 拆为两个独立 artifact 引用：universe 按 **F008** `IR-002` 的内容寻址台账消费（`lake/_metadata/universes/<digest>.csv`，提供 `universe_at(T)` 语义），calendar 由本 Feature 拥有并规范化保存为内容寻址 JSON（`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`）；ADR-0007 的 `universe_calendar_digest` 由两者 digest 组合导出（不再等于单一 JSON 文件摘要），拆解关系写入 ResearchSnapshot provenance。
 - **DR-003**：`ExperimentManifest` 应当关联输入、逐阶段状态、报告、曲线、规则版本和结论；canonical 历史产物只增不改。
 - **DR-004**：`CohortLedger` 应当保存预注册试验定义、选择阶段、全部候选和计数；preview 不得出现在 official population。
+- **DR-005**：`HoldoutBudgetLedger` 应当以 append-only 台账持久化每次留出评估（`candidate_id`、ISO 周、`experiment_id`、`cohort_id`、`verdict`、`recorded_at`、`execution_tier=canonical`）；只有 canonical capability 可追加，preview 越权写入必须被拒绝并写 `evaluation.gate_rejected`；台账与 manifest 同为可复现要件，不支持事后补记（ADR-0003 留出期使用预算）。
 
 ### 事件 / Trace 需求
 
@@ -277,7 +278,7 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `DR-004`, `NFR-003`): preview 越权被拒绝，正式台账与留出预算零变化
+- [ ] **AC-001** (`FR-001`, `DR-004`, `DR-005`, `NFR-003`): preview 越权被拒绝，正式台账与留出预算台账零变化（含「台账零行」正向断言与 preview 越权写入留出预算的负例）
 - [ ] **AC-002** (`FR-002`): label endpoint、per-pair 日历、最大 horizon、train-only fit 与 future-aware 算子负例全部被拦截
 - [ ] **AC-003** (`FR-003`, `FR-004`): 必需统计失败关闭；拒绝者仍进入试验分母，成员未收齐时 cohort 不能 finalize 或晋级
 - [ ] **AC-004** (`FR-005`): 三档成本、breakeven/换手/持有期和 rolling stability 完整，成本不存活者为 dead；样本量三级裁决正确（`<30` → `underpowered` 不判 PASS/FAIL、`30~69` → `provisional` 仅缩减仓位 paper、`≈≥69` → `trustworthy` 才可完整判定）
