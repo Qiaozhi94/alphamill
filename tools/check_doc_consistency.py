@@ -188,6 +188,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         ),
         forbids=((F007_DESIGN, "related_features: [F002, F004]"),),
     ),
+    TextCheck(
+        "f007_declares_f008_universe",
+        "F007-D003",
+        requires=(
+            (F007_SPEC, "related_features: [F002, F003, F004, F008]"),
+            (F007_SPEC, "universe_at(T)"),
+            (F007_SPEC, "F008"),
+            (F007_DESIGN, "F008 上游 Contract"),
+            (F007_TASKS, "universe_at(T)"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")

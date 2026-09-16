@@ -23,6 +23,7 @@ updated: 2026-09-17
 - **PRD / Architecture**：PRD FR3/FR7；架构 §4.2/§4.5
 - **ADR / 上游 Contract**：ADR-0003、ADR-0005、ADR-0006、ADR-0007；F002 dataset/version/value digest
 - **F003 生成侧 Contract（只读摄入）**：`generation.run_completed`（仅 `status=completed` 的运行）与 `generation.candidate_rejected`（漏斗第一级）；算子能力登记表（FR-002 的方法论守卫已登记能力清单来源）；协同池 meta-factor（`generator="pool"` 的可执行 `FactorDef`）
+- **F008 上游 Contract（只读摄入）**：point-in-time 宇宙台账内容寻址 artifact——按 digest 加载并提供 `universe_at(T)` 语义查询与 `schema_version`（F008 `IR-002`/`IR-003`）；F007 不实现宇宙扩容，也不解析 latest
 - **实现约束**：研究只读有效 Parquet；执行层级显式传参；Agent 无 canonical writer/留出能力；
   必需门失败关闭；不引入 ml4t 运行时依赖
 
