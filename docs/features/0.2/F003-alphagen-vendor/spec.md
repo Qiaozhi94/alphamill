@@ -109,7 +109,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 ### 范围外
 
 - RankIC/IC 衰减/分位数/成本门/多重检验/样本量裁决与任何 verdict → `F007`；
-- ResearchSnapshot 的实现（归 `experiment_store/`，随 `F007` 落地）——F003 只消费绑定，冒烟期用显式元组过渡（Q-002）；过渡元组须携带与 ADR-0007 等价的语义字段（`cutoff_time`、逐 dataset `as_of_fidelity`/`event_time_min`/`event_time_max`、`symbol_map_digest`、`universe_calendar_digest`），仅不落 snapshot artifact；
+- ResearchSnapshot 的实现（归 `experiment_store/`，随 `F007` 落地）——F003 只消费绑定，冒烟期用显式元组过渡（Q-002）；过渡元组须携带与 ADR-0007 对齐的语义字段（`schema_version`、`cutoff_time`、逐 dataset `as_of_fidelity`/`event_time_min`/`event_time_max`、`symbol_map_digest`、`universe_calendar_digest` 与不可变 artifact 的 provenance 引用），仅不落 snapshot artifact；F007 落地时须先发布 `ResearchSnapshot` 再替换为 `snapshot_id`（ADR-0007 决策 4/5）；
 - 因子注册表的评测摘要回写、`|ρ|>0.99` 查重与生命周期状态机 → `F007` / `F006`；
 - 宇宙扩容 30~50 对与新 pair 质量流程（FR1.5）→ `F008`（并行推进，不阻塞本 feature 的接口与闸门交付）；
 - 批量移植 GTJA191 / WQ101 公式库作为种子宇宙 → 后移（见 §7 决策）；
@@ -236,7 +236,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 ### 数据 / 实体需求
 
-- **DR-001**：`GenerationRun` 应当持久化快照绑定（`research_snapshot_id`，或过渡期的显式元组：`cutoff_time`、逐 dataset `(dataset, data_version, value_digest, as_of_fidelity, event_time_min, event_time_max)`、`symbol_map_digest`、`universe_calendar_digest`——字段语义与 ADR-0007 一致）、seed、生成器与引擎版本、配置摘要、device、hostname、宇宙规模（pair 数与 `symbol_map_digest`）、档位与逐级计数；**宇宙规模是候选质量结论的前提条件，必须随运行留痕**。
+- **DR-001**：`GenerationRun` 应当持久化快照绑定（`research_snapshot_id`，或过渡期的显式元组：`schema_version`、`cutoff_time`、逐 dataset 成员映射 `{<dataset>: (data_version, value_digest, as_of_fidelity, event_time_min, event_time_max)}`、`symbol_map_digest`、`universe_calendar_digest` 与不可变 artifact 的 `provenance` 引用——字段与身份语义与 ADR-0007 一致）、seed、生成器与引擎版本、配置摘要、device、hostname、宇宙规模（pair 数与 `symbol_map_digest`）、档位与逐级计数；**宇宙规模是候选质量结论的前提条件，必须随运行留痕**。
 - **DR-002**：`FactorDef` 应当以规范化 JSON 内容寻址持久化，`factor_id = <generator>_<definition_digest[:12]>`（**不含 run 序号**；运行归属由 `run_id` 承载，跨 run 重跑同一表达式得到同一 `factor_id`），并保存 `generator`、表达式原文、`params`、`scope`、`data_columns`、`hypothesis_id`、`definition_digest`、`run_id` 与生成来源引用；**不得**保存任何评测结论。
 - **DR-003**：`HypothesisDef` 应当至少记录经济动机、作用机制、数据依赖、适用状态/regime（`applicable_state`，缺失时给显式默认值而非留空）、预期持有期、成本敏感性、来源与 generation；自动候选绑定 `mechanism_unknown` 假设并如实标记。
 - **DR-004**：协同池 meta-factor 应当保存成员 `factor_id` 与权重、池版本与产出运行引用；成员集合变化必须产生新版本而非原地改写。
@@ -327,7 +327,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 | 决策 / 风险 | 结论或缓解 | 理由 | 后续 |
 |---|---|---|---|
 | 第二独立后端选谁 | 人工 crypto 原生种子后端（FR2.2 的"人工"分支） | 与 AlphaGen 风险解耦，冒烟失败也能交付 FR2.2；顺带为 F007 提供正控制因子 | vendor 自带 gplearn/dso 仅在降级到 L2 时启用 |
-| 是否等 F007 的 ResearchSnapshot | 不等：冒烟与挖掘期用显式元组绑定并标注过渡态，元组携带 `cutoff_time`／`as_of_fidelity`／`event_time` 范围／`symbol_map_digest`／`universe_calendar_digest`（与 ADR-0007 语义等价） | ResearchSnapshot 归 `experiment_store/`，在 F003 内重复实现会产生第二真相源；若只带 `(dataset, data_version, value_digest)` 会丢失 PIT 与映射语义，过渡态与正式身份不可互换 | F007 落地后 `mine` 只收 `research_snapshot_id`，过渡路径删除 |
+| 是否等 F007 的 ResearchSnapshot | 不等：冒烟与挖掘期用显式元组绑定并标注过渡态，元组携带 `schema_version`／`cutoff_time`／`as_of_fidelity`／`event_time` 范围／`symbol_map_digest`／`universe_calendar_digest` 与 artifact provenance（与 ADR-0007 语义对齐） | ResearchSnapshot 归 `experiment_store/`，在 F003 内重复实现会产生第二真相源；若只带 `(dataset, data_version, value_digest)` 会丢失 PIT、映射与 provenance 语义，过渡态与正式身份不可互换 | F007 落地时先构造并发布 `ResearchSnapshot` 再切 `research_snapshot_id`（ADR-0007 决策 4/5），过渡路径删除 |
 | 冒烟的 IC 对齐会不会变成影子评测台 | 只做数值一致性回归（vendor 张量 IC vs pandas 参考实现），不产 verdict、不写台账 | 评测权唯一属 F007（ADR-0003 门禁不降级） | F007 落地后该检查退化为 vendor 回归测试 |
 | 批量移植 GTJA191 / WQ101 作种子 | 不做：只手写少量 crypto 原生种子（funding carry、basis、OI 变化、截面动量、波动） | 公式库假设 A 股日频，含行业/市值/财报依赖，crypto 24/7 需重定义窗口 | 批量种子宇宙后移到独立 Feature |
 | 横截面 reward 在 6~12 对上噪声大 | 接口与闸门验收允许 6 对；**产出质量结论**必须标注宇宙规模前提，并在 `F008` 落地后用扩容宇宙复跑一次对照 | ADR-0001 后果条：宇宙扩容是产出质量前提；小宇宙下 ADR-0001 的 L2 判据（连续 2 周候选 <50）也会失真 | `F008` 与本 feature 并行（Q-001 已裁决） |
