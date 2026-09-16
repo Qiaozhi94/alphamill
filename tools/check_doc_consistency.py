@@ -235,6 +235,14 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "三级样本量"),
         ),
     ),
+    TextCheck(
+        "task_graph_missing_edges_f007",
+        "F007-D007",
+        requires=(
+            (F007_TASKS, "`T009 -> T012`"),
+            (F007_TASKS, "`T012 -> T013`"),
+        ),
+    ),
 )
 
 AC_LINE_RE = re.compile(r"^-\s+\[[ xX]\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
