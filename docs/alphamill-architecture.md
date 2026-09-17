@@ -592,6 +592,10 @@ VRAM 预算为硬上限：任务启动前自检可用显存，低于预算即进
 | `stop` | 优雅停止推理并释放显存，返回释放后的 `vram_bytes` | 重复调用返回 `state=stopped`，不报错 | 可配（默认 60s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
 | `restore` | 恢复常驻推理，返回 `state=running` | 重复调用返回 `state=running` | 可配（默认 120s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
 
+- **wire 绑定**：控制面经 HTTP 暴露——`GET /lifecycle/status`、`POST /lifecycle/stop`、
+  `POST /lifecycle/restore`（JSON）；所有请求必须带 `X-Contract-Version` 头（当前 `1`），
+  服务端不支持该版本时返回 `E_UNSUPPORTED_VERSION`；错误响应统一信封 `{"error": "E_*"}`。
+  客户端可见行为由契约测试 `tests/integration/test_f003_kronos_lifecycle.py` 锁定；
 - **显存确认**：`stop` 之后编排必须经 `status` 的 `vram_bytes` 或设备侧读数确认显存已释放，
   未确认不得取锁训练；
 - **契约版本**：`contract_version` 不匹配（`E_UNSUPPORTED_VERSION`）视为服务端未实现该契约；
