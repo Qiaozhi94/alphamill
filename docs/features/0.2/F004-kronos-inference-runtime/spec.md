@@ -8,7 +8,7 @@ related_features: [F001, F002]
 topics: [kronos, inference, deployment]
 doc_kind: spec
 created: 2026-09-12
-updated: 2026-09-16
+updated: 2026-09-18
 ---
 
 # F004：Kronos 真实推理运行时（编排内可复现）
@@ -70,6 +70,7 @@ compose 的 `kronos-signal` 服务默认 `KRONOS_USE_REAL_MODEL=false`（镜像�
 - GPU 直通（见非目标）；
 - 消费者路由切换：Freqtrade `KRONOS_SIGNAL_URL` 与 runtime snapshot `-KronosHostUrl` 仍指向 mock `:8001`；真实实例接线由后续评估决定（见 tasks §5）；
 - `signals_log` 内容的自动升级：本 feature 只提供真实信号源，不改变写入链路。
+- Kronos 服务生命周期控制面：版本化 `status` / `stop` / `restore` 契约（幂等、可配超时、`E_*` 错误码、显存确认与未部署语义）正文归架构 §7.1，wire 绑定为 HTTP `/lifecycle/*` + `X-Contract-Version`。本 feature 交付的 `kronos-signal` **不含**控制面端点；服务端实现归待分配 feature（BACKLOG「Kronos 服务生命周期端点」，夜槽编排前置）。端点缺失时 F003 客户端记 `offload_not_needed`（服务未部署）或 fail-closed 留在单槽队列，不降级为并行抢卡（F003 design §4；客户端契约测试 `tests/integration/test_f003_kronos_lifecycle.py`）。
 
 ### 边界场景
 

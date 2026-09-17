@@ -6,7 +6,7 @@ related_features: [F001, F002]
 topics: [kronos, inference, deployment]
 doc_kind: tasks
 created: 2026-09-12
-updated: 2026-09-15
+updated: 2026-09-18
 ---
 
 # F004：Kronos 真实推理运行时 - 任务
@@ -71,3 +71,4 @@ updated: 2026-09-15
 
 - GPU 直通与推理性能优化 → `v0.2.x` 后续评估：需执行机 GPU 直通条件，不属本 feature。
 - 消费者路由切换（Freqtrade `KRONOS_SIGNAL_URL` 与 runtime snapshot `-KronosHostUrl` 指向真实实例）→ `v0.2.x` 后续评估（未立项）：真实实例与 mock 并存是本期形态，路由切换涉及默认链路可用性与跨 feature 契约，F004 只交付编排内可复现的真实信号源（spec §3 范围外）。
+- Kronos 服务生命周期控制面端点（`GET /lifecycle/status`、`POST /lifecycle/stop`、`POST /lifecycle/restore`，版本化契约与 wire 绑定见架构 §7.1）→ 待分配 feature（`BACKLOG.md`「规划中」登记，夜槽编排前置）：服务端实现不含在本 feature 交付内（spec §3 范围外）。落地时必须同步转正 `tests/integration/test_f003_kronos_lifecycle.py`——该文件现以 `xfail(strict=True)` 显式声明「服务端未实现」的先红态，端点可用后 XPASS 即红，须移除该标记并补 `E_BUSY` / `E_TIMEOUT` 错误路径用例；F003 侧客户端实现与夜槽编排归 F003（其 tasks T025 / T033）。
