@@ -8,7 +8,11 @@ review}）校验 `docs/features/<version>/Fxxx-*/tasks.md`：
   - 边一律「向前」：源 ID < 目标 ID（任务编号即执行顺序，禁止依赖后序任务）；
   - 最高编号任务（收口任务）必须有至少一条入边；
   - **每个任务都必须有路径到达收口任务**（从收口任务沿入边反向遍历，孤立任务判红）；
-  - `[P]` 任务不得同时声明前置边（tasks 模板规定）。
+  - `[P]` 任务不得同时声明前置边（tasks 模板规定）；
+  - **§3 验证任务必须有前置边**——验证任务先于实现执行是 F007-D033 的失败模式；
+  - **§3 验证任务 verify 引用的测试文件，若已被更早任务声明，必须由其直接前置
+    任务承接**（「verify 文件须有前置生产者」，F007-D033）；仅在本任务首次出现的
+    文件视为该任务自产（如 real-env/属性/并发等自建证据轨），不受此限。
 
 **作用域说明**：不收 `done`（F001/F004 等历史 Feature 已收口，纳入会立刻破坏
 既有文档）与 `draft`（尚未进入流转）。这与 `validate_spec_lifecycle.py` 的
@@ -28,7 +32,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENFORCED_STATUSES = {"ready-for-development", "in-progress", "review"}
 TASK_RE = re.compile(r"^-\s+\[[ xX]\]\s+(T\d{3})")
 EDGE_SEGMENT_RE = re.compile(r"`([^`]*->[^`]*)`")
+SECTION3 = "3. 验证与验收任务"
 SECTION4 = "4. 依赖与并行关系"
+TEST_FILE_RE = re.compile(r"tests/[A-Za-z0-9_./-]+\.py")
 
 
 def strip_code_blocks(text: str) -> str:
@@ -73,6 +79,16 @@ def parse_task_lines(text: str) -> list[tuple[str, bool]]:
         m = TASK_RE.match(line.strip())
         if m:
             out.append((m.group(1), "[P]" in line))
+    return out
+
+
+def parse_task_bodies(text: str) -> dict[str, str]:
+    """返回 task_id -> 原始任务行文本（含引用标签与 verify 段）。"""
+    out: dict[str, str] = {}
+    for line in strip_code_blocks(text).split("\n"):
+        m = TASK_RE.match(line.strip())
+        if m:
+            out[m.group(1)] = line.strip()
     return out
 
 
@@ -136,6 +152,31 @@ def check_tasks(text: str) -> list[str]:
     for tid in ids:
         if tid not in reachable:
             errors.append(f"任务 {tid} 无路径到达收口任务 {last}（孤立任务）")
+
+    # F007-D033：§3 验证任务不得先于实现执行，且 verify 文件须有前置生产者。
+    section3 = section_body(text, SECTION3)
+    if section3:
+        s3_ids = [t for t, _ in parse_task_lines(section3)]
+        bodies = parse_task_bodies(text)
+        order = {t: i for i, t in enumerate(ids)}
+        for tid in s3_ids:
+            preds = incoming.get(tid, set())
+            if not preds:
+                errors.append(f"§3 验证任务 {tid} 无前置边（验证不得先于实现执行）")
+                continue
+            body = bodies.get(tid, "")
+            for f in sorted(set(TEST_FILE_RE.findall(body))):
+                earlier = [
+                    other
+                    for other, obody in bodies.items()
+                    if other != tid and f in obody and order.get(other, 0) < order.get(tid, 0)
+                ]
+                if earlier and not any(f in bodies.get(p, "") for p in preds):
+                    producers = ", ".join(sorted(earlier))
+                    errors.append(
+                        f"§3 任务 {tid} 的 verify 文件 {f} 已由更早任务（{producers}）声明，"
+                        f"但未接线任何生产者前置"
+                    )
     return list(dict.fromkeys(errors))
 
 

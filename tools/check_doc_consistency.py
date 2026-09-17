@@ -36,6 +36,7 @@ F007_TASKS = "docs/features/0.2/F007-evaluation-gates/tasks.md"
 F004_SPEC = "docs/features/0.2/F004-kronos-inference-runtime/spec.md"
 F004_TASKS = "docs/features/0.2/F004-kronos-inference-runtime/tasks.md"
 TEST_LIFECYCLE = "tests/integration/test_f003_kronos_lifecycle.py"
+ADR7 = "docs/decisions/0007-research-snapshot-binding.md"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -181,7 +182,7 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "### [TEST] 组：层 2 旅程验收轨"),
             (F007_TASKS, "T027 [TEST]"),
             (F007_TASKS, "T029 [TEST]"),
-            (F007_TASKS, "T030: 回写 spec"),
+            (F007_TASKS, "T032: 回写 spec"),
         ),
         forbids=((F007_TASKS, "- [ ] T024: 回写 spec"),),
     ),
@@ -203,6 +204,9 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_SPEC, "related_features: [F002, F003, F004, F008]"),
             (F007_SPEC, "universe_at(T)"),
             (F007_SPEC, "F008"),
+            # R2 批注（D003 保持 open 的证据）：design 只钉正文字样漏掉了 frontmatter，
+            # 现在两侧都钉。
+            (F007_DESIGN, "related_features: [F002, F003, F004, F008]"),
             (F007_DESIGN, "F008 上游 Contract"),
             (F007_TASKS, "universe_at(T)"),
         ),
@@ -239,7 +243,7 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_SPEC, "sample_tier=underpowered"),
             (F007_SPEC, "provisional"),
             (F007_SPEC, "trustworthy"),
-            (F007_DESIGN, "三级（ADR-0003 样本量门槛）"),
+            (F007_DESIGN, "三级（ADR-0003 样本量门槛；半开区间"),
             (F007_TASKS, "三级样本量"),
         ),
     ),
@@ -450,8 +454,11 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         "factor_registry_owner_declared",
         "F003-R2-005",
         requires=(
-            (SPEC, "查重判定与 lifecycle 状态判定"),
+            # F007-D028（operator 裁决#1）拆分后：摘要回写+查重归 F007，
+            # lifecycle 状态判定 v0.2 无 owner、后移 M3/F006。
+            (SPEC, "评测摘要回写与 `|ρ|`"),
             (SPEC, "owner = `F007`"),
+            (SPEC, "lifecycle 状态判定** v0.2 无 owner"),
             (SPEC, "lifecycle 动作执行"),
             (F007_SPEC, "唯一写入 owner"),
         ),
@@ -536,6 +543,121 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         forbids=(
             (DESIGN, "经 F004 交付的服务生命周期"),
             (SPEC, "经 F004 交付的容器编排控制"),
+        ),
+    ),
+    # ---- F007 文档检视 Round 2 修复断言（finding id 前缀 F007-D026..D040）----
+    TextCheck(
+        "adr0007_universe_calendar_split_aligned",
+        "F007-D030",
+        requires=(
+            (ADR7, "universe_path"),
+            (ADR7, "calendar_path"),
+            (ADR7, 'sha256(canonical_json({"universe"'),
+            (F007_SPEC, 'sha256(canonical_json({"universe"'),
+            (F007_DESIGN, 'sha256(canonical_json({"universe"'),
+            (DESIGN, "sha256(canonical_json"),
+            (DESIGN, "冻结公式"),
+        ),
+        forbids=(
+            (ADR7, "universe_calendar_path"),
+            (DESIGN, "<combine(universe.digest, calendar.digest)>"),
+        ),
+    ),
+    TextCheck(
+        "sample_tier_boundaries_frozen",
+        "F007-D031",
+        requires=(
+            (F007_SPEC, "`[0, 30)`"),
+            (F007_SPEC, "`[30, 69)`"),
+            (F007_SPEC, "`[69, ∞)`"),
+            (F007_SPEC, "`sample_unit`"),
+            (F007_SPEC, "29/30/68/69"),
+            (F007_DESIGN, "`[0, 30)`"),
+            (F007_DESIGN, "`[30, 69)`"),
+            (F007_DESIGN, "`[69, ∞)`"),
+            (F007_DESIGN, "导出优先级"),
+        ),
+        forbids=(
+            (F007_SPEC, "≈≥69"),
+            (F007_SPEC, "`<30`"),
+            (F007_SPEC, "`30~69`"),
+            (F007_DESIGN, "≈≥69"),
+        ),
+    ),
+    TextCheck(
+        "holdout_ledger_writer_deferred",
+        "F007-D032",
+        requires=(
+            (F007_SPEC, "**v0.2 写入者边界**"),
+            (F007_SPEC, "追加写入者后移 FR4/M3"),
+            (F007_SPEC, "`holdout_window`"),
+            (F007_SPEC, "`regime`"),
+            (F007_DESIGN, "v0.2 无追加写入者"),
+            (F007_DESIGN, "周度 top-k 配额"),
+            (F007_TASKS, "留出预算台账的追加写入者"),
+        ),
+    ),
+    TextCheck(
+        "second_impl_tolerance_by_estimator",
+        "F007-D034",
+        requires=(
+            (F007_TASKS, "确定性量（BH-FDR 临界值、HAC 稳健 SE）相对差 ≤1e-6"),
+            (F007_TASKS, "固定 seed 同实现复算一致"),
+            (F007_TASKS, "test_f007_second_impl_vibe.py"),
+            (F007_DESIGN, "第二实现对照（本仓）"),
+            (F007_DESIGN, "第二实现对照（外部）"),
+            (F007_DESIGN, "test_f007_second_impl_vibe.py"),
+        ),
+        forbids=((F007_TASKS, "估计量相对差 ≤1e-6"),),
+    ),
+    TextCheck(
+        "deferred_owner_has_carrier",
+        "F007-D036",
+        requires=(
+            (BACKLOG, "无前视 L2（逐 K 线重放）"),
+            (BACKLOG, "lifecycle 状态判定"),
+            (F007_TASKS, "无前视 L2（独立逐 K 线重放审计）与 L3"),
+            (F007_TASKS, "BACKLOG「规划中」行已登记"),
+        ),
+    ),
+    TextCheck(
+        "code_digest_runner_computed",
+        "F007-D037",
+        requires=(
+            (F007_SPEC, "只作**期望值**"),
+            (F007_SPEC, "工作树脏时拒绝 canonical"),
+            (F007_SPEC, "`E_INPUT_INVALID`"),
+            (F007_DESIGN, "只作**期望值**"),
+            (F007_DESIGN, "回退 git tree"),
+            (F007_DESIGN, "不接受调用方自报值"),
+        ),
+    ),
+    TextCheck(
+        "cost_model_version_published",
+        "F007-D038",
+        requires=(
+            (F007_DESIGN, "对外即 **`cost_model_version`**"),
+            (F007_DESIGN, "F003 只读消费"),
+            (F007_SPEC, "`cost_model_version`"),
+        ),
+    ),
+    TextCheck(
+        "evidence_dirs_in_design_tree",
+        "F007-D040",
+        requires=(
+            (F007_DESIGN, "f007/real_env/<run_id>/"),
+            (F007_DESIGN, "mutation/f007/mutation_report.json"),
+            (F007_DESIGN, "property/f007/<seed>/"),
+            (F007_DESIGN, "second_impl/<experiment_id>/"),
+            (F007_DESIGN, "开发期证据"),
+        ),
+    ),
+    TextCheck(
+        "f007_requirement_refs_disambiguated",
+        "F007-D039",
+        requires=(
+            (F007_SPEC, "F008 `IR-003`"),
+            (F007_TASKS, "`AC-012`, `AC-013`"),
         ),
     ),
 )
@@ -787,6 +909,230 @@ def check_declared_test_carriers(root: pathlib.Path) -> list[tuple[str, str]]:
     return errors
 
 
+# ---- F007 Round 2 解析式门禁（D026/D027/D028/D029/D035/D039：结构闭合，非子串存在）----
+# 动因：TEXT_CHECKS 的子串针脚只能证明「文字没被删」，D026/D027/D029 在全部门禁绿的情况下
+# 仍然成立（见 CURRENT-doc-F007.md Round 2 变异核对）。这一组改为解析文档结构后断言闭合性。
+
+
+def _md_section(text: str, title: str) -> str:
+    lines = text.replace("\r\n", "\n").split("\n")
+    start = None
+    for i, line in enumerate(lines):
+        m = re.match(r"^##\s+(.+)$", line)
+        if m and m.group(1).strip() == title:
+            start = i + 1
+            break
+    if start is None:
+        return ""
+    body: list[str] = []
+    for line in lines[start:]:
+        if re.match(r"^##\s", line):
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _fenced_text_block(section_text: str) -> str:
+    m = re.search(r"```text\n([\s\S]*?)```", section_text)
+    return m.group(1) if m else ""
+
+
+F007_LIFECYCLE_STATES = {
+    "CREATED",
+    "VALIDATING",
+    "RUNNING",
+    "EVIDENCE_READY",
+    "REJECTED",
+    "INCOMPLETE",
+    "REGISTERED",
+    "PREVIEW_DONE",
+    "OPEN",
+    "FINALIZED",
+}
+LIFECYCLE_TRANSITION_RE = re.compile(r"^\s*(?:\w+ )?([A-Z][A-Z_]+)\s*->\s*([A-Z][A-Z_]+)", re.M)
+
+
+def check_f007_lifecycle_closure(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F007-D026：生命周期状态机闭合——失败成员必须有终态登记路径。
+
+    解析 spec §5 的 text 代码块为迁移边，校验：状态都在冻结枚举内；REJECTED /
+    INCOMPLETE 都能到达 REGISTERED；finalize 条件写明「全部终态且已 REGISTERED」；
+    INCOMPLETE 的终态条件（重试上限/显式 abandon）有定义。
+    """
+    check_id = "f007_lifecycle_closure"
+    block = _fenced_text_block(_md_section(read(root, F007_SPEC), "5. 生命周期与不变量"))
+    if not block:
+        return [(check_id, "spec §5 未找到生命周期 text 代码块")]
+    errors: list[tuple[str, str]] = []
+    edge_set: set[tuple[str, str]] = set()
+    for m in LIFECYCLE_TRANSITION_RE.finditer(block):
+        src, dst = m.group(1), m.group(2)
+        edge_set.add((src, dst))
+        for state in (src, dst):
+            if state not in F007_LIFECYCLE_STATES:
+                errors.append((check_id, f"未知生命周期状态 {state!r}（枚举外取值）"))
+    for need, why in (
+        (("VALIDATING", "REJECTED"), "方法论门失败缺少 REJECTED 终态路径"),
+        (("REJECTED", "REGISTERED"), "拒绝成员缺少终态登记路径（cohort 将无法 finalize）"),
+        (("INCOMPLETE", "RUNNING"), "INCOMPLETE 缺少重试路径"),
+        (("INCOMPLETE", "REGISTERED"), "INCOMPLETE 终态缺少登记路径"),
+    ):
+        if need not in edge_set:
+            errors.append((check_id, f"缺少迁移 {need[0]} -> {need[1]}：{why}"))
+    finalize = " ".join(ln for ln in block.split("\n") if "OPEN -> FINALIZED" in ln)
+    if "REGISTERED" not in finalize:
+        errors.append((check_id, "finalize 条件未写明「全部终态且已 REGISTERED」"))
+    if "重试上限" not in block or "abandon" not in block:
+        errors.append((check_id, "INCOMPLETE 终态条件未定义（重试上限/显式 abandon）"))
+    return errors
+
+
+F007_PROMOTION_ENUMS = {"promising", "dead", "underpowered", "incomplete", "blocked_pending_audit"}
+
+
+def check_f007_promotion_blocked_state_defined(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F007-D027：promotion_verdict 枚举闭合、阻断点有接口与专用错误码（解析式）。"""
+    check_id = "f007_promotion_blocked_state_defined"
+    errors: list[tuple[str, str]] = []
+    design = read(root, F007_DESIGN)
+    spec = read(root, F007_SPEC)
+    m = re.search(r"\|\s*成员晋升裁决\s*\|\s*`promotion_verdict`\s*\|((?:[^|\\]|\\\|)+)\|", design)
+    if not m:
+        errors.append((check_id, "design §3.3 术语表缺 promotion_verdict 枚举行"))
+    else:
+        enums = {t.strip(" `\\") for t in m.group(1).split("\\|") if t.strip(" `\\")}
+        missing = F007_PROMOTION_ENUMS - enums
+        extra = enums - F007_PROMOTION_ENUMS
+        if missing:
+            errors.append((check_id, f"promotion_verdict 枚举缺 {sorted(missing)}"))
+        if extra:
+            errors.append((check_id, f"promotion_verdict 枚举出现未冻结取值 {sorted(extra)}"))
+    if "E_PROMOTION_BLOCKED" not in design:
+        errors.append((check_id, "design 未定义专用错误码 E_PROMOTION_BLOCKED"))
+    if not re.search(r"^\|\s*4\s*\|.*blocked_pending_audit", design, re.M):
+        errors.append((check_id, "design 导出优先级表缺 blocked_pending_audit（第 4 级）"))
+    if "blocked_pending_audit" not in spec or "F006 晋级入口" not in spec:
+        errors.append((check_id, "spec FR-007 未写明 blocked_pending_audit 与 F006 晋级入口消费"))
+    return errors
+
+
+def check_f007_registry_writeback_carrier(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F007-D028：注册表评测面回写必须具备 FR/DR/AC/design/tasks 全载体（解析式）。"""
+    check_id = "f007_registry_writeback_carrier"
+    errors: list[tuple[str, str]] = []
+    spec = read(root, F007_SPEC)
+    design = read(root, F007_DESIGN)
+    tasks = read(root, F007_TASKS)
+    fr8 = re.search(r"###\s+Requirement:[^\n]*`FR-008`[\s\S]*?(?=\n### )", spec)
+    if not fr8:
+        errors.append((check_id, "spec §4 缺 FR-008 需求块"))
+    else:
+        for needle in ("0.99", "评测面", "append-only", "不写注册表**定义面**"):
+            if needle not in fr8.group(0):
+                errors.append((check_id, f"FR-008 正文缺关键约束 {needle!r}"))
+    if "**DR-008**" not in spec:
+        errors.append((check_id, "spec 缺 DR-008 实体（RegistryEvaluationSummary）"))
+    ac13 = None
+    for line in spec.replace("\r\n", "\n").split("\n"):
+        m = AC_LINE_RE.match(line.strip())
+        if m and m.group(1) == "013":
+            ac13 = m
+    if ac13 is None:
+        errors.append((check_id, "spec 缺 AC-013 验收项"))
+    else:
+        refs = set(re.findall(r"\b(?:FR|DR|TR|IR|UX|NFR)-\d+\b", ac13.group(2)))
+        if not {"FR-008", "DR-008"} <= refs:
+            errors.append((check_id, f"AC-013 未同时引用 FR-008/DR-008（现引用 {sorted(refs)}）"))
+    if "registry_writeback" not in design:
+        errors.append((check_id, "design 缺 registry_writeback 模块"))
+    if "下游 Contract（F003 注册表评测面）" not in design:
+        errors.append((check_id, "design 缺 F003 注册表评测面下游契约段"))
+    if "FR-008" not in tasks:
+        errors.append((check_id, "tasks 无 FR-008 承载任务"))
+    return errors
+
+
+def _f007_design_ac_file_map(design_text: str) -> dict[str, set[str]]:
+    """解析 design §8 表：验收项单元格中的 AC-x → 该行计划文件集合。
+
+    「真实环境」行是执行机证据（SOP §3），不纳入开发机旅程验收的覆盖要求。
+    """
+    ac_files: dict[str, set[str]] = {}
+    for line in _md_section(design_text, "8. 测试策略与验收映射").split("\n"):
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.split("|")]
+        if len(cells) < 5:
+            continue
+        head = cells[1]
+        if "验收项" in head or set(head) <= {"-", " "}:
+            continue
+        if "真实环境" in head:
+            continue
+        files = set(TEST_FILE_RE.findall(cells[3]))
+        for ac in re.findall(r"\bAC-(\d+)\b", head):
+            ac_files.setdefault(ac, set()).update(files)
+    return ac_files
+
+
+def check_f007_design_covers_all_spec_acs(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F007-D035：spec §6 的每个 AC 必须在 design §8 有映射行。"""
+    check_id = "f007_design_covers_all_spec_acs"
+    errors: list[tuple[str, str]] = []
+    spec = read(root, F007_SPEC)
+    ac_ids = {
+        m.group(1)
+        for m in (AC_LINE_RE.match(ln.strip()) for ln in spec.replace("\r\n", "\n").split("\n"))
+        if m
+    }
+    ac_files = _f007_design_ac_file_map(read(root, F007_DESIGN))
+    for ac in sorted(ac_ids):
+        if ac not in ac_files:
+            errors.append((check_id, f"design §8 缺 AC-{ac} 映射行"))
+    return errors
+
+
+def check_f007_test_group_verify_covers_ac_map(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F007-D029：[TEST] 条目引用的 AC 所映射的测试文件必须出现在其 verify 命令内。"""
+    check_id = "f007_test_group_verify_covers_ac_map"
+    errors: list[tuple[str, str]] = []
+    ac_files = _f007_design_ac_file_map(read(root, F007_DESIGN))
+    s3 = _md_section(read(root, F007_TASKS), "3. 验证与验收任务")
+    for line in s3.split("\n"):
+        if "[TEST]" not in line:
+            continue
+        m = TASK_LINE_RE.match(line.strip())
+        if not m:
+            continue
+        tid = m.group(1)
+        paren = REF_PAREN_RE.search(m.group(2))
+        refs = re.findall(r"\bAC-(\d+)\b", paren.group(1)) if paren else []
+        verify_part = line.split("verify:")[-1] if "verify:" in line else ""
+        verify_files = set(TEST_FILE_RE.findall(verify_part))
+        for ac in refs:
+            for f in sorted(ac_files.get(ac, ())):
+                if f not in verify_files:
+                    errors.append((check_id, f"{tid} 引用 AC-{ac} 但 verify 未运行其载体 {f}"))
+    return errors
+
+
+def check_f007_requirement_id_order(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F007-D039：spec §4 的 FR/DR 需求 ID 必须按编号升序且不重复。"""
+    check_id = "f007_requirement_id_order"
+    errors: list[tuple[str, str]] = []
+    section = _md_section(read(root, F007_SPEC), "4. 需求")
+    fr_ids = re.findall(r"^###\s+Requirement:[^\n]*`FR-(\d+)`", section, re.M)
+    dr_ids = re.findall(r"^- \*\*DR-(\d+)\*\*", section, re.M)
+    for label, seq in (("FR", fr_ids), ("DR", dr_ids)):
+        nums = [int(x) for x in seq]
+        if nums != sorted(nums):
+            errors.append((check_id, f"spec §4 {label} 需求 ID 未按编号升序：{seq}"))
+        if len(set(nums)) != len(nums):
+            errors.append((check_id, f"spec §4 {label} 需求 ID 重复：{seq}"))
+    return errors
+
+
 CUSTOM_CHECKS = (
     check_f007_declares_f003,
     check_ac_body_covers_clauses,
@@ -794,6 +1140,12 @@ CUSTOM_CHECKS = (
     check_f007_design_test_map_covers_tasks,
     check_no_stale_closed_question_task,
     check_declared_test_carriers,
+    check_f007_lifecycle_closure,
+    check_f007_promotion_blocked_state_defined,
+    check_f007_registry_writeback_carrier,
+    check_f007_design_covers_all_spec_acs,
+    check_f007_test_group_verify_covers_ac_map,
+    check_f007_requirement_id_order,
 )
 
 

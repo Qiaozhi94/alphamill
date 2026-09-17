@@ -108,3 +108,74 @@ def test_multi_source_multi_target_edge_expansion(tmp_path: pathlib.Path) -> Non
     text = tasks("- `T001/T002 -> T003`：多源边展开。")
     write_feature(tmp_path, "review", text)
     assert dag.run_checks(tmp_path) == []
+
+
+# ---- F007-D033：§3 验证任务前置规则与 verify 生产者规则 ----
+
+S3_OK = (
+    "# F001-demo tasks\n\n"
+    "## 2. 实现任务\n\n"
+    "- [ ] T001 (`FR-001`): impl — verify: `tests/unit/test_impl.py`\n"
+    "- [ ] T002 (`FR-001`): impl2\n"
+    "\n## 3. 验证与验收任务\n\n"
+    "- [ ] T003 (`AC-001`): run — verify: `pytest -q tests/unit/test_impl.py`\n"
+    "\n## 4. 依赖与并行关系\n\n"
+    "- `T001/T002 -> T003`：生产者 → 验证者。\n"
+)
+
+S3_NO_PRED = (
+    "# F001-demo tasks\n\n"
+    "## 2. 实现任务\n\n"
+    "- [ ] T001 (`FR-001`): impl — verify: `tests/unit/test_impl.py`\n"
+    "- [ ] T002 (`FR-001`): impl2\n"
+    "\n## 3. 验证与验收任务\n\n"
+    "- [ ] T003 (`AC-001`): run — verify: `pytest -q tests/unit/test_impl.py`\n"
+    "\n## 4. 依赖与并行关系\n\n"
+    "- `T001 -> T002`：验证任务没有前置。\n"
+)
+
+S3_UNWIRED_PRODUCER = (
+    "# F001-demo tasks\n\n"
+    "## 2. 实现任务\n\n"
+    "- [ ] T001 (`FR-001`): impl — verify: `tests/unit/test_impl.py`\n"
+    "- [ ] T002 (`FR-001`): impl2\n"
+    "\n## 3. 验证与验收任务\n\n"
+    "- [ ] T003 (`AC-001`): run — verify: `pytest -q tests/unit/test_impl.py`\n"
+    "\n## 4. 依赖与并行关系\n\n"
+    "- `T002 -> T003`：前置不是文件生产者。\n"
+)
+
+
+def test_section3_with_wired_producer_passes(tmp_path: pathlib.Path) -> None:
+    write_feature(tmp_path, "review", S3_OK)
+    assert dag.run_checks(tmp_path) == []
+
+
+def test_section3_task_without_predecessor_rejected(tmp_path: pathlib.Path) -> None:
+    write_feature(tmp_path, "review", S3_NO_PRED)
+    errors = dag.run_checks(tmp_path)
+    assert any("T003" in msg and "无前置边" in msg for _, msg in errors)
+
+
+def test_section3_task_with_unwired_producer_rejected(tmp_path: pathlib.Path) -> None:
+    write_feature(tmp_path, "review", S3_UNWIRED_PRODUCER)
+    errors = dag.run_checks(tmp_path)
+    assert any("T003" in msg and "test_impl.py" in msg for _, msg in errors)
+
+
+def test_real_feature_tasks_satisfy_verification_rules() -> None:
+    """真实仓库锁定：F007/F003 的 §3 规则当前满足（draft 不强制，这里显式钉住）。"""
+    for rel in (
+        "docs/features/0.2/F007-evaluation-gates/tasks.md",
+        "docs/features/0.2/F003-alphagen-vendor/tasks.md",
+    ):
+        text = (dag.ROOT / rel).read_text(encoding="utf-8")
+        assert dag.check_tasks(text) == [], rel
+
+
+def test_f007_producer_rule_goes_red_on_unwired_edge() -> None:
+    """F007-D033：删掉 `T017 -> T021` 生产者边必须判红（真实文本变异）。"""
+    rel = "docs/features/0.2/F007-evaluation-gates/tasks.md"
+    text = (dag.ROOT / rel).read_text(encoding="utf-8")
+    mutated = text.replace("`T017 -> T021`", "`T017`")
+    assert any("T021" in msg for msg in dag.check_tasks(mutated))
