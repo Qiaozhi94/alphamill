@@ -32,6 +32,8 @@ CLAUDE = "CLAUDE.md"
 README = "docs/README.md"
 F007_DESIGN = "docs/features/0.2/F007-evaluation-gates/design.md"
 F007_TASKS = "docs/features/0.2/F007-evaluation-gates/tasks.md"
+F004_SPEC = "docs/features/0.2/F004-kronos-inference-runtime/spec.md"
+F004_TASKS = "docs/features/0.2/F004-kronos-inference-runtime/tasks.md"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -459,8 +461,11 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (ARCH, "Kronos 服务生命周期契约"),
             (ARCH, "contract_version"),
             (ARCH, "E_UNSUPPORTED_VERSION"),
+            (ARCH, "`GET /lifecycle/status`"),
             (DESIGN, "Kronos 生命周期 Contract"),
             (TASKS, "test_f003_kronos_lifecycle.py"),
+            (F004_SPEC, "Kronos 服务生命周期控制面"),
+            (F004_TASKS, "tests/integration/test_f003_kronos_lifecycle.py"),
         ),
     ),
 )
@@ -658,12 +663,32 @@ def check_no_stale_closed_question_task(root: pathlib.Path) -> list[tuple[str, s
     return errors
 
 
+LIFECYCLE_CONTRACT_TEST = "tests/integration/test_f003_kronos_lifecycle.py"
+
+
+def check_declared_contract_test_carrier(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F003-R2-002：文档声明的生命周期契约测试必须真实落盘。
+
+    本轮 finding 的失败模式正是「声明的载体不存在」——fix_summary 宣称由契约测试
+    闭合，但文件从未创建。按文件存在性校验，防止再次用不存在的证据收口。
+    """
+    if not (root / LIFECYCLE_CONTRACT_TEST).is_file():
+        return [
+            (
+                "declared_contract_test_carrier",
+                f"声明的契约测试文件不存在：{LIFECYCLE_CONTRACT_TEST}",
+            )
+        ]
+    return []
+
+
 CUSTOM_CHECKS = (
     check_f007_declares_f003,
     check_ac_body_covers_clauses,
     check_active_feature_indexes,
     check_f007_design_test_map_covers_tasks,
     check_no_stale_closed_question_task,
+    check_declared_contract_test_carrier,
 )
 
 

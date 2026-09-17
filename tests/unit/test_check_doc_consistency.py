@@ -159,3 +159,12 @@ def test_stale_closed_question_task_goes_red(tmp_path: pathlib.Path) -> None:
     assert "no_stale_closed_question_task" in _check_ids(
         cdc.check_no_stale_closed_question_task(tmp_path)
     )
+
+
+def test_declared_contract_test_carrier_missing_goes_red(tmp_path: pathlib.Path) -> None:
+    """F003-R2-002：文档声明的契约测试文件不存在时必须判红。
+
+    真实仓库含该文件（绿态由 test_repo_passes_all_checks 覆盖）；变异是 tmp 根
+    不落该文件，对应本轮 finding 的失败模式——用不存在的测试文件宣称修复。
+    """
+    assert cdc.check_declared_contract_test_carrier(tmp_path) != []
