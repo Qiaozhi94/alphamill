@@ -161,10 +161,51 @@ def test_stale_closed_question_task_goes_red(tmp_path: pathlib.Path) -> None:
     )
 
 
-def test_declared_contract_test_carrier_missing_goes_red(tmp_path: pathlib.Path) -> None:
-    """F003-R2-002：文档声明的契约测试文件不存在时必须判红。
+def _materialize_referenced_tests(tmp_path: pathlib.Path) -> None:
+    """把三件套引用的、仓库中已存在的测试文件也拷进 tmp 根（carrier 检查用）。"""
+    _materialize(tmp_path, {cdc.SPEC, cdc.DESIGN, cdc.TASKS})
+    for rel in (cdc.SPEC, cdc.DESIGN, cdc.TASKS):
+        text = (tmp_path / rel).read_text(encoding="utf-8")
+        for ref in set(cdc.TEST_REF_RE.findall(text)):
+            dst = tmp_path / ref
+            src = cdc.ROOT / ref
+            if src.is_file() and not dst.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(src, dst)
 
-    真实仓库含该文件（绿态由 test_repo_passes_all_checks 覆盖）；变异是 tmp 根
-    不落该文件，对应本轮 finding 的失败模式——用不存在的测试文件宣称修复。
+
+def test_declared_test_carrier_missing_goes_red(tmp_path: pathlib.Path) -> None:
+    """F003-R2-002/R4-005：已落盘的载体文件被删除必须判红。
+
+    变异：tmp 根含全部三件套与既有测试文件，唯独删掉契约测试文件——
+    对应「声明的载体不存在」的失败模式（Round 3 曾以未落盘文件宣称修复）。
     """
-    assert cdc.check_declared_contract_test_carrier(tmp_path) != []
+    _materialize_referenced_tests(tmp_path)
+    (tmp_path / "tests/integration/test_f003_kronos_lifecycle.py").unlink()
+    errors = cdc.check_declared_test_carriers(tmp_path)
+    assert "declared_test_carrier_exists" in _check_ids(errors)
+    assert any("test_f003_kronos_lifecycle.py" in msg for _, msg in errors)
+
+
+def test_declared_test_carrier_ghost_reference_goes_red(tmp_path: pathlib.Path) -> None:
+    """F003-R4-005：引用未登记白名单的幽灵测试文件必须判红。"""
+    _materialize_referenced_tests(tmp_path)
+    tasks = tmp_path / cdc.TASKS
+    tasks.write_text(
+        tasks.read_text(encoding="utf-8")
+        + "\n- [ ] T099: 幽灵用例 — verify: `tests/unit/test_f003_ghost.py`\n",
+        encoding="utf-8",
+    )
+    errors = cdc.check_declared_test_carriers(tmp_path)
+    assert "declared_test_carrier_exists" in _check_ids(errors)
+    assert any("test_f003_ghost.py" in msg for _, msg in errors)
+
+
+def test_declared_test_carrier_landed_allowlist_entry_goes_red(tmp_path: pathlib.Path) -> None:
+    """F003-R4-005：白名单条目对应文件已落盘必须判红（过期豁免会盖住载体删除）。"""
+    _materialize_referenced_tests(tmp_path)
+    landed = tmp_path / next(iter(cdc.DECLARED_TEST_ALLOWLIST))
+    landed.parent.mkdir(parents=True, exist_ok=True)
+    landed.write_text("# landed\n", encoding="utf-8")
+    errors = cdc.check_declared_test_carriers(tmp_path)
+    assert any("白名单条目已落盘" in msg for _, msg in errors)

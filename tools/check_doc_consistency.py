@@ -7,7 +7,8 @@
 覆盖范围：
   - 声明式文本断言（`TEXT_CHECKS`）：要求/禁止的字面量，按 finding 分组；
   - 解析式断言：F007 是否声明 F003 上游（D014）、AC 断言是否覆盖其引用的子句
-    （D017）、活跃 feature 索引三处是否一致（D022）。
+    （D017）、活跃 feature 索引三处是否一致（D022）、三件套测试文件引用的存在性
+    与白名单台账（R2-002/R4-005）。
 
 用法：python tools/check_doc_consistency.py
 退出码 0 = 全部通过；1 = 存在违规。
@@ -462,10 +463,33 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (ARCH, "contract_version"),
             (ARCH, "E_UNSUPPORTED_VERSION"),
             (ARCH, "`GET /lifecycle/status`"),
+            # R4-002：契约目标是真实推理服务，不是 mock（mock 无 GPU 显存可释放）。
+            (ARCH, "真实推理服务 `kronos-signal-real`"),
+            # R4-003：status 行错误码必须含 E_UNSUPPORTED_VERSION（wire 绑定对所有
+            # 动作生效，契约测试正是打 GET /lifecycle/status 做版本拒绝）。
+            (ARCH, "`E_UNAVAILABLE` / `E_UNSUPPORTED_VERSION`"),
             (DESIGN, "Kronos 生命周期 Contract"),
             (TASKS, "test_f003_kronos_lifecycle.py"),
             (F004_SPEC, "Kronos 服务生命周期控制面"),
             (F004_TASKS, "tests/integration/test_f003_kronos_lifecycle.py"),
+        ),
+    ),
+    TextCheck(
+        "kronos_offload_classification_defined",
+        "F003-R4-004",
+        requires=(
+            # 架构侧：观测→处置决策表本体（含 device=cpu 行）。
+            (ARCH, "观测 → 处置决策表"),
+            (ARCH, "`device=cpu`（非 GPU 实例）"),
+            # 客户端侧：AC-010 验收、design 客户端契约、T025 单测断言。
+            (SPEC, "观测→处置决策表记 `offload_not_needed`"),
+            (DESIGN, "逐行实现并在单测中断言"),
+            (TASKS, "观测→处置决策表逐行断言"),
+        ),
+        forbids=(
+            # 旧的无判定方法表述（「确未部署」没有操作化定义）不得回归。
+            (ARCH, "控制面不可达且该服务确实未部署"),
+            (DESIGN, "服务确未部署记 `offload_not_needed`"),
         ),
     ),
 )
@@ -663,23 +687,54 @@ def check_no_stale_closed_question_task(root: pathlib.Path) -> list[tuple[str, s
     return errors
 
 
-LIFECYCLE_CONTRACT_TEST = "tests/integration/test_f003_kronos_lifecycle.py"
+TEST_REF_RE = re.compile(r"tests/[A-Za-z0-9_/.-]+\.py")
+
+# F003-R4-005：三件套声明了但尚未落盘的测试文件白名单（载体台账）。
+# 条目 = 文件路径 → 首个声明它的未开工任务。文件落盘后必须移除条目（转为存在性
+# 校验，防止过期豁免把「删除已落盘载体」盖住）；引用未登记的幽灵文件同样判红。
+DECLARED_TEST_ALLOWLIST: dict[str, str] = {
+    "tests/integration/test_f003_alpha_pool.py": "T026",
+    "tests/integration/test_f003_boundaries.py": "T011",
+    "tests/integration/test_f003_generation_run.py": "T028",
+    "tests/integration/test_f003_lake_tensor.py": "T020",
+    "tests/integration/test_f003_smoke_gate.py": "T016",
+    "tests/unit/test_f003_alphagen_adapter.py": "T021",
+    "tests/unit/test_f003_binding.py": "T001",
+    "tests/unit/test_f003_cli_contract.py": "T012",
+    "tests/unit/test_f003_factor_store.py": "T007",
+    "tests/unit/test_f003_generator_contract.py": "T005",
+    "tests/unit/test_f003_gpu_slot.py": "T004",
+    "tests/unit/test_f003_hypotheses.py": "T006",
+    "tests/unit/test_f003_ic_parity.py": "T018",
+    "tests/unit/test_f003_manual_seeds.py": "T010",
+    "tests/unit/test_f003_objective.py": "T024",
+    "tests/unit/test_f003_operator_registry.py": "T022",
+    "tests/unit/test_f003_run_store.py": "T008",
+    "tests/unit/test_f003_vendor_hygiene.py": "T013",
+}
 
 
-def check_declared_contract_test_carrier(root: pathlib.Path) -> list[tuple[str, str]]:
-    """F003-R2-002：文档声明的生命周期契约测试必须真实落盘。
+def check_declared_test_carriers(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F003-R2-002/R4-005：三件套引用的测试文件必须落盘，未开工的须显式登记白名单。
 
-    本轮 finding 的失败模式正是「声明的载体不存在」——fix_summary 宣称由契约测试
-    闭合，但文件从未创建。按文件存在性校验，防止再次用不存在的证据收口。
+    「声明的载体不存在」正是 Round 3/4 的失败模式——fix_summary 宣称由契约测试
+    闭合，但文件从未创建。本检查扫描 spec/design/tasks 中全部 `tests/**.py` 引用：
+    文件必须存在，或在 `DECLARED_TEST_ALLOWLIST` 显式登记（附首个声明任务）。
     """
-    if not (root / LIFECYCLE_CONTRACT_TEST).is_file():
-        return [
-            (
-                "declared_contract_test_carrier",
-                f"声明的契约测试文件不存在：{LIFECYCLE_CONTRACT_TEST}",
-            )
-        ]
-    return []
+    check_id = "declared_test_carrier_exists"
+    errors: list[tuple[str, str]] = []
+    refs: set[str] = set()
+    for rel in (SPEC, DESIGN, TASKS):
+        refs.update(TEST_REF_RE.findall(read(root, rel)))
+    for path in sorted(refs):
+        if (root / path).is_file():
+            if path in DECLARED_TEST_ALLOWLIST:
+                errors.append((check_id, f"白名单条目已落盘，请移除以纳入存在性校验：{path}"))
+            continue
+        if path in DECLARED_TEST_ALLOWLIST:
+            continue
+        errors.append((check_id, f"引用的测试文件不存在且未登记白名单：{path}"))
+    return errors
 
 
 CUSTOM_CHECKS = (
@@ -688,7 +743,7 @@ CUSTOM_CHECKS = (
     check_active_feature_indexes,
     check_f007_design_test_map_covers_tasks,
     check_no_stale_closed_question_task,
-    check_declared_contract_test_carrier,
+    check_declared_test_carriers,
 )
 
 
