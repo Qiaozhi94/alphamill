@@ -169,13 +169,16 @@ CLI `alphamill-generate`（IR-001）：
 
 ### Kronos 生命周期 Contract（R2-002）
 
-夜槽编排对 `kronos-signal` 的调用遵循**架构 §7.1 的版本化契约**（`status` / `stop` / `restore`，含
-`contract_version`、幂等语义、可配超时与错误码 `E_UNAVAILABLE` / `E_BUSY` / `E_TIMEOUT` /
+夜槽编排对**真实推理服务 `kronos-signal-real`** 的调用遵循**架构 §7.1 的版本化契约**（`status` / `stop` /
+`restore`，含 `contract_version`、幂等语义、可配超时与错误码 `E_UNAVAILABLE` / `E_BUSY` / `E_TIMEOUT` /
 `E_UNSUPPORTED_VERSION`）。客户端行为：进入夜槽 → `status` →（`running` 则 `stop`）→ 用
 `status.vram_bytes` 确认显存释放 → 取锁训练 → 窗口结束 `restore`；全过程写 `kronos_offload` 观测。
-契约版本不匹配等同服务端未实现；服务确未部署记 `offload_not_needed`；忙碌/超时/版本错误一律
-**fail-closed** 留在队列。契约测试：`tests/integration/test_f003_kronos_lifecycle.py`——`tests/contract/`
-不在 `tools/verify.py` 的收集范围内（design §0 约束：测试只落 `tests/unit` / `tests/integration`）。
+观测归类按架构 §7.1 的**观测→处置决策表**逐行实现并在单测中断言：连接拒绝且部署清单无该服务、
+或 `status.device=cpu`（非 GPU 实例，无显存可释放）→ 记 `offload_not_needed`；HTTP 404 /
+`E_UNSUPPORTED_VERSION` / 停止失败 / 控制面不可达但服务在 → **fail-closed** 留在队列。
+契约测试：`tests/integration/test_f003_kronos_lifecycle.py`（目标实例 `kronos-signal-real`，经
+`KRONOS_CONTROL_URL` 显式指定，不打 mock）——`tests/contract/` 不在 `tools/verify.py` 的收集范围内
+（design §0 约束：测试只落 `tests/unit` / `tests/integration`）。
 
 ### Event / Trace Contract
 append-only `events.jsonl`，每行一个事件，含 `event_type` / `ts` / `run_id` / payload：
@@ -208,7 +211,7 @@ mine/seed 调用
 - **CPU 回退**：无 CUDA 时必须显式 `--allow-cpu`，否则拒绝启动——防止"静默跑了一夜 CPU"；CPU 运行在 `run.json` 标 `device=cpu` 与 `hostname`，产能与显存类断言对该运行不成立（spec NFR-005）。开发机只走这条路径，且只用于单元与契约测试；
 - **checkpoint**：训练每 N steps 落 `checkpoints/`；崩溃后重跑以相同 `(seed, binding, code_digest, config_digest)` 从头复算即可得到相同候选集（NFR-003），checkpoint 只用于省时，不参与身份；
 - **优雅停机与失败终态**：SIGTERM 走正常收尾——保留已产候选供 `show` 诊断（**不写 `pool.json`**），写 `status=partial` + `termination=early` 的终态 `run.json`，且**不发** `generation.run_completed`；非受控异常写 `status=failed` + `termination=<异常类>` 的终态 `run.json`（若该次写出本身失败，则目录视为未完成）；只有完整原子运行写 `status=completed` + `generation.run_completed`；下游只消费 `status=completed` 的运行；
-- **与 Kronos 的协同（live owner = F003 编排）**：训练夜槽内 Kronos 常驻推理必须卸载（架构 §7.1 时段表）。**该窗口切换的 live owner 是 F003**：进入夜槽前由 `gpu_slot` / 训练编排经 F004 交付的服务生命周期（容器编排控制）优雅停止 `kronos-signal`，确认显存释放后才取锁训练，窗口结束后恢复；F003 不向未知进程发 signal、也不接管 F004 的服务定义。全过程把 `kronos_offload: {requested_at, stop_result, vram_before_gb, vram_after_gb, restored_at}` 写进 `run.json`。停止失败或显存未释放 → **fail-closed**：留在单槽 FIFO 等待并记原因，绝不与常驻推理并行抢卡。F004 交付未部署（该服务不存在）→ 记 `offload_not_needed`。FIFO 协议本身仍可由两个并发挖掘运行独立取证。
+- **与 Kronos 的协同（live owner = F003 编排）**：训练夜槽内 Kronos 常驻推理必须卸载（架构 §7.1 时段表）。**该窗口切换的 live owner 是 F003**：进入夜槽前由 `gpu_slot` / 训练编排经 F004 交付的服务生命周期（容器编排控制）优雅停止真实推理实例（`kronos-signal-real`；其控制面端点属 BACKLOG 待分配 feature），确认显存释放后才取锁训练，窗口结束后恢复；F003 不向未知进程发 signal、也不接管 F004 的服务定义。全过程把 `kronos_offload: {requested_at, stop_result, vram_before_gb, vram_after_gb, restored_at}` 写进 `run.json`。停止失败或显存未释放 → **fail-closed**：留在单槽 FIFO 等待并记原因，绝不与常驻推理并行抢卡。未部署（连接拒绝且部署清单无该服务）或非 GPU 实例（`device=cpu`）→ 记 `offload_not_needed`；404 / `E_UNSUPPORTED_VERSION` → fail-closed（架构 §7.1 观测→处置决策表）。FIFO 协议本身仍可由两个并发挖掘运行独立取证。
 
 ## 6. UI 与可观测性
 
