@@ -316,3 +316,56 @@ def test_declared_test_carrier_orphan_entry_goes_red(tmp_path: pathlib.Path) -> 
         doc.write_text("\n".join(kept), encoding="utf-8")
     errors = cdc.check_declared_test_carriers(tmp_path)
     assert any(f"孤儿条目，请移除）：{target_ref}" in msg for _, msg in errors)
+
+
+def _arch_copy(tmp_path: pathlib.Path) -> pathlib.Path:
+    _materialize(tmp_path, {cdc.ARCH})
+    return tmp_path / cdc.ARCH
+
+
+def test_offload_table_row_disposition_flip_goes_red(tmp_path: pathlib.Path) -> None:
+    """F003-R4-004：把某行的处置改成放行必须判红（片段级 require 曾漏掉这种改写）。"""
+    arch = _arch_copy(tmp_path)
+    row = cdc.EXPECTED_OFFLOAD_TABLE[3]  # 停止失败 → fail-closed
+    text = arch.read_text(encoding="utf-8")
+    mutated = text.replace(
+        f"| {row[0]} | {row[1]} | {row[2]} |",
+        f"| {row[0]} | {row[1]} | 记 `offload_not_needed`，继续夜槽 |",
+    )
+    assert mutated != text
+    arch.write_text(mutated, encoding="utf-8")
+    assert "offload_decision_table_rows" in _check_ids(cdc.check_offload_decision_table(tmp_path))
+
+
+def test_offload_table_row_removed_goes_red(tmp_path: pathlib.Path) -> None:
+    """F003-R4-004：删掉整行（例如「控制面不可达但服务在」）必须判红。"""
+    arch = _arch_copy(tmp_path)
+    row = cdc.EXPECTED_OFFLOAD_TABLE[4]
+    text = arch.read_text(encoding="utf-8")
+    mutated = text.replace(f"  | {row[0]} | {row[1]} | {row[2]} |\n", "")
+    assert mutated != text
+    arch.write_text(mutated, encoding="utf-8")
+    assert "offload_decision_table_rows" in _check_ids(cdc.check_offload_decision_table(tmp_path))
+
+
+def test_offload_table_process_criterion_goes_red(tmp_path: pathlib.Path) -> None:
+    """F003-R6-001：404 行退回「卡上无 Kronos 进程」判据必须判红（WSL2 下恒真）。"""
+    arch = _arch_copy(tmp_path)
+    text = arch.read_text(encoding="utf-8")
+    mutated = text.replace(
+        "或设备侧 `memory.used` 低于可配阈值 `kronos_vram_idle_threshold`",
+        "或卡上无 Kronos 进程",
+    )
+    assert mutated != text
+    arch.write_text(mutated, encoding="utf-8")
+    assert "offload_decision_table_rows" in _check_ids(cdc.check_offload_decision_table(tmp_path))
+
+
+def test_offload_table_anchor_missing_goes_red(tmp_path: pathlib.Path) -> None:
+    """删掉决策表锚点（整张表被搬走/改名）必须判红，而不是静默通过。"""
+    arch = _arch_copy(tmp_path)
+    arch.write_text(
+        arch.read_text(encoding="utf-8").replace(cdc.OFFLOAD_TABLE_ANCHOR, "**其它标题**"),
+        encoding="utf-8",
+    )
+    assert "offload_decision_table_rows" in _check_ids(cdc.check_offload_decision_table(tmp_path))

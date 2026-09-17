@@ -36,6 +36,12 @@ F007_TASKS = "docs/features/0.2/F007-evaluation-gates/tasks.md"
 F004_SPEC = "docs/features/0.2/F004-kronos-inference-runtime/spec.md"
 F004_TASKS = "docs/features/0.2/F004-kronos-inference-runtime/tasks.md"
 TEST_LIFECYCLE = "tests/integration/test_f003_kronos_lifecycle.py"
+
+# F003-R5-002/R6-001：404 回落探测的规范子句，AC-010 / design / T025 逐字共用。
+OFFLOAD_FALLBACK_CLAUSE = (
+    "404/`E_UNSUPPORTED_VERSION` 回落探测：`/health.device=cpu` 或设备侧 `memory.used` "
+    "低于阈值 → `offload_not_needed`；达到阈值或读数不可得 → fail-closed（不依赖 GPU 进程列表）"
+)
 ADR7 = "docs/decisions/0007-research-snapshot-binding.md"
 
 
@@ -486,18 +492,17 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         "kronos_offload_classification_defined",
         "F003-R4-004",
         requires=(
-            # 架构侧：观测→处置决策表本体 + 五行关键判据（R4-004：逐行钉字面量）。
+            # 架构侧决策表本体由解析式检查 check_offload_decision_table 逐行锁定（R4-004）。
             (ARCH, "观测 → 处置决策表"),
-            (ARCH, "`device=cpu`（非 GPU 实例）"),
-            # R5-002（裁决记录#3）：404 行回落探测，不直接 fail-closed。
-            (ARCH, "**回落探测** `/health` 的 `device`"),
-            (ARCH, "endpoint_absent_no_gpu_tenant"),
-            (ARCH, "控制面不可达（连接拒绝/超时），但部署清单中存在该服务"),
-            # 客户端侧：AC-010 验收、design 客户端契约、T025 单测断言。
+            # 客户端侧：AC-010 验收、design 客户端契约、T025 单测断言；404 回落探测判据
+            # 三处用同一规范子句（R5-002 裁决#3 + R6-001），片段级改写即判红。
             (SPEC, "观测→处置决策表记 `offload_not_needed`"),
+            (SPEC, OFFLOAD_FALLBACK_CLAUSE),
             (DESIGN, "逐行实现并在单测中断言"),
+            (DESIGN, OFFLOAD_FALLBACK_CLAUSE),
             (TASKS, "观测→处置决策表逐行断言"),
-            (TASKS, "endpoint_absent_no_gpu_tenant"),
+            (TASKS, OFFLOAD_FALLBACK_CLAUSE),
+            (TASKS, "进程列表为空但 `memory.used` 达到阈值 → fail-closed"),
         ),
         forbids=(
             # 旧的无判定方法表述（「确未部署」没有操作化定义）不得回归。
@@ -505,6 +510,11 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (DESIGN, "服务确未部署记 `offload_not_needed`"),
             # R5-001：mock 探测括注（决策表推不出来）不得回归。
             (ARCH, "对其探测按下方决策表归"),
+            # R6-001：WSL2 下 nvidia-smi 不列 GPU 进程，进程判据恒真，不得回归。
+            (ARCH, "卡上无 Kronos 进程"),
+            (SPEC, "卡上无 Kronos 进程"),
+            (DESIGN, "卡上无 Kronos 进程"),
+            (TASKS, "卡上无 Kronos 进程"),
         ),
     ),
     TextCheck(
@@ -513,7 +523,8 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         requires=(
             # T033 的 0 xfailed 硬要求与机器门禁参数（--runxfail 使先红态按真失败计）。
             (TASKS, "必须以 **0 xfailed** 通过"),
-            (TASKS, "`--runxfail`"),
+            # R4-001：钉命令整串，避免被说明文字里的同名串满足。
+            (TASKS, "pytest -q --runxfail tests/integration/test_f003_generation_run.py"),
             (TASKS, "KRONOS_CONTROL_URL=http://127.0.0.1:8002"),
             # 端点 feature -> T033 前置边。
             (TASKS, "BACKLOG「Kronos 服务生命周期端点」feature 落地并部署于执行机 -> T033"),
@@ -882,6 +893,79 @@ DECLARED_TEST_ALLOWLIST: dict[str, str] = {
 }
 
 
+# F003-R4-004/R6-001：架构 §7.1「观测 → 处置决策表」的期望内容（逐行、按序）。
+# 片段级 require 连续两轮锁不住行级改写，因此改为解析整张表逐格比对；
+# 改表必须同步改这里，这正是有意的摩擦。
+OFFLOAD_TABLE_ANCHOR = "**观测 → 处置决策表**"
+EXPECTED_OFFLOAD_TABLE: tuple[tuple[str, str, str], ...] = (
+    (
+        "连接拒绝，且部署清单中无该服务",
+        "确未部署",
+        "记 `offload_not_needed`，继续夜槽",
+    ),
+    (
+        "`status` 可达且 `device=cpu`（非 GPU 实例）",
+        "无显存可释放",
+        "记 `offload_not_needed`，继续夜槽",
+    ),
+    (
+        "HTTP 404 / `E_UNSUPPORTED_VERSION`",
+        "端点未实现，**回落探测** `/health` 的 `device` 与设备侧显存读数"
+        "（`nvidia-smi --query-gpu=memory.used`），**不依赖 GPU 进程列表**"
+        "（WSL2 下 `nvidia-smi` 不列出 GPU 进程）",
+        "`/health.device=cpu`，或设备侧 `memory.used` 低于可配阈值 "
+        "`kronos_vram_idle_threshold` → 记 `offload_not_needed`"
+        "（`reason=endpoint_absent_no_gpu_tenant`，读数写入 `kronos_offload`），继续夜槽；"
+        "`memory.used` 达到阈值或任一读数不可得 → **fail-closed** 留在单槽队列",
+    ),
+    (
+        "`stop` 返回 `E_BUSY` / `E_TIMEOUT`，或 `status.vram_bytes` 确认未释放",
+        "停止失败",
+        "**fail-closed** 留在单槽队列",
+    ),
+    (
+        "控制面不可达（连接拒绝/超时），但部署清单中存在该服务",
+        "状态未知",
+        "**fail-closed** 留在单槽队列",
+    ),
+)
+
+
+def parse_offload_table(text: str) -> list[tuple[str, ...]] | None:
+    """取锚点之后第一张 Markdown 表的数据行（跳过表头与分隔行）；无锚点返回 None。"""
+    idx = text.find(OFFLOAD_TABLE_ANCHOR)
+    if idx < 0:
+        return None
+    rows: list[tuple[str, ...]] = []
+    started = False
+    for line in text[idx:].splitlines()[1:]:
+        s = line.strip()
+        if s.startswith("|"):
+            started = True
+            rows.append(tuple(c.strip() for c in s.strip("|").split("|")))
+        elif started:
+            break
+    return rows[2:]  # 去掉表头与 |---| 分隔行
+
+
+def check_offload_decision_table(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F003-R4-004：夜槽卸载决策表逐行逐格与期望一致（增删改行、改处置均判红）。"""
+    check_id = "offload_decision_table_rows"
+    rows = parse_offload_table(read(root, ARCH))
+    if rows is None:
+        return [(check_id, f"{ARCH} 缺少锚点 {OFFLOAD_TABLE_ANCHOR}")]
+    expected = [tuple(r) for r in EXPECTED_OFFLOAD_TABLE]
+    if rows == expected:
+        return []
+    errors: list[tuple[str, str]] = []
+    if len(rows) != len(expected):
+        errors.append((check_id, f"决策表行数 {len(rows)} ≠ 期望 {len(expected)}"))
+    for i, (got, want) in enumerate(zip(rows, expected, strict=False), start=1):
+        if got != want:
+            errors.append((check_id, f"决策表第 {i} 行与期望不一致：{' | '.join(got)[:80]}"))
+    return errors
+
+
 def check_declared_test_carriers(root: pathlib.Path) -> list[tuple[str, str]]:
     """F003-R2-002/R4-005：三件套引用的测试文件必须落盘，未开工的须显式登记白名单。
 
@@ -1146,6 +1230,7 @@ CUSTOM_CHECKS = (
     check_f007_design_covers_all_spec_acs,
     check_f007_test_group_verify_covers_ac_map,
     check_f007_requirement_id_order,
+    check_offload_decision_table,
 )
 
 
