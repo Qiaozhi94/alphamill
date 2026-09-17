@@ -585,8 +585,8 @@ VRAM 预算为硬上限：任务启动前自检可用显存，低于预算即进
 
 **Kronos 服务生命周期契约（版本化，供夜槽编排消费）**：**真实推理服务 `kronos-signal-real`**
 （执行机 GPU 实例）的服务端暴露版本化控制面（`contract_version`），供挖掘编排在训练窗口边界调用；
-mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围（对其探测按下方决策表归
-`offload_not_needed`）：
+mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围——客户端只探测 `KRONOS_CONTROL_URL`
+指定的目标实例，不探测 mock：
 
 | 动作 | 语义 | 幂等性 | 超时 | 错误码 |
 |---|---|---|---|---|
@@ -608,8 +608,8 @@ mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围（�
   |---|---|---|
   | 连接拒绝，且部署清单中无该服务 | 确未部署 | 记 `offload_not_needed`，继续夜槽 |
   | `status` 可达且 `device=cpu`（非 GPU 实例） | 无显存可释放 | 记 `offload_not_needed`，继续夜槽 |
-  | HTTP 404 / `E_UNSUPPORTED_VERSION` | 服务在、控制面未实现 | **fail-closed** 留在单槽队列 |
+  | HTTP 404 / `E_UNSUPPORTED_VERSION` | 端点未实现，**回落探测** `/health` 的 `device` 或设备侧读数（`nvidia-smi` 进程/显存） | `device=cpu` 或卡上无 Kronos 进程 → 记 `offload_not_needed`（`reason=endpoint_absent_no_gpu_tenant`，证据写入 `kronos_offload`），继续夜槽；卡上有 Kronos 占显存或设备信息不可读 → **fail-closed** 留在单槽队列 |
   | `stop` 返回 `E_BUSY` / `E_TIMEOUT`，或 `status.vram_bytes` 确认未释放 | 停止失败 | **fail-closed** 留在单槽队列 |
-  | 控制面不可达，但部署清单中存在该服务 | 状态未知 | **fail-closed** 留在单槽队列 |
+  | 控制面不可达（连接拒绝/超时），但部署清单中存在该服务 | 状态未知 | **fail-closed** 留在单槽队列 |
 - **所有权**：契约正文由本节拥有；客户端调用与运行取证归 F003（训练窗口编排），服务端实现归
   `kronos-signal-real` 交付（BACKLOG「Kronos 服务生命周期端点」，待分配 feature）。

@@ -209,3 +209,111 @@ def test_declared_test_carrier_landed_allowlist_entry_goes_red(tmp_path: pathlib
     landed.write_text("# landed\n", encoding="utf-8")
     errors = cdc.check_declared_test_carriers(tmp_path)
     assert any("白名单条目已落盘" in msg for _, msg in errors)
+
+
+# ---- F007 Round 2 解析式检查的变异回归（修复方证据：解析门必须可红）----
+
+
+def _materialize_f007(tmp_path: pathlib.Path) -> None:
+    _materialize(tmp_path, {cdc.F007_SPEC, cdc.F007_DESIGN, cdc.F007_TASKS})
+
+
+def _rewrite(path: pathlib.Path, old: str, new: str, count: int = -1) -> None:
+    replaced = text.replace(old, new) if (text := path.read_text(encoding="utf-8")) and count == -1 else None
+    if replaced is None:
+        replaced = path.read_text(encoding="utf-8").replace(old, new, count)
+    path.write_text(replaced, encoding="utf-8")
+
+
+def test_f007_lifecycle_closure_goes_red_on_missing_registration(
+    tmp_path: pathlib.Path,
+) -> None:
+    """F007-D026：拒绝成员的终态登记路径被删必须判红（状态机解析，非子串）。"""
+    _materialize_f007(tmp_path)
+    _rewrite(
+        tmp_path / cdc.F007_SPEC,
+        "REJECTED -> REGISTERED",
+        "REJECTED -> REGISTERED_X",
+    )
+    ids = _check_ids(cdc.check_f007_lifecycle_closure(tmp_path))
+    assert "f007_lifecycle_closure" in ids
+
+
+def test_f007_promotion_enum_goes_red_on_missing_blocked_state(tmp_path: pathlib.Path) -> None:
+    """F007-D027：promotion_verdict 枚举丢 blocked_pending_audit 必须判红。"""
+    _materialize_f007(tmp_path)
+    _rewrite(
+        tmp_path / cdc.F007_DESIGN,
+        r"incomplete \| blocked_pending_audit",
+        r"incomplete",
+    )
+    ids = _check_ids(cdc.check_f007_promotion_blocked_state_defined(tmp_path))
+    assert "f007_promotion_blocked_state_defined" in ids
+
+
+def test_f007_registry_writeback_carrier_goes_red_on_lost_requirement(
+    tmp_path: pathlib.Path,
+) -> None:
+    """F007-D028：FR-008 需求块消失必须判红（评测面回写无载体）。"""
+    _materialize_f007(tmp_path)
+    _rewrite(
+        tmp_path / cdc.F007_SPEC,
+        "### Requirement: 评测面回写与查重判定（`FR-008`）",
+        "### Requirement: 评测面回写与查重判定（`FR-009`）",
+    )
+    ids = _check_ids(cdc.check_f007_registry_writeback_carrier(tmp_path))
+    assert "f007_registry_writeback_carrier" in ids
+
+
+def test_f007_design_ac_map_goes_red_on_missing_row(tmp_path: pathlib.Path) -> None:
+    """F007-D035：design §8 丢 AC-012 映射行必须判红（spec AC ⊆ design §8）。"""
+    _materialize_f007(tmp_path)
+    _rewrite(
+        tmp_path / cdc.F007_DESIGN,
+        "| `AC-012` | integration + contract |"
+        " `tests/integration/test_f007_synthesis.py`、"
+        "`tests/contract/test_f007_artifact_schemas.py`"
+        " | 五阶段 ID 与 `failure_taxonomy` 三维聚合；枚举外取值拒绝 |\n",
+        "",
+    )
+    ids = _check_ids(cdc.check_f007_design_covers_all_spec_acs(tmp_path))
+    assert "f007_design_covers_all_spec_acs" in ids
+
+
+def test_f007_test_group_verify_goes_red_on_uncovered_carrier(tmp_path: pathlib.Path) -> None:
+    """F007-D029：[TEST] 条目 verify 不运行其 AC 载体文件必须判红。"""
+    _materialize_f007(tmp_path)
+    _rewrite(
+        tmp_path / cdc.F007_TASKS,
+        " tests/contract/test_f007_artifact_schemas.py`",
+        "`",
+        count=1,
+    )
+    ids = _check_ids(cdc.check_f007_test_group_verify_covers_ac_map(tmp_path))
+    assert "f007_test_group_verify_covers_ac_map" in ids
+
+
+def test_f007_requirement_id_order_goes_red_on_reorder(tmp_path: pathlib.Path) -> None:
+    """F007-D039：spec §4 需求 ID 乱序必须判红。"""
+    _materialize_f007(tmp_path)
+    _rewrite(
+        tmp_path / cdc.F007_SPEC,
+        "### Requirement: 成本、容量与时间稳定性（`FR-005`）",
+        "### Requirement: 成本、容量与时间稳定性（`FR-009`）",
+    )
+    ids = _check_ids(cdc.check_f007_requirement_id_order(tmp_path))
+    assert "f007_requirement_id_order" in ids
+
+
+def test_declared_test_carrier_orphan_entry_goes_red(tmp_path: pathlib.Path) -> None:
+    """F003-R4-005/R5-004：三件套已不引用的白名单条目必须判红（孤儿豁免不得残留）。"""
+    _materialize_referenced_tests(tmp_path)
+    target_ref = next(iter(cdc.DECLARED_TEST_ALLOWLIST))
+    # 该引用可能同时出现在 spec/design/tasks——三处都去掉才构成孤儿条目。
+    for rel in (cdc.SPEC, cdc.DESIGN, cdc.TASKS):
+        doc = tmp_path / rel
+        kept = [ln for ln in doc.read_text(encoding="utf-8").split("\n") if target_ref not in ln]
+        assert target_ref not in "\n".join(kept), f"测试前提：{rel} 中该引用可整行移除"
+        doc.write_text("\n".join(kept), encoding="utf-8")
+    errors = cdc.check_declared_test_carriers(tmp_path)
+    assert any(f"孤儿条目，请移除）：{target_ref}" in msg for _, msg in errors)

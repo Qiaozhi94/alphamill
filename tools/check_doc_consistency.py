@@ -35,6 +35,7 @@ F007_DESIGN = "docs/features/0.2/F007-evaluation-gates/design.md"
 F007_TASKS = "docs/features/0.2/F007-evaluation-gates/tasks.md"
 F004_SPEC = "docs/features/0.2/F004-kronos-inference-runtime/spec.md"
 F004_TASKS = "docs/features/0.2/F004-kronos-inference-runtime/tasks.md"
+TEST_LIFECYCLE = "tests/integration/test_f003_kronos_lifecycle.py"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -478,18 +479,63 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         "kronos_offload_classification_defined",
         "F003-R4-004",
         requires=(
-            # 架构侧：观测→处置决策表本体（含 device=cpu 行）。
+            # 架构侧：观测→处置决策表本体 + 五行关键判据（R4-004：逐行钉字面量）。
             (ARCH, "观测 → 处置决策表"),
             (ARCH, "`device=cpu`（非 GPU 实例）"),
+            # R5-002（裁决记录#3）：404 行回落探测，不直接 fail-closed。
+            (ARCH, "**回落探测** `/health` 的 `device`"),
+            (ARCH, "endpoint_absent_no_gpu_tenant"),
+            (ARCH, "控制面不可达（连接拒绝/超时），但部署清单中存在该服务"),
             # 客户端侧：AC-010 验收、design 客户端契约、T025 单测断言。
             (SPEC, "观测→处置决策表记 `offload_not_needed`"),
             (DESIGN, "逐行实现并在单测中断言"),
             (TASKS, "观测→处置决策表逐行断言"),
+            (TASKS, "endpoint_absent_no_gpu_tenant"),
         ),
         forbids=(
             # 旧的无判定方法表述（「确未部署」没有操作化定义）不得回归。
             (ARCH, "控制面不可达且该服务确实未部署"),
             (DESIGN, "服务确未部署记 `offload_not_needed`"),
+            # R5-001：mock 探测括注（决策表推不出来）不得回归。
+            (ARCH, "对其探测按下方决策表归"),
+        ),
+    ),
+    TextCheck(
+        "kronos_t033_zero_xfail_gate",
+        "F003-R4-001",
+        requires=(
+            # T033 的 0 xfailed 硬要求与机器门禁参数（--runxfail 使先红态按真失败计）。
+            (TASKS, "必须以 **0 xfailed** 通过"),
+            (TASKS, "`--runxfail`"),
+            (TASKS, "KRONOS_CONTROL_URL=http://127.0.0.1:8002"),
+            # 端点 feature -> T033 前置边。
+            (TASKS, "BACKLOG「Kronos 服务生命周期端点」feature 落地并部署于执行机 -> T033"),
+            # BACKLOG 行不得回退为「F003 开工前落地」矛盾表述。
+            (BACKLOG, "T033 要求 `test_f003_kronos_lifecycle.py` 以 0 xfailed 通过"),
+        ),
+        forbids=((BACKLOG, "F003 开工前落地"),),
+    ),
+    TextCheck(
+        "lifecycle_test_no_mock_default",
+        "F003-R4-002",
+        requires=(
+            # 契约测试模块：URL 必须显式（无默认值），缺失即 skip；
+            # 配套行为单测 tests/unit/test_f003_lifecycle_contract_config.py。
+            (TEST_LIFECYCLE, 'os.getenv("KRONOS_CONTROL_URL", "")'),
+            (TEST_LIFECYCLE, "必须显式指定"),
+        ),
+        forbids=((TEST_LIFECYCLE, "127.0.0.1:8001"),),
+    ),
+    TextCheck(
+        "kronos_owner_wording_unified",
+        "F003-R5-003",
+        requires=(
+            (DESIGN, "经**架构 §7.1 服务生命周期契约**"),
+            (SPEC, "经架构 §7.1 服务生命周期契约"),
+        ),
+        forbids=(
+            (DESIGN, "经 F004 交付的服务生命周期"),
+            (SPEC, "经 F004 交付的容器编排控制"),
         ),
     ),
 )
@@ -734,6 +780,10 @@ def check_declared_test_carriers(root: pathlib.Path) -> list[tuple[str, str]]:
         if path in DECLARED_TEST_ALLOWLIST:
             continue
         errors.append((check_id, f"引用的测试文件不存在且未登记白名单：{path}"))
+    # R5-004：文档已不再引用的白名单条目必须移除，过期豁免不得静默残留。
+    for path in sorted(DECLARED_TEST_ALLOWLIST):
+        if path not in refs:
+            errors.append((check_id, f"白名单条目未被三件套引用（孤儿条目，请移除）：{path}"))
     return errors
 
 
