@@ -219,10 +219,9 @@ def _materialize_f007(tmp_path: pathlib.Path) -> None:
 
 
 def _rewrite(path: pathlib.Path, old: str, new: str, count: int = -1) -> None:
-    replaced = text.replace(old, new) if (text := path.read_text(encoding="utf-8")) and count == -1 else None
-    if replaced is None:
-        replaced = path.read_text(encoding="utf-8").replace(old, new, count)
-    path.write_text(replaced, encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
+    text = text.replace(old, new) if count < 0 else text.replace(old, new, count)
+    path.write_text(text, encoding="utf-8")
 
 
 def test_f007_lifecycle_closure_goes_red_on_missing_registration(
@@ -303,20 +302,6 @@ def test_f007_requirement_id_order_goes_red_on_reorder(tmp_path: pathlib.Path) -
     )
     ids = _check_ids(cdc.check_f007_requirement_id_order(tmp_path))
     assert "f007_requirement_id_order" in ids
-
-
-def test_declared_test_carrier_orphan_entry_goes_red(tmp_path: pathlib.Path) -> None:
-    """F003-R4-005/R5-004：三件套已不引用的白名单条目必须判红（孤儿豁免不得残留）。"""
-    _materialize_referenced_tests(tmp_path)
-    target_ref = next(iter(cdc.DECLARED_TEST_ALLOWLIST))
-    # 该引用可能同时出现在 spec/design/tasks——三处都去掉才构成孤儿条目。
-    for rel in (cdc.SPEC, cdc.DESIGN, cdc.TASKS):
-        doc = tmp_path / rel
-        kept = [ln for ln in doc.read_text(encoding="utf-8").split("\n") if target_ref not in ln]
-        assert target_ref not in "\n".join(kept), f"测试前提：{rel} 中该引用可整行移除"
-        doc.write_text("\n".join(kept), encoding="utf-8")
-    errors = cdc.check_declared_test_carriers(tmp_path)
-    assert any(f"孤儿条目，请移除）：{target_ref}" in msg for _, msg in errors)
 
 
 def test_declared_test_carrier_orphan_entry_goes_red(tmp_path: pathlib.Path) -> None:
