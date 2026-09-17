@@ -608,7 +608,7 @@ mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围—�
   |---|---|---|
   | 连接拒绝，且部署清单中无该服务 | 确未部署 | 记 `offload_not_needed`，继续夜槽 |
   | `status` 可达且 `device=cpu`（非 GPU 实例） | 无显存可释放 | 记 `offload_not_needed`，继续夜槽 |
-  | HTTP 404 / `E_UNSUPPORTED_VERSION` | 端点未实现，**回落探测** `/health` 的 `device` 或设备侧读数（`nvidia-smi` 进程/显存） | `device=cpu` 或卡上无 Kronos 进程 → 记 `offload_not_needed`（`reason=endpoint_absent_no_gpu_tenant`，证据写入 `kronos_offload`），继续夜槽；卡上有 Kronos 占显存或设备信息不可读 → **fail-closed** 留在单槽队列 |
+  | HTTP 404 / `E_UNSUPPORTED_VERSION` | 端点未实现，**回落探测** `/health` 的 `device` 与设备侧显存读数（`nvidia-smi --query-gpu=memory.used`），**不依赖 GPU 进程列表**（WSL2 下 `nvidia-smi` 不列出 GPU 进程） | `/health.device=cpu`，或设备侧 `memory.used` 低于可配阈值 `kronos_vram_idle_threshold` → 记 `offload_not_needed`（`reason=endpoint_absent_no_gpu_tenant`，读数写入 `kronos_offload`），继续夜槽；`memory.used` 达到阈值或任一读数不可得 → **fail-closed** 留在单槽队列 |
   | `stop` 返回 `E_BUSY` / `E_TIMEOUT`，或 `status.vram_bytes` 确认未释放 | 停止失败 | **fail-closed** 留在单槽队列 |
   | 控制面不可达（连接拒绝/超时），但部署清单中存在该服务 | 状态未知 | **fail-closed** 留在单槽队列 |
 - **所有权**：契约正文由本节拥有；客户端调用与运行取证归 F003（训练窗口编排），服务端实现归
