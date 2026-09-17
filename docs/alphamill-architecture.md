@@ -583,12 +583,14 @@ flowchart LR
 
 VRAM 预算为硬上限：任务启动前自检可用显存，低于预算即进队列等待，不允许挤占时段或互相抢卡。预算值与时段表随执行机走，迁移后按上文重标。
 
-**Kronos 服务生命周期契约（版本化，供夜槽编排消费）**：`kronos-signal` 的服务端暴露版本化控制面
-（`contract_version`），供挖掘编排在训练窗口边界调用：
+**Kronos 服务生命周期契约（版本化，供夜槽编排消费）**：**真实推理服务 `kronos-signal-real`**
+（执行机 GPU 实例）的服务端暴露版本化控制面（`contract_version`），供挖掘编排在训练窗口边界调用；
+mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围（对其探测按下方决策表归
+`offload_not_needed`）：
 
 | 动作 | 语义 | 幂等性 | 超时 | 错误码 |
 |---|---|---|---|---|
-| `status` | 返回 `{state: running\|stopped, contract_version, model_loaded, vram_bytes}` | 只读，天然幂等 | 可配（默认 5s） | `E_UNAVAILABLE` |
+| `status` | 返回 `{state: running\|stopped, contract_version, model_loaded, vram_bytes, device}` | 只读，天然幂等 | 可配（默认 5s） | `E_UNAVAILABLE` / `E_UNSUPPORTED_VERSION` |
 | `stop` | 优雅停止推理并释放显存，返回释放后的 `vram_bytes` | 重复调用返回 `state=stopped`，不报错 | 可配（默认 60s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
 | `restore` | 恢复常驻推理，返回 `state=running` | 重复调用返回 `state=running` | 可配（默认 120s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
 
@@ -599,7 +601,15 @@ VRAM 预算为硬上限：任务启动前自检可用显存，低于预算即进
 - **显存确认**：`stop` 之后编排必须经 `status` 的 `vram_bytes` 或设备侧读数确认显存已释放，
   未确认不得取锁训练；
 - **契约版本**：`contract_version` 不匹配（`E_UNSUPPORTED_VERSION`）视为服务端未实现该契约；
-- **未部署与失败语义**：控制面不可达且该服务确实未部署 → 编排记 `offload_not_needed` 并继续；
-  服务在跑却返回忙碌/超时 → **fail-closed**：任务留在单槽队列，绝不与常驻推理并行抢卡；
+- **观测 → 处置决策表**：「服务确未部署」等判定只依据可观测行为与编排自身的部署清单
+  （compose 项目），不猜测服务内部状态；客户端必须按表实现并在单测中逐行断言：
+
+  | 观测 | 判定 | 处置 |
+  |---|---|---|
+  | 连接拒绝，且部署清单中无该服务 | 确未部署 | 记 `offload_not_needed`，继续夜槽 |
+  | `status` 可达且 `device=cpu`（非 GPU 实例） | 无显存可释放 | 记 `offload_not_needed`，继续夜槽 |
+  | HTTP 404 / `E_UNSUPPORTED_VERSION` | 服务在、控制面未实现 | **fail-closed** 留在单槽队列 |
+  | `stop` 返回 `E_BUSY` / `E_TIMEOUT`，或 `status.vram_bytes` 确认未释放 | 停止失败 | **fail-closed** 留在单槽队列 |
+  | 控制面不可达，但部署清单中存在该服务 | 状态未知 | **fail-closed** 留在单槽队列 |
 - **所有权**：契约正文由本节拥有；客户端调用与运行取证归 F003（训练窗口编排），服务端实现归
-  `kronos-signal` 交付。
+  `kronos-signal-real` 交付（BACKLOG「Kronos 服务生命周期端点」，待分配 feature）。
