@@ -110,7 +110,7 @@ ADR-0001 已锁定主引擎为 AlphaGen（vendor 方式），但同一份调研�
 
 - RankIC/IC 衰减/分位数/成本门三档裁决/多重检验/样本量裁决与任何 verdict → `F007`；F003 只保留参数化的成本后收益预筛（不产成本裁决）；
 - ResearchSnapshot 的实现（归 `experiment_store/`，随 `F007` 落地）——F003 只消费绑定，冒烟期用显式元组过渡（Q-002）；过渡元组须携带与 ADR-0007 对齐的语义字段（`schema_version`、`cutoff_time`、逐 dataset `as_of_fidelity`/`event_time_min`/`event_time_max`、`symbol_map_digest`、**独立且分别校验的 universe（F008 台账）与 calendar artifact 引用**及其组合导出的 `universe_calendar_digest`、不可变 artifact 的 provenance 引用），仅不落 snapshot artifact；F007 落地时须先发布 `ResearchSnapshot` 再替换为 `snapshot_id`（ADR-0007 决策 4/5）；
-- 因子注册表的**定义面**（`FactorDef` 内容寻址读写、内容版本与定义级引用）归本 feature 的 `registry/`；**评测摘要回写、`|ρ|>0.99`/`0.90~0.99` 查重判定与 lifecycle 状态判定** 的 owner = `F007`（评测面唯一写入者），**lifecycle 动作执行** 的 owner = `F006`（运营操作入口）；F003 不持有评测摘要或 lifecycle 状态，只向下游提供定义与 `generation.*` 事件；
+- 因子注册表的**定义面**（`FactorDef` 内容寻址读写、内容版本与定义级引用）归本 feature 的 `registry/`；**评测摘要回写与 `|ρ|`（`>0.99` 拒绝 / `0.90~0.99` 标记变体）查重判定** 的 owner = `F007`（评测面唯一写入者，v0.2 起，载荷见 F007 `DR-008`）；**lifecycle 状态判定** v0.2 无 owner——依赖 paper/实盘表现监控数据，后移 M3 归 `F006`（与无前视 L2/L3 审计同批，BACKLOG「规划中」行）；**lifecycle 动作执行** 的 owner = `F006`（运营操作入口）；F003 不持有评测摘要或 lifecycle 状态，只向下游提供定义与 `generation.*` 事件；
 - 宇宙扩容 30~50 对与新 pair 质量流程（FR1.5）→ `F008`（并行推进，不阻塞本 feature 的接口与闸门交付）；
 - 批量移植 GTJA191 / WQ101 公式库作为种子宇宙 → 后移（见 §7 决策）；
 - 研究控制台与任何页面 → `F005`。
@@ -326,7 +326,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 ### 依赖
 
 - 上游 Feature / Contract：F002 的 `data_bridge.reader.read()` 与 `(dataset, data_version, value_digest)` 身份、`symbol_map`；ADR-0007 的 `ResearchSnapshot` 语义字段（`cutoff_time`、`as_of_fidelity`、`event_time_min/max`、`symbol_map_digest`、`universe_calendar_digest`）——过渡期由显式元组承载同一语义；F001 的 `src/alphamill/` 布局；架构 §4.1/§4.1.1 的 FactorDef 与适配契约、§7.1 的机器边界与 GPU 槽位。**并行依赖**：`F008` 宇宙扩容——PIT 掩码消费其 IR-002 的 `universe_at(T)` 与内容寻址台账 digest（IR-003 的 `schema_version`），不阻塞接口与冒烟闸门，但候选质量结论以其落地后的宇宙为准；F008 未落地时掩码用显式 universe 配置并在运行记录里留 digest 与来源。
-- 下游消费者：`F007`（把 FactorDef 与协同池作为评测输入，把 `generation.candidate_rejected` 作为漏斗第一级，把算子能力登记表作为 FR-002 的已登记算子能力清单消费；**因子注册表的评测摘要回写、`|ρ|` 查重判定与 lifecycle 状态判定的唯一写入 owner**）、`F006`（**lifecycle 动作执行入口**）、`F005`（只读展示候选与产能）、FR4/M3 组合构建。
+- 下游消费者：`F007`（把 FactorDef 与协同池作为评测输入，把 `generation.candidate_rejected` 作为漏斗第一级，把算子能力登记表作为 FR-002 的已登记算子能力清单消费；**因子注册表评测摘要回写与 `|ρ|` 查重判定的唯一写入 owner**——lifecycle 状态判定后移 M3/F006，BACKLOG 已登记）、`F006`（**lifecycle 动作执行入口**）、`F005`（只读展示候选与产能）、FR4/M3 组合构建。
 - 外部 / 环境依赖：AlphaGen 上游仓库（vendor 时点 clone，之后不跟随）；torch 2.x / numpy 2.x / pandas 2.x / gymnasium / stable-baselines3，全部 pin；执行机提供挖掘训练的 CUDA 运行时（当前 `qiaozhi-lt`：Win11+WSL2 + RTX 4060 Laptop 8GB，按架构 §7.1 时段表；湖与训练同机，无跨机传输）；宇宙规模当前为 6 对（见 Q-001）。
 
 ### 决策与风险
