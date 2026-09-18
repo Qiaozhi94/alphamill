@@ -174,8 +174,8 @@ def test_real_feature_tasks_satisfy_verification_rules() -> None:
 
 
 def test_f007_producer_rule_goes_red_on_unwired_edge() -> None:
-    """F007-D033：删掉 `T017 -> T021` 生产者边必须判红（真实文本变异）。"""
+    """F007-D033：删掉 `T017 -> T022` 生产者边必须判红（真实文本变异）。"""
     rel = "docs/features/0.2/F007-evaluation-gates/tasks.md"
     text = (dag.ROOT / rel).read_text(encoding="utf-8")
-    mutated = text.replace("`T017 -> T021`", "`T017`")
-    assert any("T021" in msg for msg in dag.check_tasks(mutated))
+    mutated = text.replace("`T017 -> T022`", "`T017`")
+    assert any("T022" in msg for msg in dag.check_tasks(mutated))

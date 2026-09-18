@@ -55,6 +55,19 @@ class TextCheck:
 
 TEXT_CHECKS: tuple[TextCheck, ...] = (
     TextCheck(
+        "architecture_universe_calendar_split_aligned",
+        "F007-D045",
+        requires=(
+            (ARCH, '"universe_digest"'),
+            (ARCH, '"calendar_digest"'),
+            (ARCH, "lake/_metadata/universes/<digest>.csv"),
+            (ARCH, 'sha256(canonical_json({"universe": <universe_digest>,'),
+            (ARCH, '"calendar": <calendar_digest>}))'),
+            (ARCH, "`universe_path` / `calendar_path`"),
+        ),
+        forbids=((ARCH, "显式 universe/calendar JSON 由构造器规范化后保存于"),),
+    ),
+    TextCheck(
         "factor_id_no_run_seq",
         "F003-D001",
         requires=(
@@ -186,8 +199,8 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         "F007-D001",
         requires=(
             (F007_TASKS, "### [TEST] 组：层 2 旅程验收轨"),
-            (F007_TASKS, "T027 [TEST]"),
             (F007_TASKS, "T029 [TEST]"),
+            (F007_TASKS, "T031 [TEST]"),
             (F007_TASKS, "T032: 回写 spec"),
         ),
         forbids=((F007_TASKS, "- [ ] T024: 回写 spec"),),
@@ -1056,9 +1069,12 @@ def check_f007_lifecycle_closure(root: pathlib.Path) -> list[tuple[str, str]]:
             if state not in F007_LIFECYCLE_STATES:
                 errors.append((check_id, f"未知生命周期状态 {state!r}（枚举外取值）"))
     for need, why in (
+        (("CREATED", "INCOMPLETE"), "身份/输入不可解析缺少失败路径"),
         (("VALIDATING", "REJECTED"), "方法论门失败缺少 REJECTED 终态路径"),
+        (("VALIDATING", "INCOMPLETE"), "snapshot/输入校验失败缺少可重试路径"),
+        (("RUNNING", "REJECTED"), "运行时守卫拒绝缺少 REJECTED 终态路径"),
         (("REJECTED", "REGISTERED"), "拒绝成员缺少终态登记路径（cohort 将无法 finalize）"),
-        (("INCOMPLETE", "RUNNING"), "INCOMPLETE 缺少重试路径"),
+        (("INCOMPLETE", "VALIDATING"), "INCOMPLETE 缺少重试路径"),
         (("INCOMPLETE", "REGISTERED"), "INCOMPLETE 终态缺少登记路径"),
     ):
         if need not in edge_set:
@@ -1068,35 +1084,142 @@ def check_f007_lifecycle_closure(root: pathlib.Path) -> list[tuple[str, str]]:
         errors.append((check_id, "finalize 条件未写明「全部终态且已 REGISTERED」"))
     if "重试上限" not in block or "abandon" not in block:
         errors.append((check_id, "INCOMPLETE 终态条件未定义（重试上限/显式 abandon）"))
+    # D044：design §7 的每条失败映射都必须落在 spec §5 的迁移上，且 abandon 必须有 CLI 入口。
+    mapping = _md_section(read(root, F007_DESIGN), "7. 失败、恢复、安全与兼容")
+    for src, dst in set(LIFECYCLE_TRANSITION_RE.findall(mapping)):
+        if (src, dst) not in edge_set:
+            errors.append(
+                (check_id, f"design §7 失败映射 {src} -> {dst} 在 spec §5 状态机中没有对应迁移")
+            )
+    if "abandon" not in read(root, F007_SPEC).split("## 5.")[0]:
+        errors.append((check_id, "spec §4 IR-001 未提供 abandon 入口（INCOMPLETE 终态无法收口）"))
+    if "alphamill.evaluation abandon" not in read(root, F007_DESIGN):
+        errors.append((check_id, "design §4 CLI 契约缺 abandon 子命令"))
     return errors
 
 
-F007_PROMOTION_ENUMS = {"promising", "dead", "underpowered", "incomplete", "blocked_pending_audit"}
+# D041/D043：枚举不再硬编码在门禁里（硬编码把「旧答案」当成正确答案，Round 3 因此漏检
+# 优先级表输出 provisional 而枚举没有它）。这里只锁两条不变量：枚举 == 优先级表输出集合、
+# spec FR-005 的优先级串 == 表的行序；另加 D027 的必须取值 blocked_pending_audit。
+F007_PROMOTION_REQUIRED = {"blocked_pending_audit"}
+UNESCAPED_PIPE_RE = re.compile(r"(?<!\\)\|")
+
+
+def _split_md_row(line: str) -> list[str]:
+    r"""按未转义的 `|` 切分表格行；`\|`（如 `\|ρ\|`）是单元格内容，不是分隔符。"""
+    return [c.strip() for c in UNESCAPED_PIPE_RE.split(line.strip())[1:-1]]
+
+
+def _f007_promotion_priority_rows(design: str) -> list[tuple[int, str, str]]:
+    section = _md_section(design, "3. 数据模型与 Migration")
+    anchor = section.find("导出优先级")
+    if anchor < 0:
+        return []
+    rows = []
+    for line in section[anchor:].split("\n"):
+        if not line.strip().startswith("|"):
+            if rows:
+                break
+            continue
+        cells = _split_md_row(line)
+        if len(cells) != 3 or not cells[0].isdigit():
+            continue
+        values = re.findall(r"`([a-z_]+)`", cells[2])
+        if values:
+            rows.append((int(cells[0]), cells[1], values[0]))
+    return rows
 
 
 def check_f007_promotion_blocked_state_defined(root: pathlib.Path) -> list[tuple[str, str]]:
-    """F007-D027：promotion_verdict 枚举闭合、阻断点有接口与专用错误码（解析式）。"""
+    """F007-D027/D041/D043：promotion_verdict 枚举、优先级表与 spec 顺序三者闭合（解析式）。"""
     check_id = "f007_promotion_blocked_state_defined"
     errors: list[tuple[str, str]] = []
     design = read(root, F007_DESIGN)
     spec = read(root, F007_SPEC)
+    enums: set[str] = set()
     m = re.search(r"\|\s*成员晋升裁决\s*\|\s*`promotion_verdict`\s*\|((?:[^|\\]|\\\|)+)\|", design)
     if not m:
         errors.append((check_id, "design §3.3 术语表缺 promotion_verdict 枚举行"))
     else:
         enums = {t.strip(" `\\") for t in m.group(1).split("\\|") if t.strip(" `\\")}
-        missing = F007_PROMOTION_ENUMS - enums
-        extra = enums - F007_PROMOTION_ENUMS
-        if missing:
-            errors.append((check_id, f"promotion_verdict 枚举缺 {sorted(missing)}"))
-        if extra:
-            errors.append((check_id, f"promotion_verdict 枚举出现未冻结取值 {sorted(extra)}"))
+        for needed in sorted(F007_PROMOTION_REQUIRED - enums):
+            errors.append((check_id, f"promotion_verdict 枚举缺必需取值 {needed!r}"))
+    rows = _f007_promotion_priority_rows(design)
+    if not rows:
+        errors.append((check_id, "design §3.3 缺 promotion_verdict 导出优先级表"))
+    else:
+        if [r[0] for r in rows] != list(range(1, len(rows) + 1)):
+            errors.append((check_id, f"导出优先级表级别不连续：{[r[0] for r in rows]}"))
+        outputs = [r[2] for r in rows]
+        if enums and set(outputs) != enums:
+            errors.append(
+                (
+                    check_id,
+                    "优先级表输出集合与术语表枚举不一致："
+                    f"表多出 {sorted(set(outputs) - enums)}、"
+                    f"枚举多出 {sorted(enums - set(outputs))}",
+                )
+            )
+        conditions = " ".join(r[1] for r in rows)
+        for needle, why in (
+            ("REJECTED", "未覆盖 run 终态 REJECTED"),
+            ("dedup", "未覆盖查重结论"),
+            ("INCOMPLETE", "未覆盖 INCOMPLETE 终态"),
+            ("no_lookahead", "未覆盖无前视三层状态"),
+        ):
+            if needle not in conditions:
+                errors.append((check_id, f"导出优先级表条件{why}（缺 {needle}）"))
+        m2 = re.search(r"冻结优先级表取值（`([^`]+)`）", spec)
+        if not m2:
+            errors.append((check_id, "spec FR-005 缺 promotion_verdict 优先级串"))
+        else:
+            spec_order = [t.strip() for t in m2.group(1).split(">")]
+            table_order = list(dict.fromkeys(outputs))
+            if spec_order != table_order:
+                errors.append(
+                    (check_id, f"spec 优先级串 {spec_order} 与 design 表行序 {table_order} 不一致")
+                )
     if "E_PROMOTION_BLOCKED" not in design:
         errors.append((check_id, "design 未定义专用错误码 E_PROMOTION_BLOCKED"))
-    if not re.search(r"^\|\s*4\s*\|.*blocked_pending_audit", design, re.M):
-        errors.append((check_id, "design 导出优先级表缺 blocked_pending_audit（第 4 级）"))
     if "blocked_pending_audit" not in spec or "F006 晋级入口" not in spec:
         errors.append((check_id, "spec FR-007 未写明 blocked_pending_audit 与 F006 晋级入口消费"))
+    return errors
+
+
+def check_f007_dedup_precedes_verdict(root: pathlib.Path) -> list[tuple[str, str]]:
+    """F007-D042：查重必须在 finalize 内、先于 promotion_verdict 导出，回写只搬运结论。"""
+    check_id = "f007_dedup_precedes_verdict"
+    errors: list[tuple[str, str]] = []
+    design = read(root, F007_DESIGN)
+    spec = read(root, F007_SPEC)
+    tasks = read(root, F007_TASKS)
+    finalize = next(
+        (
+            para.replace("\n", " ")
+            for para in _md_section(design, "3. 数据模型与 Migration").split("\n\n")
+            if "finalize-cohort" in para
+        ),
+        "",
+    )
+    if "查重" not in finalize or "promotion_verdict" not in finalize:
+        errors.append((check_id, "design §3.2 未写明 finalize 内先查重、再导出 promotion_verdict"))
+    elif finalize.index("查重") > finalize.index("promotion_verdict"):
+        errors.append((check_id, "design §3.2 把查重写在 promotion_verdict 导出之后"))
+    if "同一次原子写" not in finalize:
+        errors.append((check_id, "design §3.2 未锁定查重结论与 verdict 同一次原子写"))
+    for rel, text, needles in (
+        (F007_SPEC, spec, ("之前", "evidence_ref", "承诺顺序")),
+        (F007_DESIGN, design, ("不重算", "evidence_ref", "承诺顺序")),
+    ):
+        for needle in needles:
+            if needle not in text:
+                errors.append((check_id, f"{rel} 缺查重契约要素 {needle!r}"))
+    t012 = [ln for ln in tasks.split("\n") if ln.strip().startswith("- [ ] T012")]
+    if not t012 or "查重" not in t012[0]:
+        errors.append((check_id, "tasks T012（finalize）未承接查重实现"))
+    t018 = [ln for ln in tasks.split("\n") if ln.strip().startswith("- [ ] T018")]
+    if not t018 or "不重算" not in t018[0]:
+        errors.append((check_id, "tasks T018（回写）未写明只搬运结论、不重算查重"))
     return errors
 
 
@@ -1226,6 +1349,7 @@ CUSTOM_CHECKS = (
     check_declared_test_carriers,
     check_f007_lifecycle_closure,
     check_f007_promotion_blocked_state_defined,
+    check_f007_dedup_precedes_verdict,
     check_f007_registry_writeback_carrier,
     check_f007_design_covers_all_spec_acs,
     check_f007_test_group_verify_covers_ac_map,

@@ -241,11 +241,11 @@ def test_f007_lifecycle_closure_goes_red_on_missing_registration(
 def test_f007_promotion_enum_goes_red_on_missing_blocked_state(tmp_path: pathlib.Path) -> None:
     """F007-D027：promotion_verdict 枚举丢 blocked_pending_audit 必须判红。"""
     _materialize_f007(tmp_path)
-    _rewrite(
-        tmp_path / cdc.F007_DESIGN,
-        r"incomplete \| blocked_pending_audit",
-        r"incomplete",
-    )
+    design = tmp_path / cdc.F007_DESIGN
+    before = design.read_text(encoding="utf-8")
+    _rewrite(design, r"blocked_pending_audit \| dead", r"dead")
+    # 变异必须真的改到文本，否则「门禁没报错」只是因为没变异（Round 3 实测的假绿）。
+    assert design.read_text(encoding="utf-8") != before
     ids = _check_ids(cdc.check_f007_promotion_blocked_state_defined(tmp_path))
     assert "f007_promotion_blocked_state_defined" in ids
 
@@ -369,3 +369,80 @@ def test_offload_table_anchor_missing_goes_red(tmp_path: pathlib.Path) -> None:
         encoding="utf-8",
     )
     assert "offload_decision_table_rows" in _check_ids(cdc.check_offload_decision_table(tmp_path))
+
+
+# ---- F007 Round 3 解析式检查的变异回归（D041/D042/D043/D044）----
+
+
+def test_f007_promotion_enum_goes_red_on_priority_output_not_in_enum(
+    tmp_path: pathlib.Path,
+) -> None:
+    """F007-D041：优先级表输出一个枚举里没有的取值必须判红（Round 3 实测漏检点）。"""
+    _materialize_f007(tmp_path)
+    _rewrite(
+        tmp_path / cdc.F007_DESIGN,
+        "| 6 | `sample_tier=provisional` | `provisional` |",
+        "| 6 | `sample_tier=provisional` | `ghost_verdict` |",
+    )
+    ids = _check_ids(cdc.check_f007_promotion_blocked_state_defined(tmp_path))
+    assert "f007_promotion_blocked_state_defined" in ids
+
+
+def test_f007_promotion_enum_goes_red_on_spec_order_drift(tmp_path: pathlib.Path) -> None:
+    """F007-D041：spec 优先级串与 design 表行序不一致必须判红。"""
+    _materialize_f007(tmp_path)
+    _rewrite(
+        tmp_path / cdc.F007_SPEC,
+        "`rejected > incomplete > underpowered",
+        "`incomplete > rejected > underpowered",
+    )
+    ids = _check_ids(cdc.check_f007_promotion_blocked_state_defined(tmp_path))
+    assert "f007_promotion_blocked_state_defined" in ids
+
+
+def test_f007_promotion_table_goes_red_when_rejected_state_uncovered(
+    tmp_path: pathlib.Path,
+) -> None:
+    """F007-D043：优先级表不覆盖 run 终态 REJECTED / 查重结论必须判红。"""
+    _materialize_f007(tmp_path)
+    design = tmp_path / cdc.F007_DESIGN
+    row = [ln for ln in design.read_text(encoding="utf-8").split("\n") if ln.startswith("| 1 |")][0]
+    _rewrite(design, row, "| 1 | 统计判死的特殊情形 | `rejected` |")
+    errors = cdc.check_f007_promotion_blocked_state_defined(tmp_path)
+    assert any("REJECTED" in msg for _, msg in errors)
+
+
+def test_f007_dedup_goes_red_when_writeback_recomputes(tmp_path: pathlib.Path) -> None:
+    """F007-D042：回写侧重新计算查重（丢掉「不重算」约束）必须判红。"""
+    _materialize_f007(tmp_path)
+    _rewrite(tmp_path / cdc.F007_DESIGN, "不重算", "重新计算")
+    ids = _check_ids(cdc.check_f007_dedup_precedes_verdict(tmp_path))
+    assert "f007_dedup_precedes_verdict" in ids
+
+
+def test_f007_dedup_goes_red_when_finalize_order_inverted(tmp_path: pathlib.Path) -> None:
+    """F007-D042：finalize 段不再写明「先查重、再导出 verdict」必须判红。"""
+    _materialize_f007(tmp_path)
+    _rewrite(
+        tmp_path / cdc.F007_DESIGN,
+        "**先做 `|ρ|` 查重判定、再按 §3.3 优先级表导出 `promotion_verdict`**，",
+        "",
+    )
+    ids = _check_ids(cdc.check_f007_dedup_precedes_verdict(tmp_path))
+    assert "f007_dedup_precedes_verdict" in ids
+
+
+def test_f007_lifecycle_goes_red_on_uncovered_failure_mapping(tmp_path: pathlib.Path) -> None:
+    """F007-D044：design §7 的失败映射在 spec §5 无对应迁移必须判红。"""
+    _materialize_f007(tmp_path)
+    _rewrite(tmp_path / cdc.F007_SPEC, "RUNNING -> REJECTED", "RUNNING -> REJECTED_X")
+    errors = cdc.check_f007_lifecycle_closure(tmp_path)
+    assert any("RUNNING -> REJECTED" in msg for _, msg in errors)
+
+
+def test_f007_lifecycle_goes_red_without_abandon_entrypoint(tmp_path: pathlib.Path) -> None:
+    """F007-D044：abandon 没有 CLI 入口必须判红（INCOMPLETE 终态无法收口）。"""
+    _materialize_f007(tmp_path)
+    _rewrite(tmp_path / cdc.F007_DESIGN, "python -m alphamill.evaluation abandon", "# removed")
+    errors = cdc.check_f007_lifecycle_closure(tmp_path)
+    assert any("abandon" in msg for _, msg in errors)
