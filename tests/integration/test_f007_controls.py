@@ -322,3 +322,26 @@ def test_us002_required_estimator_failure_never_yields_promising(sandbox, capsys
     )
     assert verdict == "incomplete"
     assert verdict != "promising"
+
+
+def test_published_events_match_manifest_digest_and_are_immutable(sandbox, capsys):
+    """R1-004 回归：已发布批次的 events_digest 必须与实际事件一致，且复用不得改动它。
+
+    修复前 canonical 在 publish 之后追加 evaluation.registered，导致 (a) 事件文件与
+    manifest.events_digest 不符，(b) 已发布的不可变证据被就地修改。
+    """
+    from alphamill.evaluation.events import events_digest, read_events
+
+    assert main(_run(sandbox, "funding_carry")) == 0
+    capsys.readouterr()
+    manifest_path = next((sandbox["reports"] / "bench").rglob("manifest.json"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    events_path = manifest_path.parent / "events.jsonl"
+    stored = read_events(events_path)
+    assert events_digest(stored) == manifest["events_digest"]
+    assert any(event.type == "evaluation.registered" for event in stored)
+
+    before = events_path.read_bytes()
+    assert main(_run(sandbox, "funding_carry")) == 0
+    capsys.readouterr()
+    assert events_path.read_bytes() == before

@@ -34,7 +34,6 @@ from alphamill.evaluation.events import (
     EVENT_REGISTERED,
     EVENT_RUN_STATE_CHANGED,
     RunEvent,
-    append_events,
     build_event,
     events_digest,
 )
@@ -210,7 +209,8 @@ def run_canonical(
     terminal_state = (
         STATE_EVIDENCE_READY if evaluation.stage_results.evidence_complete else STATE_INCOMPLETE
     )
-    events = _run_events(experiment_id, cohort_id, terminal_state)
+    registered_events = _registered_events(experiment_id, cohort_id, candidate_id)
+    events = _run_events(experiment_id, cohort_id, terminal_state) + registered_events
     curves = build_equity_curves(
         evaluation.period_returns, times=[datetime.fromisoformat(stamp) for stamp in times]
     )
@@ -275,9 +275,6 @@ def run_canonical(
         snapshot_id=snapshot.snapshot_id,
     )
     published = publisher.publish(tier_context, request)
-    append_events(
-        published / "events.jsonl", _registered_events(experiment_id, cohort_id, candidate_id)
-    )
     population.register_member(
         reports,
         cohort_id,
@@ -290,7 +287,7 @@ def run_canonical(
             cost_model_version=str(config.cost_model.get("id", "")),
             evidence_ref=f"{published.relative_to(reports).as_posix()}/curves.parquet",
         ),
-        _registered_events(experiment_id, cohort_id, candidate_id)[0],
+        registered_events[0],
     )
     return CanonicalResult(
         experiment_id=experiment_id,
