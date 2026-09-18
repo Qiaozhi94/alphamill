@@ -14,7 +14,14 @@ snapshot_id = sha256(canonical_json({
 （`NFR-002`/`SC-003`）。`universe_calendar_digest` 由 universe 与 calendar 两个独立 artifact 的
 digest 按 ADR-0007 冻结公式组合导出，不回退为「单一 JSON 文件摘要」（`DR-006`）。
 
-任务 T004 在同一模块上追加 `ExperimentContext` 的规范化与两级内容 ID。
+**两级内容 ID**（ADR-0007 决策 3 的同一原则，`DR-002`）：先对每个规范化的语义子对象取
+**一级内容摘要**（component digest），再由这些子摘要组合出**二级 ID**——父级哈希子摘要，
+不重复哈希子对象的输入。`universe_calendar_digest → snapshot_id` 与
+`{method, window, cost} digests → experiment_id` 都是这条规则。
+
+`ExperimentContext`（任务 T004）放在 `experiment_context` 模块；本模块只保留两个身份共用的
+编码原语、快照身份与 Snapshot/ResearchSnapshot 结构。这与 design §2「identity.py 负责规范化
+语义上下文、计算 ID、校验 supersedes」的分工一致，拆分只为满足 SOP 的 350 行文件上限。
 """
 
 from __future__ import annotations
@@ -24,13 +31,18 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from alphamill.data_bridge.digest import DIGEST_PREFIX, canonical_json_text
+from alphamill.data_bridge.manifest import iso_utc
 from alphamill.experiment_store.errors import SnapshotInputError, SnapshotIntegrityError
 
 SCHEMA_VERSION = 1
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+# 内容寻址引用：`sha256:<hex>` 或带类型前缀的 `cohort_sha256:<hex>` / `snapshot_sha256:<hex>`
+# （design §3.1 用类型前缀区分引用种类，形态与 ADR-0007 的 snapshot_id 一致）。
+REF_RE = re.compile(r"^(?:[a-z][a-z0-9_]*_)?sha256:[0-9a-f]{64}$")
 MEMBER_FIELDS = (
     "data_version",
     "value_digest",
@@ -63,6 +75,54 @@ def parse_utc(value: Any, field: str) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def decimal_text(value: float) -> str:
+    """浮点 → 无指数、无多余尾零的十进制定标文本（design §3.1 的数值规范化口径）。
+
+    `0.050` / `5e-2` / `0.05` 必须落到同一个字符串，否则语义相同的配置会得到不同实验身份。
+    """
+    if value != value or value in (float("inf"), float("-inf")):
+        raise SnapshotInputError(f"配置数值必须是有限十进制: {value!r}")
+    if value == 0:
+        return "0"
+    text = format(Decimal(str(value)), "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+def normalize_numbers(value: Any) -> Any:
+    """递归规范化数值：float → 定标文本，int/bool 保持原样（bool 先于 int 判定）。"""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, float):
+        return decimal_text(value)
+    if isinstance(value, Mapping):
+        return {str(key): normalize_numbers(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [normalize_numbers(item) for item in value]
+    return value
+
+
+def normalize_set(items: Any, field: str) -> list[str]:
+    """集合字段去重后排序（design §3.1：集合字段先去重再排序）。"""
+    if isinstance(items, (str, bytes)) or not isinstance(items, (list, tuple, set, frozenset)):
+        raise SnapshotInputError(f"{field} 必须是数组")
+    values = {str(item) for item in items}
+    if not values:
+        raise SnapshotInputError(f"{field} 不能为空")
+    return sorted(values)
+
+
+def normalize_utc_set(items: Any, field: str) -> list[str]:
+    """时间集合：先归一到 UTC ISO-8601，再去重排序。"""
+    if isinstance(items, (str, bytes)) or not isinstance(items, (list, tuple, set, frozenset)):
+        raise SnapshotInputError(f"{field} 必须是数组")
+    values = {iso_utc(parse_utc(item, field)) for item in items}
+    if not values:
+        raise SnapshotInputError(f"{field} 不能为空")
+    return sorted(values)
 
 
 def universe_calendar_digest(universe_digest: str, calendar_digest: str) -> str:
