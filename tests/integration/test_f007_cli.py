@@ -586,3 +586,58 @@ def test_abandon_registers_incomplete_terminal_state(cohort_env, capsys):
     entries = population.registrations(cohort_env["reports"], cohort_env["cohort_id"])
     assert [entry.candidate_id for entry in entries] == [CANDIDATE]
     assert entries[0].promotion_verdict == "incomplete"
+
+
+# ---------- T029 [TEST] 层 2 旅程验收：US-001 安全预览候选证据 ----------
+
+
+def test_us001_preview_journey_is_repeatable_and_isolated(env, capsys):
+    assert main(_args(env, json=True)) == 0
+    first_out = capsys.readouterr().out
+    assert main(_args(env, json=True)) == 0
+    second_out = capsys.readouterr().out
+    first, second = _payload(first_out), _payload(second_out)
+    assert first["experiment_id"] == second["experiment_id"]
+    assert first["stages"] == second["stages"]
+    assert first["cost_verdict"] == second["cost_verdict"]
+    reports = env["reports"]
+    assert not (reports / "bench").exists()
+    assert not (reports / "cohorts").exists()
+    assert not (reports / "holdout_budget" / "ledger.jsonl").exists()
+    lines = first_out.splitlines()[:10]
+    assert lines[0].startswith("tier=preview")
+    assert any(line.startswith("data=sha256:") for line in lines)
+    assert any(line.startswith("first_failure=") for line in lines)
+    assert "approximation=False" in first_out
+    assert first["approximation"]["is_approximate"] is False
+
+
+def test_us001_preview_overreach_is_refused_and_leaves_a_gate_rejected(env):
+    from alphamill.evaluation.capabilities import CapabilityError, context_for
+    from alphamill.experiment_store.holdout_budget import (
+        HoldoutBudgetEntry,
+        append_entry,
+        read_ledger,
+        rejection_event,
+    )
+
+    preview = context_for("preview", env["reports"])
+    entry = HoldoutBudgetEntry(
+        candidate_id="factor_sha256:" + "9" * 64,
+        iso_week="2026-W36",
+        experiment_id="sha256:" + "9" * 64,
+        cohort_id="cohort_sha256:" + "9" * 64,
+        verdict="promising",
+        recorded_at="2026-09-01T00:00:00Z",
+    )
+    with pytest.raises(CapabilityError):
+        append_entry(preview, env["reports"], entry)
+    assert read_ledger(env["reports"]) == ()
+    event = rejection_event(
+        experiment_id="sha256:" + "9" * 64,
+        cohort_id="cohort_sha256:" + "9" * 64,
+        execution_tier="preview",
+        stage="cost_capacity",
+    )
+    assert event.type == "evaluation.gate_rejected"
+    assert event.reason_code == "E_CANONICAL_FORBIDDEN"

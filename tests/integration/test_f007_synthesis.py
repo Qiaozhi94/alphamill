@@ -330,3 +330,70 @@ def test_conflicting_synthesis_publish_is_rejected(reports):
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(SynthesisError, match="语义不一致"):
         publish_synthesis(report, root=reports)
+
+
+# ---------- T031 [TEST] 层 2 旅程验收：US-003 跨实验综合诊断 ----------
+
+
+def test_us003_synthesis_rebuilds_deterministically_from_finalized_ledger(reports):
+    cohort_id, _ = population.freeze_cohort(reports, _definition(CANDIDATE_A, CANDIDATE_B))
+    _publish_member(reports, CANDIDATE_A, EXPERIMENT_A, _stages(), "promising")
+    _publish_member(reports, CANDIDATE_B, EXPERIMENT_B, _stages(cost_fail=True), "dead")
+    _register(reports, cohort_id, CANDIDATE_A, EXPERIMENT_A, "promising")
+    _register(reports, cohort_id, CANDIDATE_B, EXPERIMENT_B, "dead")
+    population.finalize_cohort(reports, cohort_id, verdict={"fdr_alpha": 0.05}, finalized_at=NOW)
+    first = build_synthesis(cohort_id=cohort_id, generated_at="2026-09-01T00:00:00Z")
+    second = build_synthesis(cohort_id=cohort_id, generated_at="2027-01-01T00:00:00Z")
+    assert first.synthesis_id == second.synthesis_id
+    assert first.status == STATUS_FINALIZED
+    assert first.funnel["cohort"]["trial_count"] == 2
+    assert len(first.facts) >= 5
+    assert first.inferences and first.recommendations
+    bucket = first.failures[0]
+    assert (bucket.stage, bucket.owner, bucket.mechanism) == (
+        STAGE_COST_CAPACITY,
+        "cost",
+        "cost_negative",
+    )
+
+
+def test_us003_preview_only_yields_empty_canonical_result(reports):
+    (reports / "preview" / EXPERIMENT_A / "attempt-1").mkdir(parents=True)
+    report = build_synthesis(cohort_id=COHORT, generated_at=NOW)
+    assert report.status == STATUS_EMPTY
+    assert report.funnel["cohort"]["member_count"] == 0
+    assert report.failures == ()
+
+
+def test_us003_report_and_curves_scalars_recompute_within_tolerance(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from alphamill.factor_factory.bench.artifact_schema import read_artifact_dir
+    from alphamill.factor_factory.bench.curves import build_equity_curves, write_curves
+
+    start = datetime(2026, 9, 1, tzinfo=UTC)
+    periods = tuple(0.01 if index % 2 else -0.004 for index in range(12))
+    curves = build_equity_curves(
+        periods, times=tuple(start + timedelta(hours=index) for index in range(12))
+    )
+    directory = tmp_path / "bundle"
+    directory.mkdir()
+    write_curves(directory / "curves.parquet", curves)
+    (directory / "report.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "experiment_id": EXPERIMENT_A,
+                "approximation": {
+                    "is_approximate": False,
+                    "reduced_dimensions": [],
+                    "signal_source": "real",
+                },
+                "curves_summary": curves.scalar_summary(),
+                "stage_results": _stages().to_payload(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    bundle = read_artifact_dir(directory, canonical=True)
+    assert bundle.report["curves_summary"] == bundle.curves.scalar_summary()

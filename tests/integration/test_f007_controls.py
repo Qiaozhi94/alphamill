@@ -252,3 +252,73 @@ def test_synthesis_keeps_rejecters_in_the_denominator(sandbox, capsys):
         == "rejected"
     )
     assert [bucket.mechanism for bucket in report.failures] == ["cost_negative", "lookahead"]
+
+
+# ---------- T030 [TEST] 层 2 旅程验收：US-002 正式评测与裁决 ----------
+
+
+def test_us002_canonical_journey_records_members_and_lookahead_layers(sandbox, capsys):
+    for name in sorted(CONTROLS):
+        assert main(_run(sandbox, name)) == 0
+        capsys.readouterr()
+    manifests = sorted((sandbox["reports"] / "bench").rglob("manifest.json"))
+    assert len(manifests) == len(CONTROLS)
+    for path in manifests:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        layers = {entry["layer"]: entry for entry in payload["no_lookahead"]["layers"]}
+        expected_l1 = "FAIL" if payload["state"] == "REJECTED" else "PASS"
+        assert layers["L1"]["status"] == expected_l1
+        assert layers["L1"]["evidence_refs"]
+        assert layers["L2"]["status"] == "not_yet_available"
+        assert layers["L2"]["owner"] == "F006/M3"
+        assert layers["L3"]["owner"] == "F006/M3"
+        blob = json.dumps(payload)
+        assert "final_window" not in blob
+        assert "holdout" not in blob
+    assert main(["finalize-cohort", "--cohort", sandbox["cohort_id"]]) == 0
+    capsys.readouterr()
+    report = build_synthesis(cohort_id=sandbox["cohort_id"], generated_at=NOW)
+    assert report.status == STATUS_FINALIZED
+    assert report.funnel["cohort"]["trial_count"] == len(CONTROLS)
+    assert report.funnel["cohort"]["member_count"] == len(CONTROLS)
+    assert report.funnel["cohort"]["rejected_count"] == 1
+
+
+def test_us002_finalize_stays_open_until_every_commitment_is_terminal(sandbox, capsys):
+    assert main(_run(sandbox, "funding_carry")) == 0
+    capsys.readouterr()
+    assert main(["finalize-cohort", "--cohort", sandbox["cohort_id"]]) == 1
+    assert "error_code=E_COHORT_FROZEN" in capsys.readouterr().out
+    assert population.load_verdict(sandbox["reports"], sandbox["cohort_id"]) is None
+    assert build_synthesis(cohort_id=sandbox["cohort_id"], generated_at=NOW).status == "OPEN"
+
+
+def test_us002_required_estimator_failure_never_yields_promising(sandbox, capsys):
+    from alphamill.evaluation.pipeline import evaluate_fixture
+    from alphamill.evaluation.run_config import load_run_config
+    from alphamill.experiment_store.promotion import PromotionInputs, derive_promotion_verdict
+    from alphamill.validation.no_lookahead import build_no_lookahead
+
+    config = load_run_config(CONFIG)
+    evaluation = evaluate_fixture(
+        config=config,
+        times=("2026-09-01T00:00:00Z", "2026-09-01T01:00:00Z"),
+        signals=(0.0, 1.0),
+        labels=(0.0, 0.01),
+        execution_tier="canonical",
+        observed_at=NOW,
+    )
+    assert evaluation.stage_results.evidence_complete is False
+    verdict = derive_promotion_verdict(
+        PromotionInputs(
+            run_state="INCOMPLETE",
+            stage_results=evaluation.stage_results,
+            sample_tier=evaluation.sample_tier,
+            cost_verdict=evaluation.cost_verdict,
+            no_lookahead=build_no_lookahead(
+                l1_status="PASS", l1_evidence_refs=("sha256:" + "a" * 64,)
+            ),
+        )
+    )
+    assert verdict == "incomplete"
+    assert verdict != "promising"

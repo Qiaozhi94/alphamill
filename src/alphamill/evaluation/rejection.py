@@ -50,6 +50,13 @@ from alphamill.factor_factory.bench.stage_model import (
     not_applicable,
 )
 from alphamill.validation.methodology_gate import ERROR_CODE
+from alphamill.validation.no_lookahead import (
+    STATUS_FAIL as LAYER_FAIL,
+)
+from alphamill.validation.no_lookahead import (
+    STATUS_NOT_YET_AVAILABLE,
+    build_no_lookahead,
+)
 
 NOT_EVALUATED = "方法论门拒绝后未执行"
 NOT_RUN_MARKER = "not_run_after_methodology_rejection"
@@ -137,6 +144,12 @@ def register_rejection(
         stage_id=stage_id, expression=expression, observed_at=observed_at
     )
     events = rejected_events(experiment_id=experiment_id, cohort_id=cohort_id, stage_id=stage_id)
+    no_lookahead = build_no_lookahead(
+        l1_status=LAYER_FAIL,
+        l1_evidence_refs=(f"expression_sha256:{expression}",),
+        l2_status=STATUS_NOT_YET_AVAILABLE,
+        l3_status=STATUS_NOT_YET_AVAILABLE,
+    )
     curves = build_equity_curves(
         NEUTRAL_CURVE,
         times=(datetime.fromisoformat(observed_at.replace("Z", "+00:00")),),
@@ -156,6 +169,7 @@ def register_rejection(
             "sample_tier": "underpowered",
             "cost_verdict": "cost_undetermined",
             "approximation": dict(REAL_SOURCE_ANNOTATION),
+            "no_lookahead": no_lookahead.to_payload(),
             "stage_results": stages.to_payload(),
         },
         report={
