@@ -152,9 +152,11 @@ def test_leakage_control_is_future_filled_and_gate_rejected():
     assert control["expected"]["still_registered"] is True
 
 
-def test_positive_controls_cannot_promote_beyond_blocked_pending_audit():
+def test_control_member_verdicts_follow_the_frozen_priority_table():
     for control in OUTCOMES["controls"]:
+        expected = control["expected"]
         if control["kind"] == "positive":
-            assert control["expected"]["promotion_verdict_ceiling"] == "blocked_pending_audit"
+            assert expected["sample_tier"] == "underpowered"
+            assert expected["promotion_verdict"] == "underpowered"
         else:
-            assert "promotion_verdict_ceiling" not in control["expected"]
+            assert expected["promotion_verdict"] in {"dead", "rejected"}

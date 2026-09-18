@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from alphamill.evaluation import publisher
+from alphamill.evaluation.canonical_result import CanonicalResult
 from alphamill.evaluation.capabilities import context_for
 from alphamill.evaluation.code_build import (
     assert_expected_code_build_digest,
@@ -38,13 +38,19 @@ from alphamill.evaluation.events import (
     build_event,
     events_digest,
 )
-from alphamill.evaluation.pipeline import evaluate_fixture, failure_text, first_failure
+from alphamill.evaluation.pipeline import evaluate_fixture
+from alphamill.evaluation.rejection import (
+    REAL_SOURCE_ANNOTATION,
+    register_rejection,
+    rejected_stage_results,
+)
 from alphamill.evaluation.run_config import load_run_config, load_unified_frame
 from alphamill.evaluation.run_state import (
     STATE_CREATED,
     STATE_EVIDENCE_READY,
     STATE_INCOMPLETE,
     STATE_REGISTERED,
+    STATE_REJECTED,
     STATE_RUNNING,
     STATE_VALIDATING,
 )
@@ -56,6 +62,7 @@ from alphamill.experiment_store.experiment_context import (
 )
 from alphamill.experiment_store.promotion import PromotionInputs, derive_promotion_verdict
 from alphamill.factor_factory.bench.curves import build_equity_curves
+from alphamill.factor_factory.bench.stage_model import STAGE_SIGNAL_QUALITY
 from alphamill.validation.methodology_gate import GuardContext, evaluate_methodology
 from alphamill.validation.no_lookahead import (
     STATUS_NOT_YET_AVAILABLE,
@@ -70,57 +77,6 @@ class CanonicalError(UpstreamContractError):
     """canonical 前置条件不满足或输入不可解析；`E_INPUT_INVALID`。"""
 
     code = "E_INPUT_INVALID"
-
-
-@dataclass(frozen=True)
-class CanonicalResult:
-    experiment_id: str
-    cohort_id: str
-    candidate_id: str
-    snapshot_id: str
-    code_build_digest: str
-    state: str
-    cost_verdict: str
-    sample_tier: str
-    stage_results: Any
-    approximation: Mapping[str, Any]
-    promotion_verdict: str | None
-    artifact_dir: str
-    reused: bool
-
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            "execution_tier": TIER_CANONICAL,
-            "experiment_id": self.experiment_id,
-            "cohort_id": self.cohort_id,
-            "candidate_id": self.candidate_id,
-            "research_snapshot_id": self.snapshot_id,
-            "code_build_digest": self.code_build_digest,
-            "state": self.state,
-            "cost_verdict": self.cost_verdict,
-            "sample_tier": self.sample_tier,
-            "promotion_verdict": self.promotion_verdict,
-            "stages": self.stage_results.to_payload(),
-            "approximation": dict(self.approximation),
-            "first_failure": first_failure(self.stage_results),
-            "artifact_dir": self.artifact_dir,
-            "reused": self.reused,
-        }
-
-    def first_screen(self) -> tuple[str, ...]:
-        return (
-            f"tier={TIER_CANONICAL} cohort={self.cohort_id}",
-            f"experiment_id={self.experiment_id}",
-            f"candidate={self.candidate_id}",
-            f"data={self.snapshot_id}",
-            f"code={self.code_build_digest}",
-            f"state={self.state}",
-            f"cost_verdict={self.cost_verdict} sample_tier={self.sample_tier}",
-            f"promotion_verdict={self.promotion_verdict}",
-            f"artifact={self.artifact_dir}",
-            f"reused={self.reused}",
-            f"first_failure={failure_text(first_failure(self.stage_results))}",
-        )
 
 
 def _run_events(experiment_id: str, cohort_id: str, terminal_state: str) -> tuple[RunEvent, ...]:
@@ -209,14 +165,40 @@ def run_canonical(
             max_label_horizon=config.max_label_horizon, embargo=config.max_label_horizon
         ),
     )
+    moment = observed_at or datetime.now(UTC).isoformat()
     if not verdict.passed:
-        raise CanonicalError(
-            f"方法论门拒绝（{verdict.failure_mechanism}）: "
-            f"{[violation.message for violation in verdict.violations]}"
+        published = register_rejection(
+            tier_context=tier_context,
+            reports=reports,
+            cohort_id=cohort_id,
+            candidate_id=candidate_id,
+            experiment_id=experiment_id,
+            snapshot_id=snapshot.snapshot_id,
+            object_id=object_id or factor_ref,
+            expression=expression,
+            observed_at=moment,
+            violation_message="; ".join(item.message for item in verdict.violations),
+            code_build_digest=code_digest,
+        )
+        return CanonicalResult(
+            experiment_id=experiment_id,
+            cohort_id=cohort_id,
+            candidate_id=candidate_id,
+            snapshot_id=snapshot.snapshot_id,
+            code_build_digest=code_digest,
+            state=STATE_REJECTED,
+            cost_verdict="cost_undetermined",
+            sample_tier="underpowered",
+            stage_results=rejected_stage_results(
+                stage_id=STAGE_SIGNAL_QUALITY, expression=expression, observed_at=moment
+            ),
+            approximation=dict(REAL_SOURCE_ANNOTATION),
+            promotion_verdict="rejected",
+            artifact_dir=str(published),
+            reused=False,
         )
 
     times, signals, labels = load_unified_frame(signals_path)
-    moment = observed_at or datetime.now(UTC).isoformat()
     evaluation = evaluate_fixture(
         config=config,
         times=times,

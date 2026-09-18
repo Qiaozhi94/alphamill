@@ -1,0 +1,254 @@
+"""T016 / `AC-003`·`SC-001`：四类控制的全链 golden 与多成员 cohort 分母完整性。
+
+用 T002 冻结的四个控制夹具（正控制 ×2、白噪声、故意泄漏）走 canonical 全链，逐项对照
+`expected-outcomes-v1.json` 的预期门禁结果；再 finalize 多成员 cohort，验证：
+
+- **拒绝者仍入分母**：泄漏控制的 `promotion_verdict=rejected` 但 `trial_count` / `member_count`
+  仍计入它，`rejected_count=1`；
+- **多成员批量夹具分母完整**：四个成员各自终态登记，集合与承诺完全相等；
+- **诊断性重算不重复计数**：同语义重跑幂等复用既有实验，成员数不变；
+- synthesis 从 finalized 台账重建时，拒绝者出现在漏斗分母中。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+
+from alphamill.data_bridge import manifest as mf
+from alphamill.data_bridge import registry, symbol_map
+from alphamill.evaluation.cli import main
+from alphamill.evaluation.universe_ledger import UniverseMember, publish_universe
+from alphamill.experiment_store import population
+from alphamill.experiment_store import research_snapshot as snapshot_store
+from alphamill.experiment_store.synthesis import STATUS_FINALIZED, build_synthesis
+
+pytestmark = pytest.mark.integration
+
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "f007"
+CONFIG = FIXTURES / "method-v1.json"
+OUTCOMES = json.loads((FIXTURES / "expected-outcomes-v1.json").read_text(encoding="utf-8"))
+CONTROLS = {control["name"]: control for control in OUTCOMES["controls"]}
+DATASET = "derivatives_funding_rates"
+VERSION = "v2026.09.01"
+CUTOFF = "2026-09-01T12:00:00Z"
+NOW = "2026-09-01T00:00:00Z"
+CALENDAR = {
+    "schema_version": 1,
+    "timezone": "UTC",
+    "windows": [{"start": "2026-09-01T00:00:00Z", "end": "2026-09-30T00:00:00Z"}],
+}
+CANDIDATES = {
+    name: f"factor_sha256:{index:064d}" for index, name in enumerate(sorted(CONTROLS), start=1)
+}
+
+
+def _lake(tmp_path: Path) -> tuple[Path, str, str]:
+    root = tmp_path / "lake"
+    spec = registry.require_dataset(DATASET)
+    payload = b"x" * 10
+    day = "2026-09-01"
+    rel = f"{DATASET}/exchange=binance/pair=BTC-USDT/date={day}.r1.parquet"
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+    partition = {
+        "logical_partition_key": {"exchange": "binance", "pair": "BTC-USDT", "date": day},
+        "path": rel,
+        "rows": 10,
+        "time_min": f"{day}T00:00:00Z",
+        "time_max": f"{day}T23:59:00Z",
+        "row_digest": "sha256:" + "a" * 64,
+        "bytes": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+    mf.publish_manifest(
+        root,
+        {
+            "dataset": DATASET,
+            "data_version": VERSION,
+            "status": "valid",
+            "rows": partition["rows"],
+            "value_digest": mf.compute_value_digest(spec, [partition]),
+            "partitions": [partition],
+        },
+    )
+    frame = symbol_map.build_symbol_map([symbol_map.SymbolRow("binance", "perp", "BTC/USDT")])
+    sm_payload = symbol_map.canonical_csv_bytes(frame)
+    sm_digest = symbol_map.content_digest(sm_payload)
+    sm_path = root / "_metadata" / "symbol_maps" / f"{sm_digest}.csv"
+    sm_path.parent.mkdir(parents=True, exist_ok=True)
+    sm_path.write_bytes(sm_payload)
+    universe_digest = publish_universe(
+        [
+            UniverseMember(
+                exchange="binance",
+                market_type="perp",
+                db_symbol="BTC/USDT",
+                lake_pair="BTC-USDT-PERP",
+                valid_from="2026-08-01T00:00:00Z",
+                valid_to="",
+                reason="listed",
+                universe_id="uni-1",
+            )
+        ],
+        root,
+    )
+    return root, sm_digest, universe_digest
+
+
+@pytest.fixture()
+def sandbox(tmp_path, monkeypatch):
+    lake, symbol_map_digest, universe_digest = _lake(tmp_path)
+    reports = tmp_path / "reports"
+    monkeypatch.setenv("ALPHAMILL_LAKE_DIR", str(lake))
+    monkeypatch.setenv("ALPHAMILL_REPORTS_DIR", str(reports))
+    monkeypatch.setattr("alphamill.evaluation.code_build.worktree_dirty", lambda root=None: False)
+    snapshot = snapshot_store.build_snapshot(
+        lake_root=lake,
+        root=reports,
+        cutoff=datetime.fromisoformat(CUTOFF),
+        datasets={DATASET: VERSION},
+        universe_digest=universe_digest,
+        calendar=CALENDAR,
+        symbol_map_digest=symbol_map_digest,
+    )
+    snapshot_store.publish_snapshot(reports, snapshot)
+    definition = {
+        "schema_version": 1,
+        "hypothesis_family": "f007-controls",
+        "selection_stage": "cross_sectional",
+        "method_config_ref": "method-v1",
+        "cost_model_ref": "cm-v1",
+        "inclusion_rules": "全部承诺成员计入分母",
+        "commitments": [
+            {"candidate_id": CANDIDATES[name], "generator": "manual", "registered_at": NOW}
+            for name in sorted(CONTROLS)
+        ],
+        "window": {
+            "selection": ["2026-01-01T00:00:00Z", "2026-04-01T00:00:00Z"],
+            "label_horizons": [1, 4, 24],
+        },
+        "universe_digest": universe_digest,
+        "calendar_digest": "sha256:" + "0" * 64,
+        "frozen_at": NOW,
+        "frozen_by": "Georg",
+    }
+    cohort_id, _ = population.freeze_cohort(reports, definition)
+    return {
+        "reports": reports,
+        "snapshot_id": snapshot.snapshot_id,
+        "cohort_id": cohort_id,
+    }
+
+
+def _run(sandbox: dict, name: str, **extra: object) -> list[str]:
+    control = CONTROLS[name]
+    args = [
+        "canonical",
+        "--factor",
+        CANDIDATES[name],
+        "--candidate",
+        CANDIDATES[name],
+        "--cohort",
+        sandbox["cohort_id"],
+        "--snapshot",
+        sandbox["snapshot_id"],
+        "--config",
+        str(CONFIG),
+        "--seed",
+        "7",
+        "--signals",
+        str(FIXTURES / control["path"]),
+        "--expression",
+        control["factor"]["expression"],
+    ]
+    for key, value in extra.items():
+        flag = f"--{key.replace('_', '-')}"
+        if value is True:
+            args.append(flag)
+        else:
+            args.extend([flag, str(value)])
+    return args
+
+
+def _payload(stdout: str) -> dict:
+    lines = stdout.splitlines()
+    return json.loads("\n".join(lines[lines.index("{") :]))
+
+
+@pytest.mark.parametrize("name", ["funding_carry", "eth_btc_momentum", "white_noise"])
+def test_positive_and_noise_controls_reach_expected_verdicts(sandbox, capsys, name: str):
+    control = CONTROLS[name]
+    assert main(_run(sandbox, name, json=True)) == 0
+    payload = _payload(capsys.readouterr().out)
+    expected = control["expected"]
+    assert payload["state"] == "EVIDENCE_READY"
+    assert payload["cost_verdict"] == expected["cost_verdict"]
+    assert payload["sample_tier"] == expected["sample_tier"]
+    statuses = {entry["stage"]: entry["status"] for entry in payload["stages"]}
+    assert statuses["signal_quality"] == "PASS"
+    assert statuses["cost_capacity"] == (
+        "PASS" if expected["cost_verdict"] == "cost_positive" else "FAIL"
+    )
+
+
+def test_white_noise_is_intercepted_by_the_cost_gate(sandbox, capsys):
+    assert main(_run(sandbox, "white_noise", json=True)) == 0
+    payload = _payload(capsys.readouterr().out)
+    assert payload["cost_verdict"] == "cost_negative"
+    assert payload["first_failure"]["stage"] == "cost_capacity"
+    assert payload["promotion_verdict"] is None
+
+
+def test_leakage_control_is_rejected_and_still_registered(sandbox, capsys):
+    assert main(_run(sandbox, "future_fill_leakage", json=True)) == 0
+    payload = _payload(capsys.readouterr().out)
+    assert payload["state"] == "REJECTED"
+    assert payload["promotion_verdict"] == "rejected"
+    assert payload["first_failure"]["mechanism"] == "lookahead"
+
+
+def test_full_cohort_records_rejecters_without_double_counting(sandbox, capsys):
+    for name in sorted(CONTROLS):
+        assert main(_run(sandbox, name, json=True)) == 0
+        capsys.readouterr()
+
+    entries = population.registrations(sandbox["reports"], sandbox["cohort_id"])
+    assert len(entries) == len(CONTROLS)
+    assert {entry.candidate_id for entry in entries} == set(CANDIDATES.values())
+
+    # 诊断性重算：同语义重跑幂等复用，不新增成员（不重复计数）
+    assert main(_run(sandbox, "white_noise", json=True)) == 0
+    rerun = _payload(capsys.readouterr().out)
+    assert rerun["reused"] is True
+    assert len(population.registrations(sandbox["reports"], sandbox["cohort_id"])) == len(CONTROLS)
+
+    assert main(["finalize-cohort", "--cohort", sandbox["cohort_id"]]) == 0
+    capsys.readouterr()
+    verdict = population.load_verdict(sandbox["reports"], sandbox["cohort_id"])
+    assert verdict["trial_count"] == len(CONTROLS)
+    assert verdict["member_count"] == len(CONTROLS)
+    assert verdict["rejected_count"] == 1
+    assert verdict["status"] == "FINALIZED"
+
+
+def test_synthesis_keeps_rejecters_in_the_denominator(sandbox, capsys):
+    for name in sorted(CONTROLS):
+        assert main(_run(sandbox, name)) == 0
+        capsys.readouterr()
+    assert main(["finalize-cohort", "--cohort", sandbox["cohort_id"]]) == 0
+    capsys.readouterr()
+    report = build_synthesis(cohort_id=sandbox["cohort_id"], generated_at=NOW)
+    assert report.status == STATUS_FINALIZED
+    assert report.funnel["cohort"]["trial_count"] == len(CONTROLS)
+    assert report.funnel["cohort"]["rejected_count"] == 1
+    assert (
+        report.funnel["cohort"]["promotion_verdicts"][CANDIDATES["future_fill_leakage"]]
+        == "rejected"
+    )
+    assert [bucket.mechanism for bucket in report.failures] == ["cost_negative", "lookahead"]

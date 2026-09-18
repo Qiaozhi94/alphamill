@@ -441,11 +441,18 @@ def test_canonical_rejects_expected_digest_mismatch(cohort_env, capsys):
     assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
 
 
-def test_canonical_rejects_lookahead_expression(cohort_env, capsys):
-    args = _canonical_args(cohort_env, cohort_env["cohort_id"])
+def test_lookahead_expression_is_a_rejected_run_not_an_input_error(cohort_env, capsys):
+    """方法论门拒绝是**终态结论**（design §5）：exit 0 + state=REJECTED + 成员照常登记。"""
+    args = _canonical_args(cohort_env, cohort_env["cohort_id"], json=True)
     args[args.index("--expression") + 1] = "shift(close, -1) / close - 1"
-    assert main(args) == 1
-    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+    assert main(args) == 0
+    payload = _payload(capsys.readouterr().out)
+    assert payload["state"] == "REJECTED"
+    assert payload["promotion_verdict"] == "rejected"
+    assert payload["first_failure"]["mechanism"] == "lookahead"
+    entries = population.registrations(cohort_env["reports"], cohort_env["cohort_id"])
+    assert [entry.candidate_id for entry in entries] == [CANDIDATE]
+    assert entries[0].promotion_verdict == "rejected"
 
 
 def test_canonical_rejects_candidate_outside_commitments(cohort_env, capsys):

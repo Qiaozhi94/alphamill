@@ -19,9 +19,9 @@
         "l1_lookahead": "PASS",
         "statistics": "significant_after_multiplicity_correction",
         "cost_verdict": "cost_positive",
-        "sample_tier": "trustworthy",
-        "promotion_verdict_ceiling": "blocked_pending_audit",
-        "rationale": "信号与前瞻收益同向；L2/L3 在 v0.2 恒为 not_yet_available，故证据达标也只能到 blocked_pending_audit（spec FR-007）。"
+        "sample_tier": "underpowered",
+        "promotion_verdict": "underpowered",
+        "rationale": "信号与前瞻收益同向，成本后为正；但平滑信号换手极低（3 笔往返）< 30，按 FR-005 半开区间判 underpowered——它压过 blocked_pending_audit（design §3.3 优先级 3 先于 5）。三级边界本身由单测的 29/30/68/69 用例覆盖。"
       }
     },
     {
@@ -40,9 +40,9 @@
         "l1_lookahead": "PASS",
         "statistics": "significant_after_multiplicity_correction",
         "cost_verdict": "cost_positive",
-        "sample_tier": "trustworthy",
-        "promotion_verdict_ceiling": "blocked_pending_audit",
-        "rationale": "截面 rank 信号与前瞻收益同向；横截面只允许在同一 timestamp 的 PIT 宇宙内计算。"
+        "sample_tier": "underpowered",
+        "promotion_verdict": "underpowered",
+        "rationale": "截面 rank 信号与前瞻收益同向；换手低（6 笔往返）< 30 判 underpowered。横截面只允许在同一 timestamp 的 PIT 宇宙内计算。"
       }
     },
     {
