@@ -2,7 +2,7 @@
 kind: feature
 id: F007
 version: "0.2"
-status: draft
+status: ready-for-development
 gate_version: 1
 related_features: [F002, F003, F004, F008]
 topics: [evaluation, validation, evidence, experiments]
