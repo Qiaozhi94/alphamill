@@ -106,7 +106,9 @@ def _member_reports(root: Path, cohort_id: str) -> tuple[tuple[str, dict[str, An
     for entry in population.registrations(root, cohort_id):
         if not entry.evidence_ref:
             continue
-        report_path = Path(entry.evidence_ref).parent / "report.json"
+        reference = Path(entry.evidence_ref)
+        resolved = reference if reference.is_absolute() else root / reference
+        report_path = resolved.parent / "report.json"
         if not report_path.is_file():
             continue
         reports.append((entry.candidate_id, json.loads(report_path.read_text(encoding="utf-8"))))

@@ -306,7 +306,7 @@ def run_canonical(
             promotion_verdict=promotion,
             sample_tier=evaluation.sample_tier,
             cost_model_version=str(config.cost_model.get("id", "")),
-            evidence_ref=f"{published.as_posix()}/curves.parquet",
+            evidence_ref=f"{published.relative_to(reports).as_posix()}/curves.parquet",
         ),
         _registered_events(experiment_id, cohort_id, candidate_id)[0],
     )

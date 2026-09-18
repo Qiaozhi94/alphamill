@@ -82,7 +82,7 @@ def abandon_experiment(
         experiment_id=experiment_id,
         run_state=STATE_REGISTERED,
         promotion_verdict="incomplete",
-        evidence_ref=f"{path.parent.as_posix()}/curves.parquet",
+        evidence_ref=f"{path.parent.relative_to(reports).as_posix()}/curves.parquet",
     )
     registered = build_event(
         experiment_id=experiment_id,
