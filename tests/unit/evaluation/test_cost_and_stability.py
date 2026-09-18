@@ -38,6 +38,11 @@ from alphamill.factor_factory.bench.signal_quality import (
     rank_ic,
     signal_source_payload,
 )
+from alphamill.factor_factory.bench.stability import (
+    evaluate_temporal_stability,
+    make_purged_rolling_folds,
+    split_segments,
+)
 from alphamill.factor_factory.bench.stage_model import (
     COST_NEGATIVE,
     COST_POSITIVE,
@@ -396,3 +401,103 @@ def test_placeholder_signal_source_is_annotated_for_preview():
         "signal_source": "placeholder",
     }
     assert payload["signal_provenance"]["source_distribution"] == {"placeholder": 1}
+
+
+# ---------- purged/embargoed rolling split 与稳定性 ----------
+
+
+def test_split_segments_partitions_the_sample_exactly():
+    assert split_segments(40, 4) == ((0, 10), (10, 20), (20, 30), (30, 40))
+    assert split_segments(10, 3) == ((0, 4), (4, 7), (7, 10))
+    with pytest.raises(StageModelError, match="至少需要 2 段"):
+        split_segments(10, 1)
+    with pytest.raises(StageModelError, match="不足以切成"):
+        split_segments(3, 2)
+
+
+def test_rolling_folds_train_strictly_before_test_and_purge_label_horizon():
+    folds = make_purged_rolling_folds(40, n_folds=3, label_horizon=1, embargo=1)
+    assert [fold.index for fold in folds] == [1, 2, 3]
+    assert [(fold.test_start, fold.test_end) for fold in folds] == [(10, 20), (20, 30), (30, 40)]
+    for fold in folds:
+        assert fold.train_indices
+        assert max(fold.train_indices) < fold.test_start
+        assert set(fold.train_indices).isdisjoint(range(fold.test_start, fold.test_end))
+    first = folds[0]
+    assert first.purged == (9,)
+    assert first.embargoed == (9,)
+    assert first.train_size == 9
+
+
+def test_embargo_removes_a_wider_buffer_than_purge():
+    fold = make_purged_rolling_folds(40, n_folds=3, label_horizon=1, embargo=3)[0]
+    assert fold.purged == (9,)
+    assert fold.embargoed == (7, 8, 9)
+    assert fold.train_size == 7
+    assert set(fold.train_indices).isdisjoint(set(fold.embargoed))
+
+
+def test_folds_reject_negative_windows():
+    with pytest.raises(StageModelError, match="不得为负"):
+        make_purged_rolling_folds(40, label_horizon=-1)
+    with pytest.raises(StageModelError, match="不得为负"):
+        make_purged_rolling_folds(40, embargo=-1)
+
+
+def test_positive_control_is_stable_across_rolling_folds():
+    frame = fixture_frame("funding_carry")
+    report, stage = evaluate_temporal_stability(
+        frame["signal"], frame["forward_return"], observed_at=NOW
+    )
+    assert stage.status == STATUS_PASS
+    assert report.consistent is True
+    assert all(ic > 0 for ic in report.fold_ics)
+    assert len(report.fold_ics) == report.n_folds == 3
+    assert report.fold_train_sizes == (9, 19, 29)
+    assert report.fold_test_sizes == (10, 10, 10)
+
+
+def test_pooled_signal_is_stable_on_cross_sectional_control():
+    frame = fixture_frame("eth_btc_momentum")
+    report, stage = evaluate_temporal_stability(
+        frame["signal"], frame["forward_return"], observed_at=NOW
+    )
+    assert stage.status == STATUS_PASS
+    assert report.consistent is True
+
+
+def test_white_noise_is_not_stable_across_folds():
+    frame = fixture_frame("white_noise")
+    report, stage = evaluate_temporal_stability(
+        frame["signal"], frame["forward_return"], observed_at=NOW
+    )
+    assert report.consistent is False
+    assert stage.status == STATUS_FAIL
+    assert stage.failures == ()
+
+
+def test_degenerate_stability_input_fails_closed():
+    report, stage = evaluate_temporal_stability(
+        [1.0] * 40, [0.1 * index for index in range(40)], observed_at=NOW
+    )
+    assert report.pooled_ic is None
+    assert stage.status == STATUS_INCOMPLETE
+    assert stage.failures[0].mechanism == "estimator_failure"
+    assert stage.failures[0].error_code == "E_REQUIRED_METRIC_FAILED"
+
+
+def test_stability_report_payload_is_frozen():
+    frame = fixture_frame("funding_carry")
+    report, _ = evaluate_temporal_stability(
+        frame["signal"], frame["forward_return"], observed_at=NOW
+    )
+    assert set(report.to_payload()) == {
+        "pooled_ic",
+        "fold_ics",
+        "fold_train_sizes",
+        "fold_test_sizes",
+        "n_folds",
+        "label_horizon",
+        "embargo",
+        "consistent",
+    }
