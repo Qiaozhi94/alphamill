@@ -65,7 +65,7 @@ updated: 2026-09-18
 - [x] T024 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`, `AC-010`, `AC-011`, `AC-012`, `AC-013`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 - [x] T025 (`FR-001`, `FR-004`, `NFR-001`, `AC-001`, `AC-003`): 承接 SC-002 的并发与故障注入集成测试——同 ID 并发 claim 只有一个成功、崩溃后 lease 超时才可接管、finalize 原子性（失败不产生部分 `cohort_verdict`）、registration 幂等重试不重复计数 — verify: `tests/integration/test_f007_concurrency.py`
 
-- [ ] T026 (`FR-004`, `NFR-002`): 统计第二实现对照抽查（PRD FR3.7）——本仓手工第二实现对照 BH-FDR/block bootstrap，**time-box 1 周**；容差按估计器分档：确定性量（BH-FDR 临界值、HAC 稳健 SE）相对差 ≤1e-6，bootstrap 量（置信区间/分位）用**固定 seed 同实现复算一致**，跨实现按置信区间重叠与分位差阈值判定（阈值落档）；对照对象、容差与证据路径 `reports/second_impl/<experiment_id>/` 一并落档；超时不阻塞主链路（不作 T029–T031 前置，收口前落档即可） — verify: `pytest -q tests/unit/evaluation/test_second_implementation.py`；Vibe-Trading 外部对照独立取证：`pytest -q tests/integration/test_f007_second_impl_vibe.py`（可选依赖缺失按 SOP §3 skip，不进 unit 硬门）
+- [x] T026 (`FR-004`, `NFR-002`): 统计第二实现对照抽查（PRD FR3.7）——本仓手工第二实现对照 BH-FDR/block bootstrap，**time-box 1 周**；容差按估计器分档：确定性量（BH-FDR 临界值、HAC 稳健 SE）相对差 ≤1e-6，bootstrap 量（置信区间/分位）用**固定 seed 同实现复算一致**，跨实现按置信区间重叠与分位差阈值判定（阈值落档）；对照对象、容差与证据路径 `reports/second_impl/<experiment_id>/` 一并落档；超时不阻塞主链路（不作 T029–T031 前置，收口前落档即可） — verify: `pytest -q tests/unit/evaluation/test_second_implementation.py`；Vibe-Trading 外部对照独立取证：`pytest -q tests/integration/test_f007_second_impl_vibe.py`（可选依赖缺失按 SOP §3 skip，不进 unit 硬门）
 
 - [x] T027 (`DR-001`, `DR-002`, `NFR-002`): 属性测试轨——身份稳定（同语义输入任意路径/codec 重跑得同一 ID）与 ResearchSnapshot 变化敏感性（成员/cutoff/映射日历变化必产生新 ID）以属性测试执行；固定可复现 seed、输入生成器由显式策略枚举（不依赖随机数据分布），反例落 `reports/property/f007/<seed>/` — verify: `pytest -q tests/property/test_f007_identity_properties.py`
 
