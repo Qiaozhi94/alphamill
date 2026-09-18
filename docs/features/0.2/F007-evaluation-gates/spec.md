@@ -2,8 +2,8 @@
 kind: feature
 id: F007
 version: "0.2"
-status: developing
-status_evidence: 设计基线核对通过；tools/verify.py 全绿于 e06f4fa；进入 SDT 双轨开发
+status: code-reviewing
+status_evidence: SDT 八闸 PASS（.sdd/sdt-gate.json）；T023 执行机真实环境取证完成于 qiaozhi-lt（RTX 4060）；tools/verify.py 全绿
 branch: feat/F007-evaluation-gates
 gate_version: 1
 related_features: [F002, F003, F004, F008]

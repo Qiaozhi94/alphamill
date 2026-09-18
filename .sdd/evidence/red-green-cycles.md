@@ -61,7 +61,7 @@ F007 **未采用严格 RED-first 流程**：多数任务里测试与源码在同
 
 ## 终态验收
 
-- 全量质量门：`.venv/bin/python tools/verify.py` → 全部通过（生命周期 / 链接 / 任务 DAG /
+- 全量质量门：`python3 tools/verify.py` → 全部通过（生命周期 / 链接 / 任务 DAG /
   文档一致性 / 依赖 pin / 密钥扫描 / pytest / ruff）
 - 真实环境取证：`reports/f007/real_env/20260918T173439Z-1368718/manifest.json`
   （hostname=qiaozhi-lt、device=cpu、绑定 snapshot 与两个成员 value_digest）
