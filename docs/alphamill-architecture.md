@@ -428,6 +428,8 @@ DatasetVersion 按 dataset 独立演进，稳定引用是 `(dataset, data_versio
     "funding": {"data_version": "v2026.09.06-r2", "value_digest": "sha256:...", "as_of_fidelity": "bitemporal", "event_time_min": "...", "event_time_max": "..."}
   },
   "symbol_map_digest": "sha256:...",
+  "universe_digest": "sha256:...",
+  "calendar_digest": "sha256:...",
   "universe_calendar_digest": "sha256:..."
 }
 ```
@@ -436,8 +438,12 @@ ResearchSnapshot 位于 `reports/research_snapshots/<snapshot_id>/manifest.json`
 不复制 Parquet，也不突破研究只读 lake 红线。构造器归 `experiment_store`：成员缺失/invalid、
 value digest 或覆盖范围不符、as-of 保真度不足、映射/日历摘要缺失均失败关闭。preview 请求
 latest 时也必须先发布该对象；canonical 只接受既有 snapshot ID。symbol map 由 F002 内容寻址
-保存于 `lake/_metadata/symbol_maps/<digest>.csv`；显式 universe/calendar JSON 由构造器规范化后保存于
-`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`，二者均可按 snapshot provenance
+保存于 `lake/_metadata/symbol_maps/<digest>.csv`；universe 与 calendar 是**两个独立 artifact**（ADR-0007
+2026-09-18 修订、`F007` DR-006）：universe 归 `F008` 内容寻址台账 `lake/_metadata/universes/<digest>.csv`
+（按 digest 加载并提供 `universe_at(T)` 语义，不复制进 reports），calendar JSON 由构造器规范化后保存于
+`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`；`universe_calendar_digest` 由二者
+按冻结公式 `sha256(canonical_json({"universe": <universe_digest>, "calendar": <calendar_digest>}))` 组合导出，
+provenance 以 `universe_path` / `calendar_path` 分别引用。三者均可按 snapshot provenance
 重放，current 文件或调用方原路径不充当证据。
 
 ### 4.5 实验身份与执行上下文
