@@ -73,9 +73,9 @@ def _require_execution_environment(snapshot_id: str | None) -> str:
 
 def _emit(frame: pd.DataFrame, column: str, *, per_symbol: bool) -> tuple[tuple[Any, ...], ...]:
     ordered = frame.sort_values(["symbol", "time"] if per_symbol else ["time"], kind="stable")
-    values: dict[str, list[float]] = {}
+    values: dict[str, list[Any]] = {}
     for row in ordered.itertuples(index=False):
-        values.setdefault(str(row.symbol), []).append(float(getattr(row, column)))
+        values.setdefault(str(row.symbol), []).append(getattr(row, column))
     return tuple(tuple(series) for series in values.values())
 
 
@@ -83,17 +83,20 @@ def _flatten(per_symbol: tuple[tuple[float, ...], ...]) -> tuple[float, ...]:
     return tuple(value for series in per_symbol for value in series)
 
 
-def _build_control_frames(snapshot, lake_root: Path) -> dict[str, pd.DataFrame]:
-    """从快照绑定的真实数据派生四类控制；快照必须含价格与（carry 用）资金费数据集。"""
+def _build_control_frames(
+    snapshot, lake_root: Path, window: tuple[str, str]
+) -> dict[str, pd.DataFrame]:
+    """从快照绑定的真实数据派生四类控制；只读**预注册窗口**，不扫全历史。"""
     members = snapshot.members
     price_dataset = next((name for name in PRICE_DATASETS if name in members), None)
     if price_dataset is None:
         pytest.fail(f"快照不含价格数据集（候选 {list(PRICE_DATASETS)}）: {sorted(members)}")
-    cut = datetime.fromisoformat(snapshot.cutoff_time.replace("Z", "+00:00"))
+    start, end = window
     prices = reader.read(
         price_dataset,
         members[price_dataset].data_version,
-        end=cut,
+        start=start,
+        end=end,
         lake_root=lake_root,
     ).frame
     if prices.empty:
@@ -108,7 +111,8 @@ def _build_control_frames(snapshot, lake_root: Path) -> dict[str, pd.DataFrame]:
         funding = reader.read(
             FUNDING_DATASET,
             members[FUNDING_DATASET].data_version,
-            end=cut,
+            start=start,
+            end=end,
             lake_root=lake_root,
         ).frame
         if not funding.empty:
@@ -134,8 +138,8 @@ def _noise_and_leakage(prices: pd.DataFrame) -> dict[str, pd.DataFrame]:
     return {"noise": ordered, "leakage": leakage}
 
 
-def _controls(snapshot, lake_root: Path) -> tuple[Control, ...]:
-    frames = _build_control_frames(snapshot, lake_root)
+def _controls(snapshot, lake_root: Path, window: tuple[str, str]) -> tuple[Control, ...]:
+    frames = _build_control_frames(snapshot, lake_root, window)
     frames.update(_noise_and_leakage(frames["momentum"]))
     specifications = (
         ("carry", "signal", CARRY_EXPRESSION, True),
@@ -177,7 +181,7 @@ def test_real_env_controls_are_archived_with_snapshot_binding(f007_snapshot_id):
     lake_root = Path(os.getenv("ALPHAMILL_LAKE_DIR", REPO / "lake"))
     config = load_run_config(REPO / "tests" / "fixtures" / "f007" / "method-v1.json")
     observed_at = datetime.now(UTC).isoformat()
-    controls = _controls(snapshot, lake_root)
+    controls = _controls(snapshot, lake_root, tuple(config.window["selection"]))
     assert controls, "真实快照未派生任何控制序列"
 
     outcomes = []
