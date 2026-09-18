@@ -1,0 +1,56 @@
+{
+  "pass": true,
+  "project": "alphamill-eval-gates",
+  "feature": "F007",
+  "gates": [
+    {
+      "gate": 1,
+      "name": "RED 证据",
+      "status": "pass",
+      "detail": "found in red-green-cycles.md"
+    },
+    {
+      "gate": 2,
+      "name": "GREEN 证据",
+      "status": "pass",
+      "detail": "exit=0",
+      "tail": ""
+    },
+    {
+      "gate": 3,
+      "name": "反测试作弊",
+      "status": "warn",
+      "detail": "最近提交同时改测试与源码: tests/integration/test_f007_controls_real.py, docs/features/0.2/F007-evaluation-gates/tasks.md, reports/f007/real_env/20260918T173439Z-1368718/manifest.json, reports/research_snapshots/_inputs/universe_calendars/sha256:4c4d37b731e85b19627eb3fa83ec2309416bb4462804e50644814a03f6e1b8c6.json, reports/research_snapshots/sha256:808201f7967dcfa0352305eb9993df513ef1ab1c32cd47ae2762872f207d2d87/manifest.json"
+    },
+    {
+      "gate": 4,
+      "name": "覆盖增量",
+      "status": "skip",
+      "detail": "未配置 coverage 命令"
+    },
+    {
+      "gate": 5,
+      "name": "变异门",
+      "status": "skip",
+      "detail": "未配置 mutation（仅关键路径要求）"
+    },
+    {
+      "gate": 6,
+      "name": "Flaky 门",
+      "status": "skip",
+      "detail": "未声明 flaky 命令"
+    },
+    {
+      "gate": 7,
+      "name": "负例门",
+      "status": "pass",
+      "detail": "存在负例/回归标记"
+    },
+    {
+      "gate": 8,
+      "name": "确定性执行",
+      "status": "pass",
+      "detail": "脚本强制（登记在案）"
+    }
+  ]
+}
