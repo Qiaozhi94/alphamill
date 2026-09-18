@@ -256,13 +256,26 @@ def build_snapshot(
     )
 
 
+def _semantic_fields(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in payload.items() if key != "provenance"}
+
+
 def publish_snapshot(root: Path, snapshot: ResearchSnapshot) -> Path:
-    """原子发布快照 manifest；同 ID 幂等（同内容逐字节一致），不接受原地改写。"""
-    payload = (json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=1) + "\n").encode("utf-8")
+    """原子发布快照 manifest；同 ID 幂等（**语义**一致即成功，先写者胜），语义冲突即拒绝。
+
+    `provenance.created_at` 是墙钟时间，不参与身份，因此不能作为幂等判据——否则同一语义的
+    快照每次重跑都会「冲突」。判据取除 provenance 外的语义字段。
+    """
+    candidate = snapshot.to_dict()
+    payload = (json.dumps(candidate, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
     final = snapshot_dir(root, snapshot.snapshot_id) / MANIFEST_NAME
     if final.is_file():
-        if final.read_bytes() != payload:
-            raise SnapshotIntegrityError(f"同 snapshot_id 内容不一致，拒绝覆盖: {final}")
+        try:
+            existing = json.loads(final.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise SnapshotIntegrityError(f"同 snapshot_id 已有产物损坏: {final}: {exc}") from exc
+        if _semantic_fields(existing) != _semantic_fields(candidate):
+            raise SnapshotIntegrityError(f"同 snapshot_id 语义不一致，拒绝覆盖: {final}")
         return final
     atomic_create(final, payload)
     return final

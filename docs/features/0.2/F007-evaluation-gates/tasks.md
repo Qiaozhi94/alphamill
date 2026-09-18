@@ -35,7 +35,7 @@ updated: 2026-09-18
 
 - [x] T004 (`DR-001`, `DR-002`, `AC-006`): 实现 snapshot/experiment canonical JSON 规范化、两级内容 ID 与 supersedes 校验 — verify: `tests/unit/experiment_store/test_research_snapshot.py`、`tests/unit/experiment_store/test_identity.py`
 - [x] T005 [P] (`FR-001`, `DR-004`, `AC-001`): 实现 preview/canonical 物理根目录和 capability 边界 — verify: `tests/integration/test_f007_execution_tiers.py`
-- [ ] T006 (`IR-001`, `IR-003`, `AC-008`, `AC-011`): 实现 preview CLI 与稳定结构化输出/错误码，首屏固定含 tier/cohort/data+code digest/state/verdict 与首个失败原因（快照测试锁定） — verify: `tests/integration/test_f007_cli.py`
+- [x] T006 (`IR-001`, `IR-003`, `AC-008`, `AC-011`): 实现 preview CLI 与稳定结构化输出/错误码，首屏固定含 tier/cohort/data+code digest/state/verdict 与首个失败原因（快照测试锁定） — verify: `tests/integration/test_f007_cli.py`
 - [x] T007 (`FR-003`, `FR-005`, `AC-004`): 实现最小信号质量、三档成本、breakeven 与阶段状态模型（按 design §3.3 术语表实现 stage 状态与 verdict 两层枚举），并写入信号来源 provenance（`source=placeholder` 在 canonical 失败关闭、preview 显式标注） — verify: `tests/unit/evaluation/test_cost_and_stability.py`
 
 ### Phase 2：方法论门与 canonical 证据

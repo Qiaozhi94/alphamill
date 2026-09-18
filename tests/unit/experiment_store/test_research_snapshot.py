@@ -277,6 +277,40 @@ def test_publish_is_idempotent_and_load_roundtrips(tmp_path):
     assert rs.load_snapshot(root, snapshot.snapshot_id).to_dict() == snapshot.to_dict()
 
 
+def test_republish_with_different_created_at_is_idempotent(tmp_path):
+    """provenance.created_at 是墙钟时间、不参与身份，因此不能作为幂等判据。"""
+    lake = make_lake(tmp_path)
+    root = tmp_path / "reports"
+    kwargs = {
+        "lake_root": lake,
+        "root": root,
+        "cutoff": CUTOFF,
+        "datasets": {DATASET: VERSION},
+        "universe_digest": make_universe(lake),
+        "calendar": CALENDAR,
+        "symbol_map_digest": make_symbol_map(lake),
+    }
+    first = rs.build_snapshot(**kwargs, created_at=datetime(2026, 1, 1, tzinfo=UTC))
+    second = rs.build_snapshot(**kwargs, created_at=datetime(2026, 6, 1, tzinfo=UTC))
+    assert first.snapshot_id == second.snapshot_id
+    path = rs.publish_snapshot(root, first)
+    assert rs.publish_snapshot(root, second) == path
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["provenance"]["created_at"] == first.provenance["created_at"]
+    assert rs.load_snapshot(root, first.snapshot_id).to_dict() == first.to_dict()
+
+
+def test_semantically_conflicting_republish_is_rejected(tmp_path):
+    snapshot = build(tmp_path)
+    root = tmp_path / "reports"
+    path = rs.publish_snapshot(root, snapshot)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["members"][DATASET]["value_digest"] = "sha256:" + "e" * 64
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(SnapshotIntegrityError, match="语义不一致"):
+        rs.publish_snapshot(root, snapshot)
+
+
 def test_tampered_snapshot_is_detected(tmp_path):
     snapshot = build(tmp_path)
     root = tmp_path / "reports"
