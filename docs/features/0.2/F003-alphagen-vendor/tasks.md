@@ -26,8 +26,8 @@ updated: 2026-09-14
 
 ## 1. 前置条件
 
-- [ ] T001 (`FR-003`, `AC-003`): 冻结并校验 F008 宇宙台账 artifact 的消费契约（按 digest 加载、`universe_at(T)` 与 `schema_version` 可读），产出 T020 的输入夹具；F008 未落地时以显式 universe 配置作为等价夹具 — verify: `tests/unit/test_f003_binding.py`
-- [ ] T002 (`FR-003`, `DR-001`): 固定绑定文件格式并验证目标 dataset 的 valid 版本与 `value_digest` 可由 F002 reader 解析 — verify: `tests/unit/test_f003_binding.py`
+- [x] T001 (`FR-003`, `AC-003`): 冻结并校验 F008 宇宙台账 artifact 的消费契约（按 digest 加载、`universe_at(T)` 与 `schema_version` 可读），产出 T020 的输入夹具；F008 未落地时以显式 universe 配置作为等价夹具 — verify: `tests/unit/test_f003_binding.py`
+- [x] T002 (`FR-003`, `DR-001`): 固定绑定文件格式并验证目标 dataset 的 valid 版本与 `value_digest` 可由 F002 reader 解析 — verify: `tests/unit/test_f003_binding.py`
 - [ ] T003 (`FR-002`): clone 上游 AlphaGen、记录 commit hash、核对核心子集的实际文件布局，产出 vendor 清单初稿，并**冻结可复现的上游基线**（逐文件 sha256 清单写入 `alphagen_vendor/_upstream_baseline.json`） — verify: `src/alphamill/factor_factory/generators/alphagen_vendor/VENDORED.md`
 - [ ] T004 (`NFR-002`, `NFR-005`): 打通并标定执行机 `qiaozhi-lt`——**先恢复 shell 接入**（env-manager 台账记录 2026-09-14 全端口复测 22/2222/2200/8022/3389/5985 全闭，当前无 shell 路径，按 `references/access-methods.md` §4 启用 Windows OpenSSH）；再在其 WSL2 内实测 CUDA 可用性与可用显存，按 §7.1 标定显存上限写进配置（不写死代码）；确认该机 F002 湖可读且通过完整性校验 — verify: `tests/unit/test_f003_gpu_slot.py`（能力探测纯函数）+ 在 `qiaozhi-lt` 上用 `alphamill.data_bridge.reader` 读一次真实快照
 
@@ -35,14 +35,14 @@ updated: 2026-09-14
 
 ### Phase 1：生成器平面骨架与人工种子后端（US-001，不依赖 AlphaGen）
 
-- [ ] T005 (`FR-001`, `IR-002`, `AC-001`): 实现 `Generator` 协议与 `GenerationRequest/Result/Counts`，含结论字段白名单拒绝 — verify: `tests/unit/test_f003_generator_contract.py`
-- [ ] T006 [P] (`DR-003`, `AC-009`): 实现 `HypothesisDef` schema 与 catalog（含 `mechanism`、`applicable_state` 默认值），内置 `mechanism_unknown` 条目 — verify: `tests/unit/test_f003_hypotheses.py`
-- [ ] T007 (`DR-002`, `AC-009`): 实现 FactorDef 规范化 JSON（带 `schema_version`）、`definition_digest`、`factor_id` 生成与 `factor_store` 读写（`load()` 由表达式 + `feature_map` 重建可执行 `compute`） — verify: `tests/unit/test_f003_factor_store.py`
-- [ ] T008 (`DR-001`, `TR-001`, `TR-002`, `AC-009`, `AC-012`): 实现 `run_store`——GenerationRun manifest（带 `schema_version`）原子写（终态 `run.json` 最后写，含 `hostname` / `device` / `vram_limit_gb` / `universe`）与 `events.jsonl` append-only — verify: `tests/unit/test_f003_run_store.py`
-- [ ] T009 (`FR-003`, `AC-003`): 实现 `binding.py`：两种绑定形态解析、逐 dataset `value_digest` 校验、invalid 立即拒绝 — verify: `tests/unit/test_f003_binding.py`
-- [ ] T010 (`US-001`, `FR-001`, `AC-001`): 实现人工 crypto 原生种子后端（funding carry、basis、OI 变化、截面动量、波动），每个种子绑定真实 `HypothesisDef` — verify: `tests/unit/test_f003_manual_seeds.py`
-- [ ] T011 (`NFR-004`, `AC-011`): 实现 `egress_guard` 与写路径白名单（只允许 `reports/generation/<run_id>/`），两者 fail-closed（安装/生效失败即拒绝启动，不降级为仅警告） — verify: `tests/integration/test_f003_boundaries.py`
-- [ ] T012 (`IR-001`, `AC-011`, `AC-012`): 实现 CLI `seed` / `show` 子命令与缺绑定的非零拒绝、未知 `schema_version` 的拒绝 — verify: `tests/unit/test_f003_cli_contract.py`
+- [x] T005 (`FR-001`, `IR-002`, `AC-001`): 实现 `Generator` 协议与 `GenerationRequest/Result/Counts`，含结论字段白名单拒绝 — verify: `tests/unit/test_f003_generator_contract.py`
+- [x] T006 [P] (`DR-003`, `AC-009`): 实现 `HypothesisDef` schema 与 catalog（含 `mechanism`、`applicable_state` 默认值），内置 `mechanism_unknown` 条目 — verify: `tests/unit/test_f003_hypotheses.py`
+- [x] T007 (`DR-002`, `AC-009`): 实现 FactorDef 规范化 JSON（带 `schema_version`）、`definition_digest`、`factor_id` 生成与 `factor_store` 读写（`load()` 由表达式 + `feature_map` 重建可执行 `compute`） — verify: `tests/unit/test_f003_factor_store.py`
+- [x] T008 (`DR-001`, `TR-001`, `TR-002`, `AC-009`, `AC-012`): 实现 `run_store`——GenerationRun manifest（带 `schema_version`）原子写（终态 `run.json` 最后写，含 `hostname` / `device` / `vram_limit_gb` / `universe`）与 `events.jsonl` append-only — verify: `tests/unit/test_f003_run_store.py`
+- [x] T009 (`FR-003`, `AC-003`): 实现 `binding.py`：两种绑定形态解析、逐 dataset `value_digest` 校验、invalid 立即拒绝 — verify: `tests/unit/test_f003_binding.py`
+- [x] T010 (`US-001`, `FR-001`, `AC-001`): 实现人工 crypto 原生种子后端（funding carry、basis、OI 变化、截面动量、波动），每个种子绑定真实 `HypothesisDef` — verify: `tests/unit/test_f003_manual_seeds.py`
+- [x] T011 (`NFR-004`, `AC-011`): 实现 `egress_guard` 与写路径白名单（只允许 `reports/generation/<run_id>/`），两者 fail-closed（安装/生效失败即拒绝启动，不降级为仅警告） — verify: `tests/integration/test_f003_boundaries.py`
+- [x] T012 (`IR-001`, `AC-011`, `AC-012`): 实现 CLI `seed` / `show` 子命令与缺绑定的非零拒绝、未知 `schema_version` 的拒绝 — verify: `tests/unit/test_f003_cli_contract.py`
 
 ### Phase 2：AlphaGen vendor 与冒烟闸门（US-002，2 个工作日 time-box）
 

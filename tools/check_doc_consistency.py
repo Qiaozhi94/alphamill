@@ -886,22 +886,14 @@ TEST_REF_RE = re.compile(r"tests/[A-Za-z0-9_/.-]+\.py")
 # 校验，防止过期豁免把「删除已落盘载体」盖住）；引用未登记的幽灵文件同样判红。
 DECLARED_TEST_ALLOWLIST: dict[str, str] = {
     "tests/integration/test_f003_alpha_pool.py": "T026",
-    "tests/integration/test_f003_boundaries.py": "T011",
     "tests/integration/test_f003_generation_run.py": "T028",
     "tests/integration/test_f003_lake_tensor.py": "T020",
     "tests/integration/test_f003_smoke_gate.py": "T016",
     "tests/unit/test_f003_alphagen_adapter.py": "T021",
-    "tests/unit/test_f003_binding.py": "T001",
-    "tests/unit/test_f003_cli_contract.py": "T012",
-    "tests/unit/test_f003_factor_store.py": "T007",
-    "tests/unit/test_f003_generator_contract.py": "T005",
     "tests/unit/test_f003_gpu_slot.py": "T004",
-    "tests/unit/test_f003_hypotheses.py": "T006",
     "tests/unit/test_f003_ic_parity.py": "T018",
-    "tests/unit/test_f003_manual_seeds.py": "T010",
     "tests/unit/test_f003_objective.py": "T024",
     "tests/unit/test_f003_operator_registry.py": "T022",
-    "tests/unit/test_f003_run_store.py": "T008",
     "tests/unit/test_f003_vendor_hygiene.py": "T013",
 }
 
