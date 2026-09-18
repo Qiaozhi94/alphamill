@@ -48,6 +48,6 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 
 ## 当前活跃 Feature
 
-- F003 AlphaGen vendor 与可插拔生成器平面（v0.2, draft）→ `docs/features/0.2/F003-alphagen-vendor/`
+- F003 AlphaGen vendor 与可插拔生成器平面（v0.2, ready-for-development）→ `docs/features/0.2/F003-alphagen-vendor/`
 - F007 统一评测台与证据门禁（v0.2, draft）→ `docs/features/0.2/F007-evaluation-gates/`
 - F008 宇宙扩容与 point-in-time 宇宙台账（v0.2, draft）→ `docs/features/0.2/F008-universe-expansion/`
