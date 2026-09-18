@@ -21,6 +21,9 @@ dependencies = [
   "uvicorn>=0.34,<1",
 ]
 
+[project.scripts]
+alphamill-generate = "alphamill.factor_factory.cli:main"
+
 [project.optional-dependencies]
 dev = [
   # 固定到范围：CI 每次 `pip install -e ".[dev]"` 拉最新，linter 自升级的
