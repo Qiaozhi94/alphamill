@@ -316,7 +316,7 @@ def test_identifier_and_url_backticks_are_not_tests(token: str) -> None:
 
 
 def test_f007_ac_identifier_backticks_are_not_mistaken_for_test_paths() -> None:
-    """回归：F007 的 13 条 AC 正文只 backtick 标识符、暂未回填 tests 路径。"""
+    """回归：AC 正文的标识符 backtick 不得被判为 tests 路径，路径形 token 必须真实存在。"""
     spec = (vsl.ROOT / "docs" / "features" / "0.2" / "F007-evaluation-gates" / "spec.md").read_text(
         encoding="utf-8"
     )
@@ -326,6 +326,9 @@ def test_f007_ac_identifier_backticks_are_not_mistaken_for_test_paths() -> None:
         if (matched := vsl.AC_RE.match(line))
         for token in re.findall(r"`([^`]+)`", matched.group(4))
     ]
-    assert tokens, "F007 的 AC 正文应含 backtick 标识符"
-    mistaken = [token for token in tokens if vsl.looks_like_test_path(token)]
-    assert mistaken == []
+    identifiers = [token for token in tokens if "/" not in token]
+    assert identifiers, "F007 的 AC 正文应含标识符 backtick"
+    assert [token for token in identifiers if vsl.looks_like_test_path(token)] == []
+    paths = [token for token in tokens if vsl.looks_like_test_path(token)]
+    assert paths, "F007 的 AC 正文应已回填 tests 路径"
+    assert all((vsl.ROOT / path).is_file() for path in paths)
