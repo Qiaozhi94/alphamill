@@ -179,7 +179,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 系统应当输出零成本/maker/taker 三档、资金费率、breakeven cost、换手、持有期与适用的容量代理，
 并以 purged/embargoed rolling split 记录选择期到留出的稳定性；成本后不为正时 verdict 为 `dead`。
-样本量按三级裁决（ADR-0003「样本量门槛」与 PRD FR3.5），区间为**半开区间**、以笔数计：`[0, 30)` 为 `sample_tier=underpowered`（不判 PASS 也不判 FAIL，触发扩宇宙/延长窗口）；`[30, 69)` 为 `provisional`（最多临时 PASS，仅允许缩减仓位进入 paper 并延长观察，不构成可信判定）；`[69, ∞)` 为 `trustworthy`（才允许完整成本后 PASS/FAIL 判定并计入北极星判据）。一「笔」= canonical 成本模拟中一次完整往返交易（同一仓位周期的开平合为一笔）；无模拟成交时按独立信号观测数计，并在 report 的 `sample_unit` 字段显式记录计数口径。成员级结论导出 `promotion_verdict` 时按 design §3.3 的冻结优先级表取值（`incomplete > underpowered > dead > blocked_pending_audit > provisional > promising`）。
+样本量按三级裁决（ADR-0003「样本量门槛」与 PRD FR3.5），区间为**半开区间**、以笔数计：`[0, 30)` 为 `sample_tier=underpowered`（不判 PASS 也不判 FAIL，触发扩宇宙/延长窗口）；`[30, 69)` 为 `provisional`（最多临时 PASS，仅允许缩减仓位进入 paper 并延长观察，不构成可信判定）；`[69, ∞)` 为 `trustworthy`（才允许完整成本后 PASS/FAIL 判定并计入北极星判据）。一「笔」= canonical 成本模拟中一次完整往返交易（同一仓位周期的开平合为一笔）；无模拟成交时按独立信号观测数计，并在 report 的 `sample_unit` 字段显式记录计数口径。成员级结论导出 `promotion_verdict` 时按 design §3.3 的冻结优先级表取值（`rejected > incomplete > underpowered > dead > blocked_pending_audit > provisional > promising`），输出值集合与 design §3.3 术语表的 `promotion_verdict` 枚举完全相等。
 
 #### Scenario: 欠功效与临时 PASS 分离
 
@@ -207,7 +207,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 ### Requirement: 无前视三层归属与晋级阻断（`FR-007`）
 
-系统应当把 PRD FR3.6 的三层无前视防线显式归属：**L1 = AST 纯度与未来算子门**（因子定义层）由 F007 方法论守卫在评测入口复检并 fail-closed（执行者在 F003 生成侧）；**L2 = 独立逐 K 线重放审计**（策略层）与 **L3 = 信号缓存 merge/join 时间戳与陈旧度对齐**（数据层）的 owner 为 F006/M3，F007 不重复实现。manifest 必须逐层记录状态（`PASS` / `FAIL` / `not_yet_available`）与证据引用，缺失层携带 owner。**L2/L3 未取得通过证据前，任何成员或组合不得晋级 paper**：状态不得记 `PASS`，也不得静默省略；证据本身达标（非 dead/underpowered/incomplete）的成员，其 `promotion_verdict` 置 `blocked_pending_audit`（不与 `dead`/`incomplete` 混淆，枚举与导出优先级见 design §3.3）。**晋级阻断点是本 Feature 产出的 `promotion_verdict` 与 manifest `no_lookahead` 三层状态**，由 F006 晋级入口消费：F006 在存在非 `PASS` 层时拒绝晋级并写 `E_PROMOTION_BLOCKED`，拒绝事件含缺失层与 owner。
+系统应当把 PRD FR3.6 的三层无前视防线显式归属：**L1 = AST 纯度与未来算子门**（因子定义层）由 F007 方法论守卫在评测入口复检并 fail-closed（执行者在 F003 生成侧）；**L2 = 独立逐 K 线重放审计**（策略层）与 **L3 = 信号缓存 merge/join 时间戳与陈旧度对齐**（数据层）的 owner 为 F006/M3，F007 不重复实现。manifest 必须逐层记录状态（`PASS` / `FAIL` / `not_yet_available`）与证据引用，缺失层携带 owner。**L2/L3 未取得通过证据前，任何成员或组合不得晋级 paper**：状态不得记 `PASS`，也不得静默省略；证据本身达标（非 rejected/incomplete/underpowered/dead）的成员，其 `promotion_verdict` 置 `blocked_pending_audit`（不与 `dead`/`incomplete` 混淆，也不得记 `provisional`/`promising`；枚举与导出优先级见 design §3.3）。**晋级阻断点是本 Feature 产出的 `promotion_verdict` 与 manifest `no_lookahead` 三层状态**，由 F006 晋级入口消费：F006 在存在非 `PASS` 层时拒绝晋级并写 `E_PROMOTION_BLOCKED`，拒绝事件含缺失层与 owner。
 
 #### Scenario: 只有 L1 通过时不得晋级
 
@@ -217,13 +217,19 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 ### Requirement: 评测面回写与查重判定（`FR-008`）
 
-系统应当作为 F003 因子注册表**评测面**的唯一写入 owner：cohort FINALIZED 后，把成员评测摘要以 append-only 方式回写注册表评测面记录（载荷 `DR-008`：`promotion_verdict`、`sample_tier`、`cost_model_version`、dedup 结果与 cohort/experiment 引用）；并对候选执行 `|ρ|` 查重判定——与注册表既有评测面记录的回归相关性 `|ρ| > 0.99` 拒绝、`0.90~0.99` 标记为变体（`variant`），**被拒者仍计入漏斗分母**（`FR-004`）。F007 不写注册表**定义面**（`FactorDef` 表达式/定义摘要/定义版本），也不做 lifecycle 状态判定（后移 M3/F006，见 §3 范围外与 tasks §5 后移）。
+系统应当在 `finalize-cohort` **内部、导出 `promotion_verdict` 之前**完成 `|ρ|` 查重判定：相关性口径按 PRD FR2.5 取成员与比较对象的 **OOS PnL（成本后权益收益）与 rolling IC 序列**（均取自各自 `curves.parquet`，比较对象经 `DR-008` 的 `evidence_ref` 定位），取两者绝对相关的较大值为 `max_abs_rho`；比较对象为注册表评测面中 `dedup.verdict≠rejected` 的既有记录，以及**同一 cohort 的其他成员**（两两比较）。`|ρ| > 0.99` 判 `dedup.verdict=rejected`、`0.90~0.99` 判 `variant`；cohort 内重复对按 `cohort.json` 预注册的承诺顺序保留在先者、拒绝在后者（不按结果择优）。查重结论进入 design §3.3 导出优先级表：`dedup.verdict=rejected` 的成员 `promotion_verdict=rejected`，`variant` 不改变取值。**被拒者仍计入 cohort 试验总数与漏斗分母**（`FR-004`）。随后系统作为 F003 因子注册表**评测面**的唯一写入 owner，在 cohort FINALIZED 后把成员评测摘要以 append-only 方式回写注册表评测面记录（载荷 `DR-008`：`promotion_verdict`、`sample_tier`、`cost_model_version`、dedup 结果、`evidence_ref` 与 cohort/experiment 引用）；回写适配器只写入 finalize 已产出的结论，不重新计算查重。F007 不写注册表**定义面**（`FactorDef` 表达式/定义摘要/定义版本），也不做 lifecycle 状态判定（后移 M3/F006，见 §3 范围外与 tasks §5 后移）。
 
 #### Scenario: 高相关候选被拒但仍入分母
 
-- GIVEN cohort 内一个候选与注册表既有因子的回归相关性 `|ρ| = 0.995`
-- WHEN cohort FINALIZED 并回写评测面
-- THEN 该成员回写记录 `dedup.verdict=rejected`，不产生 `promising` 结论，且仍计入 cohort 试验总数与漏斗分母
+- GIVEN cohort 内一个候选与注册表既有因子的 OOS PnL 序列相关性 `|ρ| = 0.995`，其统计、成本与三层无前视证据均达标
+- WHEN `finalize-cohort` 执行
+- THEN `cohort_verdict.json` 中该成员 `promotion_verdict=rejected`（不是 `promising`），回写记录 `dedup.verdict=rejected`，且仍计入 cohort 试验总数与漏斗分母
+
+#### Scenario: cohort 内成员互相重复
+
+- GIVEN 同一 cohort 按承诺顺序先后登记的成员 A、B，二者 `|ρ| = 0.993`
+- WHEN `finalize-cohort` 执行
+- THEN B 的 `dedup.verdict=rejected`、`against_factor_id` 指向 A，A 不因该对被拒；两者都计入分母
 
 #### Scenario: 定义面越权写入
 
@@ -240,7 +246,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 - **DR-005**：`HoldoutBudgetLedger` 应当以 append-only 台账持久化每次留出评估（`candidate_id`、ISO 周、`experiment_id`、`cohort_id`、`verdict`、`recorded_at`、`execution_tier=canonical`；schema 预留 `holdout_window`（起止 UTC）与 `regime` 字段，按 ADR-0003 v0.1 regime 记账与滚动留出路线由写入者填充）；只有 canonical capability 可追加，preview 越权写入必须被拒绝并写 `evaluation.gate_rejected`；台账与 manifest 同为可复现要件，不支持事后补记（ADR-0003 留出期使用预算）。**v0.2 写入者边界**：FactorDef 评测流程不访问最终留出（留出评估属 FR4/M3 的 PortfolioDef 留出门，PRD FR3.4），故 v0.2 只交付台账 schema、capability 约束与拒绝路径，**追加写入者后移 FR4/M3**（tasks §5）；v0.2 内台账零行是预期不变量（锁定「不存在旁路写入者」），不是功能缺失。
 - **DR-006**：`UniverseCalendarBinding` 应当把 universe 与 calendar 拆为两个独立 artifact 引用：universe 按 **F008** `IR-002` 的内容寻址台账消费（`lake/_metadata/universes/<digest>.csv`，提供 `universe_at(T)` 语义），calendar 由本 Feature 拥有并规范化保存为内容寻址 JSON（`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`）；ADR-0007 的 `universe_calendar_digest` 由两者 digest 按 ADR-0007 冻结的组合公式 `sha256(canonical_json({"universe": <universe_digest>, "calendar": <calendar_digest>}))` 组合导出（不再等于单一 JSON 文件摘要），拆解关系写入 ResearchSnapshot provenance。
 - **DR-007**：`SignalFactorProvenance` 应当记录从 F004/Kronos 信号或人工种子派生为可评测 `FactorDef` 的适配信息（来源 dataset 与 `source` 分布、适配器版本、原始信号列、标签与 horizon 映射）；`source=placeholder` 的来源在 canonical 被拒绝（`E_INPUT_INVALID`），preview 允许但报告必须标注 `signal_source=placeholder` 并置 `approximation=true`；F004 只交付真实信号源与 `/predict` 契约，不升级 `signals_log` 内容，消费者路由切换不在本 Feature 范围。
-- **DR-008**：`RegistryEvaluationSummary` 应当是 F007 写入 F003 注册表**评测面**的唯一载荷（append-only，只追加评测面记录、不触定义面）：`factor_id`、`cohort_id`、`experiment_id`、`promotion_verdict`、`sample_tier`、`cost_model_version`、`dedup`（`{max_abs_rho, verdict: none|variant|rejected, against_factor_id}`）、`finalized_at` 与 `schema_version`；**不含 lifecycle 状态字段**（判定后移 M3/F006）。
+- **DR-008**：`RegistryEvaluationSummary` 应当是 F007 写入 F003 注册表**评测面**的唯一载荷（append-only，只追加评测面记录、不触定义面）：`factor_id`、`cohort_id`、`experiment_id`、`promotion_verdict`、`sample_tier`、`cost_model_version`、`dedup`（`{max_abs_rho, verdict: none|variant|rejected, against_factor_id}`）、`evidence_ref`（本成员 `curves.parquet` 的逻辑 URI，供后续查重取序列）、`finalized_at` 与 `schema_version`；**不含 lifecycle 状态字段**（判定后移 M3/F006）。
 
 ### 事件 / Trace 需求
 
@@ -250,7 +256,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 ### API / 接口需求
 
-- **IR-001**：CLI 应提供 preview、canonical、finalize-cohort 与 synthesis 四个显式子命令；拒绝缺失 cohort/规则版本的 canonical 请求，也拒绝在成员未收齐时 finalize。canonical 的 `--code-build-digest` 参数只作**期望值**：实际 digest 由 runner 从已安装构建（包内容/锁文件，回退 git tree）自行计算，两者不一致即 `E_INPUT_INVALID`，工作树脏时拒绝 canonical（见 design §4）。
+- **IR-001**：CLI 应提供 preview、canonical、finalize-cohort、synthesis 与 abandon 五个显式子命令（abandon 只接受 canonical 下处于 `INCOMPLETE` 的 experiment，必须带 reason，写 `evaluation.run_state_changed` 审计事件后按终态登记）；拒绝缺失 cohort/规则版本的 canonical 请求，也拒绝在成员未收齐时 finalize。canonical 的 `--code-build-digest` 参数只作**期望值**：实际 digest 由 runner 从已安装构建（包内容/锁文件，回退 git tree）自行计算，两者不一致即 `E_INPUT_INVALID`，工作树脏时拒绝 canonical（见 design §4）。
 - **IR-002**：canonical 评测只接受已发布 ResearchSnapshot ID 和可解析的 FactorDef/冻结 PortfolioDef 引用；preview 请求 latest 时必须显式提供不可变 symbol-map ref、**F008** universe artifact 引用与 calendar artifact 输入，builder **分别**校验 universe 的 `universe_at(T)` 语义与 calendar schema 后内容寻址冻结并返回 snapshot ID；任何 tier 都不直接接受任意数据库查询，缺失任一 artifact 即失败关闭。
 - **IR-003**：机器输出应使用版本化 schema，并返回 experiment_id、状态、verdict、artifact refs 和结构化 failure；Agent/preview 可读产物不含最终确认窗的任何统计量（fail-closed）。
 
@@ -271,13 +277,17 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 
 ```text
 CREATED -> VALIDATING       身份与输入可解析
+CREATED -> INCOMPLETE       身份或输入引用不可解析（可重试态）
 VALIDATING -> RUNNING       方法论/PIT/纯度门通过
 VALIDATING -> REJECTED      方法论/PIT/纯度门失败（fail-closed，终态结论）
+VALIDATING -> INCOMPLETE    snapshot 成员/摘要/cutoff/映射日历不符（可重试态）
 RUNNING -> EVIDENCE_READY   必需阶段完成且产物原子发布（含 UNDERPOWERED/dead 等
                             完整证据结论——证据存在不等于结论为正）
-RUNNING -> INCOMPLETE       输入、估计器、发布或恢复失败（可重试态）
-INCOMPLETE -> RUNNING       同一 experiment_id 重试（重试次数入 manifest）
-INCOMPLETE -> REGISTERED    重试上限（配置项，默认 2）耗尽或显式 abandon 后，
+RUNNING -> REJECTED         运行时方法论守卫失败（fit 越界、as-of 方向或陈旧度越限；
+                            fail-closed，终态结论）
+RUNNING -> INCOMPLETE       估计器、发布或恢复失败（可重试态）
+INCOMPLETE -> VALIDATING    同一 experiment_id 重试，从校验重新开始（重试次数入 manifest）
+INCOMPLETE -> REGISTERED    重试上限（配置项，默认 2）耗尽或显式 abandon（`IR-001`）后，
                             按终态不完整结论登记
 REJECTED -> REGISTERED      拒绝成员终态登记（evaluation.registered）：
                             被拒者仍计入漏斗分母，不携带任何 PASS-like 结论
@@ -294,14 +304,14 @@ preview EVIDENCE_READY -> PREVIEW_DONE  保持隔离，不可晋级
 
 **终态集合**：canonical 成员终态为 `REGISTERED`——证据完整（EVIDENCE_READY）、拒绝（REJECTED）、
 或重试耗尽的 INCOMPLETE 都以它收口，保证「cohort 承诺成员集合 == 终态登记集合」，finalize 判据
-可判定；preview 终态为 `PREVIEW_DONE`；cohort 终态为 `FINALIZED`。`REJECTED` 是方法论/纯度门的
+可判定；preview 终态为 `PREVIEW_DONE`；cohort 终态为 `FINALIZED`。`REJECTED` 是方法论/纯度门（入口或运行时守卫）的
 fail-closed 拒绝结论，必须登记为拒绝成员；`INCOMPLETE` 是可重试态，不是终态。
 
 不变量：
 - preview 永远不能转写为 canonical；晋级意图必须以冻结上下文重新执行 canonical。
 - 任何 PASS/promising 都必须能追到完整 manifest、规则版本、data value digest 和 code/build digest。
 - canonical 成员登记不等于晋级；cohort 未 FINALIZED 时不得产生可晋级结论。
-- 必需门被 skip、warning 或 null 时，运行不能进入 `EVIDENCE_READY/REGISTERED`；必需门**执行后失败**（方法论/纯度门拒绝）产生 `REJECTED` 终态结论并照常 REGISTERED——被拒成员计入漏斗分母（`US-003` 场景 1），不得因失败而缺席登记，也不得携带任何 PASS-like 结论。
+- 必需门被 skip、warning 或 null 时，运行不能进入 `EVIDENCE_READY/REGISTERED`；必需门**执行后失败**（方法论/纯度门入口或运行时守卫拒绝）产生 `REJECTED` 终态结论并照常 REGISTERED——被拒成员计入漏斗分母（`US-003` 场景 1），不得因失败而缺席登记，也不得携带任何 PASS-like 结论。
 - 历史证据不覆盖；变化产生新 ID，并通过 supersedes 表达替代关系。
 - 无前视三层归属显式：L1 由本 Feature 方法论守卫 fail-closed 执行；L2/L3 owner 为 F006/M3，非 `PASS` 前不得晋级 paper，缺失层记 `not_yet_available` 并携带 owner（`FR-007`）。
 
@@ -318,7 +328,7 @@ fail-closed 拒绝结论，必须登记为拒绝成员；`INCOMPLETE` 是可重�
 
 - [ ] **AC-001** (`FR-001`, `DR-004`, `DR-005`, `NFR-003`): preview 越权被拒绝，正式台账与留出预算台账零变化（含「台账零行」正向断言与 preview 越权写入留出预算的负例）。v0.2 留出台账**无追加写入者**（`DR-005` 写入者后移 FR4/M3），零行是锁定「不存在旁路写入者」的预期不变量；负例含 preview 越权追加与 canonical capability 缺失追加两条路径
 - [ ] **AC-002** (`FR-002`): label endpoint、per-pair 日历、最大 horizon、train-only fit 与 future-aware 算子负例全部被拦截
-- [ ] **AC-003** (`FR-003`, `FR-004`): 必需统计失败关闭；拒绝者仍进入试验分母，成员未收齐时 cohort 不能 finalize 或晋级；**多成员 cohort 批量夹具**上被拒成员仍在分母、诊断性重算不重复计数
+- [ ] **AC-003** (`FR-003`, `FR-004`): 必需统计失败关闭；入口/运行时方法论拒绝、输入不符与重试耗尽/abandon 各自按 spec §5 迁移到 REGISTERED，`promotion_verdict` 按 design §3.3 优先级表逐级取值（每级至少一例）；拒绝者仍进入试验分母，成员未收齐时 cohort 不能 finalize 或晋级；**多成员 cohort 批量夹具**上被拒成员仍在分母、诊断性重算不重复计数
 - [ ] **AC-004** (`FR-005`): 三档成本、breakeven/换手/持有期和 rolling stability 完整，成本不存活者为 dead；样本量三级裁决正确且按半开区间冻结（`[0,30)` → `underpowered` 不判 PASS/FAIL、`[30,69)` → `provisional` 仅缩减仓位 paper、`[69,∞)` → `trustworthy` 才可完整判定），含 **29/30/68/69 笔边界用例**与 `sample_unit` 计数口径断言
 - [ ] **AC-005** (`FR-006`, `DR-003`, `NFR-001`): report/curves/manifest 原子发布，失败注入不产生半个 PASS
 - [ ] **AC-006** (`DR-001`, `DR-002`, `DR-006`, `NFR-002`): ResearchSnapshot 跨路径/codec 身份稳定；动态 latest 先冻结；成员/cutoff/映射日历或实验语义变化使相应身份变化并可 supersede；universe（F008 digest + `universe_at(T)`）与 calendar 两个 artifact 引用分别校验，缺失或 digest 不符即拒绝发布
@@ -328,7 +338,7 @@ fail-closed 拒绝结论，必须登记为拒绝成员；`INCOMPLETE` 是可重�
 - [ ] **AC-010** (`NFR-003`, `IR-003`): 最终确认窗统计量不出现在任何 Agent/preview 可读的 report/manifest/synthesis；越权读取或写入 fail-closed 并留拒绝事件
 - [ ] **AC-011** (`NFR-004`, `NFR-005`, `UX-001`): preview 的采样/缩窗在报告 `approximation` 字段显式标注（`is_approximate` 与缩减维度可核），canonical 不因性能压力静默减少门禁或样本；产物路径与 manifest 只用 POSIX 逻辑路径/URI（Windows/WSL 物理路径只进 provenance）；CLI 首屏含 tier/cohort/data+code digest/state/verdict 与首个失败原因（快照测试锁定）
 - [ ] **AC-012** (`FR-003`): 五阶段 ID 与失败三维 schema 冻结并可校验——stage 取值限于 `signal_quality`/`portfolio_transform`/`cost_capacity`/`temporal_stability`/`execution_implementation`，`failure_taxonomy` 记录含 stage/owner/mechanism/error_code/evidence_refs，synthesis 按三维聚合且拒绝枚举外取值
-- [ ] **AC-013** (`FR-008`, `DR-008`): cohort FINALIZED 后评测摘要按 `DR-008` 回写 F003 注册表评测面（append-only，定义面写入被拒且定义面记录零变化）；`|ρ|>0.99` 拒绝且被拒者仍入分母、`0.90~0.99` 标记 variant；回写载荷含 `cost_model_version` 且不含 lifecycle 状态字段
+- [ ] **AC-013** (`FR-008`, `DR-008`): cohort FINALIZED 后评测摘要按 `DR-008` 回写 F003 注册表评测面（append-only，定义面写入被拒且定义面记录零变化）；查重在 finalize 内、先于 `promotion_verdict` 导出完成：按 OOS PnL / rolling IC 序列计算，`|ρ|>0.99` 的成员 `promotion_verdict=rejected` 且仍入分母、`0.90~0.99` 标记 variant、cohort 内重复对按承诺顺序保留在先者；回写载荷含 `cost_model_version` 与 `evidence_ref` 且不含 lifecycle 状态字段
 
 ## 7. 测试、依赖与决策
 
