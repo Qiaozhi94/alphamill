@@ -49,7 +49,7 @@ updated: 2026-09-18
 
 ### Phase 3：综合、控制与契约交付
 
-- [ ] T014 (`FR-006`, `AC-007`, `AC-012`): 实现只消费 canonical 的 synthesis builder 与五阶段/三维失败汇总（按 design §3.3 冻结的 `failure_taxonomy` schema 与五阶段 ID 枚举聚合，未知取值失败关闭）；漏斗第一级只读摄取 F003 的 `generation.run_completed`（仅 `status=completed`）与 `generation.candidate_rejected`（按原因码） — verify: `tests/integration/test_f007_synthesis.py`
+- [x] T014 (`FR-006`, `AC-007`, `AC-012`): 实现只消费 canonical 的 synthesis builder 与五阶段/三维失败汇总（按 design §3.3 冻结的 `failure_taxonomy` schema 与五阶段 ID 枚举聚合，未知取值失败关闭）；漏斗第一级只读摄取 F003 的 `generation.run_completed`（仅 `status=completed`）与 `generation.candidate_rejected`（按原因码） — verify: `tests/integration/test_f007_synthesis.py`
 - [ ] T015 (`FR-006`, `UX-002`, `AC-005`, `AC-011`): 实现 report/curves/synthesis schema reader 并验证曲线-标量互推；断言 `approximation` 标注存在、canonical 恒为非近似，并对产物路径做 POSIX 逻辑路径断言（Windows/WSL 物理路径只进 provenance） — verify: `tests/contract/test_f007_artifact_schemas.py`
 - [ ] T016 (`FR-003`, `FR-004`, `FR-005`, `AC-003`): 跑正控制、白噪声与故意泄漏 golden，多成员 cohort 批量夹具全链记录拒绝者（被拒者仍入分母、诊断性重算不重复计数） — verify: `tests/integration/test_f007_controls.py`
 - [ ] T017 (`FR-001`, `FR-002`, `NFR-003`, `AC-001`, `AC-002`, `AC-003`, `AC-005`): 对 future-fill、embargo、guard 注册、preview writer、异常吞噬与 publish 完整性运行定向变异，逐 mutant 产出证据 — verify: `tests/mutation/test_f007_gate_mutations.py`；变异工具版本 pin 于 dev 依赖（范围上界，按 SOP §1），结果写 `reports/mutation/f007/mutation_report.json`（mutant-killed 报告）

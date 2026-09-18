@@ -28,6 +28,11 @@ from alphamill.evaluation.publisher import PublishError
 from alphamill.evaluation.run_state import RunStateError
 from alphamill.experiment_store.errors import SnapshotError, SnapshotIntegrityError
 from alphamill.experiment_store.population import CohortError
+from alphamill.experiment_store.synthesis import (
+    SynthesisError,
+    build_synthesis,
+    publish_synthesis,
+)
 from alphamill.factor_factory.bench.curves import CurvesError
 from alphamill.factor_factory.bench.stage_model import StageModelError
 from alphamill.validation.methodology_gate import GuardViolation
@@ -56,7 +61,7 @@ def classify_error(exc: BaseException) -> str:
         return "E_CANONICAL_FORBIDDEN"
     if isinstance(exc, SnapshotIntegrityError):
         return "E_DATA_DIGEST_MISMATCH"
-    if isinstance(exc, (PublishError, CurvesError)):
+    if isinstance(exc, (PublishError, CurvesError, SynthesisError)):
         return "E_PUBLISH_INCOMPLETE"
     if isinstance(exc, CohortError):
         return "E_COHORT_FROZEN"
@@ -123,6 +128,10 @@ def build_parser() -> argparse.ArgumentParser:
     abandon.add_argument("--cohort", required=True)
     abandon.add_argument("--candidate", required=True)
     abandon.add_argument("--json", action="store_true")
+
+    synthesis = subcommands.add_parser("synthesis", help="从 canonical 台账生成综合报告")
+    synthesis.add_argument("--cohort", required=True)
+    synthesis.add_argument("--json", action="store_true")
     return parser
 
 
@@ -189,11 +198,24 @@ def _run_abandon(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _run_synthesis(args: argparse.Namespace) -> int:
+    report = build_synthesis(cohort_id=args.cohort)
+    path = publish_synthesis(report)
+    print(f"cohort={args.cohort}")
+    print(f"synthesis_id={report.synthesis_id}")
+    print(f"status={report.status}")
+    print(f"report={path}")
+    if args.json:
+        print(json.dumps(report.to_payload(), ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
 HANDLERS = {
     "preview": _run_preview,
     "canonical": _run_canonical,
     "finalize-cohort": _run_finalize_cohort,
     "abandon": _run_abandon,
+    "synthesis": _run_synthesis,
 }
 
 
