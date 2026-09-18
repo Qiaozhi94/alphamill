@@ -63,7 +63,8 @@ SynthesisBuilder ── finalized canonical cohort manifests + curves ── syn
 - `src/alphamill/factor_factory/bench/`：信号、统计、成本、稳定性与 artifact schema；
 - `src/alphamill/evaluation/cli.py`：薄入口，不承载裁决逻辑。
 - `src/alphamill/evaluation/upstream_contracts.py`：只读摄入 F003 的 `generation.*` 事件、算子能力登记表与协同池 `FactorDef`；F007 不写 F003 运行记录，也不解析 vendor 内部结构。
-- `src/alphamill/evaluation/registry_writeback.py`：F003 注册表**评测面**唯一写入者——cohort FINALIZED 后以 `DR-008` 载荷 append-only 追加评测摘要（`FR-008`）；`|ρ|` 查重判定（`>0.99` 拒绝 / `0.90~0.99` 标记 variant）在此产出；定义面不可写，越权即 `E_CANONICAL_FORBIDDEN`。
+- `src/alphamill/experiment_store/dedup.py`：`|ρ|` 查重判定——在 `finalize-cohort` 内、导出 `promotion_verdict` **之前**执行（`FR-008`），比较对象为注册表评测面中 `dedup.verdict≠rejected` 的既有记录与同 cohort 其他成员；
+- `src/alphamill/evaluation/registry_writeback.py`：F003 注册表**评测面**唯一写入者——cohort FINALIZED 后以 `DR-008` 载荷 append-only 追加评测摘要（`FR-008`），只写入 finalize 已产出的结论、不重算查重；定义面不可写，越权即 `E_CANONICAL_FORBIDDEN`。
 
 依赖方向固定为 CLI → orchestration → domain evaluators/store ports → F002 reader/filesystem。
 bench 不读取环境变量、不决定 tier/窗口/cohort，也不写 official population。synthesis 不访问 preview。
@@ -122,7 +123,7 @@ reports/
 
 `cohort.json` 在首个 canonical 运行前冻结，内容含 hypothesis family、全部候选承诺/纳入规则、
 选择阶段、窗口、阈值和方法版本。每个承诺成员无论证据完整（EVIDENCE_READY，含 UNDERPOWERED/dead 结论）、`REJECTED`（方法论/纯度门 fail-closed 拒绝）还是 INCOMPLETE 终态（重试上限耗尽或显式 abandon），都必须有终态 registration event（`evaluation.registered`）；只有成员集合与承诺完全相等（全部 REGISTERED）时，`finalize-cohort` 才计算
-BH-FDR/有效独立数 DSR 等 cohort 级指标并原子写 `cohort_verdict.json`。成员 report 不回写，
+BH-FDR/有效独立数 DSR 等 cohort 级指标，**先做 `|ρ|` 查重判定、再按 §3.3 优先级表导出 `promotion_verdict`**，最后原子写 `cohort_verdict.json`（查重结论与 verdict 在同一次原子写内，不存在「先发布 verdict、后补查重」的窗口）。成员 report 不回写，
 最终调整后结论由 cohort verdict 关联。official population 是 `cohort.json + events/*.json +
 cohort_verdict.json` 的确定性投影，不另建可手改真相表；SQLite/DuckDB 索引若存在，删除后必须
 能完全重建。
@@ -153,19 +154,24 @@ canonical 恒为 `is_approximate=false`，不得因性能压力静默减少门�
 | 阶段状态 | `stage_results[].status` | `PASS \| FAIL \| UNDERPOWERED \| INCOMPLETE \| NOT_APPLICABLE` | 只描述单阶段结果；`PASS` 不是晋级结论 |
 | 成本裁决 | `cost_verdict` | `cost_positive \| cost_negative \| cost_undetermined` | 三档成本后收益判定 |
 | 样本量裁决 | `sample_tier` | `underpowered \| provisional \| trustworthy` | 见 §7 与 ADR-0003 |
-| 成员晋升裁决 | `promotion_verdict` | `promising \| dead \| underpowered \| incomplete \| blocked_pending_audit` | 只在 `cohort_verdict.json`，cohort FINALIZED 后才产生；证据达标但 L2/L3 非 `PASS` 时置 `blocked_pending_audit`（`FR-007`），不得借用 `dead`/`incomplete` 表达 |
+| 成员晋升裁决 | `promotion_verdict` | `promising \| provisional \| blocked_pending_audit \| dead \| underpowered \| incomplete \| rejected` | 只在 `cohort_verdict.json`，cohort FINALIZED 后才产生；取值集合与下表输出集合**完全相等**；证据达标但 L2/L3 非 `PASS` 时置 `blocked_pending_audit`（`FR-007`），方法论拒绝或查重被拒置 `rejected`，不得借用 `dead`/`incomplete` 表达 |
 | cohort 状态 | `cohort_verdict.status` | `OPEN \| FINALIZED` | 承诺成员未收齐时恒为 `OPEN`，不产生可晋级结论 |
 
 **`promotion_verdict` 导出优先级（冻结；成员级结论按序取首个命中）**：
 
 | 优先级 | 条件 | 取值 |
 |---|---|---|
-| 1 | 必需阶段/估计器失败或证据不完整（含 INCOMPLETE 终态） | `incomplete` |
-| 2 | `sample_tier=underpowered` 或必需阶段 `UNDERPOWERED` | `underpowered` |
-| 3 | `cost_verdict=cost_negative` 或统计判死 | `dead` |
-| 4 | 证据达标但 manifest `no_lookahead` 三层存在非 `PASS` 层 | `blocked_pending_audit` |
-| 5 | `sample_tier=provisional` | `provisional`（临时 PASS） |
-| 6 | 其余 | `promising` |
+| 1 | 运行终态为 `REJECTED`（方法论/纯度门入口或运行时守卫拒绝），或 `dedup.verdict=rejected`（`\|ρ\|>0.99`） | `rejected` |
+| 2 | 必需阶段/估计器失败或证据不完整（含 INCOMPLETE 终态登记） | `incomplete` |
+| 3 | `sample_tier=underpowered` 或必需阶段 `UNDERPOWERED` | `underpowered` |
+| 4 | `cost_verdict=cost_negative` 或统计判死 | `dead` |
+| 5 | 证据达标但 manifest `no_lookahead` 三层存在非 `PASS` 层 | `blocked_pending_audit` |
+| 6 | `sample_tier=provisional` | `provisional` |
+| 7 | 其余 | `promising` |
+
+该表是 `promotion_verdict` 的**唯一**取值来源：输出值集合与上表枚举完全相等，条件覆盖全部 run 终态
+（`EVIDENCE_READY`/`REJECTED`/`INCOMPLETE` 终态）与全部 `dedup.verdict` 取值（`variant` 与 `none`
+不改变取值）；新增取值必须同时改枚举行与本表，门禁 `f007_promotion_blocked_state_defined` 解析两者比对。
 
 **五阶段 ID（冻结；spec FR-003 引用同一清单）**：
 
@@ -210,6 +216,8 @@ python -m alphamill.evaluation canonical \
 python -m alphamill.evaluation finalize-cohort --cohort <cohort-id>
 
 python -m alphamill.evaluation synthesis --cohort <cohort-id>
+
+python -m alphamill.evaluation abandon --experiment <experiment-id> --reason <text>
 ```
 
 CLI 仅解析参数和序列化结果；preview 的 `--latest` 模式要求显式 symbol-map digest、**F008** universe artifact 引用（`--universe`）与 calendar 输入（`--calendar`）两个独立参数。universe 按 F008 `IR-002` 从 `lake/_metadata/universes/<digest>.csv` 加载并走 `universe_at(T)` 语义，**不复制进 reports**；calendar 由 builder canonicalize 后原子保存为
@@ -219,6 +227,7 @@ CLI 仅解析参数和序列化结果；preview 的 `--latest` 模式要求显�
 返回非零。canonical 的 `--code-build-digest` 参数只作**期望值**：实际 `code_build_digest` 由 runner
 从已安装构建计算（优先安装包内容与锁文件，回退 git tree），与期望值不一致即 `E_INPUT_INVALID`；
 版本控制工作树脏时拒绝 canonical——身份哈希使用 runner 计算值，不接受调用方自报值（`IR-001`）。
+`abandon` 只接受 canonical 下处于 `INCOMPLETE` 的 experiment（其他状态返回 `E_INPUT_INVALID`），要求非空 `--reason`，写 `evaluation.run_state_changed`（`to=REGISTERED`，reason 入 manifest）后按终态不完整结论登记，使耗不尽重试的成员不会把 cohort 永久挂在 OPEN。
 成员 canonical 成功只表示 `REGISTERED`，不输出可晋级 verdict；`finalize-cohort` 在
 成员未收齐或存在非终态 attempt 时非零。成功响应打印 experiment ID/cohort ID、tier、state、
 verdict 和 artifact URI；领域错误输出稳定 error code，不输出 PASS-like exit code。
@@ -235,8 +244,8 @@ verdict 和 artifact URI；领域错误输出稳定 error code，不输出 PASS-
 
 ### 下游 Contract（F003 注册表评测面）
 
-- **评测面回写（`FR-008`/`DR-008`）**：cohort FINALIZED 后由 `registry_writeback` 以 `DR-008` 载荷 append-only 追加评测面记录（`promotion_verdict`、`sample_tier`、`cost_model_version`、dedup 结果与 cohort/experiment 引用）；只写评测面，`FactorDef` 定义面（表达式/定义摘要/定义版本）任何写入尝试即 `E_CANONICAL_FORBIDDEN`。
-- **`|ρ|` 查重判定**：与注册表既有评测面记录计算回归相关性，`|ρ| > 0.99` 拒绝（`dedup.verdict=rejected`）、`0.90~0.99` 标记 `variant`；**被拒者仍计入 cohort 试验总数与漏斗分母**（`FR-004`），与 PRD M1 种子相关性矩阵探针共用同一套相关性计算。
+- **评测面回写（`FR-008`/`DR-008`）**：cohort FINALIZED 后由 `registry_writeback` 以 `DR-008` 载荷 append-only 追加评测面记录（`promotion_verdict`、`sample_tier`、`cost_model_version`、dedup 结果、`evidence_ref` 与 cohort/experiment 引用）；只写评测面且只搬运 finalize 的结论，`FactorDef` 定义面（表达式/定义摘要/定义版本）任何写入尝试即 `E_CANONICAL_FORBIDDEN`。
+- **`|ρ|` 查重判定（在 finalize 内，先于 verdict）**：相关性口径按 PRD FR2.5 取 **OOS PnL（成本后权益收益）与 rolling IC 序列**，两者均来自 `curves.parquet`——本成员取自身曲线，比较对象经既有评测面记录的 `evidence_ref` 定位；取两个口径绝对相关的较大值为 `max_abs_rho`。比较集合 = 注册表评测面中 `dedup.verdict≠rejected` 的既有记录 ∪ 同 cohort 其他成员（两两比较）。`|ρ| > 0.99` 判 `rejected`、`0.90~0.99` 判 `variant`；cohort 内重复对按 `cohort.json` 承诺顺序保留在先者、拒绝在后者（顺序是预注册事实，不按结果择优）。被拒者 `promotion_verdict=rejected`（§3.3 优先级第 1 级），**仍计入 cohort 试验总数与漏斗分母**（`FR-004`），与 PRD M1 种子相关性矩阵探针共用同一套相关性计算。
 - **lifecycle 状态判定不在 v0.2**：衰减/下线判定依赖 paper/实盘表现监控数据，owner 后移 M3/F006（BACKLOG「规划中」行，与无前视 L2/L3 审计同批）；v0.2 回写载荷只含 cohort FINALIZED 后的 `promotion_verdict`，不含任何 lifecycle 状态字段。
 - **`cost_model_version` 只读发布**：`cost_model.id` 即对外 `cost_model_version`（§3.1），随 report 与评测面摘要发布，F003 生成侧预筛引用同一值，不自行定义成本口径。
 
@@ -307,7 +316,7 @@ F005 前端**只经** `src/alphamill/api/` 的统一只读 API 消费 report、c
 
 ## 7. 失败、恢复、安全与兼容
 
-- 校验与失败映射：snapshot 成员/摘要/cutoff/映射日历不符 → `INCOMPLETE`（可重试，超上限或 abandon 后按终态登记）；方法论/纯度门失败 → stage `FAIL` 且运行 `REJECTED`（终态，照常 REGISTERED 并计入漏斗分母，不产生 EVIDENCE_READY）；统计估计器异常 →
+- 校验与失败映射（每条都对应 spec §5 的一条迁移）：身份/输入引用不可解析 → `CREATED -> INCOMPLETE`；snapshot 成员/摘要/cutoff/映射日历不符 → `VALIDATING -> INCOMPLETE`（可重试，重试从校验重新开始；超上限或 abandon 后按终态登记）；方法论/纯度门入口失败 → `VALIDATING -> REJECTED`，运行时守卫失败（fit 越界、as-of 方向或陈旧度越限）→ `RUNNING -> REJECTED`（均为 stage `FAIL` + 终态，照常 REGISTERED 并计入漏斗分母，不产生 EVIDENCE_READY）；统计估计器异常 →
   `INCOMPLETE`；证据不足 → 样本 `[0, 30)` 记 stage `UNDERPOWERED`、`sample_tier=underpowered`（证据完整、照常发布登记，不判 PASS/FAIL）；`[30, 69)` 记 `provisional`，只允许缩减仓位 paper 且不得进入北极星判据；成本不存活 → stage `FAIL` 且 `cost_verdict=cost_negative`（证据完整照常登记，cohort 裁决 `dead`）。
 - 重启与恢复：只消费完整发布目录；temp/无 registration 的目录不可见；同 ID 重试不重复计数。
 - 权限边界：canonical writer、留出 reader 与**最终确认窗 reader** 作为显式 capability 注入；preview/Agent 构造器没有
@@ -346,7 +355,7 @@ F005 前端**只经** `src/alphamill/api/` 的统一只读 API 消费 report、c
 | `SC-002` | integration + fault injection | `tests/integration/test_f007_concurrency.py` | 同 ID 并发 claim、崩溃后 lease 接管、finalize 原子性、registration 幂等 |
 | `AC-010` | integration + mutation | `tests/integration/test_f007_execution_tiers.py` | 最终确认窗统计量不出现在 Agent/preview 可读产物；越权 fail-closed |
 | `AC-012` | integration + contract | `tests/integration/test_f007_synthesis.py`、`tests/contract/test_f007_artifact_schemas.py` | 五阶段 ID 与 `failure_taxonomy` 三维聚合；枚举外取值拒绝 |
-| `AC-013` 评测面回写 | integration | `tests/integration/test_f007_registry_writeback.py` | `DR-008` 载荷 append-only；`|ρ|` 阈值判定（拒绝/variant）；定义面零变化；载荷无 lifecycle 字段 |
+| `AC-013` 评测面回写 | integration | `tests/integration/test_f007_registry_writeback.py`、`tests/integration/test_f007_canonical_registry.py` | 查重在 finalize 内先于 verdict 导出、cohort 内重复按承诺顺序保留在先者；`DR-008` 载荷 append-only 且含 `evidence_ref`；定义面零变化；载荷无 lifecycle 字段 |
 
 另以 funding carry/BTC-ETH 截面动量、白噪声、故意 future-fill 四类 fixture 做端到端 golden；对 guard 注册表、异常吞噬、preview writer、embargo 比较符与 artifact 完整性各做一次定向变异，
 逐 mutant 产出 kill 证据到 `reports/mutation/f007/mutation_report.json`（无 survived 项才算通过），
