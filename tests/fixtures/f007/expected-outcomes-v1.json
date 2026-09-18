@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "note": "每个控制 fixture 的预期门禁结果。T016 全链控制与 T023 执行机真实环境取证都按本文件判定。",
+  "unified_columns": ["time", "symbol", "close", "signal", "forward_return"],
+  "controls": [
+    {
+      "name": "funding_carry",
+      "kind": "positive",
+      "path": "controls/funding_carry.csv",
+      "shape": "time_series (1 symbol x 40 hourly rows)",
+      "factor": {
+        "generator": "manual",
+        "expression": "-1 * signal",
+        "signal_column": "signal",
+        "label_column": "forward_return"
+      },
+      "expected": {
+        "methodology_gate": "PASS",
+        "l1_lookahead": "PASS",
+        "statistics": "significant_after_multiplicity_correction",
+        "cost_verdict": "cost_positive",
+        "sample_tier": "trustworthy",
+        "promotion_verdict_ceiling": "blocked_pending_audit",
+        "rationale": "信号与前瞻收益同向；L2/L3 在 v0.2 恒为 not_yet_available，故证据达标也只能到 blocked_pending_audit（spec FR-007）。"
+      }
+    },
+    {
+      "name": "eth_btc_momentum",
+      "kind": "positive",
+      "path": "controls/eth_btc_momentum.csv",
+      "shape": "cross_sectional (6 symbols x 40 hourly rows)",
+      "factor": {
+        "generator": "manual",
+        "expression": "rank(signal)",
+        "signal_column": "signal",
+        "label_column": "forward_return"
+      },
+      "expected": {
+        "methodology_gate": "PASS",
+        "l1_lookahead": "PASS",
+        "statistics": "significant_after_multiplicity_correction",
+        "cost_verdict": "cost_positive",
+        "sample_tier": "trustworthy",
+        "promotion_verdict_ceiling": "blocked_pending_audit",
+        "rationale": "截面 rank 信号与前瞻收益同向；横截面只允许在同一 timestamp 的 PIT 宇宙内计算。"
+      }
+    },
+    {
+      "name": "white_noise",
+      "kind": "negative",
+      "path": "controls/white_noise.csv",
+      "shape": "cross_sectional (6 symbols x 40 hourly rows)",
+      "factor": {
+        "generator": "manual",
+        "expression": "signal",
+        "signal_column": "signal",
+        "label_column": "forward_return"
+      },
+      "expected": {
+        "methodology_gate": "PASS",
+        "l1_lookahead": "PASS",
+        "statistics": "not_significant_after_multiplicity_correction",
+        "cost_verdict": "cost_negative",
+        "sample_tier": "trustworthy",
+        "promotion_verdict": "dead",
+        "rationale": "信号与前瞻收益独立（固定 seed 生成）：统计门不得放行，成本门判死。"
+      }
+    },
+    {
+      "name": "future_fill_leakage",
+      "kind": "negative",
+      "path": "controls/future_fill_leakage.csv",
+      "shape": "time_series (1 symbol x 40 hourly rows)",
+      "factor": {
+        "generator": "manual",
+        "expression": "shift(close, -1) / close - 1",
+        "signal_column": "signal",
+        "label_column": "forward_return"
+      },
+      "expected": {
+        "methodology_gate": "FAIL",
+        "l1_lookahead": "FAIL",
+        "mechanism": "lookahead",
+        "run_state": "REJECTED",
+        "promotion_verdict": "rejected",
+        "still_registered": true,
+        "rationale": "表达式引用未来算子（负向 shift），数据侧 signal 亦等于 t+1 收益；L1 必须在评测入口 fail-closed，被拒者仍须登记并计入漏斗分母。"
+      }
+    }
+  ]
+}
