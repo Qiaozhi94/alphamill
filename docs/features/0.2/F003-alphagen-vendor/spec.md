@@ -2,7 +2,8 @@
 kind: feature
 id: F003
 version: "0.2"
-status: draft
+status: doc-reviewing
+branch: docs/F003-alphagen-vendor
 gate_version: 1
 related_features: [F001, F002, F007, F008]
 topics: [factor-factory, alphagen, vendor, generators, m2]
