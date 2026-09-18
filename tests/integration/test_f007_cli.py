@@ -19,6 +19,7 @@ from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge import registry, symbol_map
 from alphamill.evaluation.cli import ERROR_CODES, main
 from alphamill.evaluation.universe_ledger import UniverseMember, publish_universe
+from alphamill.experiment_store import population
 from alphamill.experiment_store import research_snapshot as snapshot_store
 
 pytestmark = pytest.mark.integration
@@ -328,3 +329,253 @@ def test_every_emitted_error_code_is_registered(env, capsys):
     main(args)
     code = capsys.readouterr().out.splitlines()[0].removeprefix("error_code=")
     assert code in ERROR_CODES
+
+
+# ---------- canonical / finalize-cohort / abandon（T013） ----------
+
+CANDIDATE = "factor_sha256:" + "9" * 64
+EXPRESSION = "rank(close) / delay(close, 1)"
+
+
+def _cohort_definition(candidate: str) -> dict:
+    return {
+        "schema_version": 1,
+        "hypothesis_family": "momentum-v1",
+        "selection_stage": "cross_sectional",
+        "method_config_ref": "method-v1",
+        "cost_model_ref": "cm-v1",
+        "inclusion_rules": "全部承诺成员计入分母",
+        "commitments": [
+            {
+                "candidate_id": candidate,
+                "generator": "manual",
+                "registered_at": "2026-09-01T00:00:00Z",
+            }
+        ],
+        "window": {
+            "selection": ["2026-01-01T00:00:00Z", "2026-04-01T00:00:00Z"],
+            "label_horizons": [1, 4, 24],
+        },
+        "universe_digest": "sha256:" + "f" * 64,
+        "calendar_digest": "sha256:" + "0" * 64,
+        "frozen_at": "2026-09-01T00:00:00Z",
+        "frozen_by": "Georg",
+    }
+
+
+def _canonical_args(env: dict, cohort_id: str, **extra: object) -> list[str]:
+    args = [
+        "canonical",
+        "--factor",
+        FACTOR_REF,
+        "--candidate",
+        CANDIDATE,
+        "--cohort",
+        cohort_id,
+        "--snapshot",
+        env["snapshot_id"],
+        "--config",
+        str(CONFIG),
+        "--seed",
+        "7",
+        "--signals",
+        str(POSITIVE),
+        "--expression",
+        EXPRESSION,
+    ]
+    for key, value in extra.items():
+        flag = f"--{key.replace('_', '-')}"
+        if value is True:
+            args.append(flag)
+        else:
+            args.extend([flag, str(value)])
+    return args
+
+
+@pytest.fixture()
+def cohort_env(env, monkeypatch):
+    cohort_id, _ = population.freeze_cohort(env["reports"], _cohort_definition(CANDIDATE))
+    monkeypatch.setattr("alphamill.evaluation.code_build.worktree_dirty", lambda root=None: False)
+    return {**env, "cohort_id": cohort_id}
+
+
+def test_canonical_requires_a_frozen_cohort(cohort_env, capsys):
+    assert main(_canonical_args(cohort_env, "cohort_sha256:" + "1" * 64)) == 1
+    assert "error_code=E_COHORT_FROZEN" in capsys.readouterr().out
+
+
+def test_canonical_publishes_registers_and_is_idempotent(cohort_env, capsys):
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"], json=True)) == 0
+    payload = _payload(capsys.readouterr().out)
+    assert payload["execution_tier"] == "canonical"
+    assert payload["reused"] is False
+    assert payload["promotion_verdict"] is None
+    published = Path(payload["artifact_dir"])
+    assert (published / "registration.json").is_file()
+    assert (published / "curves.parquet").is_file()
+    assert [
+        entry.candidate_id
+        for entry in population.registrations(cohort_env["reports"], cohort_env["cohort_id"])
+    ] == [CANDIDATE]
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"], json=True)) == 0
+    again = _payload(capsys.readouterr().out)
+    assert again["reused"] is True
+    assert again["experiment_id"] == payload["experiment_id"]
+
+
+def test_canonical_rejects_dirty_worktree(cohort_env, monkeypatch, capsys):
+    monkeypatch.setattr("alphamill.evaluation.code_build.worktree_dirty", lambda root=None: True)
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 1
+    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+
+
+def test_canonical_rejects_expected_digest_mismatch(cohort_env, capsys):
+    assert (
+        main(
+            _canonical_args(
+                cohort_env, cohort_env["cohort_id"], code_build_digest="sha256:" + "0" * 64
+            )
+        )
+        == 1
+    )
+    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+
+
+def test_canonical_rejects_lookahead_expression(cohort_env, capsys):
+    args = _canonical_args(cohort_env, cohort_env["cohort_id"])
+    args[args.index("--expression") + 1] = "shift(close, -1) / close - 1"
+    assert main(args) == 1
+    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+
+
+def test_canonical_rejects_candidate_outside_commitments(cohort_env, capsys):
+    args = _canonical_args(cohort_env, cohort_env["cohort_id"])
+    args[args.index("--candidate") + 1] = "factor_sha256:" + "7" * 64
+    assert main(args) == 1
+    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+
+
+def test_finalize_cohort_refuses_while_members_are_missing(cohort_env, capsys):
+    assert main(["finalize-cohort", "--cohort", cohort_env["cohort_id"]]) == 1
+    assert "error_code=E_COHORT_FROZEN" in capsys.readouterr().out
+
+
+def test_finalize_cohort_writes_verdict_after_registration(cohort_env, capsys):
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 0
+    capsys.readouterr()
+    assert main(["finalize-cohort", "--cohort", cohort_env["cohort_id"]]) == 0
+    assert "status=FINALIZED" in capsys.readouterr().out
+    verdict = population.load_verdict(cohort_env["reports"], cohort_env["cohort_id"])
+    assert verdict["trial_count"] == 1
+    assert verdict["member_count"] == 1
+
+
+def _fake_canonical(env: dict, experiment: str, state: str) -> Path:
+    directory = env["reports"] / "bench" / FACTOR_REF / env["snapshot_id"] / experiment
+    directory.mkdir(parents=True)
+    (directory / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "execution_tier": "canonical",
+                "experiment_id": experiment,
+                "state": state,
+                "events_digest": "sha256:" + "d" * 64,
+                "research_snapshot_id": env["snapshot_id"],
+                "object_id": FACTOR_REF,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (directory / "report.json").write_text(json.dumps({"schema_version": 1}), encoding="utf-8")
+    (directory / "curves.parquet").write_bytes(b"")
+    (directory / "registration.json").write_text(
+        json.dumps({"schema_version": 1}), encoding="utf-8"
+    )
+    return directory
+
+
+def test_abandon_rejects_unknown_and_non_incomplete_experiments(cohort_env, capsys):
+    assert (
+        main(
+            [
+                "abandon",
+                "--experiment",
+                "sha256:" + "1" * 64,
+                "--reason",
+                "retry exhausted",
+                "--cohort",
+                cohort_env["cohort_id"],
+                "--candidate",
+                CANDIDATE,
+            ]
+        )
+        == 1
+    )
+    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+    experiment = "sha256:" + "3" * 64
+    _fake_canonical(cohort_env, experiment, "EVIDENCE_READY")
+    assert (
+        main(
+            [
+                "abandon",
+                "--experiment",
+                experiment,
+                "--reason",
+                "retry exhausted",
+                "--cohort",
+                cohort_env["cohort_id"],
+                "--candidate",
+                CANDIDATE,
+            ]
+        )
+        == 1
+    )
+    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+
+
+def test_abandon_requires_non_empty_reason(cohort_env, capsys):
+    experiment = "sha256:" + "4" * 64
+    _fake_canonical(cohort_env, experiment, "INCOMPLETE")
+    assert (
+        main(
+            [
+                "abandon",
+                "--experiment",
+                experiment,
+                "--reason",
+                "   ",
+                "--cohort",
+                cohort_env["cohort_id"],
+                "--candidate",
+                CANDIDATE,
+            ]
+        )
+        == 1
+    )
+    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+
+
+def test_abandon_registers_incomplete_terminal_state(cohort_env, capsys):
+    experiment = "sha256:" + "5" * 64
+    _fake_canonical(cohort_env, experiment, "INCOMPLETE")
+    assert (
+        main(
+            [
+                "abandon",
+                "--experiment",
+                experiment,
+                "--reason",
+                "retry exhausted",
+                "--cohort",
+                cohort_env["cohort_id"],
+                "--candidate",
+                CANDIDATE,
+            ]
+        )
+        == 0
+    )
+    assert "state=REGISTERED" in capsys.readouterr().out
+    entries = population.registrations(cohort_env["reports"], cohort_env["cohort_id"])
+    assert [entry.candidate_id for entry in entries] == [CANDIDATE]
+    assert entries[0].promotion_verdict == "incomplete"

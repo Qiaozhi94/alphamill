@@ -1,9 +1,8 @@
 """preview 运行编排（`FR-001`/`UX-001`；任务 T006）。
 
 一次 preview 的确定性流程：装载预注册配置 → 冻结/解析 ResearchSnapshot（latest 先冻结）→
-构造语义上下文与 `experiment_id` → 计算代码/构建摘要 → 信号来源 provenance 与近似标注 →
-跑最小阶段集（信号质量、成本/容量、时序稳定；组合与执行阶段显式 `NOT_APPLICABLE`）→
-产出结构化结果与首屏。
+构造语义上下文与 `experiment_id` → 计算代码/构建摘要 → 跑最小阶段集（信号质量、成本/容量、
+时序稳定；组合与执行阶段显式 `NOT_APPLICABLE`）→ 产出结构化结果与首屏。
 
 边界：preview **只**写 `reports/preview/` 命名空间；Agent/preview 可读产物不得含最终确认窗或
 留出字段（`NFR-003`）；preview 永不产生 `promotion_verdict`（cohort 级 verdict 只在 canonical
@@ -25,43 +24,26 @@ from typing import Any
 from alphamill.evaluation.capabilities import assert_no_canonical_leak
 from alphamill.evaluation.code_build import code_build_digest as compute_code_build_digest
 from alphamill.evaluation.contract_common import TIER_PREVIEW
+from alphamill.evaluation.pipeline import (
+    evaluate_fixture,
+    failure_text,
+    first_failure,
+)
 from alphamill.evaluation.run_config import (
-    LABEL_COLUMN,
-    SIGNAL_COLUMN,
     load_run_config,
     load_unified_frame,
     preview_cohort_id,
     resolve_snapshot,
 )
 from alphamill.evaluation.run_state import STATE_INCOMPLETE, STATE_PREVIEW_DONE
-from alphamill.evaluation.signal_adapter import adapt_signal_records
 from alphamill.experiment_store.experiment_context import (
     CONTEXT_SCHEMA_VERSION,
     ExperimentContext,
 )
-from alphamill.factor_factory.bench.cost import evaluate_cost, load_cost_model
-from alphamill.factor_factory.bench.minimal_backtest import summarize
-from alphamill.factor_factory.bench.signal_quality import (
-    evaluate_signal_quality,
-    signal_source_payload,
-)
-from alphamill.factor_factory.bench.stability import evaluate_temporal_stability
-from alphamill.factor_factory.bench.stage_model import (
-    STAGE_EXECUTION_IMPLEMENTATION,
-    STAGE_PORTFOLIO_TRANSFORM,
-    STATUS_FAIL,
-    STATUS_INCOMPLETE,
-    STATUS_UNDERPOWERED,
-    StageResults,
-    not_applicable,
-    sample_tier,
-)
 
-ADAPTER_VERSION = "f007-adapter-v1"
-SIGNALS_DATASET = "signals_file"
 DEFAULT_SIGNAL_SOURCE = "real"
-PORTFOLIO_REASON = "FactorDef 运行不构建 PortfolioDef（组合构建属 FR4/M3）"
-EXECUTION_REASON = "FactorDef 运行不含执行实现（执行链属 F006/M3）"
+
+__all__ = ["PreviewResult", "failure_text", "first_failure", "run_preview"]
 
 
 @dataclass(frozen=True)
@@ -74,7 +56,7 @@ class PreviewResult:
     state: str
     cost_verdict: str
     sample_tier: str | None
-    stage_results: StageResults
+    stage_results: Any
     approximation: Mapping[str, Any]
     signal_provenance: Mapping[str, Any]
     first_failure: Mapping[str, Any] | None
@@ -120,30 +102,6 @@ class PreviewResult:
         )
 
 
-def failure_text(failure: Mapping[str, Any] | None) -> str:
-    if not failure:
-        return "none"
-    stage = failure.get("stage") or "?"
-    detail = failure.get("reason") or failure.get("mechanism") or failure.get("error_code") or ""
-    return f"{stage}:{detail}" if detail else str(stage)
-
-
-def first_failure(stage_results: StageResults) -> Mapping[str, Any] | None:
-    """首个失败记录优先；无记录时回落到首个「不通过」阶段（`NOT_APPLICABLE` 不算失败）。"""
-    ordered = stage_results.to_payload()
-    for entry in ordered:
-        if entry["failures"]:
-            return {**entry["failures"][0], "stage": entry["stage"]}
-    for entry in ordered:
-        if entry["status"] in (STATUS_FAIL, STATUS_UNDERPOWERED, STATUS_INCOMPLETE):
-            return {
-                "stage": entry["stage"],
-                "status": entry["status"],
-                "reason": entry.get("reason"),
-            }
-    return None
-
-
 def run_preview(
     *,
     config_path: Path,
@@ -186,49 +144,14 @@ def run_preview(
     )
 
     times, signals, labels = load_unified_frame(signals_path)
-    moment = observed_at or datetime.now(UTC).isoformat()
-    records = [
-        {
-            "time": time,
-            "symbol": "fixture",
-            "source": signal_source,
-            SIGNAL_COLUMN: signal,
-            LABEL_COLUMN: label,
-        }
-        for time, signal, label in zip(times, signals, labels, strict=True)
-    ]
-    provenance = adapt_signal_records(
-        records,
-        dataset=SIGNALS_DATASET,
-        adapter_version=ADAPTER_VERSION,
-        signal_column=SIGNAL_COLUMN,
-        label_column=LABEL_COLUMN,
-        horizons={signal_source: config.max_label_horizon},
-    )[1]
-    source_payload = signal_source_payload(provenance, TIER_PREVIEW)
-
-    _quality_metrics, quality_stage = evaluate_signal_quality(
-        signals, labels, observed_at=moment, min_observations=config.min_observations
-    )
-    trades = summarize(signals, labels, times)
-    cost_result, cost_stage = evaluate_cost(
-        gross_return=trades.gross_return,
-        turnover_value=trades.turnover,
-        round_trips=trades.round_trips,
-        holding_period_hours_value=trades.holding_period_hours,
-        cost_model=load_cost_model(config.cost_model.get("normalized", {})),
-        observed_at=moment,
-    )
-    _stability, stability_stage = evaluate_temporal_stability(signals, labels, observed_at=moment)
-
-    stage_results = StageResults(
-        results=(
-            quality_stage,
-            not_applicable(STAGE_PORTFOLIO_TRANSFORM, PORTFOLIO_REASON),
-            cost_stage,
-            stability_stage,
-            not_applicable(STAGE_EXECUTION_IMPLEMENTATION, EXECUTION_REASON),
-        )
+    evaluation = evaluate_fixture(
+        config=config,
+        times=times,
+        signals=signals,
+        labels=labels,
+        execution_tier=TIER_PREVIEW,
+        observed_at=observed_at or datetime.now(UTC).isoformat(),
+        signal_source=signal_source,
     )
     result = PreviewResult(
         execution_tier=TIER_PREVIEW,
@@ -236,13 +159,15 @@ def run_preview(
         cohort_id=cohort,
         snapshot_id=snapshot.snapshot_id,
         code_build_digest=code_digest,
-        state=STATE_PREVIEW_DONE if stage_results.evidence_complete else STATE_INCOMPLETE,
-        cost_verdict=cost_result.verdict,
-        sample_tier=sample_tier(trades.trade_count, sample_unit=trades.sample_unit),
-        stage_results=stage_results,
-        approximation=source_payload["approximation"],
-        signal_provenance=source_payload["signal_provenance"],
-        first_failure=first_failure(stage_results),
+        state=(
+            STATE_PREVIEW_DONE if evaluation.stage_results.evidence_complete else STATE_INCOMPLETE
+        ),
+        cost_verdict=evaluation.cost_verdict,
+        sample_tier=evaluation.sample_tier,
+        stage_results=evaluation.stage_results,
+        approximation=evaluation.approximation,
+        signal_provenance=evaluation.signal_provenance,
+        first_failure=first_failure(evaluation.stage_results),
     )
     assert_no_canonical_leak(
         {"experiment_id": result.experiment_id, "sample_tier": result.sample_tier},

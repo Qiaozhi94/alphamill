@@ -17,13 +17,20 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from alphamill.evaluation.canonical import run_canonical
+from alphamill.evaluation.canonical_ops import abandon_experiment, finalize_cohort
 from alphamill.evaluation.capabilities import CapabilityError
 from alphamill.evaluation.code_build import CodeBuildMismatchError
 from alphamill.evaluation.contract_common import UpstreamContractError
+from alphamill.evaluation.events import EventError
 from alphamill.evaluation.preview import run_preview
+from alphamill.evaluation.publisher import PublishError
 from alphamill.evaluation.run_state import RunStateError
 from alphamill.experiment_store.errors import SnapshotError, SnapshotIntegrityError
+from alphamill.experiment_store.population import CohortError
+from alphamill.factor_factory.bench.curves import CurvesError
 from alphamill.factor_factory.bench.stage_model import StageModelError
+from alphamill.validation.methodology_gate import GuardViolation
 
 EXIT_OK = 0
 EXIT_DOMAIN_ERROR = 1
@@ -49,13 +56,17 @@ def classify_error(exc: BaseException) -> str:
         return "E_CANONICAL_FORBIDDEN"
     if isinstance(exc, SnapshotIntegrityError):
         return "E_DATA_DIGEST_MISMATCH"
-    if isinstance(exc, CodeBuildMismatchError):
+    if isinstance(exc, (PublishError, CurvesError)):
+        return "E_PUBLISH_INCOMPLETE"
+    if isinstance(exc, CohortError):
+        return "E_COHORT_FROZEN"
+    if isinstance(exc, GuardViolation):
         return exc.code
-    if isinstance(exc, UpstreamContractError):
+    if isinstance(exc, (CodeBuildMismatchError, UpstreamContractError)):
         return exc.code
     if isinstance(exc, SnapshotError):
         return "E_INPUT_INVALID"
-    if isinstance(exc, (StageModelError, RunStateError)):
+    if isinstance(exc, (StageModelError, RunStateError, EventError)):
         return "E_INPUT_INVALID"
     return ERROR_INTERNAL
 
@@ -86,6 +97,32 @@ def build_parser() -> argparse.ArgumentParser:
     preview.add_argument("--cohort", help="显式 cohort 引用；缺省派生 preview 专属 cohort")
     preview.add_argument("--signal-source", dest="signal_source", default="real")
     preview.add_argument("--json", action="store_true", help="额外输出结构化 payload")
+
+    canonical = subcommands.add_parser(
+        "canonical", help="正式评测（写 reports/bench 与 official population）"
+    )
+    canonical.add_argument("--factor", required=True)
+    canonical.add_argument("--candidate", required=True, help="cohort 承诺内的候选 ID")
+    canonical.add_argument("--cohort", required=True, help="已冻结 cohort 引用")
+    canonical.add_argument("--snapshot", required=True, help="已发布 ResearchSnapshot ID")
+    canonical.add_argument("--config", required=True, type=Path)
+    canonical.add_argument("--seed", required=True, type=int)
+    canonical.add_argument("--signals", required=True, type=Path)
+    canonical.add_argument("--expression", required=True, help="因子表达式（方法论门 L1 输入）")
+    canonical.add_argument("--object", default=None, help="被测对象 ID（默认取 --factor）")
+    canonical.add_argument("--code-build-digest", dest="code_build_digest", default=None)
+    canonical.add_argument("--json", action="store_true")
+
+    finalize = subcommands.add_parser("finalize-cohort", help="收齐后 finalize cohort")
+    finalize.add_argument("--cohort", required=True)
+    finalize.add_argument("--json", action="store_true")
+
+    abandon = subcommands.add_parser("abandon", help="按终态不完整结论登记 INCOMPLETE 实验")
+    abandon.add_argument("--experiment", required=True)
+    abandon.add_argument("--reason", required=True)
+    abandon.add_argument("--cohort", required=True)
+    abandon.add_argument("--candidate", required=True)
+    abandon.add_argument("--json", action="store_true")
     return parser
 
 
@@ -111,7 +148,53 @@ def _run_preview(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-HANDLERS = {"preview": _run_preview}
+def _run_canonical(args: argparse.Namespace) -> int:
+    result = run_canonical(
+        config_path=args.config,
+        factor_ref=args.factor,
+        candidate_id=args.candidate,
+        cohort_id=args.cohort,
+        seed=args.seed,
+        signals_path=args.signals,
+        snapshot_id=args.snapshot,
+        expression=args.expression,
+        object_id=args.object,
+        expected_code_build_digest=args.code_build_digest,
+    )
+    for line in result.first_screen():
+        print(line)
+    if args.json:
+        print(json.dumps(result.to_payload(), ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _run_finalize_cohort(args: argparse.Namespace) -> int:
+    path = finalize_cohort(args.cohort)
+    print(f"cohort={args.cohort}")
+    print("status=FINALIZED")
+    print(f"verdict={path}")
+    return EXIT_OK
+
+
+def _run_abandon(args: argparse.Namespace) -> int:
+    path = abandon_experiment(
+        experiment_id=args.experiment,
+        reason=args.reason,
+        cohort_id=args.cohort,
+        candidate_id=args.candidate,
+    )
+    print(f"experiment_id={args.experiment}")
+    print("state=REGISTERED")
+    print(f"registration={path}")
+    return EXIT_OK
+
+
+HANDLERS = {
+    "preview": _run_preview,
+    "canonical": _run_canonical,
+    "finalize-cohort": _run_finalize_cohort,
+    "abandon": _run_abandon,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
