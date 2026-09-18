@@ -104,6 +104,13 @@ def test_draft_feature_not_enforced(tmp_path: pathlib.Path) -> None:
     assert dag.run_checks(tmp_path) == []
 
 
+def test_v4_status_words_enforced(tmp_path: pathlib.Path) -> None:
+    """v4.2 词表迁移：developing / code-reviewing 必须与旧词一样进入 DAG 执法范围。"""
+    for word in ("developing", "code-reviewing"):
+        write_feature(tmp_path, word, BACKWARD)
+        assert any("向后边" in msg for _, msg in dag.run_checks(tmp_path)), word
+
+
 def test_multi_source_multi_target_edge_expansion(tmp_path: pathlib.Path) -> None:
     text = tasks("- `T001/T002 -> T003`：多源边展开。")
     write_feature(tmp_path, "review", text)

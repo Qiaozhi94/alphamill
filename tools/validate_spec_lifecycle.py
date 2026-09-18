@@ -6,7 +6,7 @@
   - spec.md 是状态唯一真相源（design/tasks 不得声明独立 status）
   - gate v1：固定章节结构、Q/DQ 关闭、AC 引用第 4 节真实需求、
     review/done 的 tests 路径真实存在
-  - 进入开发流转（ready-for-development / in-progress / review）的 tasks.md
+  - 进入开发流转（ready-for-development / developing / code-reviewing）的 tasks.md
     第 3 节必须含 `### [TEST] 组`（层 2 旅程验收轨；只看该节，放错章节判红）
   - BACKLOG.md 与所有非 done Feature 双向集合一致
 
@@ -22,8 +22,31 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ALLOWED_STATUS = {"draft", "ready-for-development", "in-progress", "review", "done"}
+# 状态词表 v4.2（sdd-flow 主干）：doc-reviewing / developing / code-reviewing 为规范词。
+# 存量旧词（in-progress / review / ready）保留为兼容别名，读取时归一化到规范词——
+# 迁移期内两者等价，门禁对两者执法强度一致（见 STATUS_ALIAS）。
+STATUS_V4 = (
+    "draft",
+    "doc-reviewing",
+    "ready-for-development",
+    "developing",
+    "code-reviewing",
+    "done",
+)
+STATUS_ALIAS = {
+    "in-progress": "developing",
+    "review": "code-reviewing",
+    "ready": "ready-for-development",
+}
+ALLOWED_STATUS = set(STATUS_V4) | set(STATUS_ALIAS)
 ALLOWED_GATES = {"0", "1"}
+
+
+def norm_status(status: str | None) -> str | None:
+    """把兼容旧词归一化为 v4.2 规范词；未知词原样返回（交由 ALLOWED_STATUS 判红）。"""
+    return STATUS_ALIAS.get(status, status) if status else status
+
+
 SPEC_SECTIONS = [
     "0. 来源与意图",
     "1. 问题、目标与非目标",
@@ -59,8 +82,8 @@ TASKS_SECTIONS = [
 UNFINISHED_MARKERS = ("TODO", "TBD", "待补", "未补", "pending", "PENDING")
 # [TEST] 组是「进入代码开发前」的硬性要求：不含 done（历史 Feature 豁免，纳入会
 # 立刻破坏 F001/F004）与 draft（尚未进入流转）；且只认 tasks.md 第 3 节内的标题，
-# 放错章节不算数（R2-007）。
-TEST_GROUP_STATUSES = {"ready-for-development", "in-progress", "review"}
+# 放错章节不算数（R2-007）。集合为归一化后的规范词（旧词经 norm_status 映射）。
+TEST_GROUP_STATUSES = {"ready-for-development", "developing", "code-reviewing"}
 TEST_GROUP_RE = re.compile(r"^###\s+\[TEST\]", re.M)
 REQ_RE = re.compile(r"\b(?:FR|DR|TR|IR|UX|NFR)-\d+\b")
 AC_RE = re.compile(r"^-\s+\[([ xX])\]\s+\*\*AC-(\d+)\*\*\s*\(([^)]*)\)\s*:\s*(.*)$")
@@ -208,7 +231,7 @@ def check_feature(feat: dict, root: pathlib.Path, errors: list[str]):
             continue
         if re.match(r"^###\s+Phase", line.strip()) and not in_section2:
             tag("tasks.md 的 Phase 只能作为「2. 实现任务」下的三级标题")
-    if spec_fm.get("status") in TEST_GROUP_STATUSES:
+    if norm_status(spec_fm.get("status")) in TEST_GROUP_STATUSES:
         section3 = section_body(feat["tasks"], "3. 验证与验收任务") or ""
         if not TEST_GROUP_RE.search(section3):
             tag("tasks.md 第 3 节缺少必需的 [TEST] 组（层 2 旅程验收轨）")
@@ -222,7 +245,12 @@ def check_feature(feat: dict, root: pathlib.Path, errors: list[str]):
     for fname, body in (("spec.md", spec_q), ("design.md", design_dq)):
         for issue in question_section_issues(body):
             tag(f"{fname} 待确认问题: {issue}")
-    if spec_fm.get("status") in ("ready-for-development", "in-progress", "review", "done"):
+    if norm_status(spec_fm.get("status")) in (
+        "ready-for-development",
+        "developing",
+        "code-reviewing",
+        "done",
+    ):
         open_n = open_questions(spec_q) + open_questions(design_dq)
         if open_n:
             tag(f"{open_n} 个 Q/DQ 未关闭（ready-for-development 及以上不允许）")
@@ -241,10 +269,10 @@ def check_feature(feat: dict, root: pathlib.Path, errors: list[str]):
         if bad:
             tag(f"AC-{ac.group(2)} 引用不存在的需求: {', '.join(sorted(bad))}")
         tests = [t for t in re.findall(r"`([^`]+)`", ac.group(4)) if not t.startswith("http")]
-        if spec_fm.get("status") in ("review", "done") and not tests:
+        if norm_status(spec_fm.get("status")) in ("code-reviewing", "done") and not tests:
             tag(f"AC-{ac.group(2)} 在 {spec_fm.get('status')} 状态缺少 tests: 路径")
-        # tests 路径存在性只在 review/done 强制；路径格式任何状态都校验。
-        if spec_fm.get("status") not in ("review", "done"):
+        # tests 路径存在性只在 code-reviewing/done 强制；路径格式任何状态都校验。
+        if norm_status(spec_fm.get("status")) not in ("code-reviewing", "done"):
             continue
         for t in tests:
             if t.startswith("/") or ".." in t:

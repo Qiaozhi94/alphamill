@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
+
 from tools import validate_spec_lifecycle as vsl
 
 SPEC_GATE0_DRAFT = """---
@@ -212,3 +214,69 @@ def test_test_group_in_wrong_section_rejected(tmp_path: pathlib.Path) -> None:
     ok, errors = vsl.verify_repo(tmp_path)
     assert not ok
     assert any("[TEST] 组" in e for e in errors)
+
+
+INFLIGHT_AC = "- [ ] **AC-1** (`FR-001`): 示例验收 tests: `tests/unit/test_demo.py`"
+
+
+def _review_spec_with_status(status_word: str) -> str:
+    return _review_spec(INFLIGHT_AC).replace("status: review", f"status: {status_word}")
+
+
+def _backlog_row(status_word: str) -> str:
+    return f"| F001-demo | 0.1 | {status_word} | [spec](docs/features/0.1/F001-demo/spec.md) |"
+
+
+@pytest.mark.parametrize("status_word", ["doc-reviewing", "developing", "code-reviewing"])
+def test_v4_status_words_allowed(tmp_path: pathlib.Path, status_word: str) -> None:
+    """v4.2 词表迁移：doc-reviewing / developing / code-reviewing 必须判为合法。"""
+    write_review_tree(tmp_path, _review_spec_with_status(status_word))
+    write_backlog(tmp_path, _backlog_row(status_word))
+    ok, errors = vsl.verify_repo(tmp_path)
+    assert ok, errors
+
+
+def test_unknown_status_word_rejected(tmp_path: pathlib.Path) -> None:
+    write_feature(tmp_path, SPEC_GATE0_DRAFT.replace("status: draft", "status: shipping"))
+    write_backlog(tmp_path, VALID_BACKLOG_ROW.replace("| draft |", "| shipping |"))
+    ok, errors = vsl.verify_repo(tmp_path)
+    assert not ok
+    assert any("非法 status: shipping" in e for e in errors)
+
+
+def test_illegal_gate_version_rejected(tmp_path: pathlib.Path) -> None:
+    write_feature(tmp_path, SPEC_GATE0_DRAFT.replace("gate_version: 0", "gate_version: 2"))
+    write_backlog(tmp_path, VALID_BACKLOG_ROW)
+    ok, errors = vsl.verify_repo(tmp_path)
+    assert not ok
+    assert any("非法 gate_version: 2" in e for e in errors)
+
+
+def test_norm_status_maps_legacy_aliases() -> None:
+    assert vsl.norm_status("in-progress") == "developing"
+    assert vsl.norm_status("review") == "code-reviewing"
+    assert vsl.norm_status("ready") == "ready-for-development"
+    assert vsl.norm_status("developing") == "developing"
+    assert vsl.norm_status("shipping") == "shipping"
+
+
+def test_legacy_in_progress_enforces_test_group_like_developing(tmp_path: pathlib.Path) -> None:
+    """旧词 in-progress 与规范词 developing 执法一致：[TEST] 组缺失即判红。"""
+    write_review_tree(tmp_path, _review_spec_with_status("in-progress"))
+    (tmp_path / "docs" / "features" / "0.1" / "F001-demo" / "tasks.md").write_text(
+        REVIEW_TASKS_NO_TEST_GROUP, encoding="utf-8"
+    )
+    write_backlog(tmp_path, _backlog_row("in-progress"))
+    ok, errors = vsl.verify_repo(tmp_path)
+    assert not ok
+    assert any("[TEST] 组" in e for e in errors)
+
+
+def test_legacy_review_requires_tests_path_like_code_reviewing(tmp_path: pathlib.Path) -> None:
+    """旧词 review 与规范词 code-reviewing 执法一致：AC 缺 tests 路径即判红。"""
+    ac = "- [ ] **AC-1** (`FR-001`): 示例验收"
+    write_review_tree(tmp_path, _review_spec(ac))
+    write_backlog(tmp_path, REVIEW_BACKLOG_ROW)
+    ok, errors = vsl.verify_repo(tmp_path)
+    assert not ok
+    assert any("缺少 tests: 路径" in e for e in errors)

@@ -41,8 +41,11 @@ Feature 状态只保存在 `spec.md` 的 frontmatter，是机器可读的唯一�
 状态流转（单向推进，不可回退）：
 
 ```text
-draft → ready-for-development → in-progress → review → done
+draft → doc-reviewing → ready-for-development → developing → code-reviewing → done
 ```
+
+> 状态词表 v4.2（对齐 sdd-flow 主干）。旧词 `in-progress` / `review` 为等价别名，
+> 迁移期由 `tools/validate_spec_lifecycle.py` 归一化，两者执法强度一致。
 
 - `design.md` / `tasks.md` **不允许**再声明独立 Status。
 - `spec.md` frontmatter 固定包含 `kind: feature`、`id`、`version`、`status`、
@@ -150,8 +153,8 @@ draft → ready-for-development → in-progress → review → done
   - [ ] **AC-001** (`FR-001`, `NFR-002`): 可观察行为 — tests: `server/tests/integration/example.test.ts`
   ```
 
-- `draft`、`ready-for-development`、`in-progress` 阶段允许 `tests:` 暂缺；此时 AC
-  仍须有合法 ID、需求引用和可观察行为。
+- `draft`、`doc-reviewing`、`ready-for-development`、`developing` 阶段允许 `tests:` 暂缺；
+  此时 AC 仍须有合法 ID、需求引用和可观察行为（`code-reviewing` 起强制真实路径）。
 
 在实现前检查：
 

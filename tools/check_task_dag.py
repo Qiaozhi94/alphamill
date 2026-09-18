@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """任务依赖 DAG 校验（doc review F003-D012 回归门）。
 
-对进入开发流转的 Feature（spec status ∈ {ready-for-development, in-progress,
-review}）校验 `docs/features/<version>/Fxxx-*/tasks.md`：
+对进入开发流转的 Feature（spec status ∈ {ready-for-development, developing,
+code-reviewing}；旧词 in-progress / review 为等价别名）校验
+`docs/features/<version>/Fxxx-*/tasks.md`：
 
   - §4「依赖与并行关系」里所有边端点都是已定义的任务 ID；
   - 边一律「向前」：源 ID < 目标 ID（任务编号即执行顺序，禁止依赖后序任务）；
@@ -29,7 +30,13 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ENFORCED_STATUSES = {"ready-for-development", "in-progress", "review"}
+ENFORCED_STATUSES = {
+    "ready-for-development",
+    "developing",
+    "code-reviewing",
+    "in-progress",
+    "review",
+}
 TASK_RE = re.compile(r"^-\s+\[[ xX]\]\s+(T\d{3})")
 EDGE_SEGMENT_RE = re.compile(r"`([^`]*->[^`]*)`")
 SECTION3 = "3. 验证与验收任务"

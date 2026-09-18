@@ -45,7 +45,8 @@ updated: 2026-09-07
 
 - **状态唯一真源**是各 Feature `spec.md` 的 frontmatter `status`；`design.md`、
   `tasks.md`、README、CLAUDE 不得声明第二份独立状态。
-- 状态机：`draft → ready-for-development → in-progress → review → done`。
+- 状态机（v4.2）：`draft → doc-reviewing → ready-for-development → developing → code-reviewing → done`；
+  旧词 `in-progress` / `review` 为等价别名（迁移期由 `tools/validate_spec_lifecycle.py` 归一化）。
 - 进入 `ready-for-development` 前：spec/design 待确认问题（`Q-xxx` / `DQ-xxx`）全部
   关闭；tasks 可追踪到合法引用。
 - `done` 时：tasks、AC 与退出条件非空且全部完成，每条 AC 引用存在的仓库内测试路径。
