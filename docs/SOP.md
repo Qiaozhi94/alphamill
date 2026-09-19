@@ -112,3 +112,11 @@ updated: 2026-09-07
 | `deployment/verify.ps1` | F001 全链路验收脚本 | F002 验收门重构阶段 |
 | `src/alphamill/validation/validate_low_frequency_candidate_holdout.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
 | `src/alphamill/factor_factory/bench/independent_cross_backtest.py` | F001 原样迁移的评测脚本 | F002 评测台阶段 |
+
+### F003 AlphaGen vendor 目录级豁免
+
+以下目录按目录级规则豁免 350 行硬上限；豁免不扩展到同级或其他 F003 胶水代码。
+
+| 目录 | 豁免范围 | 豁免原因 | 解除期限 |
+|---|---|---|---|
+| `src/alphamill/factor_factory/generators/alphagen_vendor/` | 350 行硬上限 | ADR-0002 的 minimal-diff vendor hygiene 与本仓 style gates 冲突 | 无；随 vendor 目录存在 |
