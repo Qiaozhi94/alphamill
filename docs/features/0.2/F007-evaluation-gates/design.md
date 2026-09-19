@@ -6,7 +6,7 @@ related_features: [F002, F003, F004, F008]
 topics: [evaluation, validation, evidence, experiments]
 doc_kind: design
 created: 2026-09-13
-updated: 2026-09-18
+updated: 2026-09-19
 ---
 
 # F007：统一评测台与证据门禁 - 设计
@@ -220,7 +220,7 @@ python -m alphamill.evaluation synthesis --cohort <cohort-id>
 python -m alphamill.evaluation abandon --experiment <experiment-id> --reason <text>
 ```
 
-CLI 仅解析参数和序列化结果；preview 的 `--latest` 模式要求显式 symbol-map digest、**F008** universe artifact 引用（`--universe`）与 calendar 输入（`--calendar`）两个独立参数。universe 按 F008 `IR-002` 从 `lake/_metadata/universes/<digest>.csv` 加载并走 `universe_at(T)` 语义，**不复制进 reports**；calendar 由 builder canonicalize 后原子保存为
+CLI 仅解析参数和序列化结果；preview 的 `--latest` 模式要求显式 symbol-map digest、**F008** universe artifact 引用（`--universe`）与 calendar 输入（`--calendar`）两个独立参数。universe 按 F008 `IR-002` 从 `lake/_metadata/universes/<digest>.json` 加载并走 `universe_at(T)` 语义，**不复制进 reports**；calendar 由 builder canonicalize 后原子保存为
 `reports/research_snapshots/_inputs/universe_calendars/<digest>.json`（该路径只承载 calendar，universe 不合并进此文件；ADR-0007 的 `universe_calendar_digest` 由两个 digest 组合导出），再发布 ResearchSnapshot 并显示
 实际 ID；`--snapshot` 模式不重新选择这些输入。
 `canonical` 缺 cohort、code digest、ResearchSnapshot 或规则版本时
