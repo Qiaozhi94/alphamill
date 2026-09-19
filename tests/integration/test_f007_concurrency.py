@@ -7,8 +7,8 @@
 
 from __future__ import annotations
 
-import json
 import os
+import threading
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -155,38 +155,75 @@ def test_corrupt_claim_is_treated_as_stale_and_recoverable(tmp_path):
     assert read_claim(tmp_path, EXPERIMENT).owner_token == "recovery"
 
 
-def test_takeover_guard_serializes_and_preserves_single_writer(tmp_path):
-    """R2-202 回归：接管临界区串行——他人持接管锁时本进程接管必须失败，任一时刻至多一个持有者。"""
+def test_single_writer_invariant_holds_when_takeover_is_preempted(tmp_path):
+    """`R2-202` 不变量：同一 key **任意时刻至多一个持有者**。
+
+    锁的是不变量本身，不是某一版实现：让接管者 B 在「判定失效通过之后、替换 claim 之前」被挂起，
+    A 完整跑完一次 `recover`，再放行 B。历史上三版实现（`unlink→acquire`、`rename` 移开、
+    `.takeover` 哨兵）都在这个交错下产生两个持有者。
+    """
     import alphamill.evaluation.claim as claim_module
 
     acquire(tmp_path, EXPERIMENT, owner_token="dead", lease_seconds=1, now=NOW)
     now = NOW + timedelta(seconds=120)
-    claim_file = claim_path(tmp_path, EXPERIMENT)
-    guard = claim_file.with_name(f"{claim_file.name}{claim_module.TAKEOVER_SUFFIX}")
-    guard.write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
+    gate = threading.Event()
+    entered = threading.Event()
+    real_assert = claim_module.assert_takeover_allowed
+
+    def pause_the_second_taker(claim, **kwargs):
+        real_assert(claim, **kwargs)
+        if threading.current_thread().name == "takeover-b":
+            entered.set()
+            gate.wait(10)
+
+    outcomes: dict[str, object] = {}
+
+    def run(name: str) -> None:
+        try:
+            outcomes[name] = recover(
+                tmp_path, EXPERIMENT, owner_token=name, now=now, process_alive=False
+            )
+        except ClaimBusyError as exc:
+            outcomes[name] = exc
+
+    claim_module.assert_takeover_allowed = pause_the_second_taker
+    worker = threading.Thread(target=run, args=("takeover-b",), name="takeover-b")
     try:
-        with pytest.raises(ClaimBusyError, match="接管"):
-            recover(tmp_path, EXPERIMENT, owner_token="A", now=now, process_alive=False)
+        worker.start()
+        assert entered.wait(10), "接管者 B 未到达判定点"
+        run("takeover-a")
+        gate.set()
+        worker.join(10)
     finally:
-        guard.unlink(missing_ok=True)
-    taken = recover(tmp_path, EXPERIMENT, owner_token="B", now=now, process_alive=False)
-    assert taken.owner_token == "B"
-    with pytest.raises(ClaimBusyError):
-        recover(tmp_path, EXPERIMENT, owner_token="C", now=now, process_alive=False)
-    assert read_claim(tmp_path, EXPERIMENT).owner_token == "B"
+        claim_module.assert_takeover_allowed = real_assert
+        gate.set()
+        worker.join(10)
+
+    holders = sorted(
+        name for name, result in outcomes.items() if not isinstance(result, ClaimBusyError)
+    )
+    assert len(holders) == 1, f"单写者不变量被破坏：{holders} 同时持有"
+    assert read_claim(tmp_path, EXPERIMENT).owner_token == holders[0]
 
 
-def test_stale_takeover_guard_is_reclaimed(tmp_path):
-    """R2-202：残留接管锁（持有进程已死）可被回收，不永久堵死 experiment_id。"""
-    import alphamill.evaluation.claim as claim_module
-
-    acquire(tmp_path, EXPERIMENT, owner_token="dead", lease_seconds=1, now=NOW)
-    now = NOW + timedelta(seconds=120)
-    claim_file = claim_path(tmp_path, EXPERIMENT)
-    guard = claim_file.with_name(f"{claim_file.name}{claim_module.TAKEOVER_SUFFIX}")
-    guard.write_text(json.dumps({"pid": 999999}), encoding="utf-8")
-    taken = recover(tmp_path, EXPERIMENT, owner_token="recovery", now=now, process_alive=False)
-    assert taken.owner_token == "recovery"
+def test_crashed_holder_is_always_recoverable(tmp_path):
+    """`R1-105`/`R2-202`：崩溃遗留（正常/损坏/空）claim 都能被接管，不永久堵死 experiment_id。"""
+    for leftover in (None, "{not json", ""):
+        target = claim_path(tmp_path, EXPERIMENT)
+        target.unlink(missing_ok=True)
+        if leftover is None:
+            acquire(tmp_path, EXPERIMENT, owner_token="dead", lease_seconds=1, now=NOW)
+        else:
+            target.write_text(leftover, encoding="utf-8")
+        taken = recover(
+            tmp_path,
+            EXPERIMENT,
+            owner_token="recovery",
+            now=NOW + timedelta(seconds=120),
+            process_alive=False,
+        )
+        assert taken.owner_token == "recovery"
+        assert read_claim(tmp_path, EXPERIMENT).owner_token == "recovery"
 
 
 def test_release_refuses_corrupt_claim(tmp_path):
