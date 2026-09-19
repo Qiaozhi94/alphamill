@@ -524,6 +524,33 @@ def test_finalize_records_counts_and_projection_rebuilds(tmp_path):
     pop.assert_projection_rebuilds(tmp_path, cohort_id)
 
 
+def test_finalize_is_idempotent_across_finalized_at_values(tmp_path):
+    """R1-008 回归：重复 finalize 不因墙钟不同而报错，也不改写已写 verdict；语义冲突仍拒绝。"""
+    cohort_id, _ = pop.freeze_cohort(tmp_path, _definition(CANDIDATE_A))
+    pop.register_member(
+        tmp_path,
+        cohort_id,
+        _registration(CANDIDATE_A, EXPERIMENT_A),
+        _registered_event(EXPERIMENT_A, cohort_id),
+    )
+    path = pop.finalize_cohort(
+        tmp_path, cohort_id, verdict={"fdr_alpha": 0.05}, finalized_at=FROZEN_AT
+    )
+    before = path.read_bytes()
+    again = pop.finalize_cohort(
+        tmp_path,
+        cohort_id,
+        verdict={"fdr_alpha": 0.05},
+        finalized_at="2030-01-01T00:00:00Z",
+    )
+    assert again == path
+    assert path.read_bytes() == before
+    with pytest.raises(pop.RegistryIntegrityError, match="不一致"):
+        pop.finalize_cohort(
+            tmp_path, cohort_id, verdict={"fdr_alpha": 0.99}, finalized_at=FROZEN_AT
+        )
+
+
 def test_registrations_return_in_commitment_order(tmp_path):
     cohort_id, _ = pop.freeze_cohort(tmp_path, _definition(CANDIDATE_B, CANDIDATE_A))
     for candidate, experiment in ((CANDIDATE_A, EXPERIMENT_A), (CANDIDATE_B, EXPERIMENT_B)):

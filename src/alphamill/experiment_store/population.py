@@ -224,6 +224,17 @@ def assert_cohort_complete(root: Path, cohort_id: str) -> None:
         raise CohortError(f"cohort 仍有 {len(missing)} 个承诺成员未终态登记: {list(missing)}")
 
 
+def _verdict_semantically_equal(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
+    """幂等判据排除墙钟 `finalized_at`（`R1-008`）：其余字段逐项相等才算同一 verdict。"""
+
+    def semantic(entry: Mapping[str, Any]) -> dict[str, Any]:
+        value = dict(entry)
+        value.pop("finalized_at", None)
+        return value
+
+    return semantic(left) == semantic(right)
+
+
 def finalize_cohort(
     root: Path, cohort_id: str, *, verdict: Mapping[str, Any], finalized_at: str
 ) -> Path:
@@ -249,9 +260,10 @@ def finalize_cohort(
         "utf-8"
     )
     if final.is_file():
-        if final.read_bytes() != encoded:
-            raise RegistryIntegrityError(f"cohort verdict 已存在且内容不一致: {final}")
-        return final
+        existing = json.loads(final.read_text(encoding="utf-8"))
+        if _verdict_semantically_equal(existing, payload):
+            return final
+        raise RegistryIntegrityError(f"cohort verdict 已存在且内容不一致: {final}")
     temp = final.with_name(f"{final.name}.tmp-{os.getpid()}")
     temp.write_bytes(encoded)
     os.replace(temp, final)
