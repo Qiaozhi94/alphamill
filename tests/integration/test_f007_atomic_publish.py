@@ -181,9 +181,7 @@ def test_registration_is_written_only_after_validation(tmp_path):
     sidecar = _curves()
     summary = dict(sidecar.scalar_summary())
     summary["max_drawdown"] = 999.0
-    request = _request(
-        canonical=True, report={"schema_version": 1, "curves_summary": summary}
-    )
+    request = _request(canonical=True, report={"schema_version": 1, "curves_summary": summary})
     with pytest.raises(PublishError, match="互推不符"):
         publish(context, request, quarantine_on_failure=True)
     assert not publisher.target_dir(context, request).exists()

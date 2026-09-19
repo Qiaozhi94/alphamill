@@ -114,6 +114,15 @@ def decide_verdict(rho: float) -> str:
     return "none"
 
 
+def _comparable(left: DedupCandidate, right: DedupCandidate) -> bool:
+    """两成员只有在至少一个口径上序列等长时才可比较；跨窗口/跨形状的成员不构成重复对。"""
+    pairs = (
+        (left.oos_pnl, right.oos_pnl),
+        (left.rolling_ic, right.rolling_ic),
+    )
+    return any(first and second and len(first) == len(second) for first, second in pairs)
+
+
 def decide_dedup(
     candidate: DedupCandidate,
     *,
@@ -121,7 +130,7 @@ def decide_dedup(
     registry_records: Iterable[DedupRecord] = (),
     registry_candidates: Mapping[str, DedupCandidate] | None = None,
 ) -> DedupOutcome:
-    """对候选做两两查重并取最大相关；无比较对象时 `verdict=none`、`max_abs_rho=0`。"""
+    """对候选做两两查重并取最大相关；无可比对象时 `verdict=none`、`max_abs_rho=0`。"""
     comparators: list[DedupCandidate] = [member for member in earlier_members]
     known = registry_candidates or {}
     for record in registry_records:
@@ -133,6 +142,8 @@ def decide_dedup(
     best_rho = -1.0
     best_against: str | None = None
     for counterpart in comparators:
+        if not _comparable(candidate, counterpart):
+            continue
         rho = max_abs_rho(candidate, counterpart)
         if best_against is None or rho > best_rho:
             best_rho = rho

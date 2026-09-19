@@ -324,6 +324,43 @@ def test_us002_required_estimator_failure_never_yields_promising(sandbox, capsys
     assert verdict != "promising"
 
 
+def test_canonical_report_wires_member_required_statistics(sandbox, capsys):
+    """R1-001 回归：canonical 评测阶段必须接线成员级 HAC IC / block bootstrap。
+
+    删除 `evaluate_fixture` 里的 `member_statistics(...)` 调用后 `required_statistics` 缺失/为空，
+    本断言变红——证明统计原语确有生产调用者，而不是只有单测。
+    """
+    assert main(_run(sandbox, "funding_carry")) == 0
+    capsys.readouterr()
+    manifest_path = next((sandbox["reports"] / "bench").rglob("manifest.json"))
+    report = json.loads((manifest_path.parent / "report.json").read_text(encoding="utf-8"))
+    stats = report["required_statistics"]
+    assert stats is not None
+    assert stats["status"] == "PASS"
+    assert stats["periods"] >= 2
+    assert {"ic", "hac_se", "t_stat"} <= set(stats["ic"])
+    assert {"point", "lower", "upper", "excludes_zero"} <= set(stats["bootstrap"])
+    assert stats["bootstrap"]["n_resamples"] == 1000
+    assert 0.0 <= stats["p_value"] <= 1.0
+    statuses = {entry["stage"]: entry["status"] for entry in report["stage_results"]}
+    assert statuses["temporal_stability"] != "INCOMPLETE"
+
+
+def test_finalize_wires_cohort_level_multiplicity(sandbox, capsys):
+    """R1-001 回归：finalize 必须接线 cohort 级 BH-FDR / 有效独立数 / DSR。"""
+    for name in sorted(CONTROLS):
+        assert main(_run(sandbox, name)) == 0
+        capsys.readouterr()
+    assert main(["finalize-cohort", "--cohort", sandbox["cohort_id"]]) == 0
+    capsys.readouterr()
+    verdict = population.load_verdict(sandbox["reports"], sandbox["cohort_id"])
+    stats = verdict["cohort_statistics"]["cohort_statistics"]
+    assert stats["status"] == "PASS", stats
+    assert {"bh", "effective_trials", "dsr"} <= set(stats)
+    assert stats["bh"]["alpha"] == 0.05
+    assert stats["effective_trials"] >= 1.0
+
+
 def test_published_events_match_manifest_digest_and_are_immutable(sandbox, capsys):
     """R1-004 回归：已发布批次的 events_digest 必须与实际事件一致，且复用不得改动它。
 

@@ -64,11 +64,14 @@ def load_run_config(path: Path) -> RunConfig:
     )
 
 
-def load_unified_frame(path: Path) -> tuple[tuple[str, ...], tuple[float, ...], tuple[float, ...]]:
-    """读取统一列集的信号夹具；列集不符或数值非法即拒绝。"""
+def load_unified_panel(
+    path: Path,
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[float, ...], tuple[float, ...]]:
+    """读取统一列集的信号夹具，保留 `symbol` 列以支持横截面逐期 IC；列集不符或数值非法即拒绝。"""
     if not path.is_file():
         raise UpstreamContractError(f"信号文件不存在: {path}")
     times: list[str] = []
+    symbols: list[str] = []
     signals: list[float] = []
     labels: list[float] = []
     with path.open(newline="", encoding="utf-8") as handle:
@@ -84,9 +87,16 @@ def load_unified_frame(path: Path) -> tuple[tuple[str, ...], tuple[float, ...], 
             except (TypeError, ValueError) as exc:
                 raise UpstreamContractError(f"信号文件第 {index} 行数值非法: {exc}") from exc
             times.append(row[TIME_COLUMN])
+            symbols.append(row[SYMBOL_COLUMN])
     if not times:
         raise UpstreamContractError(f"信号文件为空: {path}")
-    return tuple(times), tuple(signals), tuple(labels)
+    return tuple(times), tuple(symbols), tuple(signals), tuple(labels)
+
+
+def load_unified_frame(path: Path) -> tuple[tuple[str, ...], tuple[float, ...], tuple[float, ...]]:
+    """读取统一列集的信号夹具（不保留 symbol）。"""
+    times, _symbols, signals, labels = load_unified_panel(path)
+    return times, signals, labels
 
 
 def preview_cohort_id(upstream_id: str, snapshot_id: str) -> str:

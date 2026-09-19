@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from alphamill.evaluation.required_statistics import member_statistics
 from alphamill.evaluation.run_config import RunConfig
 from alphamill.evaluation.signal_adapter import adapt_signal_records
 from alphamill.factor_factory.bench.cost import evaluate_cost, load_cost_model
@@ -26,9 +27,12 @@ from alphamill.factor_factory.bench.stability import evaluate_temporal_stability
 from alphamill.factor_factory.bench.stage_model import (
     STAGE_EXECUTION_IMPLEMENTATION,
     STAGE_PORTFOLIO_TRANSFORM,
+    STAGE_TEMPORAL_STABILITY,
     STATUS_FAIL,
     STATUS_INCOMPLETE,
+    STATUS_PASS,
     STATUS_UNDERPOWERED,
+    StageResult,
     StageResults,
     not_applicable,
     sample_tier,
@@ -50,6 +54,7 @@ class FixtureEvaluation:
     trade_summary: Mapping[str, Any]
     cost_payload: Mapping[str, Any]
     period_returns: tuple[float, ...] = ()
+    required_statistics: Mapping[str, Any] | None = None
 
 
 def evaluate_fixture(
@@ -63,6 +68,7 @@ def evaluate_fixture(
     signal_source: str = "real",
     signal_column: str = "signal",
     label_column: str = "forward_return",
+    symbols: Sequence[str] | None = None,
 ) -> FixtureEvaluation:
     """跑信号质量 + 成本/容量 + 时序稳定三阶段，并给出近似与来源标注。"""
     records = [
@@ -100,6 +106,15 @@ def evaluate_fixture(
     _stability, stability_stage = evaluate_temporal_stability(
         signals, labels, observed_at=observed_at
     )
+    required_statistics, stats_stage = member_statistics(
+        times=times,
+        signals=signals,
+        labels=labels,
+        method_config=config.method_config,
+        observed_at=observed_at,
+        symbols=symbols,
+    )
+    stability_stage = _merge_statistics_stage(stability_stage, stats_stage)
     stage_results = StageResults(
         results=(
             quality_stage,
@@ -123,6 +138,20 @@ def evaluate_fixture(
             cost_model=load_cost_model(config.cost_model.get("normalized", {})),
             deciding_tier=cost_result.deciding_tier,
         ),
+        required_statistics=required_statistics,
+    )
+
+
+def _merge_statistics_stage(stability_stage: StageResult, stats_stage: StageResult) -> StageResult:
+    """成员级必需统计失败时，时序稳定阶段记 `INCOMPLETE`（不得为 PASS，`FR-003`）。"""
+    if stats_stage.status == STATUS_PASS:
+        return stability_stage
+    reasons = [value for value in (stability_stage.reason, stats_stage.reason) if value]
+    return StageResult(
+        stage_id=STAGE_TEMPORAL_STABILITY,
+        status=STATUS_INCOMPLETE,
+        reason="; ".join(dict.fromkeys(reasons)) or None,
+        failures=tuple(stability_stage.failures) + tuple(stats_stage.failures),
     )
 
 

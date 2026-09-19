@@ -9,10 +9,11 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from alphamill.evaluation import canonical_ops
 from alphamill.evaluation.capabilities import CapabilityError, context_for
 from alphamill.evaluation.events import (
     EVENT_GATE_REJECTED,
@@ -48,6 +49,7 @@ from alphamill.experiment_store.promotion import (
     PromotionInputs,
     derive_promotion_verdict,
 )
+from alphamill.factor_factory.bench.curves import build_equity_curves, write_curves
 from alphamill.factor_factory.bench.stage_model import (
     COST_NEGATIVE,
     COST_POSITIVE,
@@ -571,6 +573,65 @@ def test_finalize_is_idempotent_across_finalized_at_values(tmp_path):
         pop.finalize_cohort(
             tmp_path, cohort_id, verdict={"fdr_alpha": 0.99}, finalized_at=FROZEN_AT
         )
+
+
+def _write_member_evidence(reports, candidate: str, experiment: str, returns) -> str:
+    directory = reports / "bench" / candidate / "snapshot" / experiment
+    directory.mkdir(parents=True, exist_ok=True)
+    times = tuple(
+        datetime(2026, 9, 1, tzinfo=UTC) + timedelta(hours=index) for index in range(len(returns))
+    )
+    write_curves(directory / "curves.parquet", build_equity_curves(returns, times=times))
+    (directory / "report.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "required_statistics": {
+                    "status": "PASS",
+                    "p_value": 0.01,
+                    "method": {"fdr_alpha": 0.05},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return f"bench/{candidate}/snapshot/{experiment}/curves.parquet"
+
+
+def test_finalize_wires_cohort_dedup_and_overrides_verdict(tmp_path, monkeypatch):
+    """R1-002 回归：finalize 内按承诺顺序查重，并据此重导 promotion_verdict（同一次原子写）。
+
+    删除 finalize 里的 `resolve_cohort_dedup` 调用后 B 不会变 `rejected`，本断言变红。
+    """
+    reports = tmp_path / "reports"
+    monkeypatch.setenv("ALPHAMILL_REPORTS_DIR", str(reports))
+    cohort_id, _ = pop.freeze_cohort(reports, _definition(CANDIDATE_A, CANDIDATE_B))
+    series = (0.01, -0.004, 0.006, 0.002, -0.001, 0.005)
+    for candidate, experiment in ((CANDIDATE_A, EXPERIMENT_A), (CANDIDATE_B, EXPERIMENT_B)):
+        pop.register_member(
+            reports,
+            cohort_id,
+            pop.MemberRegistration(
+                candidate_id=candidate,
+                experiment_id=experiment,
+                run_state=STATE_REGISTERED,
+                promotion_verdict="promising",
+                sample_tier="trustworthy",
+                cost_model_version="cm-v1",
+                evidence_ref=_write_member_evidence(reports, candidate, experiment, series),
+            ),
+            _registered_event(experiment, cohort_id),
+        )
+    path = canonical_ops.finalize_cohort(cohort_id, finalized_at=FROZEN_AT)
+    verdict = json.loads(path.read_text(encoding="utf-8"))
+    dedup = verdict["cohort_statistics"]["dedup"]
+    assert dedup[CANDIDATE_B]["verdict"] == "rejected"
+    assert dedup[CANDIDATE_B]["against_factor_id"] == CANDIDATE_A
+    assert dedup[CANDIDATE_A]["verdict"] == "none"
+    members = {entry["candidate_id"]: entry for entry in verdict["members"]}
+    assert members[CANDIDATE_A]["promotion_verdict"] == "promising"
+    assert members[CANDIDATE_B]["promotion_verdict"] == "rejected"
+    assert verdict["rejected_count"] == 1
 
 
 def test_registrations_return_in_commitment_order(tmp_path):

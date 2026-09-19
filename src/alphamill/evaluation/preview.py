@@ -31,7 +31,7 @@ from alphamill.evaluation.pipeline import (
 )
 from alphamill.evaluation.run_config import (
     load_run_config,
-    load_unified_frame,
+    load_unified_panel,
     preview_cohort_id,
     resolve_snapshot,
 )
@@ -143,7 +143,7 @@ def run_preview(
         seed=seed,
     )
 
-    times, signals, labels = load_unified_frame(signals_path)
+    times, symbols, signals, labels = load_unified_panel(signals_path)
     evaluation = evaluate_fixture(
         config=config,
         times=times,
@@ -152,6 +152,7 @@ def run_preview(
         execution_tier=TIER_PREVIEW,
         observed_at=observed_at or datetime.now(UTC).isoformat(),
         signal_source=signal_source,
+        symbols=symbols,
     )
     result = PreviewResult(
         execution_tier=TIER_PREVIEW,

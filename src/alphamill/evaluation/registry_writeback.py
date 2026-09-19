@@ -113,18 +113,21 @@ def build_summaries(
     if verdict is None:
         raise population.CohortError(f"cohort {cohort_id} 尚未 FINALIZED，评测面回写被拒绝")
     moment = finalized_at or str(verdict.get("finalized_at", ""))
+    members = verdict.get("members") or [
+        entry.to_payload() for entry in population.registrations(root, cohort_id)
+    ]
     summaries = []
-    for entry in population.registrations(root, cohort_id):
+    for member in members:
         summaries.append(
             EvaluationSummary(
-                factor_id=entry.candidate_id,
+                factor_id=str(member["candidate_id"]),
                 cohort_id=cohort_id,
-                experiment_id=entry.experiment_id,
-                promotion_verdict=entry.promotion_verdict,
-                sample_tier=entry.sample_tier,
-                cost_model_version=entry.cost_model_version,
-                dedup=entry.dedup,
-                evidence_ref=entry.evidence_ref,
+                experiment_id=str(member["experiment_id"]),
+                promotion_verdict=str(member["promotion_verdict"]),
+                sample_tier=member.get("sample_tier"),
+                cost_model_version=member.get("cost_model_version"),
+                dedup=member.get("dedup"),
+                evidence_ref=member.get("evidence_ref"),
                 finalized_at=moment,
             )
         )

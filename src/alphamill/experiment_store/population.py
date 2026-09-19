@@ -242,7 +242,17 @@ def finalize_cohort(
     assert_cohort_complete(root, cohort_id)
     definition = load_cohort(root, cohort_id)
     entries = registrations(root, cohort_id)
-    members = [entry.to_payload() for entry in entries]
+    promotion_overrides = verdict.get("promotion_verdicts") or {}
+    dedup_overrides = verdict.get("dedup") or {}
+    members = []
+    for entry in entries:
+        payload = entry.to_payload()
+        candidate = entry.candidate_id
+        if candidate in promotion_overrides:
+            payload["promotion_verdict"] = promotion_overrides[candidate]
+        if candidate in dedup_overrides:
+            payload["dedup"] = dedup_overrides[candidate]
+        members.append(payload)
     payload = {
         "schema_version": SCHEMA_VERSION,
         "cohort_id": cohort_id,
@@ -250,7 +260,7 @@ def finalize_cohort(
         "finalized_at": finalized_at,
         "trial_count": len(definition["commitments"]),
         "member_count": len(members),
-        "rejected_count": sum(1 for entry in entries if entry.promotion_verdict == "rejected"),
+        "rejected_count": sum(1 for member in members if member["promotion_verdict"] == "rejected"),
         "members": members,
         "cohort_statistics": dict(verdict),
     }
@@ -304,9 +314,8 @@ def assert_projection_rebuilds(root: Path, cohort_id: str) -> None:
         != verdict["trial_count"]
     ):
         raise RegistryIntegrityError("verdict member_count 与登记集合不符")
-    rejected = sum(
-        1 for entry in first["registrations"] if entry["promotion_verdict"] == "rejected"
-    )
+    final_members = verdict.get("members") or first["registrations"]
+    rejected = sum(1 for member in final_members if member["promotion_verdict"] == "rejected")
     if rejected != verdict["rejected_count"]:
         raise RegistryIntegrityError("verdict rejected_count 与登记集合不符")
 

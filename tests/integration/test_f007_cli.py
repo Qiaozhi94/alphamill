@@ -439,9 +439,9 @@ def test_published_but_unregistered_run_is_recovered_on_rerun(cohort_env, capsys
     payload = _payload(capsys.readouterr().out)
     assert payload["reused"] is True
     assert population.missing_commitments(reports, cohort_id) == ()
-    assert [
-        entry.candidate_id for entry in population.registrations(reports, cohort_id)
-    ] == [CANDIDATE]
+    assert [entry.candidate_id for entry in population.registrations(reports, cohort_id)] == [
+        CANDIDATE
+    ]
 
 
 def test_canonical_refuses_when_single_writer_claim_is_held(cohort_env, capsys):
