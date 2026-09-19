@@ -60,7 +60,7 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         requires=(
             (ARCH, '"universe_digest"'),
             (ARCH, '"calendar_digest"'),
-            (ARCH, "lake/_metadata/universes/<digest>.csv"),
+            (ARCH, "lake/_metadata/universes/<digest>.json"),
             (ARCH, 'sha256(canonical_json({"universe": <universe_digest>,'),
             (ARCH, '"calendar": <calendar_digest>}))'),
             (ARCH, "`universe_path` / `calendar_path`"),
@@ -203,7 +203,10 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (F007_TASKS, "T031 [TEST]"),
             (F007_TASKS, "T032: 回写 spec"),
         ),
-        forbids=((F007_TASKS, "- [ ] T024: 回写 spec"),),
+        forbids=(
+            (F007_TASKS, "- [ ] T024: 回写 spec"),
+            (F007_TASKS, "- [x] T024: 回写 spec"),
+        ),
     ),
     TextCheck(
         "f007_ingests_f003_contracts",
@@ -706,6 +709,12 @@ def read(root: pathlib.Path, rel: str) -> str:
     return (root / rel).read_text(encoding="utf-8")
 
 
+def find_task_line(tasks: str, task_id: str) -> str:
+    """按任务号取任务行，**忽略勾选状态**：勾选是执行进度，不应让任务契约断言失效。"""
+    pattern = re.compile(rf"^-\s+\[[ xX]\]\s+{re.escape(task_id)}(?!\d)")
+    return next((line for line in tasks.split("\n") if pattern.match(line.strip())), "")
+
+
 def parse_frontmatter(text: str) -> dict:
     norm = text.replace("\r\n", "\n")
     m = re.match(r"^---\n([\s\S]*?)\n---", norm)
@@ -1195,11 +1204,11 @@ def check_f007_dedup_precedes_verdict(root: pathlib.Path) -> list[tuple[str, str
         for needle in needles:
             if needle not in text:
                 errors.append((check_id, f"{rel} 缺查重契约要素 {needle!r}"))
-    t012 = [ln for ln in tasks.split("\n") if ln.strip().startswith("- [ ] T012")]
-    if not t012 or "查重" not in t012[0]:
+    t012 = find_task_line(tasks, "T012")
+    if "查重" not in t012:
         errors.append((check_id, "tasks T012（finalize）未承接查重实现"))
-    t018 = [ln for ln in tasks.split("\n") if ln.strip().startswith("- [ ] T018")]
-    if not t018 or "不重算" not in t018[0]:
+    t018 = find_task_line(tasks, "T018")
+    if "不重算" not in t018:
         errors.append((check_id, "tasks T018（回写）未写明只搬运结论、不重算查重"))
     return errors
 

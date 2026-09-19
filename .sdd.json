@@ -1,7 +1,15 @@
 {
-  "$comment": "SDD Flow (sdd-flow skill) 项目适配。缺省字段自动探测；规范见 ~/.config/opencode/skills/sdd-flow/references/project-adapter.md",
+  "$comment": "SDD Flow (sdd-flow skill) 项目适配。缺省字段自动探测；规范见 ~/.config/opencode/skills/sdd-flow/references/project-adapter.md branch_ignore：并行在飞 feature 的分支不算收口遗留物（F003 正在开发中，17 提交未合并，其收口由该 feature 自己的 T5 负责）；本 Feature 自己的分支不受白名单影响（脚本按 b != branch 排除）。",
   "verify": ".venv/bin/python tools/verify.py",
   "test": ".venv/bin/python -m pytest -q",
-  "gates": { "G1": true, "G2": false, "G3": false, "G4": true },
-  "quick_max_files": 3
+  "gates": {
+    "G1": true,
+    "G2": false,
+    "G3": false,
+    "G4": true
+  },
+  "quick_max_files": 3,
+  "branch_ignore": [
+    "feat/F003-alphagen-vendor"
+  ]
 }

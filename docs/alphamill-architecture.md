@@ -439,7 +439,7 @@ ResearchSnapshot 位于 `reports/research_snapshots/<snapshot_id>/manifest.json`
 value digest 或覆盖范围不符、as-of 保真度不足、映射/日历摘要缺失均失败关闭。preview 请求
 latest 时也必须先发布该对象；canonical 只接受既有 snapshot ID。symbol map 由 F002 内容寻址
 保存于 `lake/_metadata/symbol_maps/<digest>.csv`；universe 与 calendar 是**两个独立 artifact**（ADR-0007
-2026-09-18 修订、`F007` DR-006）：universe 归 `F008` 内容寻址台账 `lake/_metadata/universes/<digest>.csv`
+2026-09-18 修订、`F007` DR-006）：universe 归 `F008` 内容寻址台账 `lake/_metadata/universes/<digest>.json`
 （按 digest 加载并提供 `universe_at(T)` 语义，不复制进 reports），calendar JSON 由构造器规范化后保存于
 `reports/research_snapshots/_inputs/universe_calendars/<digest>.json`；`universe_calendar_digest` 由二者
 按冻结公式 `sha256(canonical_json({"universe": <universe_digest>, "calendar": <calendar_digest>}))` 组合导出，

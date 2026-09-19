@@ -6,7 +6,7 @@ related_features: [F001, F002, F003, F007]
 topics: [data-bridge, universe, backfill, data-quality, point-in-time, m2]
 doc_kind: design
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-19
 ---
 
 # F008：宇宙扩容与 point-in-time 宇宙台账 - 设计
@@ -32,11 +32,11 @@ updated: 2026-09-14
 
 ## 1. 技术概要与影响面
 
-四段式流水线：**发现 → 冻结 → 回填 → 质量门 → 台账发布**。发现从 Binance 公开行情按口径筛候选；人工确认后冻结为内容寻址的 `UniverseDef`；回填复用 F001 的 `historical_backfill.py`，外面套一层可续跑的批次编排；每个 pair 回填完成后跑质量门（复用 `tools/f001_backfill_report.py` 的口径，参数化到多 pair）；过门的 pair 写入联机库的 `universe_membership` 台账并进 F002 导出清单，台账再以 `symbol_map` 同构的方式发布为湖内内容寻址 artifact。
+四段式流水线：**发现 → 冻结 → 回填 → 质量门 → 台账发布**。发现从 Binance 公开行情按口径筛候选；人工确认后冻结为内容寻址的 `UniverseDef`；回填复用 F001 的 `historical_backfill.py`，外面套一层可续跑的批次编排；每个 pair 回填完成后跑质量门（复用 `tools/f001_backfill_report.py` 的口径，参数化到多 pair）；过门的 pair 写入联机库的 `universe_membership` 台账并进 F002 导出清单，台账再以 canonical JSON 发布为湖内内容寻址 artifact（最小 PIT 投影，schema 见 §3）。
 
 - 前端：不适用
 - 后端 / API：新增 `src/alphamill/data_bridge/universe/` 子包与 `alphamill-universe` CLI；`collector/historical_backfill.py` 由脚本升级为可被编排调用（同时解除其 350 行豁免）
-- 存储 / Migration：新增 TimescaleDB 表 `universe_membership`（只追加）；新增湖元数据目录 `lake/_metadata/universes/<digest>.csv`
+- 存储 / Migration：新增 TimescaleDB 表 `universe_membership`（只追加）；新增湖元数据目录 `lake/_metadata/universes/<digest>.json`
 - Runtime：长跑回填编排（限速、退避、断点、逐 pair 进度）
 - Event / Evidence：`universe.member_changed`、`backfill.progress`、`backfill.failed`；质量门判定记录
 - 文档 / 配置：修订 `docs/alphamill-integration.md` §1.3 的 OKX 过期表述；`docs/SOP.md` 豁免表移除 `historical_backfill.py` 条目
@@ -49,7 +49,7 @@ src/alphamill/data_bridge/
 │   ├── discover.py             #   Binance USDⓈ-M 筛选（成交额排名前 N + 上线天数 + 排除规则）
 │   ├── definition.py           #   UniverseDef 内容寻址、冻结与版本化
 │   ├── membership.py           #   PIT 台账读写 + universe_at(T)
-│   ├── artifact.py             #   台账 canonical 序列化与 digest 发布（symbol_map 同构）
+│   ├── artifact.py             #   台账 canonical JSON 序列化与 digest 发布（最小 PIT 投影）
 │   ├── quality_gate.py         #   新 pair 准入门（复用 F001 完整性口径）
 │   └── backfill_runner.py      #   批次编排：限速 / 退避 / 断点 / 逐 pair 进度
 ├── collector/historical_backfill.py   # 由脚本改为可编排调用（解除行数豁免）
@@ -75,7 +75,7 @@ src/alphamill/data_bridge/
 |---|---|
 | `exchange` / `market_type` / `db_symbol` / `lake_pair` | 与 `symbol_map` 同一映射键（F002-D010：`(exchange, market_type, db_symbol)`） |
 | `valid_from` / `valid_to` | 成员区间（UTC）；`valid_to IS NULL` = 当前有效 |
-| `reason` | `listed` / `delisted` / `liquidity_in` / `liquidity_out` / `quality_fail` / `initial_seed` |
+| `reason` | 仅可交易期事实：`listed` / `delisted` / `initial_seed`（准入/隔离原因码归质量门判定记录，不进台账） |
 | `universe_id` | 触发本次变更的 `UniverseDef` 内容摘要 |
 | `ingested_at` | 采集时间，支撑 bitemporal 语义与"何时知道的"审计 |
 
@@ -97,7 +97,22 @@ src/alphamill/data_bridge/
 
 批次：`candidates` 按成交额排名有序，批 1 取前 30（含现有 6 对），批 2 取第 31–40。批次只影响回填与准入的时序，不影响 `universe_id`——冻结的是完整的 40 对定义。
 
-**湖内 artifact**：`lake/_metadata/universes/<digest>.csv`，canonical 格式冻结（固定列序、按 `(lake_pair, valid_from)` 排序、UTF-8、LF、固定表头），digest 为 canonical 字节的 SHA-256；已有同 digest 文件必须逐字节一致（与 `symbol_map` 完全同构，实现可共用其发布原语）。
+**湖内 artifact**：`lake/_metadata/universes/<digest>.json`，**canonical JSON**，schema 冻结为
+
+```json
+{"schema_version": 1, "members": [{"lake_pair": "BTC-USDT", "valid_from": "2026-01-01T00:00:00Z", "valid_to": null}]}
+```
+
+- 顶层键**严格等于** `{schema_version, members}`，成员键**严格等于** `{lake_pair, valid_from, valid_to}`——多一个键即判非法，不做宽松忽略；
+- `members` 按 `(lake_pair, valid_from)` 排序；对象键按字典序；UTF-8、无多余空白；时间为 UTC ISO-8601，`valid_to: null` 表示当前有效；
+- `digest = "sha256:" + sha256(canonical_bytes).hexdigest()`，**前缀进文件名**（与 `symbol_map.content_digest`、`factor_factory.canonical.sha256_prefixed_bytes` 同一约定）；
+- 已有同 digest 文件必须逐字节一致，冲突即报错而非覆盖。
+
+**artifact 只承载最小 PIT 投影**：`reason` / `universe_id` / `ingested_at` / `exchange` / `market_type` / `db_symbol` 留在联机库表，不进 artifact——它们不参与 `universe_at(T)` 判定，放进来只会让 digest 随审计噪声变化，使 ResearchSnapshot 身份无谓漂移。
+
+**因此 artifact 不与 `symbol_map` 同构**（后者是 CSV 表格），不共用其序列化原语；但沿用同一套发布纪律：原子创建、同 digest 必须逐字节一致、只按显式 digest 读取。该 schema 与已落地的下游消费者 `src/alphamill/factor_factory/generators/universe.py`（`load_explicit_universe`）逐字段一致——实现完成后必须能被它直接加载，这是 `AC-009` 的断言之一。
+
+**导出清单（无独立实体）**：定义为「台账中该时点可交易 ∩ 质量门判定为 ACTIVE」的 pair 集合，由 `universe_membership` 与质量门判定记录联合导出。落地方式：`partitions.lake_pairs_map(conn, market_type, admitted: set[str] | None = None)` 增加可选准入集合参数，`None` 时保持现行为——F002 既有测试与 manifest/对账/修订语义一律不变。`symbol_map` **不**参与该过滤，保持全量（回填写库即产生新 digest，属预期；旧 digest 仍可按引用读取）。
 
 **`BackfillRun`（JSON，落 `reports/backfill/<run_id>/`）**：`run_id` / `universe_id` / `pairs[]` / `window` / 限速参数 / 逐 pair `{rows, last_cursor, status, retries, error}` / `hostname` / 起止时间。
 
@@ -119,11 +134,11 @@ src/alphamill/data_bridge/
 
 append-only JSONL：
 
-- `universe.member_changed`：`lake_pair`、`direction`（in/out）、`effective_at`、`reason`、`universe_id`；
+- `universe.member_changed`：`lake_pair`、`direction`（in/out）、`effective_at`、`reason`、`universe_id`、`line`（`tradability` = 台账可交易期变更 / `admission` = 准入状态变更，见 spec TR-001）；
 - `backfill.progress`：`run_id`、`lake_pair`、`rows`、`cursor`、`elapsed`；
 - `backfill.failed`：`run_id`、`lake_pair`、`error_class`、`retries`、`last_cursor`。
 
-幂等键：成员事件用 `(lake_pair, effective_at, direction)`；回填事件用 `(run_id, lake_pair, cursor)`。
+幂等键：成员事件用 `(lake_pair, effective_at, direction, line)`；回填事件用 `(run_id, lake_pair, cursor)`。
 
 ## 5. Runtime、Workflow 与并发
 
@@ -136,7 +151,7 @@ discover → （人工确认）→ freeze → backfill（长跑，可中断）�
 - **并发**：pair 间可有限并发（受限速预算约束），单 pair 内严格串行；与 `data_bridge` 导出**串行**（架构 §7.1：导出与训练串行，回填同理占用同一库）；
 - **长跑可观测**：进度事件按 pair 落盘，`show` 可随时查看；中断后重跑先读 `BackfillRun` 恢复断点；
 - **质量门执行点**：在 pair 回填完成后单独执行，不混在回填循环里——门禁与生产数据的耦合越松越好；
-- **台账写入时序**：先写库（`universe_membership` 追加）→ 再发布 artifact → 最后才把 pair 纳入导出清单。顺序反了会出现"导出清单里有、台账里没有"的 pair。
+- **台账写入时序**：先写库（`universe_membership` 追加）→ 再发布 artifact → 最后才把 pair 纳入导出清单（即写入准入记录，使其进入 `admitted` 集合）。顺序反了会出现"导出清单里有、台账里没有"的 pair。
 
 ## 6. UI 与可观测性
 
@@ -165,13 +180,15 @@ UI：不适用（只读呈现归 `F005`，ADR-0005：不新增口径载体）。
 | `AC-002` | unit | `tests/unit/test_f008_universe_def.py` | 未冻结驱动回填被拒；成员增删产生新版本，旧版本只读 |
 | `AC-003` | integration | `tests/integration/test_f008_backfill.py` | 中断后重跑从断点继续、无重复行、行数符合预期 |
 | `AC-004` | unit | `tests/unit/test_f008_rate_limit.py` | 限流触发指数退避、重试有上限、速率不因失败提高 |
-| `AC-005` | integration | `tests/integration/test_f008_quality_gate.py` | 缺失率超限 / 边界未闭合 / 连续聚合不一致三类 fixture 均被拦并各记原因码 |
+| `AC-005` | integration | `tests/integration/test_f008_quality_gate.py` | 缺失率超限 / 边界未闭合 / 重复主键 / 连续聚合不一致四类 fixture 均被拦并各记原因码 |
 | `AC-006` | unit | `tests/unit/test_f008_quality_gate_window.py` | 上线晚于窗口起点的 pair 按实际可得窗口算缺失率，不误判 |
 | `AC-007` | unit | `tests/unit/test_f008_membership.py` | 上市/退市/中途进出 fixture 上 universe_at(T) 各时点正确 |
 | `AC-008` | unit | `tests/unit/test_f008_membership.py` | 原地改写历史区间被拒；退出记录保留历史数据 |
-| `AC-009` | integration | `tests/integration/test_f008_export_integration.py` | 同内容同 digest 且逐字节一致；内容变化得新 digest 且旧 digest 仍可读 |
+| `AC-009` | integration | `tests/integration/test_f008_export_integration.py` | 同内容同 digest 且逐字节一致；内容变化得新 digest 且旧 digest 仍可读；产物可被 `load_explicit_universe` 直接加载 |
 | `AC-010` | integration | `tests/integration/test_f008_backfill.py` | 成员变更与回填事件可按 run/pair 查询；运行记录带 hostname |
 | `AC-011` | integration | `tests/integration/test_f008_capacity_report.py` | 扩容后磁盘、全量导出耗时、NAS 备份时长实测入档并与 6 对基线对照 |
+| `AC-012` | unit | `tests/unit/test_f008_cli_contract.py` | 五个子命令的启动期拒绝各以可区分的非零原因退出 |
+| `AC-013` | unit | `tests/unit/test_f008_artifact.py` | artifact 与 `BackfillRun` 均带 `schema_version`；版本不符或出现未知键即拒绝加载，不做宽松忽略 |
 
 真实环境场景：全量回填（1~2 周 wall-clock，owner 主导）、扩容后首次全量导出与 NAS 备份实测，全部在执行机 `qiaozhi-lt` 执行并记录 hostname；开发机上这些用例跳过属预期，不算证据也不算失败。
 
@@ -179,14 +196,17 @@ UI：不适用（只读呈现归 `F005`，ADR-0005：不新增口径载体）。
 
 | 决策 / 风险 | 结论或缓解 | 理由 | 替代方案 / 后续 |
 |---|---|---|---|
-| 台账是 dataset 还是 artifact | **artifact**，与 `symbol_map` 同构内容寻址 | ADR-0007 与 `F007` IR-002 都按「universe/calendar artifact」定义；元数据按日分区没有意义 | 发布原语与 `symbol_map` 共用，减少一套实现 |
+| 台账是 dataset 还是 artifact | **artifact**，内容寻址 | ADR-0007 与 `F007` IR-002 都按「universe/calendar artifact」定义；元数据按日分区没有意义 | 不进 dataset registry，不参与 data_version 修订语义 |
+| artifact 用 JSON 还是 CSV | **canonical JSON**，只含最小 PIT 投影（§3） | CSV 无处安放 `IR-003` 的 `schema_version`；`valid_to` 可空在 CSV 里只能靠空串约定；calendar 已是 JSON，两者 digest 要组合；且 `generators/universe.py` 已按 JSON schema 落地并有集成测试 | 裁决 2026-09-19（owner）；联动修订 ADR-0007、架构 §4.3、`F007` DR-006/design §4 与 `tools/check_doc_consistency.py` 的路径断言 |
+| 台账区间 vs 准入状态 | **拆成两条线**：台账记可交易期，准入状态归质量门判定记录 | 准入时点语义会让 `universe_at(T)` 在扩容日前返回空集，PIT 掩码失效 | 裁决 2026-09-19（owner）；§3 表的 `reason` 收敛为 `listed`/`delisted`/`initial_seed` |
+| 导出准入怎么落地 | `lake_pairs_map` 加可选 `admitted` 参数，默认 `None` 保持现行为；`symbol_map` 不过滤 | F002 无清单实体，pair 由 `SELECT DISTINCT` 派生；改输入端不触碰 manifest/对账/修订语义 | 裁决 2026-09-19（owner）；`symbol_map` 与导出清单允许不等，须在实现期测试中显式断言 |
 | 台账真相源放哪 | 联机库表为可查询真相源，湖内 artifact 为其快照 | 区间查询与追加需要 SQL；研究侧需要不可变引用 | 两者不一致时以库为准并重新发布 |
 | 发现脚本 | 按 Binance USDⓈ-M 重写，不复用 OKX 脚本 | F001 事故后数据路线已改 Binance | 同步修订 integration §1.3 |
 | 质量门阈值 | 复用 F001 口径（缺失率 ≤1%、边界闭合、连续聚合按桶重算精确一致），可配但默认不放宽 | ADR-0003；换阈值会让新老数据不可比 | 阈值变更须显式改配置并记理由 |
-| 退市 pair | 保留历史数据，只写 `valid_to` 并移出导出清单 | 删除即制造幸存者偏差 | — |
+| 退市 pair | 保留历史数据，只写 `valid_to` 并移出导出清单（产品层理由见 `spec.md` §7） | 技术侧含义：`membership.py` 无 DELETE 路径 | — |
 | 现有 6 对 | 首次台账发布即补 `initial_seed` 记录 | 否则老 pair 在 PIT 查询里凭空全程存在 | 与建表迁移同批完成 |
 | `historical_backfill.py` 的行数豁免 | 本 feature 泛化它，同时从 `docs/SOP.md` 豁免表移除 | 豁免的解除期限本就写的是「F002 泛化阶段」，实际泛化发生在这里 | 若本轮未完成泛化则必须显式续期，不得静默留着 |
-| 规模与阈值（Q-001 裁决） | 40 对分两批（前 30 / 第 31–40）；成交额**排名**前 N 而非绝对金额；上线 >180 天不要求满窗；排除结构性重复标的 | 噪声收益几乎全在前 30（rank 相关标准误 0.447→0.186→0.160→0.143），而导出与 NAS 成本线性且每天都付；绝对金额阈值随市场周期漂移会破坏 FR-001 的可复现性 | 批 1 过门后 `F003` 即可用；余量充足时按增量加 pair，台账天然支持 |
+| 规模与阈值（Q-001 裁决） | 见 `spec.md` §7 同名条目（产品层取舍的唯一拥有者），本文不复述 | — | `criteria` 的落地字段见 §3 |
 | 回填 1~2 周且依赖外部 | owner 主导，失败 pair 可单独重跑；批 2 失败不影响批 1 的准入 | PRD FR1.5 已把它定性为独立工作流 | 分批降低了"全跑完才有产出"的风险 |
 | 扩容后导出/备份变慢 | 实测记录并与基线对照，不预设没问题 | F002 基线可比 | 超出可接受范围再评估分片导出 |
 

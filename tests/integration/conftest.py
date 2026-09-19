@@ -194,3 +194,19 @@ def export_symbol_map_for(conn, lake) -> str:
     from alphamill.data_bridge import symbol_map
 
     return symbol_map.export_symbol_map(conn=conn, lake_root=lake).digest
+
+
+def pytest_addoption(parser) -> None:
+    """T023 真实环境取证命令 `pytest --snapshot <snapshot-id>` 需要的选项。"""
+    parser.addoption(
+        "--snapshot",
+        action="store",
+        default=None,
+        help="执行机不可变 ResearchSnapshot ID（F007 T023 真实环境取证）",
+    )
+
+
+@pytest.fixture(scope="session")
+def f007_snapshot_id(request) -> str | None:
+    value = request.config.getoption("--snapshot")
+    return str(value) if value else None

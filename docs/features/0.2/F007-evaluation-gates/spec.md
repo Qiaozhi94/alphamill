@@ -2,13 +2,15 @@
 kind: feature
 id: F007
 version: "0.2"
-status: ready-for-development
+status: done
+status_evidence: merge 635bb6a（PR #2，循环 16 并入后独立复检 32 条 finding 闭环） + CI run 35441883653 全绿（verify py3.11 与 py3.13 均通过）；首次收口证据为 merge aa7f958 + CI run 35420117790
+branch: feat/F007-evaluation-gates
 gate_version: 1
 related_features: [F002, F003, F004, F008]
 topics: [evaluation, validation, evidence, experiments]
 doc_kind: spec
 created: 2026-09-13
-updated: 2026-09-18
+updated: 2026-09-19
 ---
 
 # F007：统一评测台与证据门禁
@@ -244,7 +246,7 @@ track-record length；阈值和选择阶段在看结果前冻结。成员先登�
 - **DR-003**：`ExperimentManifest` 应当关联输入、逐阶段状态、报告、曲线、规则版本和结论；canonical 历史产物只增不改。
 - **DR-004**：`CohortLedger` 应当保存预注册试验定义、选择阶段、全部候选和计数；preview 不得出现在 official population。
 - **DR-005**：`HoldoutBudgetLedger` 应当以 append-only 台账持久化每次留出评估（`candidate_id`、ISO 周、`experiment_id`、`cohort_id`、`verdict`、`recorded_at`、`execution_tier=canonical`；schema 预留 `holdout_window`（起止 UTC）与 `regime` 字段，按 ADR-0003 v0.1 regime 记账与滚动留出路线由写入者填充）；只有 canonical capability 可追加，preview 越权写入必须被拒绝并写 `evaluation.gate_rejected`；台账与 manifest 同为可复现要件，不支持事后补记（ADR-0003 留出期使用预算）。**v0.2 写入者边界**：FactorDef 评测流程不访问最终留出（留出评估属 FR4/M3 的 PortfolioDef 留出门，PRD FR3.4），故 v0.2 只交付台账 schema、capability 约束与拒绝路径，**追加写入者后移 FR4/M3**（tasks §5）；v0.2 内台账零行是预期不变量（锁定「不存在旁路写入者」），不是功能缺失。
-- **DR-006**：`UniverseCalendarBinding` 应当把 universe 与 calendar 拆为两个独立 artifact 引用：universe 按 **F008** `IR-002` 的内容寻址台账消费（`lake/_metadata/universes/<digest>.csv`，提供 `universe_at(T)` 语义），calendar 由本 Feature 拥有并规范化保存为内容寻址 JSON（`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`）；ADR-0007 的 `universe_calendar_digest` 由两者 digest 按 ADR-0007 冻结的组合公式 `sha256(canonical_json({"universe": <universe_digest>, "calendar": <calendar_digest>}))` 组合导出（不再等于单一 JSON 文件摘要），拆解关系写入 ResearchSnapshot provenance。
+- **DR-006**：`UniverseCalendarBinding` 应当把 universe 与 calendar 拆为两个独立 artifact 引用：universe 按 **F008** `IR-002` 的内容寻址台账消费（`lake/_metadata/universes/<digest>.json`，提供 `universe_at(T)` 语义），calendar 由本 Feature 拥有并规范化保存为内容寻址 JSON（`reports/research_snapshots/_inputs/universe_calendars/<digest>.json`）；ADR-0007 的 `universe_calendar_digest` 由两者 digest 按 ADR-0007 冻结的组合公式 `sha256(canonical_json({"universe": <universe_digest>, "calendar": <calendar_digest>}))` 组合导出（不再等于单一 JSON 文件摘要），拆解关系写入 ResearchSnapshot provenance。
 - **DR-007**：`SignalFactorProvenance` 应当记录从 F004/Kronos 信号或人工种子派生为可评测 `FactorDef` 的适配信息（来源 dataset 与 `source` 分布、适配器版本、原始信号列、标签与 horizon 映射）；`source=placeholder` 的来源在 canonical 被拒绝（`E_INPUT_INVALID`），preview 允许但报告必须标注 `signal_source=placeholder` 并置 `approximation=true`；F004 只交付真实信号源与 `/predict` 契约，不升级 `signals_log` 内容，消费者路由切换不在本 Feature 范围。
 - **DR-008**：`RegistryEvaluationSummary` 应当是 F007 写入 F003 注册表**评测面**的唯一载荷（append-only，只追加评测面记录、不触定义面）：`factor_id`、`cohort_id`、`experiment_id`、`promotion_verdict`、`sample_tier`、`cost_model_version`、`dedup`（`{max_abs_rho, verdict: none|variant|rejected, against_factor_id}`）、`evidence_ref`（本成员 `curves.parquet` 的逻辑 URI，供后续查重取序列）、`finalized_at` 与 `schema_version`；**不含 lifecycle 状态字段**（判定后移 M3/F006）。
 
@@ -326,19 +328,19 @@ fail-closed 拒绝结论，必须登记为拒绝成员；`INCOMPLETE` 是可重�
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `DR-004`, `DR-005`, `NFR-003`): preview 越权被拒绝，正式台账与留出预算台账零变化（含「台账零行」正向断言与 preview 越权写入留出预算的负例）。v0.2 留出台账**无追加写入者**（`DR-005` 写入者后移 FR4/M3），零行是锁定「不存在旁路写入者」的预期不变量；负例含 preview 越权追加与 canonical capability 缺失追加两条路径
-- [ ] **AC-002** (`FR-002`): label endpoint、per-pair 日历、最大 horizon、train-only fit 与 future-aware 算子负例全部被拦截
-- [ ] **AC-003** (`FR-003`, `FR-004`): 必需统计失败关闭；入口/运行时方法论拒绝、输入不符与重试耗尽/abandon 各自按 spec §5 迁移到 REGISTERED，`promotion_verdict` 按 design §3.3 优先级表逐级取值（每级至少一例）；拒绝者仍进入试验分母，成员未收齐时 cohort 不能 finalize 或晋级；**多成员 cohort 批量夹具**上被拒成员仍在分母、诊断性重算不重复计数
-- [ ] **AC-004** (`FR-005`): 三档成本、breakeven/换手/持有期和 rolling stability 完整，成本不存活者为 dead；样本量三级裁决正确且按半开区间冻结（`[0,30)` → `underpowered` 不判 PASS/FAIL、`[30,69)` → `provisional` 仅缩减仓位 paper、`[69,∞)` → `trustworthy` 才可完整判定），含 **29/30/68/69 笔边界用例**与 `sample_unit` 计数口径断言
-- [ ] **AC-005** (`FR-006`, `DR-003`, `NFR-001`): report/curves/manifest 原子发布，失败注入不产生半个 PASS
-- [ ] **AC-006** (`DR-001`, `DR-002`, `DR-006`, `NFR-002`): ResearchSnapshot 跨路径/codec 身份稳定；动态 latest 先冻结；成员/cutoff/映射日历或实验语义变化使相应身份变化并可 supersede；universe（F008 digest + `universe_at(T)`）与 calendar 两个 artifact 引用分别校验，缺失或 digest 不符即拒绝发布
-- [ ] **AC-007** (`FR-006`, `UX-002`): synthesis 只消费 canonical，输出五阶段漏斗且事实/推断/建议分栏
-- [ ] **AC-008** (`IR-001`, `IR-002`, `IR-003`, `DR-007`): CLI/schema 契约能拒绝非法 canonical 请求并返回结构化失败；`source=placeholder` 的 Kronos 信号源自 canonical 被拒（`E_INPUT_INVALID`）、preview 显式标注，适配 provenance 完整
-- [ ] **AC-009** (`FR-007`): 三层无前视状态逐层进入 manifest；L1 fail-closed 生效（未来算子负例被拒）；L2/L3 非 `PASS` 时阻断晋级且拒绝事件携带缺失层与 owner；任何情况下不得把缺失层记为 PASS 或静默省略
-- [ ] **AC-010** (`NFR-003`, `IR-003`): 最终确认窗统计量不出现在任何 Agent/preview 可读的 report/manifest/synthesis；越权读取或写入 fail-closed 并留拒绝事件
-- [ ] **AC-011** (`NFR-004`, `NFR-005`, `UX-001`): preview 的采样/缩窗在报告 `approximation` 字段显式标注（`is_approximate` 与缩减维度可核），canonical 不因性能压力静默减少门禁或样本；产物路径与 manifest 只用 POSIX 逻辑路径/URI（Windows/WSL 物理路径只进 provenance）；CLI 首屏含 tier/cohort/data+code digest/state/verdict 与首个失败原因（快照测试锁定）
-- [ ] **AC-012** (`FR-003`): 五阶段 ID 与失败三维 schema 冻结并可校验——stage 取值限于 `signal_quality`/`portfolio_transform`/`cost_capacity`/`temporal_stability`/`execution_implementation`，`failure_taxonomy` 记录含 stage/owner/mechanism/error_code/evidence_refs，synthesis 按三维聚合且拒绝枚举外取值
-- [ ] **AC-013** (`FR-008`, `DR-008`): cohort FINALIZED 后评测摘要按 `DR-008` 回写 F003 注册表评测面（append-only，定义面写入被拒且定义面记录零变化）；查重在 finalize 内、先于 `promotion_verdict` 导出完成：按 OOS PnL / rolling IC 序列计算，`|ρ|>0.99` 的成员 `promotion_verdict=rejected` 且仍入分母、`0.90~0.99` 标记 variant、cohort 内重复对按承诺顺序保留在先者；回写载荷含 `cost_model_version` 与 `evidence_ref` 且不含 lifecycle 状态字段
+- [x] **AC-001** (`FR-001`, `DR-004`, `DR-005`, `NFR-003`): preview 越权被拒绝，正式台账与留出预算台账零变化（含「台账零行」正向断言与 preview 越权写入留出预算的负例）。v0.2 留出台账**无追加写入者**（`DR-005` 写入者后移 FR4/M3），零行是锁定「不存在旁路写入者」的预期不变量；负例含 preview 越权追加与 canonical capability 缺失追加两条路径 — tests: `tests/integration/test_f007_execution_tiers.py`、`tests/mutation/test_f007_gate_mutations.py`
+- [x] **AC-002** (`FR-002`): label endpoint、per-pair 日历、最大 horizon、train-only fit 与 future-aware 算子负例全部被拦截 — tests: `tests/unit/validation/test_methodology_gate.py`
+- [x] **AC-003** (`FR-003`, `FR-004`): 必需统计失败关闭；入口/运行时方法论拒绝、输入不符与重试耗尽/abandon 各自按 spec §5 迁移到 REGISTERED，`promotion_verdict` 按 design §3.3 优先级表逐级取值（每级至少一例）；拒绝者仍进入试验分母，成员未收齐时 cohort 不能 finalize 或晋级；**多成员 cohort 批量夹具**上被拒成员仍在分母、诊断性重算不重复计数 — tests: `tests/unit/evaluation/test_required_statistics.py`、`tests/integration/test_f007_controls.py`、`tests/integration/test_f007_canonical_registry.py`
+- [x] **AC-004** (`FR-005`): 三档成本、breakeven/换手/持有期和 rolling stability 完整，成本不存活者为 dead；样本量三级裁决正确且按半开区间冻结（`[0,30)` → `underpowered` 不判 PASS/FAIL、`[30,69)` → `provisional` 仅缩减仓位 paper、`[69,∞)` → `trustworthy` 才可完整判定），含 **29/30/68/69 笔边界用例**与 `sample_unit` 计数口径断言 — tests: `tests/unit/evaluation/test_cost_and_stability.py`
+- [x] **AC-005** (`FR-006`, `DR-003`, `NFR-001`): report/curves/manifest 原子发布，失败注入不产生半个 PASS — tests: `tests/integration/test_f007_atomic_publish.py`
+- [x] **AC-006** (`DR-001`, `DR-002`, `DR-006`, `NFR-002`): ResearchSnapshot 跨路径/codec 身份稳定；动态 latest 先冻结；成员/cutoff/映射日历或实验语义变化使相应身份变化并可 supersede；universe（F008 digest + `universe_at(T)`）与 calendar 两个 artifact 引用分别校验，缺失或 digest 不符即拒绝发布 — tests: `tests/unit/experiment_store/test_research_snapshot.py`、`tests/unit/experiment_store/test_identity.py`、`tests/property/test_f007_identity_properties.py`
+- [x] **AC-007** (`FR-006`, `UX-002`): synthesis 只消费 canonical，输出五阶段漏斗且事实/推断/建议分栏 — tests: `tests/integration/test_f007_synthesis.py`
+- [x] **AC-008** (`IR-001`, `IR-002`, `IR-003`, `DR-007`): CLI/schema 契约能拒绝非法 canonical 请求并返回结构化失败；`source=placeholder` 的 Kronos 信号源自 canonical 被拒（`E_INPUT_INVALID`）、preview 显式标注，适配 provenance 完整 — tests: `tests/integration/test_f007_cli.py`、`tests/contract/test_f007_upstream_contracts.py`
+- [x] **AC-009** (`FR-007`): 三层无前视状态逐层进入 manifest；L1 fail-closed 生效（未来算子负例被拒）；L2/L3 非 `PASS` 时阻断晋级且拒绝事件携带缺失层与 owner；任何情况下不得把缺失层记为 PASS 或静默省略 — tests: `tests/unit/validation/test_methodology_gate.py`
+- [x] **AC-010** (`NFR-003`, `IR-003`): 最终确认窗统计量不出现在任何 Agent/preview 可读的 report/manifest/synthesis；越权读取或写入 fail-closed 并留拒绝事件 — tests: `tests/integration/test_f007_execution_tiers.py`
+- [x] **AC-011** (`NFR-004`, `NFR-005`, `UX-001`): preview 的采样/缩窗在报告 `approximation` 字段显式标注（`is_approximate` 与缩减维度可核），canonical 不因性能压力静默减少门禁或样本；产物路径与 manifest 只用 POSIX 逻辑路径/URI（Windows/WSL 物理路径只进 provenance）；CLI 首屏含 tier/cohort/data+code digest/state/verdict 与首个失败原因（快照测试锁定） — tests: `tests/contract/test_f007_artifact_schemas.py`、`tests/integration/test_f007_cli.py`
+- [x] **AC-012** (`FR-003`): 五阶段 ID 与失败三维 schema 冻结并可校验——stage 取值限于 `signal_quality`/`portfolio_transform`/`cost_capacity`/`temporal_stability`/`execution_implementation`，`failure_taxonomy` 记录含 stage/owner/mechanism/error_code/evidence_refs，synthesis 按三维聚合且拒绝枚举外取值 — tests: `tests/contract/test_f007_artifact_schemas.py`、`tests/integration/test_f007_synthesis.py`
+- [x] **AC-013** (`FR-008`, `DR-008`): cohort FINALIZED 后评测摘要按 `DR-008` 回写 F003 注册表评测面（append-only，定义面写入被拒且定义面记录零变化）；查重在 finalize 内、先于 `promotion_verdict` 导出完成：按 OOS PnL / rolling IC 序列计算，`|ρ|>0.99` 的成员 `promotion_verdict=rejected` 且仍入分母、`0.90~0.99` 标记 variant、cohort 内重复对按承诺顺序保留在先者；回写载荷含 `cost_model_version` 与 `evidence_ref` 且不含 lifecycle 状态字段 — tests: `tests/integration/test_f007_registry_writeback.py`、`tests/integration/test_f007_canonical_registry.py`
 
 ## 7. 测试、依赖与决策
 

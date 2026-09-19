@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "note": "F007 cohort v1 schema 模板：cohort.json 在首个 canonical 运行前冻结，成员与承诺顺序是预注册事实（不按结果择优）。",
+  "cohort_schema": {
+    "cohort_id": "cohort_sha256:<内容寻址，由本文件语义字段导出>",
+    "hypothesis_family": "<字符串：同一假设族的标识>",
+    "selection_stage": "cross_sectional | time_series",
+    "method_config_ref": "method-v1",
+    "cost_model_ref": "cm-v1",
+    "inclusion_rules": "<字符串：纳入规则，含被排除者的处理>",
+    "commitments": [
+      {
+        "candidate_id": "<F003 factor_id 或人工种子 id>",
+        "generator": "alphagen | pool | manual | kronos",
+        "registered_at": "<UTC ISO-8601>"
+      }
+    ],
+    "window": {
+      "selection": ["<UTC ISO-8601>", "<UTC ISO-8601>"],
+      "label_horizons": [1, 4, 24]
+    },
+    "universe_digest": "sha256:<F008 台账 digest，不解析 latest>",
+    "calendar_digest": "sha256:<本 Feature calendar artifact digest>",
+    "frozen_at": "<UTC ISO-8601>",
+    "frozen_by": "<责任人>"
+  },
+  "invariants": {
+    "commitment_order_rule": "承诺顺序 = commitments 数组顺序；cohort 内查重时按该顺序保留在先者、拒绝在后者。",
+    "finalize_rule": "只有全部承诺成员都已 REGISTERED（EVIDENCE_READY / REJECTED / INCOMPLETE 终态）时 OPEN -> FINALIZED。",
+    "rejected_still_counts": "被拒绝成员仍计入 cohort 试验总数与漏斗分母（spec FR-004）。",
+    "immutability": "冻结后不可原地修改；成员增删必须产生新 cohort_id。"
+  }
+}
