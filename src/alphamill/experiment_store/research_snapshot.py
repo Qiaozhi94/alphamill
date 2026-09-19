@@ -240,7 +240,7 @@ def build_snapshot(
             for name in sorted(members)
         },
         "symbol_map_path": f"lake/_metadata/symbol_maps/{symbol_map_digest}.csv",
-        "universe_path": f"lake/_metadata/universes/{universe.digest}.csv",
+        "universe_path": f"lake/_metadata/universes/{universe.digest}.json",
         "calendar_path": calendar_logical,
     }
     return ResearchSnapshot(

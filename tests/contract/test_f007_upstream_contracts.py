@@ -8,83 +8,182 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import hashlib
+import json
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from alphamill.data_bridge import paths
 from alphamill.evaluation import upstream_contracts as uc
-from alphamill.evaluation.contract_common import (
-    UNIVERSE_COLUMNS,
-    content_digest,
-)
 from alphamill.evaluation.universe_ledger import UniverseMember, publish_universe
 
 T0 = datetime(2026, 7, 1, tzinfo=UTC)
 T_MID = datetime(2026, 7, 20, tzinfo=UTC)
 T3 = datetime(2026, 9, 1, tzinfo=UTC)
+BTC_FROM = datetime(2026, 7, 10, tzinfo=UTC)
+BTC_TO = datetime(2026, 8, 15, tzinfo=UTC)
+ETH_FROM = datetime(2026, 7, 1, tzinfo=UTC)
+
+# `IR-002` 冻结的字面文档：顶层 {schema_version, members}、成员严格三键、按
+# (lake_pair, valid_from) 排序、valid_to=null 表示当前有效。
+UNIVERSE_DOCUMENT = {
+    "schema_version": 1,
+    "members": [
+        {
+            "lake_pair": "BTC-USDT-PERP",
+            "valid_from": "2026-07-10T00:00:00Z",
+            "valid_to": "2026-08-15T00:00:00Z",
+        },
+        {"lake_pair": "ETH-USDT-PERP", "valid_from": "2026-07-01T00:00:00Z", "valid_to": None},
+    ],
+}
 
 
 def _members() -> list[UniverseMember]:
     return [
-        UniverseMember(
-            "binance",
-            "perp",
-            "BTC/USDT",
-            "BTC-USDT-PERP",
-            "2026-07-10T00:00:00Z",
-            "2026-08-15T00:00:00Z",
-            "listed",
-            "uni-1",
-        ),
-        UniverseMember(
-            "binance",
-            "perp",
-            "ETH/USDT",
-            "ETH-USDT-PERP",
-            "2026-07-01T00:00:00Z",
-            "",
-            "listed",
-            "uni-1",
-        ),
+        UniverseMember("ETH-USDT-PERP", ETH_FROM, None),
+        UniverseMember("BTC-USDT-PERP", BTC_FROM, BTC_TO),
     ]
+
+
+def _artifact_path(root: Path, digest: str) -> Path:
+    return root / "_metadata" / "universes" / f"{digest}.json"
+
+
+def _independent_payload(document: dict) -> bytes:
+    """独立于被测模块复算 canonical 字节：只用 stdlib json 固定 `IR-002` 的规则。"""
+    return json.dumps(
+        document, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    ).encode("utf-8")
+
+
+def _publish_document(tmp_path: Path, document: dict) -> str:
+    """按「文件名的 digest = 自身字节摘要」写入 artifact 目录（模拟发布侧落盘）。"""
+    payload = _independent_payload(document)
+    digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+    target = _artifact_path(tmp_path, digest)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload)
+    return digest
 
 
 # ---------- F008 universe ----------
 
 
+def test_universe_key_sets_are_frozen():
+    assert set(UNIVERSE_DOCUMENT) == set(uc.UNIVERSE_TOP_LEVEL_KEYS)
+    assert set(UNIVERSE_DOCUMENT["members"][0]) == set(uc.UNIVERSE_MEMBER_KEYS)
+    assert uc.UNIVERSE_SCHEMA_VERSION == 1
+
+
+def test_universe_artifact_is_canonical_json_content_addressed(tmp_path):
+    digest = publish_universe(_members(), tmp_path)
+    expected = "sha256:" + hashlib.sha256(_independent_payload(UNIVERSE_DOCUMENT)).hexdigest()
+    assert digest == expected
+    target = _artifact_path(tmp_path, digest)
+    assert target.read_bytes() == _independent_payload(UNIVERSE_DOCUMENT)
+    # 同 digest 逐字节一致：成员顺序不同的输入归一到同一 canonical 字节
+    assert publish_universe(list(reversed(_members())), tmp_path) == digest
+    assert target.read_bytes() == _independent_payload(UNIVERSE_DOCUMENT)
+    # 落盘只有 `<digest>.json`，不再有任何 `.csv` 路径
+    assert [item.name for item in uc.universe_artifact_dir(tmp_path).iterdir()] == [
+        f"{digest}.json"
+    ]
+
+
 def test_universe_at_returns_point_in_time_membership(tmp_path):
-    publish_universe(_members(), tmp_path)
-    ledger = uc.load_universe(_digest_of(_members()), tmp_path)
+    digest = publish_universe(_members(), tmp_path)
+    ledger = uc.load_universe(digest, tmp_path)
+    assert ledger.digest == digest
+    assert ledger.schema_version == uc.UNIVERSE_SCHEMA_VERSION
     assert ledger.universe_at(T0) == ("ETH-USDT-PERP",)
     assert ledger.universe_at(T_MID) == ("BTC-USDT-PERP", "ETH-USDT-PERP")
     assert ledger.universe_at(T3) == ("ETH-USDT-PERP",)
 
 
-def test_universe_is_content_addressed(tmp_path):
-    first = publish_universe(_members(), tmp_path)
-    assert publish_universe(list(reversed(_members())), tmp_path) == first
+def test_universe_members_carry_only_the_minimal_pit_projection(tmp_path):
+    ledger = uc.load_universe(publish_universe(_members(), tmp_path), tmp_path)
+    btc = next(member for member in ledger.members if member.lake_pair == "BTC-USDT-PERP")
+    eth = next(member for member in ledger.members if member.lake_pair == "ETH-USDT-PERP")
+    assert (btc.valid_from, btc.valid_to) == (BTC_FROM, BTC_TO)
+    assert eth.valid_to is None
+
+
+def test_universe_at_half_open_boundaries(tmp_path):
+    ledger = uc.load_universe(publish_universe(_members(), tmp_path), tmp_path)
+    assert ledger.universe_at(BTC_FROM) == ("BTC-USDT-PERP", "ETH-USDT-PERP")  # 左闭
+    assert ledger.universe_at(BTC_FROM - timedelta(seconds=1)) == ("ETH-USDT-PERP",)
+    assert ledger.universe_at(BTC_TO) == ("ETH-USDT-PERP",)  # 右开
+    assert ledger.universe_at(BTC_TO - timedelta(seconds=1)) == (
+        "BTC-USDT-PERP",
+        "ETH-USDT-PERP",
+    )
 
 
 def test_universe_digest_tamper_is_detected(tmp_path):
     digest = publish_universe(_members(), tmp_path)
-    target = tmp_path / "_metadata" / "universes" / f"{digest}.csv"
-    target.write_bytes(target.read_bytes().replace(b"ETH-USDT-PERP", b"ETH-USDT-PERP"))
-    target.write_bytes(target.read_bytes() + b" ")
+    target = _artifact_path(tmp_path, digest)
+    target.write_bytes(target.read_bytes().replace(b"BTC-USDT-PERP", b"XBT-USDT-PERP"))
     with pytest.raises(uc.UpstreamContractError, match="digest 校验失败"):
         uc.load_universe(digest, tmp_path)
 
 
-def test_unknown_universe_schema_version_fails_closed(tmp_path):
-    header = ",".join(UNIVERSE_COLUMNS)
-    row = "binance,perp,BTC/USDT,BTC-USDT-PERP,2026-07-10T00:00:00Z,,listed,uni-1,2"
-    payload = f"{header}\n{row}\n".encode()
-    digest = content_digest(payload)
-    target = tmp_path / "_metadata" / "universes" / f"{digest}.csv"
+def test_non_canonical_universe_bytes_fail_closed(tmp_path):
+    payload = json.dumps(UNIVERSE_DOCUMENT, indent=2, sort_keys=True).encode("utf-8")
+    digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+    target = _artifact_path(tmp_path, digest)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(payload)
+    with pytest.raises(uc.UpstreamContractError, match="canonical"):
+        uc.load_universe(digest, tmp_path)
+
+
+def test_unknown_universe_schema_version_fails_closed(tmp_path):
+    digest = _publish_document(tmp_path, {**UNIVERSE_DOCUMENT, "schema_version": 2})
     with pytest.raises(uc.UpstreamContractError, match="schema_version"):
         uc.load_universe(digest, tmp_path)
+
+
+def test_unknown_universe_keys_fail_closed(tmp_path):
+    top_level = _publish_document(tmp_path, {**UNIVERSE_DOCUMENT, "reason": "listed"})
+    with pytest.raises(uc.UpstreamContractError, match="顶层键非法"):
+        uc.load_universe(top_level, tmp_path)
+    member = {
+        "lake_pair": "BTC-USDT-PERP",
+        "valid_from": "2026-07-10T00:00:00Z",
+        "valid_to": None,
+        "universe_id": "uni-1",
+    }
+    member_key = _publish_document(tmp_path, {"schema_version": 1, "members": [member]})
+    with pytest.raises(uc.UpstreamContractError, match="成员键非法"):
+        uc.load_universe(member_key, tmp_path)
+
+
+def test_overlapping_validity_windows_fail_closed(tmp_path):
+    overlapping = {
+        "schema_version": 1,
+        "members": [
+            {
+                "lake_pair": "BTC-USDT-PERP",
+                "valid_from": "2026-07-01T00:00:00Z",
+                "valid_to": "2026-08-01T00:00:00Z",
+            },
+            {"lake_pair": "BTC-USDT-PERP", "valid_from": "2026-07-15T00:00:00Z", "valid_to": None},
+        ],
+    }
+    digest = _publish_document(tmp_path, overlapping)
+    with pytest.raises(uc.UpstreamContractError, match="overlapping validity windows"):
+        uc.load_universe(digest, tmp_path)
+    with pytest.raises(uc.UpstreamContractError, match="overlapping validity windows"):
+        publish_universe(
+            [
+                UniverseMember("BTC-USDT-PERP", T0, datetime(2026, 8, 1, tzinfo=UTC)),
+                UniverseMember("BTC-USDT-PERP", datetime(2026, 7, 15, tzinfo=UTC), None),
+            ],
+            tmp_path,
+        )
 
 
 def test_missing_universe_artifact_fails_closed(tmp_path):
@@ -99,12 +198,6 @@ def test_universe_artifact_dir_is_lake_metadata(tmp_path):
 def test_default_lake_root_matches_data_bridge(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHAMILL_LAKE_DIR", str(tmp_path))
     assert uc.universe_artifact_dir() == paths.lake_root() / "_metadata" / "universes"
-
-
-def _digest_of(members: list[UniverseMember]) -> str:
-    from alphamill.evaluation.universe_ledger import canonical_universe_bytes
-
-    return content_digest(canonical_universe_bytes(members))
 
 
 # ---------- F003 生成侧 ----------

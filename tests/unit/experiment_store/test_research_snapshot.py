@@ -102,14 +102,9 @@ def make_universe(root: Path) -> str:
     return publish_universe(
         [
             UniverseMember(
-                exchange="binance",
-                market_type="perp",
-                db_symbol="BTC/USDT",
                 lake_pair="BTC-USDT-PERP",
-                valid_from="2026-08-01T00:00:00Z",
-                valid_to="",
-                reason="listed",
-                universe_id="uni-1",
+                valid_from=datetime(2026, 8, 1, tzinfo=UTC),
+                valid_to=None,
             )
         ],
         root,

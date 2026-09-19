@@ -96,9 +96,7 @@ def _utc_iso(value: datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
 
 
-def _checked_times(
-    valid_from: Any, valid_to: Any, field: str
-) -> tuple[datetime, datetime | None]:
+def _checked_times(valid_from: Any, valid_to: Any, field: str) -> tuple[datetime, datetime | None]:
     """归一化并校验成员区间：`valid_to` 为 None 表示无上界，否则必须晚于 `valid_from`。"""
     start = parse_utc(valid_from, f"{field} valid_from")
     if valid_to is None:
@@ -141,7 +139,10 @@ def _canonical_bytes(document: Mapping[str, Any]) -> bytes:
 
 
 def canonical_universe_bytes(members: Iterable[UniverseMember]) -> bytes:
-    """canonical 台账字节：顶层 `{schema_version, members}`、成员按 `(lake_pair, valid_from)` 排序。"""
+    """canonical 台账字节：顶层 `{schema_version, members}`。
+
+    成员按 `(lake_pair, valid_from)` 排序，对象键字典序，UTF-8、无尾随换行。
+    """
     normalized = [_normalize_member(member) for member in members]
     _assert_no_overlap(normalized)
     documents = sorted(
@@ -201,9 +202,7 @@ def load_universe(digest: str, lake_root: Path | None = None) -> UniverseLedger:
         raise UpstreamContractError(f"universe 台账不是 canonical 形式（排序/字节）: {path}")
     members = _members_from_document(document)
     _assert_no_overlap(members)
-    return UniverseLedger(
-        digest=digest, schema_version=UNIVERSE_SCHEMA_VERSION, members=members
-    )
+    return UniverseLedger(digest=digest, schema_version=UNIVERSE_SCHEMA_VERSION, members=members)
 
 
 def _parse_document(payload: bytes, path: Path) -> dict[str, Any]:
@@ -237,8 +236,7 @@ def _parse_document(payload: bytes, path: Path) -> dict[str, Any]:
 
 def _members_from_document(document: Mapping[str, Any]) -> tuple[UniverseMember, ...]:
     return tuple(
-        _member_from_document(index, item)
-        for index, item in enumerate(document["members"])
+        _member_from_document(index, item) for index, item in enumerate(document["members"])
     )
 
 
