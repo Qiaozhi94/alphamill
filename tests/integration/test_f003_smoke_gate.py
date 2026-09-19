@@ -3,19 +3,30 @@
 from __future__ import annotations
 
 import json
+import os
+from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pandas as pd
 import pytest
+import torch
 
 from alphamill.factor_factory.canonical import canonical_json_bytes
 from alphamill.factor_factory.errors import SchemaValidationError, UnknownSchemaVersionError
+from alphamill.factor_factory.generators.alphagen_runner import (
+    PpoEpochResult,
+    build_stock_data,
+    extract_candidates,
+    run_ppo_epoch,
+)
 from alphamill.factor_factory.generators.base import (
     DEFAULT_WINDOW_PRESET,
     GenerationCounts,
     RejectionCounts,
     Window,
 )
+from alphamill.factor_factory.generators.lake_tensor import TensorPanel
 from alphamill.factor_factory.generators.smoke_gate import (
     FunnelObligations,
     RewardSpotCheck,
@@ -242,3 +253,67 @@ def test_default_smoke_config_and_window_are_valid() -> None:
     assert window.end == NOW
     assert window.start < window.end
     assert window.resample == "1h"
+
+
+def _synthetic_panel(days: int = 4, pair_count: int = 2) -> TensorPanel:
+    timestamps = pd.date_range("2026-01-01", periods=days, freq="h", tz="UTC")
+    pairs = tuple(f"PAIR-{index}" for index in range(pair_count))
+    rows = [
+        (t, p, 10 + d + i, 100 + d, 20 + d + i)
+        for d, t in enumerate(timestamps)
+        for i, p in enumerate(pairs)
+    ]
+    frame = pd.DataFrame(
+        rows,
+        columns=[
+            "timestamp",
+            "pair",
+            "synthetic.close@1h",
+            "synthetic.volume@1h",
+            "synthetic.high@1h",
+        ],
+    )
+    frame = frame.set_index(["timestamp", "pair"])
+    frame["__in_universe__"] = True
+    return TensorPanel(
+        datasets=("synthetic",),
+        resample="1h",
+        pairs=pairs,
+        timestamps=timestamps,
+        panel=frame,
+        feature_map={"synthetic.volume@1h": 0, "synthetic.close@1h": 1, "synthetic.high@1h": 2},
+        feature_map_digest="sha256:test",
+        universe_source="test",
+    )
+
+
+def test_build_stock_data_preserves_panel_axes_and_target_shape() -> None:
+    panel = _synthetic_panel()
+    stock_data, target, pairs = build_stock_data(panel, feature_map=panel.feature_map)
+    assert stock_data.data.shape == (3, 4, 2)
+    assert target.shape == (4, 2)
+    assert pairs == panel.pairs
+    assert torch.isclose(target[0, 0], torch.tensor(0.1), atol=1e-6)
+    assert torch.isnan(target[-1]).all()
+    assert not {field.name for field in fields(PpoEpochResult)} & {
+        "verdict",
+        "ic",
+        "rank_ic",
+        "score",
+    }
+
+
+def test_gpu_ppo_epoch_completes_when_integration_cuda_is_enabled() -> None:
+    if os.environ.get("ALPHAMILL_INTEGRATION") != "1":
+        pytest.skip("ALPHAMILL_INTEGRATION=1 is required")
+    if not torch.cuda.is_available():
+        pytest.fail("ALPHAMILL_INTEGRATION=1 requires CUDA for the AlphaGen smoke run")
+
+    panel = _synthetic_panel(days=40, pair_count=4)
+    stock_data, target, _ = build_stock_data(panel, feature_map=panel.feature_map)
+    result = run_ppo_epoch(
+        stock_data=stock_data, target=target, device="cuda", seed=17, total_timesteps=64
+    )
+    assert result.steps == 64
+    assert result.device == "cuda"
+    assert isinstance(extract_candidates(result.pool), list)

@@ -47,6 +47,9 @@ mining = [
   "torch>=2.7,<3",
   "numpy>=2,<3",
   "stable-baselines3>=2.7,<3",
+  # vendor 的 RL env 提供 action_masks()，必须用掩码感知算法（MaskablePPO），
+  # 否则策略会采样到非法 token 并抛 InvalidExpressionException。
+  "sb3-contrib>=2.7,<3",
   "gymnasium>=1.2,<1.3",
 ]
 
