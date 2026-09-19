@@ -194,10 +194,18 @@ def registrations(root: Path, cohort_id: str) -> tuple[MemberRegistration, ...]:
     if not directory.is_dir():
         return ()
     by_candidate: dict[str, MemberRegistration] = {}
+    source: dict[str, Path] = {}
     for path in sorted(directory.glob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         registration = MemberRegistration.from_payload(payload["registration"])
+        existing = by_candidate.get(registration.candidate_id)
+        if existing is not None and existing != registration:
+            raise RegistryIntegrityError(
+                f"候选 {registration.candidate_id} 存在不一致的多条终态登记: "
+                f"{source[registration.candidate_id].name} 与 {path.name}（拒绝静默 last-wins）"
+            )
         by_candidate[registration.candidate_id] = registration
+        source[registration.candidate_id] = path
     return tuple(by_candidate[candidate] for candidate in order if candidate in by_candidate)
 
 

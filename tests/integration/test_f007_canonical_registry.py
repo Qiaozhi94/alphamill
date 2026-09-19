@@ -451,6 +451,30 @@ def test_registration_is_idempotent_by_event_id(tmp_path):
         pop.register_member(tmp_path, cohort_id, altered, event)
 
 
+def test_conflicting_duplicate_registration_is_rejected(tmp_path):
+    """R1-007 回归：同一承诺用两个 event_id 登记且载荷不同时必须拒绝，不得静默 last-wins。"""
+    cohort_id, _ = pop.freeze_cohort(tmp_path, _definition(CANDIDATE_A))
+    first_event = _registered_event(EXPERIMENT_A, cohort_id)
+    second_event = build_event(
+        experiment_id=EXPERIMENT_A,
+        execution_tier="canonical",
+        cohort_id=cohort_id,
+        from_state=STATE_EVIDENCE_READY,
+        to_state=STATE_REGISTERED,
+        event_type=EVENT_REGISTERED,
+        sequence=1,
+    )
+    pop.register_member(tmp_path, cohort_id, _registration(CANDIDATE_A, EXPERIMENT_A), first_event)
+    pop.register_member(
+        tmp_path,
+        cohort_id,
+        _registration(CANDIDATE_A, EXPERIMENT_A, verdict="dead"),
+        second_event,
+    )
+    with pytest.raises(pop.RegistryIntegrityError, match="不一致"):
+        pop.registrations(tmp_path, cohort_id)
+
+
 def test_finalize_requires_every_commitment_and_writes_no_partial_verdict(tmp_path):
     cohort_id, _ = pop.freeze_cohort(tmp_path, _definition(CANDIDATE_A, CANDIDATE_B))
     pop.register_member(
