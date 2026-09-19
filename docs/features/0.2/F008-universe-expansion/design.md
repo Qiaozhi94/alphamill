@@ -89,7 +89,14 @@ src/alphamill/data_bridge/
 | `universe_id` | 触发本次变更的 `UniverseDef` 内容摘要 |
 | `ingested_at` | 采集时间，支撑 bitemporal 语义与"何时知道的"审计 |
 
-约束：区间不重叠（同一 pair 的 `valid_from` 严格递增）；**没有 UPDATE 路径**——退出用写 `valid_to` 的追加记录表达，历史行不可改写（数据库层用触发器或应用层单写封装，落地任务里择一并写明）。
+约束（追加语义，2026-09-19 实现期定稿）：**只追加的状态迁移行**——同一 pair 的 `valid_from` 严格递增（append 顺序即时间序），**没有 UPDATE / DELETE 路径**（数据库触发器 + 应用层单写封装双保险）。台账的「可交易区间」由行**派生**而不是直接存储：
+
+- 每一行是一次状态迁移，`reason ∈ {listed, delisted, initial_seed}` 是迁移后的状态；
+- `valid_to` 为空表示该状态开放；非空时用于一次性表达已闭合的历史区间（例如入库时已退市的 `initial_seed`）；
+- **派生规则**：同一 pair 按 `valid_from` 升序，第 i 行的区间 = `[valid_from_i, valid_to_i ?? valid_from_{i+1} ?? ∞)`；`delisted` 行本身不贡献可交易区间（它只终止前一行）；
+- `universe_at(T)`（库侧）= 「`valid_from <= T` 的最后一个状态是 `listed`/`initial_seed`」；artifact 内是派生后的**并集区间**，消费方的半开区间并集判定与库侧逐点一致。
+
+这样「退市」= 追加一行 `delisted`（而不是改写旧行的 `valid_to`），历史行永远可审计；**区间不重叠**由「同一 pair 的 `valid_from` 严格递增」保证（与 `DR-002` 是同一约束的两种说法）。`universe_quality_verdicts` 同族：准入判定也只追加，最新一条（按 `judged_at, id`）是当前准入状态。
 
 **Migration**：一个前向迁移 `db/migrations/005_universe_membership.sql`（现有编号止于 `004_`）建表 + 索引 `(lake_pair, valid_from)`；无回滚数据（新表）。`tools/apply_migrations.py` 有两条硬约束，迁移必须满足：**幂等**（`CREATE TABLE/INDEX IF NOT EXISTS`、`CREATE OR REPLACE FUNCTION`）与**不得含非事务语句**（`CREATE INDEX CONCURRENTLY` / `VACUUM` / `ALTER SYSTEM` 会被 `assert_transactional` 拦下）；整文件在单事务内执行，触发器与触发器函数是事务内合法语句、可用。首次迁移后必须立即执行"现有 6 对补台账"（`reason=initial_seed`，`valid_from` 取各自实际数据起点），否则老 pair 在 PIT 查询里会凭空全程存在。
 

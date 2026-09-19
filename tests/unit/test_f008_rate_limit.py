@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import ast
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -91,7 +92,7 @@ def test_shared_budget_spaces_requests_across_pairs() -> None:
 
     assert [pair for pair, _ in events] == pairs
     stamps = [stamp for _, stamp in events]
-    deltas = [later - earlier for earlier, later in zip(stamps, stamps[1:], strict=True)]
+    deltas = [later - earlier for earlier, later in pairwise(stamps)]
     assert all(delta >= min_interval for delta in deltas), deltas
     # 共享预算 = 只有一个名额序列：5 次等待、每次恰好一个 min_interval。
     assert clock.sleeps == [min_interval] * (len(pairs) - 1)
@@ -228,7 +229,7 @@ def test_failure_does_not_speed_up_following_requests() -> None:
     assert stamps == [0.0, min_interval, 2 * min_interval]
     # 退避叠加在速率预算之上，而不是替换它：1.0 退避 + 1.0 补足间隔 + 2.0 正常间隔。
     assert clock.sleeps == [1.0, 1.0, 2.0]
-    deltas = [later - earlier for earlier, later in zip(stamps, stamps[1:], strict=True)]
+    deltas = [later - earlier for earlier, later in pairwise(stamps)]
     assert all(delta >= min_interval for delta in deltas), deltas
     assert cumulative == sorted(cumulative)  # 累计等待单调不减
     assert limiter.total_wait_seconds == pytest.approx(sum(clock.sleeps))
