@@ -309,6 +309,7 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 - [ ] **AC-011** (`NFR-005`): 扩容后实测记录磁盘占用、单次全量导出耗时与 NAS 备份时长，并与 F002 的 6 对基线对照 — tests: `tests/integration/test_f008_capacity_report.py`
 - [ ] **AC-012** (`IR-001`, `FR-002`, `FR-003`, `FR-004`): CLI 五个子命令的契约与 `design.md` §4 登记的全部九类启动期拒绝全覆盖——`discover` 口径缺字段 / 交易所不可达，`freeze` 缺 `--confirm` / 候选清单为空，`backfill` 定义未冻结 / 窗口非法 / 磁盘余量不足，`gate` 对回填未完成的 pair 判 `INCOMPLETE`，`show` 定义或 digest 不存在——各自以非零退出并给出可区分的原因 — tests: `tests/unit/test_f008_cli_contract.py`
 - [ ] **AC-013** (`IR-003`, `IR-002`, `DR-003`): 台账 artifact 与 `BackfillRun` 均带 `schema_version`；artifact 加载方在 `schema_version` 与期望值不符、顶层或成员出现未知键时拒绝加载并报错，不做宽松忽略 — tests: `tests/unit/test_f008_artifact.py`
+- [ ] **AC-014** (`IR-002`, `FR-006`, `NFR-003`): `F007` 的只读消费面（`evaluation/universe_ledger.py`，被 `experiment_store/research_snapshot.py` 调用）按 IR-002 的 canonical JSON 加载同一 digest 的 artifact，`universe_at(T)` 各时点结果与本 feature 台账一致；消费面不再残留任何 `<digest>.csv` 读写路径 — tests: `tests/contract/test_f007_upstream_contracts.py`
 
 ## 7. 测试、依赖与决策
 
@@ -323,6 +324,7 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 
 - 上游 Feature / Contract：F001（Binance 数据路线、`historical_backfill.py`、`tools/f001_backfill_report.py` 完整性口径）；F002（Parquet 湖、dataset registry、`symbol_map`、reader 与 manifest 契约）。
 - 下游消费者：`F003`（横截面 PIT 掩码与候选质量结论的宇宙前提）、`F007`（ResearchSnapshot 的 universe/calendar 摘要，ADR-0007）、FR4/M3 组合构建。
+  - **`F007` 消费面待迁移（开工前检查 2026-09-19）**：main 上 `evaluation/universe_ledger.py` 仍按已被裁决废弃的 CSV 契约（`<digest>.csv` + 9 列）读写，而 ADR-0007 / 架构 §4.3 / F007 DR-006 与本文 `IR-002` 都已冻结为 canonical JSON——**三份文档一致，代码没跟上**。`SC-004`（F007 可直接消费）要求把该消费面迁到 JSON，由 `AC-014` 验收、`tasks.md` T029 承载；迁移只改消费面与其测试，F007 的 ResearchSnapshot 身份语义（ADR-0007 组合 digest 公式）不变。
 - 外部 / 环境依赖：Binance 公开行情与限流策略；执行机的磁盘余量（约 4200 万行）；NAS 备份窗口。
 
 ### 决策与风险
@@ -345,6 +347,7 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 | 流动性阈值用绝对金额还是排名 | **排名**：滚动 90 天日均成交额前 N | 绝对金额会随市场周期漂移——牛市可能 60 个 pair 过线、熊市只剩十几个，同一口径产出的宇宙规模不可控，与 FR-001 的可复现要求冲突；排名法自适应且直接产出目标规模 | 窗口与名次进 `UniverseDef.criteria`，变更即新 `universe_id` |
 | 上线天数要不要求满窗 | **不要求**：维持 >180 天，允许部分历史 | 要求"上线满 2 年"等于只选活过两年的币，这是幸存者偏差的另一张脸——而消除它正是本 feature 的立意；PIT 台账已正确处理"何时进入"，部分历史是合法状态 | 缺失率按实际可得窗口计算（AC-006） |
 | 结构性重复标的 | 排除稳定币对、杠杆代币、指数/篮子类合约（如 BTCDOM） | 它们在横截面 rank 里要么是常数噪声，要么与主流币结构性重复，会污染 IC | 排除规则与排除原因一并入档（DR-001） |
+| F007 消费面仍是 CSV 契约 | **随本 feature 迁移到 canonical JSON**（`evaluation/universe_ledger.py` 与其契约/集成测试），迁移只改读写面，不动 ResearchSnapshot 身份公式 | 2026-09-19 裁决把 artifact 定为 JSON 后，ADR-0007 / 架构 §4.3 / F007 DR-006 / 本文 IR-002 四份文档都改了，**F007 已 `done` 的代码没改**——文档一致不等于代码一致；不迁移则 `SC-004` 落空，ResearchSnapshot 的 `--universe` 路径直接找不到 artifact | 开工前检查 2026-09-19 发现；`AC-014` 验收、T029 承载；F007 状态保持 `done`（属契约对齐维护，不重开 feature） |
 
 ## 8. 待确认问题
 

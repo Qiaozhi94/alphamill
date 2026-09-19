@@ -26,16 +26,16 @@ updated: 2026-09-19
 
 ## 1. 前置条件
 
-- [ ] T001 (`FR-001`, `DR-001`): 把 Q-001 的裁决值落成可复核的口径文件（`turnover_lookback_days=90`、`turnover_rank_top_n=40`、`min_listed_days=180`、排除规则），作为 `discover` 的输入 — verify: `tests/unit/test_f008_discover.py`
+- [x] T001 (`FR-001`, `DR-001`): 把 Q-001 的裁决值落成可复核的口径文件（`turnover_lookback_days=90`、`turnover_rank_top_n=40`、`min_listed_days=180`、排除规则），作为 `discover` 的输入 — verify: `tests/unit/test_f008_discover.py`
 - [ ] T002 (`NFR-005`): 估算并确认执行机磁盘余量能装下 40 对约 4200 万行及其 Parquet 快照（外推：约 29,300 个 ohlcv 分区、NAS 约 58,800 文件），不足则先扩容 — verify: 执行机 `df -h` 记录 + 与 F002 的 631 万行实测占用外推
-- [ ] T003 [P] (`FR-001`): 确认 Binance USDⓈ-M 永续的行情接口与限流策略（可用字段、成交额口径、速率上限） — verify: `tests/unit/test_f008_discover.py`（接口响应 fixture）
+- [x] T003 [P] (`FR-001`): 确认 Binance USDⓈ-M 永续的行情接口与限流策略（可用字段、成交额口径、速率上限） — verify: `tests/unit/test_f008_discover.py`（接口响应 fixture）
 
 ## 2. 实现任务
 
 ### Phase 1：宇宙定义与台账（不依赖长跑回填）
 
-- [ ] T004 (`FR-001`, `AC-001`): 实现 `discover.py`——按成交额排名取前 N、上线天数过滤与排除规则筛候选，记录逐候选指标、排除者与排除原因、快照时间；候选按排名有序以支持批次切分 — verify: `tests/unit/test_f008_discover.py`
-- [ ] T005 (`FR-002`, `DR-001`, `AC-002`): 实现 `definition.py`——`UniverseDef` canonical JSON、`universe_id` 内容寻址、人工确认冻结与版本化 — verify: `tests/unit/test_f008_universe_def.py`
+- [x] T004 (`FR-001`, `AC-001`): 实现 `discover.py`——按成交额排名取前 N、上线天数过滤与排除规则筛候选，记录逐候选指标、排除者与排除原因、快照时间；候选按排名有序以支持批次切分 — verify: `tests/unit/test_f008_discover.py`
+- [x] T005 (`FR-002`, `DR-001`, `AC-002`): 实现 `definition.py`——`UniverseDef` canonical JSON、`universe_id` 内容寻址、人工确认冻结与版本化 — verify: `tests/unit/test_f008_universe_def.py`
 - [ ] T006 (`DR-002`): 编写前向迁移 `db/migrations/005_universe_membership.sql`（现有编号止于 004）建 `universe_membership` 表与 `(lake_pair, valid_from)` 索引；须满足 runner 两条硬约束——幂等（`IF NOT EXISTS`）、无非事务语句，整文件单事务执行 — verify: `tests/unit/test_apply_migrations.py`
 - [ ] T007 (`FR-005`, `DR-002`, `AC-007`, `AC-008`): 实现 `membership.py`——只追加写入封装、区间不重叠约束、`universe_at(T)`（左闭右开）；按 `DQ-001` 结论决定是否加数据库触发器兜底并记录结论 — verify: `tests/unit/test_f008_membership.py`
 - [ ] T008 (`FR-005`, `DR-002`): 为现有 6 对补 `initial_seed` 台账记录，`valid_from` 取各自实际数据起点 — verify: `tests/unit/test_f008_membership.py`
@@ -68,6 +68,7 @@ updated: 2026-09-19
 - [ ] T026 (`AC-011`, `NFR-004`): 在执行机 `qiaozhi-lt` 归档容量与耗时实测证据（含 hostname），开发机跳过属预期不得以其结果替代 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f008_capacity_report.py`
 - [ ] T027: 修订 `docs/alphamill-integration.md` §1.3 的 OKX 过期表述为 Binance 路线 — verify: `python3 tools/check_doc_links.py` + 人工复核该节
 - [ ] T028 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
+- [ ] T029 (`AC-014`, `IR-002`, `FR-006`): 把 `F007` 的 universe 只读消费面从废弃的 CSV 契约迁到 `IR-002` 的 canonical JSON——`evaluation/universe_ledger.py` 改为按 `<digest>.json` 加载（顶层 `{schema_version, members}`、成员严格三键、digest 用解析后重新规范化的字节重算、未知键与版本不符 fail-closed）、`contract_common.py` 的 `UNIVERSE_COLUMNS` 换成 JSON 键集合常量、`upstream_contracts.py` 门面再导出同步，并改三处 CSV fixture 测试（`tests/contract/test_f007_upstream_contracts.py`、`tests/integration/test_f007_controls.py`、`tests/integration/test_f007_cli.py`）；`universe_at(T)` 半开区间语义与 ResearchSnapshot 身份公式不得改动 — verify: `pytest -q tests/contract/test_f007_upstream_contracts.py tests/integration/test_f007_controls.py tests/integration/test_f007_cli.py tests/unit/experiment_store/`
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
@@ -79,7 +80,7 @@ updated: 2026-09-19
 - [ ] T033 [TEST] (`US-004`, `AC-007`, `AC-008`, `AC-013`): 旅程 US-004 端到端验收——含上市/退市/中途进出的成员 fixture 上 `universe_at(T)` 在各时点返回正确集合（左闭右开）；原地改写已发布历史区间被拒、退出只以追加新区间表达且历史数据不删；`schema_version` 不符或出现未知键时加载被拒 — verify: `pytest -q tests/unit/test_f008_membership.py tests/unit/test_f008_artifact.py`
 
 - [ ] T034: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
-      （编号说明：`T029` 是空号——原收口任务在检视收口时改编号为 `T034`，以满足 `check_task_dag` 的「收口任务编号最高、须有入边」两条规则。）
+      （编号说明：原收口任务在检视收口时由 `T029` 改编号为 `T034`，以满足 `check_task_dag` 的「收口任务编号最高、须有入边」两条规则；`T029` 现由「F007 消费面迁移」占用——它是开工前检查发现的契约漂移修复，必须排在最高编号之前。）
 
 ## 4. 依赖与并行关系
 
@@ -104,9 +105,10 @@ updated: 2026-09-19
 - `T004/T005/T007/T008/T012/T016 -> T024`：单元套件以发现、定义、台账与限速/窗口语义实现为前提。
 - `T009/T013/T014/T015/T017 -> T025`：集成套件以回填编排、质量门与导出联动实现为前提。
 - `T011 -> T027`：先完成 `historical_backfill.py` 泛化（含 SOP 豁免表处理），再统一修订 integration §1.3 的过期表述。
+- `T009 -> T029`：F007 消费面迁移以 artifact 的 canonical JSON 契约为输入（T009 冻结该格式），并由 T029 的契约测试复核两侧 digest 一致。
 - `T024/T025 -> T028`：统一质量门在各验收套件之后跑。
-- `T024/T025/T026/T027/T028/T030/T031/T032/T033 -> T034`：全部验收套件、真实环境证据、文档修订与旅程验收
-  通过后，才回写 spec 验收证据与状态。
+- `T024/T025/T026/T027/T028/T029/T030/T031/T032/T033 -> T034`：全部验收套件、真实环境证据、文档修订、
+  下游消费面迁移与旅程验收通过后，才回写 spec 验收证据与状态。
 - 与 `F003` 的关系：**批 1 过门（T022 的第一次执行）即满足 `F003` T035 的 ≥30 对前提**，不必等批 2 或 T023；在此之前 F003 的一切工作不被阻塞。
 - `F003 并入 main -> AC-009 跨消费者断言`：`factor_factory/generators/universe.py::load_explicit_universe` 当前只存在于 `feat/F003-alphagen-vendor`（F003 仍 `developing`），AC-009 的「产物可被它直接加载」一条在 F003 落地前**不可执行**——按项目 SOP「已知缺口显式标记」写成 `xfail(strict=True)` 并在 reason 里写明该分支依赖，F003 并入 main 后 XPASS 转红、强制摘除标记并真跑；F008 侧先由 `AC-013`（`tests/unit/test_f008_artifact.py`）锁死同一 schema 的键集合、排序与 digest 规则。
 - `T017 -> T023`：准入过滤与退市/隔离都会减少全量导出的分区数，可能命中 F002 的 `guard_full_shrink`；容量实测（T023）必须显式记录是否用了 `--allow-shrink` 与 manifest 的 `shrink_confirmed`，不得放宽守卫。

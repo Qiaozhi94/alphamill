@@ -17,19 +17,10 @@ EXECUTION_TIERS = (TIER_PREVIEW, TIER_CANONICAL)
 
 DIGEST_PREFIX = "sha256:"
 
-# --- F008 宇宙台账 ---
+# --- F008 宇宙台账（canonical JSON，IR-002/IR-003）---
 UNIVERSE_SCHEMA_VERSION = 1
-UNIVERSE_COLUMNS = (
-    "exchange",
-    "market_type",
-    "db_symbol",
-    "lake_pair",
-    "valid_from",
-    "valid_to",
-    "reason",
-    "universe_id",
-    "schema_version",
-)
+UNIVERSE_TOP_LEVEL_KEYS = frozenset({"schema_version", "members"})
+UNIVERSE_MEMBER_KEYS = frozenset({"lake_pair", "valid_from", "valid_to"})
 
 # --- F003 生成侧 ---
 EVENT_RUN_COMPLETED = "generation.run_completed"
