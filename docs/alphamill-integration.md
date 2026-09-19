@@ -33,9 +33,20 @@
 
 ### 1.3 宇宙扩容（FR1.5）
 
-1. 运行 quant-crypto 的 `discover_okx_swap_universe.py`，按流动性（日均成交额）+ 上线时长（>180 天）筛 30~50 对；
-2. 复用 `historical_backfill.py` 分批回补（限速保护）；
-3. 新 pair 先进质量流程（缺失检测/异常跳变），通过后才入导出清单。
+1. 按 Binance USDⓈ-M 永续的滚动 90 天日均 USDT 成交额**排名前 40** + 上线 >180 天 + 排除规则
+   （稳定币对 / 杠杆代币 / 指数篮子）产出候选，人工确认后冻结为目标宇宙——
+   实现见 `F008` 的 `python -m alphamill.data_bridge.universe discover|freeze`；
+   **不复用** quant-crypto 的 `discover_okx_swap_universe.py`：F001 事故后数据路线已由 OKX 改为
+   Binance（`EXCHANGES=binance` 已进 compose/.env/策略配置），该脚本的交易所与接口都不匹配；
+2. 复用 `historical_backfill.py` 分批回补（限速保护、退避重试、断点续跑），分两批：批 1 = 前 30
+   （含现有 6 对），批 2 = 第 31–40；
+3. 新 pair 先过质量流程（缺失率 ≤1% 按**实际可得窗口**算 / 边界闭合 / 重复主键 / 连续聚合按桶
+   精确对账），通过后才写入准入记录并进入导出清单；同时把「可交易期」写进只追加的
+   `universe_membership` 台账并发布为内容寻址 artifact（`lake/_metadata/universes/<digest>.json`），
+   供横截面 PIT 掩码与 ResearchSnapshot 按显式 digest 消费。
+
+> 口径与实现细节的唯一拥有者：`docs/features/0.2/F008-universe-expansion/`（spec 行为契约 /
+> design 技术方案 / tasks 执行清单）。本节只保留操作入口与路线结论。
 
 ---
 
