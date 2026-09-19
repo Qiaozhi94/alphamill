@@ -423,6 +423,26 @@ def test_canonical_publishes_registers_and_is_idempotent(cohort_env, capsys):
     assert again["experiment_id"] == payload["experiment_id"]
 
 
+def test_published_but_unregistered_run_is_recovered_on_rerun(cohort_env, capsys):
+    """R1-003 回归：登记丢失但产物已发布时，复用分支幂等补登记，cohort 不永挂 OPEN。"""
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 0
+    capsys.readouterr()
+    reports = cohort_env["reports"]
+    cohort_id = cohort_env["cohort_id"]
+    events_dir = reports / "cohorts" / cohort_id / "events"
+    for path in events_dir.glob("*.json"):
+        path.unlink()
+    assert population.missing_commitments(reports, cohort_id) == (CANDIDATE,)
+
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"], json=True)) == 0
+    payload = _payload(capsys.readouterr().out)
+    assert payload["reused"] is True
+    assert population.missing_commitments(reports, cohort_id) == ()
+    assert [
+        entry.candidate_id for entry in population.registrations(reports, cohort_id)
+    ] == [CANDIDATE]
+
+
 def test_canonical_rejects_dirty_worktree(cohort_env, monkeypatch, capsys):
     monkeypatch.setattr("alphamill.evaluation.code_build.worktree_dirty", lambda root=None: True)
     assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 1

@@ -33,9 +33,11 @@ from alphamill.evaluation.contract_common import TIER_CANONICAL, UpstreamContrac
 from alphamill.evaluation.events import (
     EVENT_REGISTERED,
     EVENT_RUN_STATE_CHANGED,
+    EVENTS_FILENAME,
     RunEvent,
     build_event,
     events_digest,
+    read_events,
 )
 from alphamill.evaluation.pipeline import evaluate_fixture
 from alphamill.evaluation.rejection import (
@@ -141,6 +143,14 @@ def run_canonical(
     target = tier_context.bench_dir(object_id or factor_ref, snapshot.snapshot_id, experiment_id)
     if publisher.is_published(target, canonical=True):
         manifest = json.loads((target / CANONICAL_STATE_MANIFEST).read_text(encoding="utf-8"))
+        _ensure_member_registered(
+            reports=reports,
+            cohort_id=cohort_id,
+            candidate_id=candidate_id,
+            experiment_id=experiment_id,
+            target=target,
+            config=config,
+        )
         return CanonicalResult(
             experiment_id=experiment_id,
             cohort_id=cohort_id,
@@ -325,5 +335,97 @@ def _registered_events(
             event_type=EVENT_REGISTERED,
             evidence_refs=(candidate_id,),
             sequence=0,
+        ),
+    )
+
+
+def _no_lookahead_from_manifest(manifest: Mapping[str, Any]):
+    """从已发布 manifest 重建三层无前视状态（复用分支重导 `promotion_verdict` 用）。"""
+
+    payload = manifest.get("no_lookahead") or {}
+    layers = {entry["layer"]: entry for entry in payload.get("layers", [])}
+
+    def layer(name: str) -> Mapping[str, Any]:
+        return layers.get(name, {})
+
+    return build_no_lookahead(
+        l1_status=str(layer("L1").get("status", STATUS_NOT_YET_AVAILABLE)),
+        l1_evidence_refs=tuple(layer("L1").get("evidence_refs", ())),
+        l2_status=str(layer("L2").get("status", STATUS_NOT_YET_AVAILABLE)),
+        l2_evidence_refs=tuple(layer("L2").get("evidence_refs", ())),
+        l3_status=str(layer("L3").get("status", STATUS_NOT_YET_AVAILABLE)),
+        l3_evidence_refs=tuple(layer("L3").get("evidence_refs", ())),
+    )
+
+
+def _published_registered_event(
+    target: Path, *, experiment_id: str, cohort_id: str, candidate_id: str, state: str
+) -> RunEvent:
+    """取已发布批次里**实际**的 `evaluation.registered` 事件，保证复用补登记幂等键一致。"""
+    for event in read_events(target / EVENTS_FILENAME):
+        if event.type == EVENT_REGISTERED:
+            return event
+    from_state = STATE_REJECTED if state == STATE_REJECTED else STATE_EVIDENCE_READY
+    return build_event(
+        experiment_id=experiment_id,
+        execution_tier=TIER_CANONICAL,
+        cohort_id=cohort_id,
+        from_state=from_state,
+        to_state=STATE_REGISTERED,
+        event_type=EVENT_REGISTERED,
+        evidence_refs=(candidate_id,),
+        sequence=0,
+    )
+
+
+def _ensure_member_registered(
+    *,
+    reports: Path,
+    cohort_id: str,
+    candidate_id: str,
+    experiment_id: str,
+    target: Path,
+    config: Any,
+) -> None:
+    """复用已发布批次前**幂等补登记**（`R1-003`）：崩溃窗口只丢失登记时 cohort 不会永挂 OPEN。"""
+    if any(
+        entry.candidate_id == candidate_id
+        for entry in population.registrations(reports, cohort_id)
+    ):
+        return
+    manifest = json.loads((target / CANONICAL_STATE_MANIFEST).read_text(encoding="utf-8"))
+    state = str(manifest.get("state", STATE_EVIDENCE_READY))
+    sample_tier = str(manifest.get("sample_tier", "underpowered"))
+    cost_verdict = str(manifest.get("cost_verdict", "cost_undetermined"))
+    if state == STATE_REJECTED:
+        promotion = "rejected"
+    else:
+        promotion = derive_promotion_verdict(
+            PromotionInputs(
+                run_state=state,
+                stage_results=_stage_results_from_manifest(manifest),
+                sample_tier=sample_tier,
+                cost_verdict=cost_verdict,
+                no_lookahead=_no_lookahead_from_manifest(manifest),
+            )
+        )
+    population.register_member(
+        reports,
+        cohort_id,
+        population.MemberRegistration(
+            candidate_id=candidate_id,
+            experiment_id=experiment_id,
+            run_state=STATE_REGISTERED,
+            promotion_verdict=promotion,
+            sample_tier=sample_tier,
+            cost_model_version=str(config.cost_model.get("id", "")),
+            evidence_ref=f"{target.relative_to(reports).as_posix()}/curves.parquet",
+        ),
+        _published_registered_event(
+            target,
+            experiment_id=experiment_id,
+            cohort_id=cohort_id,
+            candidate_id=candidate_id,
+            state=state,
         ),
     )
