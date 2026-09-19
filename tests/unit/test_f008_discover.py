@@ -14,63 +14,22 @@ import pytest
 
 from alphamill.data_bridge.universe import criteria as criteria_mod
 from alphamill.data_bridge.universe import discover
-from alphamill.data_bridge.universe.criteria import Criteria, load_criteria
+from alphamill.data_bridge.universe.criteria import load_criteria
 from alphamill.data_bridge.universe.definition import build_definition
 from alphamill.data_bridge.universe.discover import (
     Candidate,
     Evaluation,
-    MarketRecord,
     MarketSnapshot,
 )
 from alphamill.data_bridge.universe.errors import CriteriaError, ExchangeUnreachableError
+from tests.f008_fixtures import criteria_for, market, snapshot
 
 SNAPSHOT_AT = "2026-09-19T00:00:00Z"
 
 
-def _market(
-    base: str,
-    *,
-    listed_days: int = 700,
-    turnover: float = 1_000_000.0,
-    points: int = 90,
-    quote: str = "USDT",
-) -> MarketRecord:
-    from alphamill.data_bridge import symbol_map
-
-    db_symbol = f"{base}/{quote}"
-    lake_pair, _ = symbol_map.derive_pairs(db_symbol, "perp")
-    listed_at = datetime(2026, 9, 19, tzinfo=UTC).timestamp() - listed_days * 86400
-    return MarketRecord(
-        symbol=f"{db_symbol}:{quote}",
-        db_symbol=db_symbol,
-        lake_pair=lake_pair,
-        base=base,
-        quote=quote,
-        listed_at=datetime.fromtimestamp(listed_at, tz=UTC).isoformat().replace("+00:00", "Z"),
-        daily_turnover_usdt=tuple([turnover] * points),
-    )
-
-
-def _snapshot(*records: MarketRecord) -> MarketSnapshot:
-    return MarketSnapshot(
-        exchange="binance",
-        market_type="perp",
-        snapshot_at=SNAPSHOT_AT,
-        markets=tuple(records),
-    )
-
-
-def _criteria(**overrides: Any) -> Criteria:
-    base = load_criteria()
-    return Criteria(
-        exchange=overrides.get("exchange", base.exchange),
-        market_type=overrides.get("market_type", base.market_type),
-        quote_currency=overrides.get("quote_currency", base.quote_currency),
-        turnover_lookback_days=overrides.get("turnover_lookback_days", base.turnover_lookback_days),
-        turnover_rank_top_n=overrides.get("turnover_rank_top_n", base.turnover_rank_top_n),
-        min_listed_days=overrides.get("min_listed_days", base.min_listed_days),
-        exclude_rules=overrides.get("exclude_rules", base.exclude_rules),
-    )
+_market = market
+_snapshot = snapshot
+_criteria = criteria_for
 
 
 # ---------- T001：口径文件 ----------

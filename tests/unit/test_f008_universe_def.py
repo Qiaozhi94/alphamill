@@ -9,7 +9,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from test_f008_discover import _criteria, _market, _snapshot
 
 from alphamill.data_bridge.universe import definition as def_mod
 from alphamill.data_bridge.universe.definition import (
@@ -28,6 +27,9 @@ from alphamill.data_bridge.universe.errors import (
     UniverseNotFoundError,
     UniverseNotFrozenError,
 )
+from tests.f008_fixtures import criteria_for as _criteria
+from tests.f008_fixtures import market as _market
+from tests.f008_fixtures import snapshot as _snapshot
 
 SNAPSHOT_AT = "2026-09-19T00:00:00Z"
 

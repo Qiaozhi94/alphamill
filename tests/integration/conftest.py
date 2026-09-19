@@ -210,3 +210,31 @@ def pytest_addoption(parser) -> None:
 def f007_snapshot_id(request) -> str | None:
     value = request.config.getoption("--snapshot")
     return str(value) if value else None
+
+
+# ---------------------------------------------------------------- F008 宇宙扩容
+
+F008_TABLES = ("universe_membership", "universe_quality_verdicts")
+
+
+@pytest.fixture()
+def f008_conn(f002_db):
+    """F008 集成库连接：在 F002 scratch 库上叠加 005 迁移，并按用例清场。
+
+    追加语义的两张表不能用 DELETE（触发器会拒），清场一律用 TRUNCATE。
+    """
+    conn = psycopg2.connect(**f002_db)
+    migration = REPO / "db" / "migrations" / "005_universe_membership.sql"
+    with conn.cursor() as cur:
+        cur.execute(migration.read_text(encoding="utf-8"))
+    conn.commit()
+    with conn.cursor() as cur:
+        cur.execute(f"TRUNCATE {', '.join(F008_TABLES)}")
+        cur.execute("DELETE FROM ohlcv_1m")
+        cur.execute("DELETE FROM backfill_progress")
+        cur.execute("DROP TABLE IF EXISTS f008_scratch_ohlcv")
+    conn.commit()
+    try:
+        yield conn
+    finally:
+        conn.close()
