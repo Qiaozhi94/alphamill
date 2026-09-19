@@ -18,13 +18,15 @@ from alphamill.evaluation.required_statistics import member_statistics
 from alphamill.evaluation.run_config import RunConfig
 from alphamill.evaluation.signal_adapter import adapt_signal_records
 from alphamill.factor_factory.bench.cost import evaluate_cost, load_cost_model
-from alphamill.factor_factory.bench.minimal_backtest import summarize
+from alphamill.factor_factory.bench.minimal_backtest import TradeSummary, summarize
 from alphamill.factor_factory.bench.signal_quality import (
     evaluate_signal_quality,
     signal_source_payload,
 )
 from alphamill.factor_factory.bench.stability import evaluate_temporal_stability
 from alphamill.factor_factory.bench.stage_model import (
+    SAMPLE_UNIT_OBSERVATIONS,
+    SAMPLE_UNIT_ROUND_TRIPS,
     STAGE_EXECUTION_IMPLEMENTATION,
     STAGE_PORTFOLIO_TRANSFORM,
     STAGE_TEMPORAL_STABILITY,
@@ -54,7 +56,64 @@ class FixtureEvaluation:
     trade_summary: Mapping[str, Any]
     cost_payload: Mapping[str, Any]
     period_returns: tuple[float, ...] = ()
+    curve_times: tuple[str, ...] = ()
     required_statistics: Mapping[str, Any] | None = None
+
+
+def _aggregate_panel(
+    times: Sequence[str],
+    symbols: Sequence[str],
+    signals: Sequence[float],
+    labels: Sequence[float],
+) -> tuple[tuple[str, ...], tuple[float, ...], tuple[float, ...]]:
+    """多标的面板按 timestamp 聚合成等权组合序列：消除跨标的虚假换手与时间戳回跳。"""
+    grouped: dict[str, list[tuple[float, float]]] = {}
+    for time, _symbol, signal, label in zip(times, symbols, signals, labels, strict=True):
+        grouped.setdefault(str(time), []).append((float(signal), float(label)))
+    ordered = sorted(grouped)
+    return (
+        tuple(ordered),
+        tuple(sum(item[0] for item in grouped[time]) / len(grouped[time]) for time in ordered),
+        tuple(sum(item[1] for item in grouped[time]) / len(grouped[time]) for time in ordered),
+    )
+
+
+def _panel_trade_summary(
+    times: Sequence[str],
+    symbols: Sequence[str],
+    signals: Sequence[float],
+    labels: Sequence[float],
+) -> TradeSummary:
+    """多标的面板：逐标的分组计算交易摘要后汇总，避免跨标的边界产生虚假换手。"""
+    groups: dict[str, list[int]] = {}
+    for index, symbol in enumerate(symbols):
+        groups.setdefault(str(symbol), []).append(index)
+    summaries = [
+        summarize(
+            [signals[index] for index in indices],
+            [labels[index] for index in indices],
+            [times[index] for index in indices],
+        )
+        for indices in groups.values()
+    ]
+    round_trips = sum(summary.round_trips for summary in summaries)
+    n_observations = sum(summary.n_observations for summary in summaries)
+    if round_trips > 0:
+        sample_unit = SAMPLE_UNIT_ROUND_TRIPS
+        trade_count = round_trips
+    else:
+        sample_unit = SAMPLE_UNIT_OBSERVATIONS
+        trade_count = n_observations
+    return TradeSummary(
+        gross_return=sum(summary.gross_return for summary in summaries),
+        turnover=sum(summary.turnover for summary in summaries),
+        round_trips=round_trips,
+        holding_period_hours=sum(summary.holding_period_hours for summary in summaries)
+        / len(summaries),
+        sample_unit=sample_unit,
+        trade_count=trade_count,
+        n_observations=n_observations,
+    )
 
 
 def evaluate_fixture(
@@ -70,7 +129,20 @@ def evaluate_fixture(
     label_column: str = "forward_return",
     symbols: Sequence[str] | None = None,
 ) -> FixtureEvaluation:
-    """跑信号质量 + 成本/容量 + 时序稳定三阶段，并给出近似与来源标注。"""
+    """跑信号质量 + 成本/容量 + 时序稳定三阶段，并给出近似与来源标注。
+
+    多标的面板先按 timestamp 聚合成等权组合序列再做成本/稳定性/曲线（避免把面板当单条序列），
+    成员级必需统计仍用原始（含横截面）数据。
+    """
+    if symbols is not None and len({str(symbol) for symbol in symbols}) > 1:
+        evaluation_times, evaluation_signals, evaluation_labels = _aggregate_panel(
+            times, symbols, signals, labels
+        )
+    else:
+        evaluation_times = tuple(str(stamp) for stamp in times)
+        evaluation_signals = tuple(float(value) for value in signals)
+        evaluation_labels = tuple(float(value) for value in labels)
+
     records = [
         {
             "time": time,
@@ -92,9 +164,15 @@ def evaluate_fixture(
     source_payload = signal_source_payload(provenance, execution_tier)
 
     _quality, quality_stage = evaluate_signal_quality(
-        signals, labels, observed_at=observed_at, min_observations=config.min_observations
+        evaluation_signals,
+        evaluation_labels,
+        observed_at=observed_at,
+        min_observations=config.min_observations,
     )
-    trades = summarize(signals, labels, times)
+    if symbols is not None and len({str(symbol) for symbol in symbols}) > 1:
+        trades = _panel_trade_summary(times, symbols, signals, labels)
+    else:
+        trades = summarize(evaluation_signals, evaluation_labels, evaluation_times)
     cost_result, cost_stage = evaluate_cost(
         gross_return=trades.gross_return,
         turnover_value=trades.turnover,
@@ -104,7 +182,7 @@ def evaluate_fixture(
         observed_at=observed_at,
     )
     _stability, stability_stage = evaluate_temporal_stability(
-        signals, labels, observed_at=observed_at
+        evaluation_signals, evaluation_labels, observed_at=observed_at
     )
     required_statistics, stats_stage = member_statistics(
         times=times,
@@ -133,11 +211,12 @@ def evaluate_fixture(
         trade_summary=trades.to_payload(),
         cost_payload=cost_result.to_payload(),
         period_returns=_net_period_returns(
-            signals,
-            labels,
+            evaluation_signals,
+            evaluation_labels,
             cost_model=load_cost_model(config.cost_model.get("normalized", {})),
             deciding_tier=cost_result.deciding_tier,
         ),
+        curve_times=evaluation_times,
         required_statistics=required_statistics,
     )
 

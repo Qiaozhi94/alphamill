@@ -52,6 +52,11 @@ def statistics_parameters(method_config: Mapping[str, Any]) -> dict[str, Any]:
         "n_resamples": int(bootstrap.get("n_resamples", DEFAULT_RESAMPLES)),
         "seed": int(bootstrap.get("seed", DEFAULT_SEED)),
         "fdr_alpha": float(multiplicity.get("fdr_alpha", DEFAULT_FDR_ALPHA)),
+        "dsr_threshold": (
+            float(multiplicity["dsr_threshold"])
+            if multiplicity.get("dsr_threshold") is not None
+            else None
+        ),
     }
 
 
@@ -155,17 +160,34 @@ def cohort_statistics(
     member_returns: Mapping[str, Sequence[float]],
     correlations: Sequence[float],
     alpha: float = 0.05,
+    dsr_threshold: float | None = None,
+    required_candidates: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """cohort 级必需统计；任一必需估计器异常/缺失即整体 `INCOMPLETE`（不产出部分结论）。
+    """cohort 级必需统计；必需输入缺失或估计器异常即整体 `INCOMPLETE`（不产出部分结论）。
 
-    输入按 `candidate_id` 映射对齐（不再用并发列表），返回逐成员的 `bh_rejected` 与 `dsr`，
-    供 finalize 把多重检验结论接进 `statistically_dead`。
+    输入按 `candidate_id` 映射对齐；`required_candidates` 覆盖不全也判 INCOMPLETE（`R2-207`）。
+    `dsr_threshold` 必须来自预注册配置，缺省即 INCOMPLETE 而非猜一个（`R2-205`）。
+    `best_sharpe <= 0` 是有结论的负结果：MinTRL 记 `not_applicable`、统计保持 PASS，成员由
+    `statistically_dead` 走 `dead`（`R2-206`）。
     """
     if not member_p_values:
         return {
             "status": "INCOMPLETE",
             "fdr_alpha": alpha,
             "reason": "无成员 p 值，BH-FDR 不可判定",
+        }
+    if required_candidates is not None and set(member_p_values) != set(required_candidates):
+        missing = sorted(set(required_candidates) - set(member_p_values))
+        return {
+            "status": "INCOMPLETE",
+            "fdr_alpha": alpha,
+            "reason": f"部分成员缺 p 值，多重检验覆盖不全: {missing}",
+        }
+    if dsr_threshold is None:
+        return {
+            "status": "INCOMPLETE",
+            "fdr_alpha": alpha,
+            "reason": "预注册方法配置缺 dsr_threshold，DSR 判死阈值不可判定",
         }
     candidates = list(member_p_values)
     try:
@@ -175,6 +197,7 @@ def cohort_statistics(
     result: dict[str, Any] = {
         "status": "PASS",
         "fdr_alpha": alpha,
+        "dsr_threshold": dsr_threshold,
         "bh": bh.to_payload(),
         "bh_rejected": {
             name: bool(flag) for name, flag in zip(candidates, bh.rejected, strict=True)
@@ -199,16 +222,6 @@ def cohort_statistics(
             "status": "INCOMPLETE",
             "reason": "无成员可计算 Sharpe，DSR/MinTRL 不可判定",
         }
-    best_candidate = max(sharpes, key=lambda name: sharpes[name])
-    best_sharpe = sharpes[best_candidate]
-    result["best_candidate"] = best_candidate
-    result["best_sharpe"] = best_sharpe
-    if best_sharpe <= 0.0:
-        return {
-            **result,
-            "status": "INCOMPLETE",
-            "reason": f"最佳成员 Sharpe={best_sharpe:.6g} <= 0，DSR/MinTRL 无有限解",
-        }
     dsr_map: dict[str, float | None] = {}
     for candidate, sharpe in sharpes.items():
         n_observations = len(member_returns[candidate])
@@ -225,16 +238,30 @@ def cohort_statistics(
             )
         except StatisticsError:
             dsr_map[candidate] = None
-    if dsr_map.get(best_candidate) is None:
-        return {
-            **result,
-            "status": "INCOMPLETE",
-            "dsr": dsr_map,
-            "reason": "最佳成员 DSR 估计器异常",
-        }
     result["dsr"] = dsr_map
-    try:
-        result["mintrl"] = min_track_record_length(best_sharpe, target_sharpe=0.0)
-    except StatisticsError as exc:
-        return {**result, "status": "INCOMPLETE", "reason": f"MinTRL 估计器异常: {exc}"}
+
+    best_candidate = max(sharpes, key=lambda name: sharpes[name])
+    best_sharpe = sharpes[best_candidate]
+    result["best_candidate"] = best_candidate
+    result["best_sharpe"] = best_sharpe
+    if best_sharpe <= 0.0:
+        result["mintrl"] = None
+        result["mintrl_reason"] = "not_applicable: 最佳成员 Sharpe <= 0"
+    else:
+        try:
+            result["mintrl"] = min_track_record_length(best_sharpe, target_sharpe=0.0)
+        except StatisticsError as exc:
+            return {**result, "status": "INCOMPLETE", "reason": f"MinTRL 估计器异常: {exc}"}
+
+    statistical_dead: dict[str, bool] = {}
+    for candidate in candidates:
+        bh_significant = result["bh_rejected"].get(candidate, True)
+        sharpe = sharpes.get(candidate)
+        dsr_value = dsr_map.get(candidate)
+        statistical_dead[candidate] = (
+            not bh_significant
+            or (sharpe is not None and sharpe <= 0.0)
+            or (dsr_value is not None and dsr_value < dsr_threshold)
+        )
+    result["statistically_dead"] = statistical_dead
     return result

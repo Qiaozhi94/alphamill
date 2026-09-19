@@ -11,6 +11,7 @@ import math
 
 import pytest
 
+from alphamill.evaluation.required_statistics import cohort_statistics
 from alphamill.factor_factory.bench.multiplicity import (
     benjamini_hochberg,
     deflated_sharpe_ratio,
@@ -277,3 +278,52 @@ def test_statistics_stage_maps_estimator_error_to_incomplete():
     assert stage.failures[0].mechanism == "estimator_failure"
     assert stage.failures[0].owner == "statistics"
     assert stage.failures[0].error_code == "E_REQUIRED_METRIC_FAILED"
+
+
+# ---------- cohort 统计的失败关闭与统计判死（R2-205/206/207） ----------
+
+
+def _positive_returns() -> dict:
+    return {"a": (0.05, 0.04, 0.06, 0.05, 0.055, 0.045)}
+
+
+def test_cohort_statistics_requires_preregistered_dsr_threshold():
+    result = cohort_statistics(
+        member_p_values={"a": 0.01},
+        member_returns=_positive_returns(),
+        correlations=[0.1],
+        alpha=0.05,
+        dsr_threshold=None,
+        required_candidates=["a"],
+    )
+    assert result["status"] == "INCOMPLETE"
+    assert "dsr_threshold" in result["reason"]
+
+
+def test_cohort_statistics_requires_p_values_for_all_members():
+    result = cohort_statistics(
+        member_p_values={"a": 0.01},
+        member_returns=_positive_returns(),
+        correlations=[0.1],
+        alpha=0.05,
+        dsr_threshold=0.95,
+        required_candidates=["a", "b"],
+    )
+    assert result["status"] == "INCOMPLETE"
+    assert "b" in result["reason"]
+
+
+def test_negative_best_sharpe_is_pass_with_nontrl_not_applicable_and_dead():
+    returns = {"a": (-0.05, -0.04, -0.06, -0.05, -0.055, -0.045)}
+    result = cohort_statistics(
+        member_p_values={"a": 0.01},
+        member_returns=returns,
+        correlations=[0.1],
+        alpha=0.05,
+        dsr_threshold=0.95,
+        required_candidates=["a"],
+    )
+    assert result["status"] == "PASS"
+    assert result["mintrl"] is None
+    assert result["mintrl_reason"].startswith("not_applicable")
+    assert result["statistically_dead"]["a"] is True

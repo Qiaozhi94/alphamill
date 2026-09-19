@@ -618,6 +618,7 @@ def _write_member_evidence(
     p_value: float = 0.01,
     with_report: bool = True,
     alpha: float = 0.05,
+    dsr_threshold: float = 0.95,
 ) -> str:
     directory = reports / "bench" / candidate / "snapshot" / experiment
     directory.mkdir(parents=True, exist_ok=True)
@@ -633,7 +634,7 @@ def _write_member_evidence(
                     "required_statistics": {
                         "status": "PASS",
                         "p_value": p_value,
-                        "method": {"fdr_alpha": alpha},
+                        "method": {"fdr_alpha": alpha, "dsr_threshold": dsr_threshold},
                     },
                 }
             ),
@@ -747,6 +748,39 @@ def test_statistically_insignificant_member_becomes_dead(tmp_path, monkeypatch):
     assert stats["bh_rejected"][CANDIDATE_A] is False
     members = {entry["candidate_id"]: entry for entry in verdict["members"]}
     assert members[CANDIDATE_A]["promotion_verdict"] == "dead"
+
+
+def test_finalize_is_stable_after_writeback_records_own_cohort(tmp_path, monkeypatch):
+    """R2-201 回归：回写本 cohort 后再次 finalize 必须逐字段一致，不得读回自己写的结论。"""
+    reports = tmp_path / "reports"
+    monkeypatch.setenv("ALPHAMILL_REPORTS_DIR", str(reports))
+    cohort_id, _ = pop.freeze_cohort(reports, _definition(CANDIDATE_A, CANDIDATE_B))
+    returns_by_candidate = {
+        CANDIDATE_A: (0.05, 0.04, 0.06, 0.05, 0.055, 0.045),
+        CANDIDATE_B: (0.02, -0.01, 0.03, -0.02, 0.01, -0.015),
+    }
+    for candidate, experiment in ((CANDIDATE_A, EXPERIMENT_A), (CANDIDATE_B, EXPERIMENT_B)):
+        pop.register_member(
+            reports,
+            cohort_id,
+            pop.MemberRegistration(
+                candidate_id=candidate,
+                experiment_id=experiment,
+                run_state=STATE_REGISTERED,
+                promotion_verdict="blocked_pending_audit",
+                sample_tier="trustworthy",
+                cost_model_version="cm-v1",
+                evidence_ref=_write_member_evidence(
+                    reports, candidate, experiment, returns_by_candidate[candidate]
+                ),
+            ),
+            _registered_event(experiment, cohort_id),
+        )
+    first = canonical_ops.finalize_cohort(cohort_id, finalized_at=FROZEN_AT)
+    before = first.read_bytes()
+    second = canonical_ops.finalize_cohort(cohort_id, finalized_at="2030-01-01T00:00:00Z")
+    assert second == first
+    assert first.read_bytes() == before
 
 
 def test_finalize_rejects_conflicting_member_fdr_alpha(tmp_path, monkeypatch):

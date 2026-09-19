@@ -135,6 +135,7 @@ def register_rejection(
     expression: str,
     observed_at: str,
     violation_message: str,
+    signal_digest: str,
     code_build_digest: str = "",
     stage_id: str = STAGE_SIGNAL_QUALITY,
 ) -> Path:
@@ -165,6 +166,7 @@ def register_rejection(
             "object_id": object_id,
             "cohort_id": cohort_id,
             "candidate_id": candidate_id,
+            "signal_digest": signal_digest,
             "sample_tier": "underpowered",
             "cost_verdict": "cost_undetermined",
             "approximation": dict(REAL_SOURCE_ANNOTATION),

@@ -493,6 +493,29 @@ def test_canonical_reuse_rejects_different_signal_input(cohort_env, capsys):
     assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
 
 
+def test_canonical_succeeds_even_if_release_fails(cohort_env, monkeypatch, capsys):
+    """R2-203 回归：finally 内 release 失败不得覆盖已经成功的 canonical 结果。"""
+    from alphamill.evaluation import claim as claim_module
+
+    def boom(*_args, **_kwargs):
+        raise claim_module.ClaimBusyError("release boom")
+
+    monkeypatch.setattr(claim_module, "release", boom)
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 0
+
+
+def test_canonical_reuse_rejects_manifest_without_signal_digest(cohort_env, capsys):
+    """R2-208 回归：旧 manifest 缺 signal_digest 时不得静默复用。"""
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"], json=True)) == 0
+    payload = _payload(capsys.readouterr().out)
+    manifest_path = Path(payload["artifact_dir"]) / "manifest.json"
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data.pop("signal_digest")
+    manifest_path.write_text(json.dumps(data), encoding="utf-8")
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 1
+    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+
+
 def test_canonical_rejects_dirty_worktree(cohort_env, monkeypatch, capsys):
     monkeypatch.setattr("alphamill.evaluation.code_build.worktree_dirty", lambda root=None: True)
     assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 1

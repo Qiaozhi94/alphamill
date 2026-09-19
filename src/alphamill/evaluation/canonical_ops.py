@@ -10,11 +10,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from alphamill.evaluation.canonical_members import (
+    horizon_of,
+    load_member_curves,
+    load_member_report,
+    load_registry,
+)
 from alphamill.evaluation.capabilities import context_for
 from alphamill.evaluation.contract_common import TIER_CANONICAL, UpstreamContractError
 from alphamill.evaluation.events import (
@@ -26,7 +31,6 @@ from alphamill.evaluation.events import (
 )
 from alphamill.evaluation.registry_writeback import (
     build_summaries,
-    read_evaluation_face,
     writeback_evaluation_face,
 )
 from alphamill.evaluation.required_statistics import cohort_statistics
@@ -36,12 +40,10 @@ from alphamill.experiment_store import research_snapshot as rs
 from alphamill.experiment_store.dedup import (
     DedupCandidate,
     DedupError,
-    DedupRecord,
     max_abs_rho,
     resolve_cohort_dedup,
 )
 from alphamill.experiment_store.promotion import VERDICT_INCOMPLETE
-from alphamill.factor_factory.bench.curves import CurvesError, read_curves
 
 MANIFEST_NAME = "manifest.json"
 BENCH_SUBDIR = "bench"
@@ -114,70 +116,6 @@ def abandon_experiment(
     return population.register_member(reports, cohort_id, registration, registered)
 
 
-def _resolve_reference(root: Path, reference: str | None) -> Path | None:
-    if not reference:
-        return None
-    path = Path(reference)
-    if path.is_absolute():
-        return path
-    candidate = root / path
-    if candidate.exists():
-        return candidate
-    if path.parts and path.parts[0] == "reports":
-        return root / Path(*path.parts[1:])
-    return candidate
-
-
-def _load_member_curves(root: Path, entry: population.MemberRegistration) -> Any:
-    path = _resolve_reference(root, entry.evidence_ref)
-    if path is None:
-        return None
-    try:
-        return read_curves(path)
-    except CurvesError:
-        return None
-
-
-def _load_member_report(root: Path, entry: population.MemberRegistration) -> dict[str, Any] | None:
-    path = _resolve_reference(root, entry.evidence_ref)
-    if path is None:
-        return None
-    report_path = path.parent / "report.json"
-    if not report_path.is_file():
-        return None
-    return json.loads(report_path.read_text(encoding="utf-8"))
-
-
-def _load_registry(
-    root: Path, horizon: int
-) -> tuple[tuple[DedupRecord, ...], dict[str, DedupCandidate]]:
-    records: list[DedupRecord] = []
-    candidates: dict[str, DedupCandidate] = {}
-    for row in read_evaluation_face(root):
-        dedup = row.get("dedup") or {}
-        verdict = str(dedup.get("verdict", "none"))
-        factor_id = str(row["factor_id"])
-        records.append(DedupRecord(factor_id=factor_id, verdict=verdict))
-        if verdict == "rejected":
-            continue
-        path = _resolve_reference(root, row.get("evidence_ref"))
-        if path is None:
-            continue
-        try:
-            curves = read_curves(path)
-        except CurvesError:
-            continue
-        candidates[factor_id] = DedupCandidate.from_curves(
-            factor_id, curves, horizon, evidence_ref=row.get("evidence_ref")
-        )
-    return tuple(records), candidates
-
-
-def _horizon_of(definition: Mapping[str, Any]) -> int:
-    horizons = (definition.get("window") or {}).get("label_horizons") or [1]
-    return max(int(horizon) for horizon in horizons)
-
-
 def _record_unreadable_evidence(
     reports: Path, cohort_id: str, entry: population.MemberRegistration
 ) -> None:
@@ -210,13 +148,13 @@ def finalize_cohort(cohort_id: str, *, finalized_at: str | None = None) -> Path:
     population.assert_cohort_complete(reports, cohort_id)
     definition = population.load_cohort(reports, cohort_id)
     entries = population.registrations(reports, cohort_id)
-    horizon = _horizon_of(definition)
+    horizon = horizon_of(definition)
 
     curves_by_candidate: dict[str, Any] = {}
     reports_by_candidate: dict[str, dict[str, Any]] = {}
     for entry in entries:
-        curves = _load_member_curves(reports, entry)
-        report = _load_member_report(reports, entry)
+        curves = load_member_curves(reports, entry)
+        report = load_member_report(reports, entry)
         if curves is None or report is None:
             _record_unreadable_evidence(reports, cohort_id, entry)
             continue
@@ -233,7 +171,7 @@ def finalize_cohort(cohort_id: str, *, finalized_at: str | None = None) -> Path:
         for entry in entries
         if entry.candidate_id in curves_by_candidate and entry.promotion_verdict != "rejected"
     ]
-    registry_records, registry_candidates = _load_registry(reports, horizon)
+    registry_records, registry_candidates = load_registry(reports, horizon, cohort_id)
     dedup_reason: str | None = None
     outcomes: dict[str, Any] = {}
     try:
@@ -248,6 +186,8 @@ def finalize_cohort(cohort_id: str, *, finalized_at: str | None = None) -> Path:
     member_p_values: dict[str, float] = {}
     member_returns: dict[str, tuple[float, ...]] = {}
     alphas: set[float] = set()
+    dsr_thresholds: set[float] = set()
+    required_candidates: set[str] = set()
     for entry in entries:
         statistics = (reports_by_candidate.get(entry.candidate_id) or {}).get(
             "required_statistics"
@@ -257,12 +197,19 @@ def finalize_cohort(cohort_id: str, *, finalized_at: str | None = None) -> Path:
         method = statistics.get("method") or {}
         if method.get("fdr_alpha") is not None:
             alphas.add(float(method["fdr_alpha"]))
+        if method.get("dsr_threshold") is not None:
+            dsr_thresholds.add(float(method["dsr_threshold"]))
         curves = curves_by_candidate.get(entry.candidate_id)
         if curves is not None:
             member_returns[entry.candidate_id] = tuple(curves.long_short)
+        if entry.candidate_id in reports_by_candidate and entry.promotion_verdict != "rejected":
+            required_candidates.add(entry.candidate_id)
     if len(alphas) > 1:
         raise CanonicalOpError(f"成员间 fdr_alpha 不一致: {sorted(alphas)}")
+    if len(dsr_thresholds) > 1:
+        raise CanonicalOpError(f"成员间 dsr_threshold 不一致: {sorted(dsr_thresholds)}")
     alpha = next(iter(alphas), 0.05)
+    dsr_threshold = next(iter(dsr_thresholds), None)
 
     correlations: list[float] = []
     for index, member in enumerate(members_in_order):
@@ -282,6 +229,8 @@ def finalize_cohort(cohort_id: str, *, finalized_at: str | None = None) -> Path:
         member_returns=member_returns,
         correlations=correlations,
         alpha=alpha,
+        dsr_threshold=dsr_threshold,
+        required_candidates=sorted(required_candidates),
     )
     if len(reports_by_candidate) != len(entries):
         statistics_payload = {
@@ -297,15 +246,7 @@ def finalize_cohort(cohort_id: str, *, finalized_at: str | None = None) -> Path:
             "reason": statistics_payload.get("reason", dedup_reason),
         }
 
-    bh_rejected = statistics_payload.get("bh_rejected") or {}
-    dsr_map = statistics_payload.get("dsr") or {}
-    dead_threshold = 1.0 - alpha
-
-    def statistically_dead(candidate: str) -> bool:
-        if candidate in bh_rejected and not bh_rejected[candidate]:
-            return True
-        value = dsr_map.get(candidate)
-        return value is not None and value < dead_threshold
+    statistical_dead = statistics_payload.get("statistically_dead") or {}
 
     promotion_verdicts: dict[str, str] = {}
     dedup_payloads: dict[str, Any] = {}
@@ -322,7 +263,7 @@ def finalize_cohort(cohort_id: str, *, finalized_at: str | None = None) -> Path:
         elif verdict in EVIDENCE_ADEQUATE_VERDICTS:
             if statistics_payload.get("status") != "PASS":
                 verdict = VERDICT_INCOMPLETE
-            elif statistically_dead(candidate):
+            elif statistical_dead.get(candidate, False):
                 verdict = "dead"
         promotion_verdicts[candidate] = verdict
 

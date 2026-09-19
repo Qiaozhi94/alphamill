@@ -36,7 +36,10 @@ from alphamill.experiment_store.identity import (
     normalize_utc_set,
 )
 
-CONTEXT_SCHEMA_VERSION = 1
+CONTEXT_SCHEMA_VERSION = 2
+# v1 → v2：数值规范化由「int 原样 / float 定标」改为「int 与 float 统一定标」（`R2-204`），
+# 因此同一预注册配置在 v2 下得到与 v1 不同的 experiment_id；已发布 v1 产物仍按 v1 读取。
+SUPPORTED_CONTEXT_SCHEMA_VERSIONS = (1, CONTEXT_SCHEMA_VERSION)
 CONFIG_FIELDS = ("method_config", "cost_model")
 
 
@@ -90,7 +93,7 @@ class ExperimentContext:
         self.validate()
 
     def validate(self) -> None:
-        if self.schema_version != CONTEXT_SCHEMA_VERSION:
+        if self.schema_version not in SUPPORTED_CONTEXT_SCHEMA_VERSIONS:
             raise SnapshotInputError(f"不支持的 experiment schema_version: {self.schema_version!r}")
         if self.execution_tier not in EXECUTION_TIERS:
             raise SnapshotInputError(

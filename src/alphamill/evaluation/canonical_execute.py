@@ -95,6 +95,7 @@ def execute_canonical(
         ),
     )
     moment = observed_at or datetime.now(UTC).isoformat()
+    signal_digest = content_digest(signals_path.read_bytes())
     if not verdict.passed:
         published = register_rejection(
             tier_context=tier_context,
@@ -107,6 +108,7 @@ def execute_canonical(
             expression=expression,
             observed_at=moment,
             violation_message="; ".join(item.message for item in verdict.violations),
+            signal_digest=signal_digest,
             code_build_digest=code_digest,
         )
         return CanonicalResult(
@@ -145,7 +147,8 @@ def execute_canonical(
     )
     events = _run_events(experiment_id, cohort_id, terminal_state) + member_events
     curves = build_equity_curves(
-        evaluation.period_returns, times=[datetime.fromisoformat(stamp) for stamp in times]
+        evaluation.period_returns,
+        times=[datetime.fromisoformat(stamp) for stamp in evaluation.curve_times],
     )
     promotion = derive_promotion_verdict(
         PromotionInputs(
@@ -180,7 +183,7 @@ def execute_canonical(
             "object_id": object_id or factor_ref,
             "cohort_id": cohort_id,
             "candidate_id": candidate_id,
-            "signal_digest": content_digest(signals_path.read_bytes()),
+            "signal_digest": signal_digest,
             "sample_tier": evaluation.sample_tier,
             "cost_verdict": evaluation.cost_verdict,
             "approximation": dict(evaluation.approximation),

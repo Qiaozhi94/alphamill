@@ -377,6 +377,15 @@ def test_synthesis_carries_effective_trials_and_final_verdicts(sandbox, capsys):
     assert report.funnel["cohort"]["promotion_verdicts"] == final
 
 
+def test_rejection_manifest_records_signal_digest(sandbox, capsys):
+    """R2-208 回归：方法论拒绝路径的 manifest 也必须写 signal_digest。"""
+    assert main(_run(sandbox, "future_fill_leakage")) == 0
+    capsys.readouterr()
+    manifest_path = next((sandbox["reports"] / "bench").rglob("manifest.json"))
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload["signal_digest"].startswith("sha256:")
+
+
 def test_published_events_match_manifest_digest_and_are_immutable(sandbox, capsys):
     """R1-004 回归：已发布批次的 events_digest 必须与实际事件一致，且复用不得改动它。
 

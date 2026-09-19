@@ -154,6 +154,24 @@ def test_corrupt_claim_is_treated_as_stale_and_recoverable(tmp_path):
     assert read_claim(tmp_path, EXPERIMENT).owner_token == "recovery"
 
 
+def test_recover_does_not_remove_a_competitor_lock(tmp_path, monkeypatch):
+    """R2-202 回归：接管用原子 rename；对手抢先 acquire 后接管者必须失败，不得删掉对手的锁。"""
+    import alphamill.evaluation.claim as claim_module
+
+    acquire(tmp_path, EXPERIMENT, owner_token="old", lease_seconds=1, now=NOW)
+    now = NOW + timedelta(seconds=120)
+    real_move_aside = claim_module._move_aside
+
+    def move_then_competitor_wins(path):
+        real_move_aside(path)
+        acquire(tmp_path, EXPERIMENT, owner_token="competitor", now=now)
+
+    monkeypatch.setattr(claim_module, "_move_aside", move_then_competitor_wins)
+    with pytest.raises(ClaimBusyError):
+        recover(tmp_path, EXPERIMENT, owner_token="recoverer", now=now, process_alive=False)
+    assert read_claim(tmp_path, EXPERIMENT).owner_token == "competitor"
+
+
 def test_release_refuses_corrupt_claim(tmp_path):
     claim_path(tmp_path, EXPERIMENT).write_text("{not json", encoding="utf-8")
     with pytest.raises(ClaimBusyError, match="不可识别"):

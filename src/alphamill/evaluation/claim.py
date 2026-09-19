@@ -14,14 +14,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 CLAIM_SUFFIX = ".claim"
+STALE_SUFFIX = ".stale"
 DEFAULT_LEASE_SECONDS = 900
 CLAIM_SCHEMA_VERSION = 1
 
@@ -177,6 +180,21 @@ def assert_takeover_allowed(
         raise ClaimBusyError(f"{claim.key} 的 temp artifact 已发布，应走幂等读取而非接管")
 
 
+def _move_aside(path: Path) -> None:
+    """把失效 claim 原子 rename 到唯一临时名——两个接管者只有一个能 rename 成功。
+
+    rename 是原子的：抢输的一方拿到 `FileNotFoundError` 后直接去 `acquire`，由 `O_EXCL`
+    决出唯一持有者；不会像 `unlink→acquire` 那样删掉别人刚建立的锁（`R2-202`）。
+    """
+    tomb = path.with_name(f"{path.name}{STALE_SUFFIX}-{os.getpid()}-{uuid.uuid4().hex}")
+    try:
+        os.rename(path, tomb)
+    except FileNotFoundError:
+        return
+    with contextlib.suppress(OSError):
+        tomb.unlink()
+
+
 def recover(
     root: Path,
     key: str,
@@ -189,7 +207,7 @@ def recover(
 ) -> Claim:
     """接管失效锁后原子替换 claim；不满足接管条件即拒绝，原锁保持不变。
 
-    文件不存在 → 直接 `acquire`；文件存在但**损坏/为空** → 视为失效锁，清掉后 `acquire`；
+    文件不存在 → 直接 `acquire`；文件存在但**损坏/为空** → 视为失效锁，原子移开后 `acquire`；
     否则必须满足三条件（lease 过期 ∧ 无活进程 ∧ temp 未发布）。
     """
     path = claim_path(root, key)
@@ -197,10 +215,10 @@ def recover(
         return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)
     existing = read_claim(root, key)
     if existing is None:
-        path.unlink(missing_ok=True)
+        _move_aside(path)
         return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)
     assert_takeover_allowed(
         existing, now=now, process_alive=process_alive, temp_published=temp_published
     )
-    path.unlink(missing_ok=True)
+    _move_aside(path)
     return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)

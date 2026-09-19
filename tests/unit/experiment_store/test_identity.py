@@ -64,6 +64,28 @@ def test_same_semantics_produce_same_id():
     assert make_context().experiment_id == make_context().experiment_id
 
 
+def test_context_schema_version_bumped_and_v1_still_readable():
+    """R2-204：身份口径变更必须升 `CONTEXT_SCHEMA_VERSION`，且旧 v1 产物仍可读。"""
+    assert CONTEXT_SCHEMA_VERSION == 2
+    context = make_context()
+    legacy_payload = {
+        "schema_version": 1,
+        "execution_tier": context.execution_tier,
+        "upstream": dict(context.upstream),
+        "cohort_id": context.cohort_id,
+        "method_config": dict(context.method_config),
+        "window": dict(context.window),
+        "cost_model": dict(context.cost_model),
+        "research_snapshot_id": context.research_snapshot_id,
+        "code_build_digest": context.code_build_digest,
+        "seed": context.seed,
+        "supersedes": None,
+    }
+    legacy = ExperimentContext.from_dict(legacy_payload)
+    assert legacy.schema_version == 1
+    assert legacy.experiment_id != context.experiment_id
+
+
 def test_execution_tier_is_not_part_of_identity():
     canonical = make_context(execution_tier="canonical")
     preview = make_context(execution_tier="preview")
