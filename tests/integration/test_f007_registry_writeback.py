@@ -13,11 +13,17 @@ from pathlib import Path
 import pytest
 
 from alphamill.evaluation.capabilities import CapabilityError, context_for
-from alphamill.evaluation.events import EVENT_REGISTERED, build_event
+from alphamill.evaluation.events import (
+    EVENT_GATE_REJECTED,
+    EVENT_REGISTERED,
+    build_event,
+    read_events,
+)
 from alphamill.evaluation.registry_writeback import (
     DR008_FIELDS,
     WritebackError,
     build_summaries,
+    definition_face_rejections_path,
     evaluation_face_path,
     read_evaluation_face,
     write_definition_face,
@@ -181,7 +187,17 @@ def test_definition_face_write_is_forbidden_and_leaves_zero_changes(reports):
     )
     before = sorted(path.name for path in definition.iterdir())
     with pytest.raises(CapabilityError) as excinfo:
-        write_definition_face(expression="close", definition_digest="sha256:x")
+        write_definition_face(
+            root=reports,
+            experiment_id=EXPERIMENT_A,
+            cohort_id="cohort_sha256:" + "c" * 64,
+            expression="close",
+            definition_digest="sha256:x",
+        )
     assert excinfo.value.code == "E_CANONICAL_FORBIDDEN"
     assert sorted(path.name for path in definition.iterdir()) == before
+    rejections = read_events(definition_face_rejections_path(reports))
+    assert len(rejections) == 1
+    assert rejections[0].type == EVENT_GATE_REJECTED
+    assert rejections[0].reason_code == "E_CANONICAL_FORBIDDEN"
     assert rs.reports_root() == reports

@@ -14,7 +14,12 @@ from datetime import UTC, datetime
 import pytest
 
 from alphamill.evaluation.capabilities import CapabilityError, context_for
-from alphamill.evaluation.events import EVENT_GATE_REJECTED, EVENT_REGISTERED, build_event
+from alphamill.evaluation.events import (
+    EVENT_GATE_REJECTED,
+    EVENT_REGISTERED,
+    build_event,
+    read_events,
+)
 from alphamill.evaluation.run_state import STATE_EVIDENCE_READY, STATE_REGISTERED
 from alphamill.experiment_store import population as pop
 from alphamill.experiment_store.dedup import (
@@ -35,6 +40,7 @@ from alphamill.experiment_store.holdout_budget import (
     ledger_path,
     read_ledger,
     rejection_event,
+    rejections_path,
 )
 from alphamill.experiment_store.promotion import (
     DEDUP_REJECTED,
@@ -286,6 +292,22 @@ def test_preview_cannot_append_to_holdout_ledger(tmp_path):
         append_entry(preview, tmp_path, _entry())
     assert read_ledger(tmp_path) == ()
     assert not ledger_path(tmp_path).exists()
+
+
+def test_preview_overreach_on_ledger_leaves_gate_rejected_event(tmp_path):
+    """R1-006 回归：越权写留出台账先留 gate_rejected 证据再失败关闭；台账保持零行。"""
+    preview = context_for("preview", tmp_path)
+    entry = _entry()
+    with pytest.raises(CapabilityError, match="holdout_budget_writer"):
+        append_entry(preview, tmp_path, entry)
+    assert read_ledger(tmp_path) == ()
+    assert not ledger_path(tmp_path).exists()
+    events = read_events(rejections_path(tmp_path))
+    assert len(events) == 1
+    assert events[0].type == EVENT_GATE_REJECTED
+    assert events[0].reason_code == "E_CANONICAL_FORBIDDEN"
+    assert events[0].experiment_id == entry.experiment_id
+    assert events[0].cohort_id == entry.cohort_id
 
 
 def test_canonical_can_append_and_read_back(tmp_path):

@@ -17,13 +17,24 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from alphamill.evaluation.capabilities import CAP_HOLDOUT_BUDGET_WRITER, TierContext
+from alphamill.evaluation.capabilities import (
+    CAP_HOLDOUT_BUDGET_WRITER,
+    CapabilityError,
+    TierContext,
+)
 from alphamill.evaluation.contract_common import TIER_CANONICAL
-from alphamill.evaluation.events import EVENT_GATE_REJECTED, RunEvent, build_event
+from alphamill.evaluation.events import (
+    EVENT_GATE_REJECTED,
+    RunEvent,
+    append_events,
+    build_event,
+)
 from alphamill.evaluation.run_state import STATE_CREATED, STATE_INCOMPLETE
+from alphamill.factor_factory.bench.stage_model import STAGE_COST_CAPACITY
 
 LEDGER_SUBDIR = "holdout_budget"
 LEDGER_FILENAME = "ledger.jsonl"
+REJECTIONS_FILENAME = "rejections.jsonl"
 REQUIRED_FIELDS = (
     "candidate_id",
     "iso_week",
@@ -42,6 +53,11 @@ class HoldoutBudgetError(Exception):
 
 def ledger_path(root: Path) -> Path:
     return root / LEDGER_SUBDIR / LEDGER_FILENAME
+
+
+def rejections_path(root: Path) -> Path:
+    """越权写入留出台账时留下的 `evaluation.gate_rejected` 事件（`TR-002`；`R1-006`）。"""
+    return root / LEDGER_SUBDIR / REJECTIONS_FILENAME
 
 
 @dataclass(frozen=True)
@@ -113,8 +129,26 @@ def read_ledger(root: Path) -> tuple[HoldoutBudgetEntry, ...]:
 
 
 def append_entry(context: TierContext, root: Path, entry: HoldoutBudgetEntry) -> Path:
-    """追加一行；调用方必须持有 canonical 的留出预算台账能力，否则 fail-closed。"""
-    context.require(CAP_HOLDOUT_BUDGET_WRITER)
+    """追加一行；调用方必须持有 canonical 的留出预算台账能力，否则 fail-closed。
+
+    越权时**先**原子追加 `evaluation.gate_rejected`（`TR-002`/`R1-006`）再抛错——失败关闭
+    必须留下可定位证据，而不是只抛异常；台账本身保持零行（不落任何越权写入）。
+    """
+    try:
+        context.require(CAP_HOLDOUT_BUDGET_WRITER)
+    except CapabilityError:
+        append_events(
+            rejections_path(root),
+            (
+                rejection_event(
+                    experiment_id=entry.experiment_id,
+                    cohort_id=entry.cohort_id,
+                    execution_tier=context.execution_tier,
+                    stage=STAGE_COST_CAPACITY,
+                ),
+            ),
+        )
+        raise
     path = ledger_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:

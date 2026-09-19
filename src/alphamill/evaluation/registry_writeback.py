@@ -20,6 +20,13 @@ from pathlib import Path
 from typing import Any
 
 from alphamill.evaluation.capabilities import CAP_CANONICAL_WRITER, CapabilityError, TierContext
+from alphamill.evaluation.contract_common import TIER_CANONICAL
+from alphamill.evaluation.events import (
+    EVENT_GATE_REJECTED,
+    append_events,
+    build_event,
+)
+from alphamill.evaluation.run_state import STATE_CREATED, STATE_INCOMPLETE
 from alphamill.experiment_store import population
 from alphamill.experiment_store import research_snapshot as rs
 
@@ -161,8 +168,40 @@ def writeback_evaluation_face(
     return path
 
 
-def write_definition_face(*_args: Any, **_kwargs: Any) -> None:
-    """`FactorDef` 定义面归 F003；F007 任何写入尝试都是越权（`E_CANONICAL_FORBIDDEN`）。"""
+def definition_face_rejections_path(root: Path) -> Path:
+    """定义面越权写入时留下的 `evaluation.gate_rejected` 事件（`TR-002`；`R1-006`）。"""
+    return root / REGISTRY_SUBDIR / "rejections.jsonl"
+
+
+def write_definition_face(
+    *,
+    root: Path,
+    experiment_id: str,
+    cohort_id: str,
+    execution_tier: str = TIER_CANONICAL,
+    stage: str = "",
+    **fields: Any,
+) -> None:
+    """`FactorDef` 定义面归 F003；F007 任何写入尝试都是越权（`E_CANONICAL_FORBIDDEN`）。
+
+    越权时先原子追加 `evaluation.gate_rejected` 再抛错（`R1-006`），定义面内容零变化。
+    """
+    append_events(
+        definition_face_rejections_path(root),
+        (
+            build_event(
+                experiment_id=experiment_id,
+                execution_tier=execution_tier,
+                cohort_id=cohort_id,
+                from_state=STATE_CREATED,
+                to_state=STATE_INCOMPLETE,
+                event_type=EVENT_GATE_REJECTED,
+                stage=stage,
+                reason_code="E_CANONICAL_FORBIDDEN",
+                evidence_refs=(f"{REGISTRY_SUBDIR}/definitions",),
+            ),
+        ),
+    )
     raise CapabilityError(
         f"定义面字段 {list(DEFINITION_FACE_FIELDS)} 归 F003，F007 评测面回写不得写入"
     )
