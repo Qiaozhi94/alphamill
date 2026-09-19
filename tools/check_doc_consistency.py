@@ -888,9 +888,7 @@ DECLARED_TEST_ALLOWLIST: dict[str, str] = {
     "tests/integration/test_f003_generation_run.py": "T028",
     "tests/integration/test_f003_smoke_gate.py": "T016",
     "tests/unit/test_f003_alphagen_adapter.py": "T021",
-    "tests/unit/test_f003_gpu_slot.py": "T004",
     "tests/unit/test_f003_ic_parity.py": "T018",
-    "tests/unit/test_f003_objective.py": "T024",
     "tests/unit/test_f003_vendor_hygiene.py": "T013",
 }
 
