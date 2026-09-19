@@ -51,7 +51,7 @@ updated: 2026-09-19
 - [x] T015 (`FR-004`, `DR-004`, `AC-005`): 实现 `quality_gate.py`——复用 `tools/f001_backfill_report.py` 的缺失率/边界闭合/连续聚合三项口径并参数化到多 pair，**另补一项它没有的显式重复主键检查**（`GROUP BY exchange, symbol, time HAVING count(*) > 1`；参考表 `ohlcv_1m` 的主键使重复结构性不可发生，故该项在真实表上恒为 0，其检测路径必须由无主键 scratch 源表 fixture 真实触发，不得写成空转断言），逐 pair 判定记录（通过与失败同样保留，该记录是准入状态真相源） — verify: `tests/integration/test_f008_quality_gate.py`
 - [x] T016 (`FR-004`, `AC-006`, `DR-002`): 实现"实际可得窗口"缺失率语义——上线晚于窗口起点不算缺失；真实上市时间写入台账 `valid_from`（可交易期语义，与准入时点无关） — verify: `tests/unit/test_f008_quality_gate_window.py`
 - [x] T017 (`FR-006`, `DR-004`): 实现准入联动——固定 库追加 → artifact 发布 → 写准入记录并进入导出清单 三步顺序，任一步失败不进入下一步；`admitted = universe_at(本次导出 window_end)`，接线三处缺一不可：`partitions.lake_pairs_map(admitted=…)` + `produce_partitions` 的单元格级剔除（否则未准入 pair 会抛 `DataBridgeError` 而非被排除）+ `exporter.export_dataset/_export_one` 透传；`admitted=None` 时行为与 F002 现状逐字节一致，且断言 `symbol_map` 保持全量（与导出清单允许不等）；全量导出若因收缩命中 `guard_full_shrink`，按 F002 既有语义走 `--allow-shrink` 并在容量报告记录 `shrink_confirmed`，不得放宽守卫 — verify: `tests/integration/test_f008_export_integration.py`
-- [ ] T018 (`IR-001`, `AC-012`): 实现 `universe/__main__.py` 模块入口（`python -m alphamill.data_bridge.universe`，不新增 `[project.scripts]`）的五个子命令与 design §4 登记的全部九类启动期拒绝条件（未冻结/窗口非法/磁盘不足/`freeze` 缺 `--confirm`/`gate` 遇回填未完成/口径缺字段/交易所不可达/候选清单为空/定义或 digest 不存在），各自以可区分的非零原因退出 — verify: `tests/unit/test_f008_cli_contract.py`
+- [x] T018 (`IR-001`, `AC-012`): 实现 `universe/__main__.py` 模块入口（`python -m alphamill.data_bridge.universe`，不新增 `[project.scripts]`）的五个子命令与 design §4 登记的全部九类启动期拒绝条件（未冻结/窗口非法/磁盘不足/`freeze` 缺 `--confirm`/`gate` 遇回填未完成/口径缺字段/交易所不可达/候选清单为空/定义或 digest 不存在），各自以可区分的非零原因退出 — verify: `tests/unit/test_f008_cli_contract.py`
 
 ### Phase 3：真实扩容执行
 

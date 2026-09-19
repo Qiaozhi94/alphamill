@@ -28,6 +28,18 @@ class ExchangeUnreachableError(UniverseError):
     code = "E_UNIVERSE_EXCHANGE_UNREACHABLE"
 
 
+class ConfirmRequiredError(UniverseError):
+    """`freeze` 缺少人工确认开关（`--confirm`）：冻结必须显式确认。"""
+
+    code = "E_UNIVERSE_CONFIRM_REQUIRED"
+
+
+class EmptyDefinitionError(UniverseError):
+    """候选清单为空：空宇宙不得冻结，也不得驱动回填。"""
+
+    code = "E_UNIVERSE_EMPTY_CANDIDATES"
+
+
 class UniverseNotFoundError(UniverseError):
     """指定 universe_id 的定义或 digest artifact 不存在。"""
 

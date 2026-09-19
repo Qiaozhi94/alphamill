@@ -25,7 +25,8 @@ def market(
     quote: str = "USDT",
 ) -> MarketRecord:
     db_symbol = f"{base}/{quote}"
-    lake_pair, _ = symbol_map.derive_pairs(db_symbol, "perp")
+    # 与生产一致：研究数据集 ohlcv_1m 是 spot 命名空间（见 discover.DATA_MARKET_TYPE）
+    lake_pair, _ = symbol_map.derive_pairs(db_symbol, "spot")
     listed_at = datetime(2026, 9, 19, tzinfo=UTC).timestamp() - listed_days * 86400
     return MarketRecord(
         symbol=f"{db_symbol}:{quote}",
