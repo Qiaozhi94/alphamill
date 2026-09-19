@@ -59,13 +59,13 @@ updated: 2026-09-14
 - [x] T020 (`FR-003`, `AC-003`): 实现 `lake_tensor` 完整路径——多 dataset 合并、重采样（默认 1h）、PIT 宇宙掩码（消费 F008 `universe_at(T)` 与台账 digest；F008 未落地时用显式 universe 配置并把 digest 与来源写进 `run.json`）、`feature_map` 与其 digest — verify: `tests/integration/test_f003_lake_tensor.py`
 - [ ] T021 (`FR-004`, `AC-004`): 实现 `alphagen_adapter`——token 序列编译闭包、`meta["expression"]` 反解、`data_columns` 经 `feature_map` 反解、截面边界（no-signal 语义） — verify: `tests/unit/test_f003_alphagen_adapter.py`
 - [x] T022 (`FR-005`, `AC-005`): 实现算子能力登记表（时序/截面语义、窗口语义、crypto 24/7 窗口换算），并导出为 `F007` 可消费的版本化能力清单（含 `schema_version`；`F007` FR-002 的已登记算子能力消费源） — verify: `tests/unit/test_f003_operator_registry.py`
-- [ ] T023 (`FR-005`, `TR-002`, `AC-005`): 实现生成侧 AST 自检与四类拒绝原因码（`unregistered_op` / `lookahead` / `reachability` / `duplicate_definition`）计数 — verify: `tests/unit/test_f003_operator_registry.py`
+- [x] T023 (`FR-005`, `TR-002`, `AC-005`): 实现生成侧 AST 自检与四类拒绝原因码（`unregistered_op` / `lookahead` / `reachability` / `duplicate_definition`）计数 — verify: `tests/unit/test_f003_operator_registry.py`
 - [ ] T024 (`FR-005`, `AC-006`): 实现目标对齐——换手惩罚、≥30 笔/90 天可达性预筛与成本后收益预筛（按可配成本参数，只产预筛信号不产裁决），参数写入 `run.json` 的 `objective` — verify: `tests/unit/test_f003_objective.py`
 
 ### Phase 4：批量挖掘、协同池与产能
 
 - [ ] T025 (`NFR-002`, `AC-010`): 实现 `gpu_slot`——显存自检（上限可配，不写死常数）、flock 单槽 FIFO（`queue_seq` / 取锁 / 释放 / 超时状态记录）、训练窗口校验、`--allow-cpu` / `--allow-offhours` 显式开关，运行记录写 `hostname` / `device` / `kronos_offload`；实现夜槽 Kronos 生命周期客户端（**live owner = F003**）：按架构 §7.1 契约调用 `status` / `stop` / `restore`（含 `contract_version`、幂等、超时与错误码），用 `status.vram_bytes` 确认显存释放，失败或版本不匹配则 fail-closed 留在 FIFO，并按架构 §7.1 观测→处置决策表逐行断言（连接拒绝且部署清单无该服务 / `device=cpu` → `offload_not_needed`；404/`E_UNSUPPORTED_VERSION` 回落探测：`/health.device=cpu` 或设备侧 `memory.used` 低于阈值 → `offload_not_needed`；达到阈值或读数不可得 → fail-closed（不依赖 GPU 进程列表），`reason=endpoint_absent_no_gpu_tenant`，读数写入 `kronos_offload`；单测须含「进程列表为空但 `memory.used` 达到阈值 → fail-closed」用例；停止失败 / 控制面不可达但服务在 → fail-closed） — verify: `tests/unit/test_f003_gpu_slot.py`, `tests/integration/test_f003_kronos_lifecycle.py`
-- [ ] T026 (`FR-007`, `DR-004`, `AC-008`): 实现协同池导出为可执行 FactorDef（`generator=pool`，加载后可按成员重算）与 `pool_store`，成员权重可反解且重算一致，成员或权重变化产生新 `factor_id` — verify: `tests/integration/test_f003_alpha_pool.py`
+- [x] T026 (`FR-007`, `DR-004`, `AC-008`): 实现协同池导出为可执行 FactorDef（`generator=pool`，加载后可按成员重算）与 `pool_store`，成员权重可反解且重算一致，成员或权重变化产生新 `factor_id` — verify: `tests/integration/test_f003_alpha_pool.py`
 - [ ] T027 (`IR-001`, `FR-001`, `AC-011`): 实现 CLI `mine` 子命令与全部启动期拒绝条件（缺绑定/invalid/档位不明/窗口外/无 CUDA），并支持 `--window` / `--config` 默认值以构造完整 `GenerationRequest`（默认值来自代码内常量并写入 config artifact） — verify: `tests/unit/test_f003_cli_contract.py`
 - [ ] T028 (`NFR-003`, `AC-009`): 实现并验证可复现性——canonical config artifact 与 `config_digest` 落盘、seed 稳定派生、torch 确定性开关；同 `(seed, binding, code_digest, config_digest)` 重跑得到相同 factor_id 集合与相同池成员 — verify: `tests/integration/test_f003_generation_run.py`
 - [ ] T029 (`NFR-001`, `AC-006`): 在执行机跑一次完整挖掘运行，入册 ≥50 个通过自检候选并记录逐级计数、hostname 与设备 — verify: `tests/integration/test_f003_generation_run.py`

@@ -885,7 +885,6 @@ TEST_REF_RE = re.compile(r"tests/[A-Za-z0-9_/.-]+\.py")
 # 条目 = 文件路径 → 首个声明它的未开工任务。文件落盘后必须移除条目（转为存在性
 # 校验，防止过期豁免把「删除已落盘载体」盖住）；引用未登记的幽灵文件同样判红。
 DECLARED_TEST_ALLOWLIST: dict[str, str] = {
-    "tests/integration/test_f003_alpha_pool.py": "T026",
     "tests/integration/test_f003_generation_run.py": "T028",
     "tests/integration/test_f003_smoke_gate.py": "T016",
     "tests/unit/test_f003_alphagen_adapter.py": "T021",
