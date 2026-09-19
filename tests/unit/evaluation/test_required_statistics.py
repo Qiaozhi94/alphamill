@@ -99,8 +99,10 @@ def test_hac_se_is_positive_and_clamps_lag():
 
 
 def test_hac_se_rejects_degenerate_series():
+    # 用 0.5（二进制精确）而非 0.1：py<3.12 的 sum() 无补偿求和，sum([0.1]*10) != 1.0，
+    # 会让「常数序列」出现 ~1e-17 的伪偏差而不再是严格退化——该断言不得依赖求和的浮点细节。
     with pytest.raises(StatisticsError, match="HAC 方差非正"):
-        hac_se([0.1] * 10)
+        hac_se([0.5] * 10)
     with pytest.raises(StatisticsError, match="不得为负"):
         hac_se(_ic_series(5), lag=-1)
     with pytest.raises(StatisticsError, match="至少需要"):
