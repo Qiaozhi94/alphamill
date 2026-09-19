@@ -46,10 +46,10 @@ updated: 2026-09-14
 
 ### Phase 2：AlphaGen vendor 与冒烟闸门（US-002，2 个工作日 time-box）
 
-- [ ] T013 (`FR-002`, `AC-002`): vendor 核心子集落地（表达式/算子、张量求值器、线性协同池、RL 环境），丢弃 `requirements.txt` 与 `alphagen_qlib/`，逐处改动标注并补齐 `VENDORED.md` 五项，且与 T003 冻结的上游基线逐文件比对（差异集合 == 标注集合） — verify: `tests/unit/test_f003_vendor_hygiene.py`
+- [x] T013 (`FR-002`, `AC-002`): vendor 核心子集落地（表达式/算子、张量求值器、线性协同池、RL 环境），丢弃 `requirements.txt` 与 `alphagen_qlib/`，逐处改动标注并补齐 `VENDORED.md` 五项，且与 T003 冻结的上游基线逐文件比对（差异集合 == 标注集合） — verify: `tests/unit/test_f003_vendor_hygiene.py`
 - [x] T014 (`FR-002`): `pyproject.toml` 新增 `mining` 可选依赖组（torch / numpy / stable-baselines3 / gymnasium 全部写版本范围；torch 需显式选 CUDA 构建，且必须覆盖 `qiaozhi-lab` 的 Blackwell sm_120，为迁移留路）、`ruff extend-exclude` 排除 vendor 目录，并在 `docs/SOP.md` Code Quality 豁免表登记 vendor 目录 — verify: `python3 tools/verify.py`
 - [x] T015 (`FR-002`, `NFR-004`): 扩展 `tools/check_dep_pins.py` 为"可选 extras 已安装才校验范围"，并在 runner 入口加 mining extra 能力自检 fail-closed（两者必须同时落地） — verify: `tests/unit/test_check_dep_pins.py`
-- [ ] T016 (`FR-006`, `AC-007`): 实现冒烟闸门判据判定器、当日冒烟 manifest（含 ADR-0001 两条 M2 义务：生成侧逐级计数、下游级 `owner=F007`+`not_yet_available` 占位、奖励频率抽查）、档位状态机与降级裁决（L1→L0 回切须新 time-box 记录），并提供 `smoke` 的默认 config/window 构造 — verify: `tests/integration/test_f003_smoke_gate.py`
+- [x] T016 (`FR-006`, `AC-007`): 实现冒烟闸门判据判定器、当日冒烟 manifest（含 ADR-0001 两条 M2 义务：生成侧逐级计数、下游级 `owner=F007`+`not_yet_available` 占位、奖励频率抽查）、档位状态机与降级裁决（L1→L0 回切须新 time-box 记录），并提供 `smoke` 的默认 config/window 构造 — verify: `tests/integration/test_f003_smoke_gate.py`
 - [ ] T017 (`FR-006`, `AC-007`): 在执行机用最小数据切片跑通 1 个 PPO epoch（含 gym→gymnasium env wrapper 适配）——冒烟第 1 天判据 — verify: `tests/integration/test_f003_smoke_gate.py`
 - [ ] T018 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
 - [ ] T019 (`FR-006`): 在执行机实跑 time-box（第 1、2 天判据），产出裁决记录（L0 锁定或 L1 降级；L2 不属 time-box 裁决）与触发判据写入当日 manifest；**不在此步回写 spec**（回写在 T032，须先归档证据） — verify: `tests/integration/test_f003_smoke_gate.py` + 当日 manifest 含裁决与触发判据
