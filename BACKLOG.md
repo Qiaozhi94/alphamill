@@ -6,7 +6,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 | Feature | 版本 | 状态 | 链接 |
 |---|---|---|---|
 | F003-alphagen-vendor | 0.2 | developing | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
-| F008-universe-expansion | 0.2 | ready-for-development | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
+| F008-universe-expansion | 0.2 | developing | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
 
 > 规则：feature 状态变更（spec frontmatter）时必须同步本表；`done` 的 Feature 移出本表，
 > 交付记录进入 `docs/features/releases/<version>.md`。

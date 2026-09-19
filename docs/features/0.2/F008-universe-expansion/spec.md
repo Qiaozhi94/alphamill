@@ -2,7 +2,8 @@
 kind: feature
 id: F008
 version: "0.2"
-status: ready-for-development
+status: developing
+branch: feat/F008-universe-expansion
 gate_version: 1
 related_features: [F001, F002, F003, F007]
 topics: [data-bridge, universe, backfill, data-quality, point-in-time, m2]
