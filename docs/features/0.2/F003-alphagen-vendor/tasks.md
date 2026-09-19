@@ -84,7 +84,7 @@ updated: 2026-09-14
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 - [x] T036 [TEST] (`US-001`, `AC-001`, `AC-003`, `AC-004`): 旅程 US-001 端到端验收——固定快照绑定与 seed 经 `produce()` 连跑两次得到同一 `factor_id` 集合、落盘后加载的 FactorDef 可直接执行、invalid 绑定被拒并留 `rejected` 终态；夹具在 Phase 1 先以红灯立起，收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/unit/test_f003_generator_contract.py tests/unit/test_f003_factor_store.py tests/unit/test_f003_alphagen_adapter.py tests/integration/test_f003_lake_tensor.py`
-- [ ] T037 [TEST] (`US-002`, `AC-007`): 旅程 US-002 端到端验收——在执行机按 `smoke --day 1`、`--day 2` 走完 time-box：逐条 L1 判据 pass/fail、两条 M2 义务入 manifest、判据未达标即输出 L1 降级、回切请求被拒；收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_smoke_gate.py` + 当日 manifest
+- [x] T037 [TEST] (`US-002`, `AC-007`): 旅程 US-002 端到端验收——在执行机按 `smoke --day 1`、`--day 2` 走完 time-box：逐条 L1 判据 pass/fail、两条 M2 义务入 manifest、判据未达标即输出 L1 降级、回切请求被拒；收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_smoke_gate.py` + 当日 manifest
 - [x] T038 [TEST] (`US-003`, `AC-006`, `AC-008`, `AC-009`): 旅程 US-003 端到端验收——执行机训练夜槽一次完整挖掘：入册 ≥50、逐级计数入 run.json、成本后收益与可达性预筛参数入 objective、协同池可导出且按成员重算一致、零交易型表达式被排除、同配置重跑得到相同 factor_id 集合与池成员 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_generation_run.py tests/integration/test_f003_alpha_pool.py tests/unit/test_f003_objective.py`
 
 - [ ] T039: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
