@@ -33,7 +33,7 @@ updated: 2026-09-15
 | Feature 实现方案 | `features/<version>/Fxxx-*/design.md` | 技术设计 |
 | 开发、验收和检视纪律 | `SOP.md` | 开发流程约定 |
 | 当前 active Feature 与强提醒 | `../CLAUDE.md` | 自动加载入口 |
-| 非 done Feature 派生索引 | `../BACKLOG.md` | 活跃 feature 索引（当前 F003/F007/F008） |
+| 非 done Feature 派生索引 | `../BACKLOG.md` | 活跃 feature 索引（当前 F003/F008） |
 | 版本收口摘要 | `features/releases/0.1.md` | 0.1 收口于 2026-09-12 |
 | 缺陷和过程教训 | `reviews/RETROSPECTIVE.md` | 检视复盘 |
 

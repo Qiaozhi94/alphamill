@@ -2,8 +2,8 @@
 kind: feature
 id: F007
 version: "0.2"
-status: code-reviewing
-status_evidence: SDT 八闸 PASS（.sdd/sdt-gate.json）；T023 执行机真实环境取证完成于 qiaozhi-lt（RTX 4060）；tools/verify.py 全绿
+status: done
+status_evidence: merge aa7f958 + CI run 35420117790 全绿（verify py3.11 与 py3.13 均通过）
 branch: feat/F007-evaluation-gates
 gate_version: 1
 related_features: [F002, F003, F004, F008]
