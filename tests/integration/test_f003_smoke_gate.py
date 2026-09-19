@@ -14,6 +14,7 @@ import torch
 
 from alphamill.factor_factory.canonical import canonical_json_bytes
 from alphamill.factor_factory.errors import SchemaValidationError, UnknownSchemaVersionError
+from alphamill.factor_factory.generators.alphagen_generation import build_counts, run_generation
 from alphamill.factor_factory.generators.alphagen_runner import (
     PpoEpochResult,
     _operator_margin,
@@ -27,6 +28,7 @@ from alphamill.factor_factory.generators.base import (
     RejectionCounts,
     Window,
 )
+from alphamill.factor_factory.generators.ic_parity import compare_ic
 from alphamill.factor_factory.generators.lake_tensor import TensorPanel
 from alphamill.factor_factory.generators.smoke_gate import (
     FunnelObligations,
@@ -322,3 +324,87 @@ def test_gpu_ppo_epoch_completes_when_integration_cuda_is_enabled() -> None:
     assert result.device == "cuda"
     assert result.evaluations >= 1, "a smoke epoch that evaluates no expression is vacuous"
     assert isinstance(extract_candidates(result.pool), list)
+
+
+def _flat_panel(days: int, pair_count: int) -> TensorPanel:
+    """Panel with vendor-facing feature names (`close`), needed for IC parity tokens."""
+    timestamps = pd.date_range("2026-01-01", periods=days, freq="h", tz="UTC")
+    pairs = tuple(f"PAIR-{index}" for index in range(pair_count))
+    rows = [
+        (t, p, 10 + d + i, 100 + d, 20 + d + i)
+        for d, t in enumerate(timestamps)
+        for i, p in enumerate(pairs)
+    ]
+    frame = pd.DataFrame(rows, columns=["timestamp", "pair", "close", "volume", "high"]).set_index(
+        ["timestamp", "pair"]
+    )
+    frame["__in_universe__"] = True
+    return TensorPanel(
+        datasets=("synthetic",),
+        resample="1h",
+        pairs=pairs,
+        timestamps=timestamps,
+        panel=frame,
+        feature_map={"volume": 0, "close": 1, "high": 2},
+        feature_map_digest="sha256:flat",
+        universe_source="test",
+    )
+
+
+def test_timebox_judges_l0_lock_with_real_gpu_evidence(tmp_path: Path) -> None:
+    if os.environ.get("ALPHAMILL_INTEGRATION") != "1":
+        pytest.skip("ALPHAMILL_INTEGRATION=1 is required")
+    if not torch.cuda.is_available():
+        pytest.fail("ALPHAMILL_INTEGRATION=1 requires CUDA for the smoke time-box")
+
+    flat = _flat_panel(days=200, pair_count=6)
+    stock_data, target, _ = build_stock_data(flat, feature_map=flat.feature_map)
+    outcome = run_generation(
+        stock_data=stock_data,
+        target=target,
+        device="cuda",
+        seed=23,
+        total_timesteps=4096,
+        pool_capacity=5,
+    )
+    counts = build_counts(outcome)
+
+    forward = flat.panel["close"].groupby(level="pair").pct_change().shift(-1).dropna()
+    parity = compare_ic(
+        ("feature:close", "return:1", "cs_rank"),
+        flat.panel,
+        forward,
+        feature_map=flat.feature_map,
+    )
+
+    spot = RewardSpotCheck(
+        turnover_prefilter_applied=True,
+        reachability_prefilter_applied=True,
+        zero_trade_bias_observed=False,
+        notes="time-box spot check against turnover and reachability pre-filters",
+    )
+    day1 = judge_day1(
+        ppo_epoch_ok=outcome.evaluations >= 1,
+        counts=counts,
+        reward_spot_check=spot,
+        tier_before="L1",
+        now=datetime.now(UTC),
+    )
+    day2 = judge_day2(
+        ic_parity_ok=parity.matched,
+        counts=counts,
+        reward_spot_check=spot,
+        tier_before=day1.tier_after,
+        now=datetime.now(UTC),
+    )
+
+    assert day1.verdict == "L0_locked"
+    assert day1.tier_after == "L0"
+    assert day1.obligations.downstream.get("owner") == "F007"
+    assert day2.verdict == "L0_locked"
+    assert day2.trigger is None
+
+    path = write_smoke_manifest(tmp_path / "smoke-day2.json", day2)
+    reloaded = load_smoke_manifest(path)
+    assert reloaded.verdict == "L0_locked"
+    assert reloaded.tier_after == "L0"

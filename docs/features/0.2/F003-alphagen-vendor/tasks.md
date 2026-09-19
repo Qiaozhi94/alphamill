@@ -53,7 +53,7 @@ updated: 2026-09-14
 - [x] T017 (`FR-006`, `AC-007`): 在执行机用最小数据切片跑通 1 个 PPO epoch（含 gym→gymnasium env wrapper 适配）——冒烟第 1 天判据 — verify: `tests/integration/test_f003_smoke_gate.py`
       — 复勾（2026-09-19）：首版取证为空转（`eval_cnt=0`），已按 review-convergence §7.5 回退；根因修复后重取证为真。修复包括张量布局 `(days, features, stocks)` + feature 轴按 `FeatureType` 索引、`n_days` 应为求值窗口（`LakeStockData` 与 `_VendorStockData` 两处都要减余量）、`Ref` 为滞后故 `max_future_days` 取 target horizon、MaskablePPO + sb3-contrib。现已加**反空转断言** `evaluations >= 1`；`ALPHAMILL_INTEGRATION=1` 下 13 passed（512 步，device=cuda，eval_cnt ≥ 1）。
 - [x] T018 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
-- [ ] T019 (`FR-006`): 在执行机实跑 time-box（第 1、2 天判据），产出裁决记录（L0 锁定或 L1 降级；L2 不属 time-box 裁决）与触发判据写入当日 manifest；**不在此步回写 spec**（回写在 T032，须先归档证据） — verify: `tests/integration/test_f003_smoke_gate.py` + 当日 manifest 含裁决与触发判据
+- [x] T019 (`FR-006`): 在执行机实跑 time-box（第 1、2 天判据），产出裁决记录（L0 锁定或 L1 降级；L2 不属 time-box 裁决）与触发判据写入当日 manifest；**不在此步回写 spec**（回写在 T032，须先归档证据） — verify: `tests/integration/test_f003_smoke_gate.py` + 当日 manifest 含裁决与触发判据
 
 ### Phase 3：完整数据面、适配器与生成侧自检
 
