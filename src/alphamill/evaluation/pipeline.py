@@ -104,12 +104,12 @@ def _panel_trade_summary(
     else:
         sample_unit = SAMPLE_UNIT_OBSERVATIONS
         trade_count = n_observations
+    count = len(summaries)
     return TradeSummary(
-        gross_return=sum(summary.gross_return for summary in summaries),
-        turnover=sum(summary.turnover for summary in summaries),
+        gross_return=sum(summary.gross_return for summary in summaries) / count,
+        turnover=sum(summary.turnover for summary in summaries) / count,
         round_trips=round_trips,
-        holding_period_hours=sum(summary.holding_period_hours for summary in summaries)
-        / len(summaries),
+        holding_period_hours=sum(summary.holding_period_hours for summary in summaries) / count,
         sample_unit=sample_unit,
         trade_count=trade_count,
         n_observations=n_observations,

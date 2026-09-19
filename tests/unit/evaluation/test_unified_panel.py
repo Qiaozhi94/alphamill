@@ -99,3 +99,5 @@ def test_panel_evaluation_groups_by_symbol_and_has_monotonic_times(tmp_path):
     )
     assert len(evaluation.period_returns) == 3
     assert evaluation.trade_summary["round_trips"] == 2
+    assert evaluation.trade_summary["gross_return"] == pytest.approx(0.05)
+    assert evaluation.trade_summary["turnover"] == pytest.approx(1.0)

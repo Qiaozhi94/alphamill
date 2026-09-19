@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, datetime, timedelta
 
@@ -154,22 +155,38 @@ def test_corrupt_claim_is_treated_as_stale_and_recoverable(tmp_path):
     assert read_claim(tmp_path, EXPERIMENT).owner_token == "recovery"
 
 
-def test_recover_does_not_remove_a_competitor_lock(tmp_path, monkeypatch):
-    """R2-202 回归：接管用原子 rename；对手抢先 acquire 后接管者必须失败，不得删掉对手的锁。"""
+def test_takeover_guard_serializes_and_preserves_single_writer(tmp_path):
+    """R2-202 回归：接管临界区串行——他人持接管锁时本进程接管必须失败，任一时刻至多一个持有者。"""
     import alphamill.evaluation.claim as claim_module
 
-    acquire(tmp_path, EXPERIMENT, owner_token="old", lease_seconds=1, now=NOW)
+    acquire(tmp_path, EXPERIMENT, owner_token="dead", lease_seconds=1, now=NOW)
     now = NOW + timedelta(seconds=120)
-    real_move_aside = claim_module._move_aside
-
-    def move_then_competitor_wins(path):
-        real_move_aside(path)
-        acquire(tmp_path, EXPERIMENT, owner_token="competitor", now=now)
-
-    monkeypatch.setattr(claim_module, "_move_aside", move_then_competitor_wins)
+    claim_file = claim_path(tmp_path, EXPERIMENT)
+    guard = claim_file.with_name(f"{claim_file.name}{claim_module.TAKEOVER_SUFFIX}")
+    guard.write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
+    try:
+        with pytest.raises(ClaimBusyError, match="接管"):
+            recover(tmp_path, EXPERIMENT, owner_token="A", now=now, process_alive=False)
+    finally:
+        guard.unlink(missing_ok=True)
+    taken = recover(tmp_path, EXPERIMENT, owner_token="B", now=now, process_alive=False)
+    assert taken.owner_token == "B"
     with pytest.raises(ClaimBusyError):
-        recover(tmp_path, EXPERIMENT, owner_token="recoverer", now=now, process_alive=False)
-    assert read_claim(tmp_path, EXPERIMENT).owner_token == "competitor"
+        recover(tmp_path, EXPERIMENT, owner_token="C", now=now, process_alive=False)
+    assert read_claim(tmp_path, EXPERIMENT).owner_token == "B"
+
+
+def test_stale_takeover_guard_is_reclaimed(tmp_path):
+    """R2-202：残留接管锁（持有进程已死）可被回收，不永久堵死 experiment_id。"""
+    import alphamill.evaluation.claim as claim_module
+
+    acquire(tmp_path, EXPERIMENT, owner_token="dead", lease_seconds=1, now=NOW)
+    now = NOW + timedelta(seconds=120)
+    claim_file = claim_path(tmp_path, EXPERIMENT)
+    guard = claim_file.with_name(f"{claim_file.name}{claim_module.TAKEOVER_SUFFIX}")
+    guard.write_text(json.dumps({"pid": 999999}), encoding="utf-8")
+    taken = recover(tmp_path, EXPERIMENT, owner_token="recovery", now=now, process_alive=False)
+    assert taken.owner_token == "recovery"
 
 
 def test_release_refuses_corrupt_claim(tmp_path):

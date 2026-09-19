@@ -74,5 +74,5 @@ ml4t 配套仓提供了可借鉴的模式：显式 `preview/canonical` 执行层
 
 - 2026-09-19（F007 检视循环 16）：`ExperimentContext` 数值规范化口径由「int 原样 / float 定标」
   改为「int 与 float 统一定标」（`5` 与 `5.0` 得到同一 `experiment_id`），`CONTEXT_SCHEMA_VERSION`
-  升为 2。v1 产物仍按 v1 读取；同一语义输入在 v2 下会得到与 v1 不同的 `experiment_id`，属预期的
-  身份口径变更（`R2-204`）。
+  升为 2。v1 仅保留可构造性（校验接受 `schema_version=1`），历史 ID 不可复算；同一语义输入在 v2
+  下会得到与 v1 不同的 `experiment_id`，属预期的身份口径变更（`R2-204`）。

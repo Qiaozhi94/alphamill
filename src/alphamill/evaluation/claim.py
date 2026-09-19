@@ -17,14 +17,13 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 CLAIM_SUFFIX = ".claim"
-STALE_SUFFIX = ".stale"
+TAKEOVER_SUFFIX = ".takeover"
 DEFAULT_LEASE_SECONDS = 900
 CLAIM_SCHEMA_VERSION = 1
 
@@ -180,19 +179,35 @@ def assert_takeover_allowed(
         raise ClaimBusyError(f"{claim.key} 的 temp artifact 已发布，应走幂等读取而非接管")
 
 
-def _move_aside(path: Path) -> None:
-    """把失效 claim 原子 rename 到唯一临时名——两个接管者只有一个能 rename 成功。
+def _takeover_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}{TAKEOVER_SUFFIX}")
 
-    rename 是原子的：抢输的一方拿到 `FileNotFoundError` 后直接去 `acquire`，由 `O_EXCL`
-    决出唯一持有者；不会像 `unlink→acquire` 那样删掉别人刚建立的锁（`R2-202`）。
-    """
-    tomb = path.with_name(f"{path.name}{STALE_SUFFIX}-{os.getpid()}-{uuid.uuid4().hex}")
+
+def _read_takeover_pid(guard: Path) -> int | None:
     try:
-        os.rename(path, tomb)
-    except FileNotFoundError:
-        return
-    with contextlib.suppress(OSError):
-        tomb.unlink()
+        return int(json.loads(guard.read_text(encoding="utf-8"))["pid"])
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def _acquire_takeover_guard(guard: Path) -> int:
+    """接管临界区锁：``O_EXCL`` 创建 `<claim>.takeover`，只有持锁者能删除旧 claim。
+
+    这是把「读→判定→删→建」变成串行临界区的关键：任何两个接管者都无法同时进入，因此不存在
+    「接管者删掉对手刚建立的锁」的交错（`R2-202`）。残留的 guard（持有进程已死）按 pid 存活
+    探测就地回收，避免崩溃后永久堵死。
+    """
+    for _ in range(2):
+        try:
+            return os.open(guard, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError as exc:
+            holder = _read_takeover_pid(guard)
+            if holder is None or not is_process_alive(holder):
+                with contextlib.suppress(OSError):
+                    guard.unlink()
+                continue
+            raise ClaimBusyError(f"{guard.name} 正在被其他进程接管，拒绝并发接管") from exc
+    raise ClaimBusyError(f"{guard.name} 接管锁争用失败，拒绝并发接管")
 
 
 def recover(
@@ -207,18 +222,27 @@ def recover(
 ) -> Claim:
     """接管失效锁后原子替换 claim；不满足接管条件即拒绝，原锁保持不变。
 
-    文件不存在 → 直接 `acquire`；文件存在但**损坏/为空** → 视为失效锁，原子移开后 `acquire`；
-    否则必须满足三条件（lease 过期 ∧ 无活进程 ∧ temp 未发布）。
+    「读 claim → 判定失效 → 删除 → 创建」整体放在 `<claim>.takeover` 串行临界区内，
+    保证任一时刻至多一个接管者；文件不存在直接 `acquire`，损坏/为空视为失效锁。
     """
     path = claim_path(root, key)
     if not path.is_file():
         return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)
-    existing = read_claim(root, key)
-    if existing is None:
-        _move_aside(path)
+    guard = _takeover_path(path)
+    guard_fd = _acquire_takeover_guard(guard)
+    try:
+        if not path.is_file():
+            return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)
+        existing = read_claim(root, key)
+        if existing is None:
+            path.unlink(missing_ok=True)
+            return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)
+        assert_takeover_allowed(
+            existing, now=now, process_alive=process_alive, temp_published=temp_published
+        )
+        path.unlink(missing_ok=True)
         return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)
-    assert_takeover_allowed(
-        existing, now=now, process_alive=process_alive, temp_published=temp_published
-    )
-    _move_aside(path)
-    return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)
+    finally:
+        os.close(guard_fd)
+        with contextlib.suppress(OSError):
+            guard.unlink()
