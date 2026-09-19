@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -441,6 +442,20 @@ def test_published_but_unregistered_run_is_recovered_on_rerun(cohort_env, capsys
     assert [
         entry.candidate_id for entry in population.registrations(reports, cohort_id)
     ] == [CANDIDATE]
+
+
+def test_canonical_refuses_when_single_writer_claim_is_held(cohort_env, capsys):
+    """R1-005 回归：canonical 事务必须取得单写者 claim；被他人持有时 E_COHORT_FROZEN。"""
+    from alphamill.evaluation import claim as claim_module
+
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"], json=True)) == 0
+    payload = _payload(capsys.readouterr().out)
+    shutil.rmtree(Path(payload["artifact_dir"]))
+    claim_module.acquire(
+        cohort_env["reports"] / "_claims", payload["experiment_id"], owner_token="rival"
+    )
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 1
+    assert "error_code=E_COHORT_FROZEN" in capsys.readouterr().out
 
 
 def test_canonical_rejects_dirty_worktree(cohort_env, monkeypatch, capsys):

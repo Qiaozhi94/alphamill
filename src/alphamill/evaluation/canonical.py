@@ -16,14 +16,16 @@ v0.2 的因子输入经由 `--signals` + `--expression` 夹具接缝；F003 注�
 from __future__ import annotations
 
 import json
+import os
+import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from alphamill.evaluation import publisher
+from alphamill.evaluation import claim, publisher
 from alphamill.evaluation.canonical_result import CanonicalResult
-from alphamill.evaluation.capabilities import context_for
+from alphamill.evaluation.capabilities import TierContext, context_for
 from alphamill.evaluation.code_build import (
     assert_expected_code_build_digest,
     assert_worktree_clean_for_canonical,
@@ -45,7 +47,7 @@ from alphamill.evaluation.rejection import (
     register_rejection,
     rejected_stage_results,
 )
-from alphamill.evaluation.run_config import load_run_config, load_unified_frame
+from alphamill.evaluation.run_config import RunConfig, load_run_config, load_unified_frame
 from alphamill.evaluation.run_state import (
     STATE_CREATED,
     STATE_EVIDENCE_READY,
@@ -72,6 +74,7 @@ from alphamill.validation.no_lookahead import (
 )
 
 CANONICAL_STATE_MANIFEST = "manifest.json"
+CLAIMS_SUBDIR = "_claims"
 
 
 class CanonicalError(UpstreamContractError):
@@ -167,6 +170,44 @@ def run_canonical(
             reused=True,
         )
 
+    claim_token = f"canonical-{os.getpid()}-{uuid.uuid4().hex}"
+    claim.acquire(reports / CLAIMS_SUBDIR, experiment_id, owner_token=claim_token)
+    try:
+        return _execute_canonical(
+            reports=reports,
+            tier_context=tier_context,
+            config=config,
+            experiment_id=experiment_id,
+            cohort_id=cohort_id,
+            candidate_id=candidate_id,
+            factor_ref=factor_ref,
+            object_id=object_id,
+            signals_path=signals_path,
+            snapshot=snapshot,
+            expression=expression,
+            code_digest=code_digest,
+            observed_at=observed_at,
+        )
+    finally:
+        claim.release(reports / CLAIMS_SUBDIR, experiment_id, owner_token=claim_token)
+
+
+def _execute_canonical(
+    *,
+    reports: Path,
+    tier_context: TierContext,
+    config: RunConfig,
+    experiment_id: str,
+    cohort_id: str,
+    candidate_id: str,
+    factor_ref: str,
+    object_id: str | None,
+    signals_path: Path,
+    snapshot: rs.ResearchSnapshot,
+    expression: str,
+    code_digest: str,
+    observed_at: str | None,
+) -> CanonicalResult:
     verdict = evaluate_methodology(
         expression=expression,
         declared_capabilities=("operator",),

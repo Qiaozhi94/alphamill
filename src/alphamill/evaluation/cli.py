@@ -20,6 +20,7 @@ from pathlib import Path
 from alphamill.evaluation.canonical import run_canonical
 from alphamill.evaluation.canonical_ops import abandon_experiment, finalize_cohort
 from alphamill.evaluation.capabilities import CapabilityError
+from alphamill.evaluation.claim import ClaimBusyError
 from alphamill.evaluation.code_build import CodeBuildMismatchError
 from alphamill.evaluation.contract_common import UpstreamContractError
 from alphamill.evaluation.events import EventError
@@ -59,6 +60,8 @@ def classify_error(exc: BaseException) -> str:
     """领域异常 → 稳定错误码；未知异常一律 `E_INTERNAL`（不静默、不降级）。"""
     if isinstance(exc, CapabilityError):
         return "E_CANONICAL_FORBIDDEN"
+    if isinstance(exc, ClaimBusyError):
+        return "E_COHORT_FROZEN"
     if isinstance(exc, SnapshotIntegrityError):
         return "E_DATA_DIGEST_MISMATCH"
     if isinstance(exc, (PublishError, CurvesError, SynthesisError)):
