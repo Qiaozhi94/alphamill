@@ -115,6 +115,8 @@ def export_dataset(
     lake_root: Path | None = None,
     post_export_hook: PostExportHook = None,
     allow_shrink: bool = False,
+    admitted: set[str] | None = None,
+    universe_filter: bool = False,
 ) -> dict[str, Any]:
     """导出单个 dataset（design §4 契约）；返回 manifest 摘要 dict。
 
@@ -122,6 +124,9 @@ def export_dataset(
           | full（全 span 重导 + 分区级 diff，仅在内容变化时发布新版本）。
     window_end: 窗口开区间上界；缺省为今日 00:00 UTC，即导到昨天。
     allow_shrink: full 模式下确认源库收缩确属有意（见 _guard_full_shrink）。
+    admitted: F008 导出准入集合（`lake_pair`）；`None`（默认）行为与 F002 现状逐字节一致。
+    universe_filter: 按「台账可交易 ∩ 质量门 ACTIVE」在本 dataset 的窗口终点上现算准入集合
+        （F008 `FR-006`）；与显式 `admitted` 互斥，只在本参数为真且未显式给出集合时生效。
     """
     if mode not in ("incremental", "full"):
         raise ValueError(f"未知 mode: {mode!r}")
@@ -132,7 +137,16 @@ def export_dataset(
     started = time.monotonic()
     try:
         return _export_one(
-            conn, spec, mode, window_end, root, post_export_hook, started, allow_shrink
+            conn,
+            spec,
+            mode,
+            window_end,
+            root,
+            post_export_hook,
+            started,
+            allow_shrink,
+            admitted,
+            universe_filter,
         )
     finally:
         reconcile.reset_snapshot_session(conn)
@@ -149,6 +163,8 @@ def _export_one(
     post_export_hook: PostExportHook,
     started: float,
     allow_shrink: bool = False,
+    admitted: set[str] | None = None,
+    universe_filter: bool = False,
 ) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
     baseline_version, baseline = _baseline(root, spec.name)
@@ -156,8 +172,17 @@ def _export_one(
 
     xmin, taken_at = reconcile.begin_snapshot_tx(conn)
     start, end = _resolve_window(conn, spec, mode, window_end, baseline_partitions)
+    if universe_filter and admitted is None:
+        # F008 导出清单：台账可交易 ∩ 质量门 ACTIVE，取本次导出的窗口终点作为 PIT 时点
+        from alphamill.data_bridge.universe.quality_gate import export_admitted
+
+        admitted = export_admitted(
+            conn,
+            dt.datetime.combine(end, dt.time.min, tzinfo=dt.UTC),
+            market_type=spec.market_type,
+        )
     symbol_map_ref = symbol_map.export_symbol_map(conn=conn, lake_root=root)
-    lake_pairs = partitions.lake_pairs_map(conn, market_type=spec.market_type)
+    lake_pairs = partitions.lake_pairs_map(conn, market_type=spec.market_type, admitted=admitted)
     excluded_null = reconcile.count_null_event_time(conn, spec)
     flagged, flagged_total = (
         partitions.quality_flags(conn, lake_pairs) if spec.source_table == "ohlcv_1m" else ([], 0)
@@ -193,7 +218,7 @@ def _export_one(
     data_version = mf.next_data_version(root, spec.name, dt.datetime.now(dt.UTC).date())
 
     produced, produced_keys, written = partitions.produce_partitions(
-        root, spec, conn, start, end, baseline_partitions, lake_pairs
+        root, spec, conn, start, end, baseline_partitions, lake_pairs, admitted
     )
     window_dates = partitions.date_span(start.isoformat(), (end - dt.timedelta(days=1)).isoformat())
     empty_keys = partitions.empty_cell_keys(

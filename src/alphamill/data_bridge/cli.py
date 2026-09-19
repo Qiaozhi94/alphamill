@@ -53,6 +53,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="full 模式人工确认：源库收缩确属有意，放行空结果/大幅收缩的新版本"
         "（窗口传错导致的截断不在确认范围内，仍然拒绝）",
     )
+    parser.add_argument(
+        "--universe-filter",
+        action="store_true",
+        help="F008：按「台账可交易 ∩ 质量门 ACTIVE」过滤 pair（窗口终点为 PIT 时点）；"
+        "缺省关闭，行为与 F002 现状一致",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="调试日志")
     return parser.parse_args(argv)
 
@@ -105,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
                 mode=args.mode,
                 window_end=args.window_end,
                 allow_shrink=args.allow_shrink,
+                universe_filter=args.universe_filter,
             )
         except psycopg2.Error as exc:
             print(f"FATAL: {dataset}: 瞬时故障（可重试）: {exc}", file=sys.stderr)

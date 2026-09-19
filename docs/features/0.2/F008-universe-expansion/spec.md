@@ -222,7 +222,7 @@ updated: 2026-09-19
 
 ### Requirement: 导出清单与湖内 artifact 联动（`FR-006`）
 
-当 pair 通过质量门时，系统应当把它纳入 `F002` 的导出清单——**导出清单定义为「台账中在本次导出窗口终点（`window_end`）可交易 且 质量门判定为 ACTIVE」的 pair 集合**（无独立实体，由台账与判定记录联合导出），由导出侧在 pair 选择处按该集合过滤实现，不改 `F002` 的 manifest / 对账 / 修订与失效语义；`symbol_map` 保持全量（回答「库里有什么」），与导出清单（回答「研究能用什么」）**允许不等**，回填写库即让 `symbol_map` 产生新 digest 属预期行为；宇宙台账应当以 canonical JSON 发布为内容寻址 artifact（digest 为 canonical 字节的 SHA-256 并带 `sha256:` 前缀，同 digest 文件必须逐字节一致），供 ResearchSnapshot 按显式 digest 引用。`symbol_map` 因新 pair 产生新 digest 时，旧 digest 应当仍可读取。
+当 pair 通过质量门时，系统应当把它纳入 `F002` 的导出清单——**导出清单定义为「台账中在本次导出窗口终点（`window_end`）可交易 且 质量门判定为 ACTIVE」的 pair 集合**（无独立实体，由台账与判定记录联合导出），由导出侧在 pair 选择处按该集合过滤实现（按被导出 dataset 的 `market_type` 取命名空间交集），不改 `F002` 的 manifest / 对账 / 修订与失效语义；`symbol_map` 保持全量（回答「库里有什么」），与导出清单（回答「研究能用什么」）**允许不等**，回填写库即让 `symbol_map` 产生新 digest 属预期行为；宇宙台账应当以 canonical JSON 发布为内容寻址 artifact（digest 为 canonical 字节的 SHA-256 并带 `sha256:` 前缀，同 digest 文件必须逐字节一致），供 ResearchSnapshot 按显式 digest 引用。`symbol_map` 因新 pair 产生新 digest 时，旧 digest 应当仍可读取。
 
 #### Scenario: artifact 内容寻址
 
@@ -280,6 +280,7 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 
 - **台账区间记录标的可交易期，不是准入时点**：`valid_from` = 真实上市时间、`valid_to` = 退市时间；准入与隔离是另一条状态线，落在质量门判定记录（`DR-004`）与导出清单里，不写进台账区间——两者混用会让 `universe_at(T)` 在扩容日之前返回空集，横截面掩码直接失效；
 - 台账只追加：历史区间一经发布不可改写，成员变化只能以新区间表达；
+- **成员按湖内命名空间成对登记**：同一 `db_symbol` 在研究数据集（`ohlcv_1m`，`spot`）与派生品数据集（`derivatives_*`，`perp`）里是两条 `lake_pair`（`BTC-USDT` / `BTC-USDT-PERP`），台账两条都要有——少一条会让 `F003` 的横截面掩码把对应数据集的分区整片掩掉。口径里的 `market_type=perp` 是**排名市场**（用 USDⓈ-M 永续成交额排名），不是湖内命名空间；
 - 退出不等于删除：退市/剔除的 pair 历史数据永久保留——删了就是幸存者偏差；
 - 未过质量门的数据不进导出清单，也不能被手工塞进去；
 - 未冻结的宇宙定义不得驱动回填等长跑任务；

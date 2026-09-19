@@ -260,7 +260,9 @@ def test_fetch_snapshot_parses_klines_and_derives_pairs(monkeypatch) -> None:
     )
 
     assert [record.db_symbol for record in snapshot.markets] == ["BTC/USDT", "ETH/USDT"]
-    assert snapshot.markets[0].lake_pair == "BTC-USDT-PERP"
+    # 研究数据集 ohlcv_1m 是 spot 命名空间（BTC-USDT）；perp 是 derivatives_* 的命名空间，
+    # 口径里的 market_type=perp 只是排名市场，不参与湖内命名
+    assert snapshot.markets[0].lake_pair == "BTC-USDT"
     assert snapshot.markets[0].daily_turnover_usdt == (1_000.0, 1_000.0, 1_000.0)
     assert snapshot.snapshot_at == "2026-09-19T00:00:00Z"
     assert snapshot.markets[0].listed_at == "2025-01-01T00:00:00Z"

@@ -4,16 +4,15 @@
 
 三条结构性保证：
 
-1. **未冻结不得驱动**：编排入口先 `require_frozen()`（`FR-002` 场景：未冻结即非零拒绝）；
-2. **断点续跑**：每写完一个 pair 就把 `BackfillRun` 落盘；重跑同一 run 时**跳过已完成
-   （completed/unavailable）的 pair**，未完成的 pair 由 `backfill_progress` 表的
-   `next_since` 继续（幂等 upsert，重跑不产生重复行）；
-3. **失败隔离**：单 pair 失败只记该 pair 的 `status=failed`、断点位置与错误分类，
-   其他 pair 继续跑完。
+1. **未冻结不得驱动**：编排入口先 `require_frozen()`（`FR-002`：未冻结即非零拒绝）；
+2. **断点续跑**：每写完一个 pair 就把 `BackfillRun` 落盘；重跑同一 run 跳过已完成
+   （completed/unavailable）的 pair，未完成的由 `backfill_progress.next_since` 继续；
+3. **失败隔离**：单 pair 失败只记该 pair 的 `status=failed`、断点与错误分类，其他 pair 继续。
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import socket
 from collections.abc import Callable, Iterable, Sequence
@@ -25,39 +24,38 @@ from typing import Any
 from alphamill.data_bridge import paths
 from alphamill.data_bridge.collector import historical_backfill as backfill
 from alphamill.data_bridge.collector.backfill_progress import current_cursor
+from alphamill.data_bridge.universe.batching import (
+    DEFAULT_BATCH_SPLIT,
+    PairPlan,
+    plan_batch,
+    run_window_check,
+)
 from alphamill.data_bridge.universe.canonical import utc_iso
 from alphamill.data_bridge.universe.definition import UniverseDef, require_frozen
-from alphamill.data_bridge.universe.errors import BackfillIncompleteError, WindowError
+from alphamill.data_bridge.universe.errors import BackfillIncompleteError
 from alphamill.data_bridge.universe.storage import atomic_create
 
 SCHEMA_VERSION = 1
-DEFAULT_BATCH_SPLIT = 30
 _RUN_FILE = "run.json"
+
+# 批次切分与窗口校验在 `batching.py`；这里 re-export 保持调用方导入路径不变。
+__all__ = [
+    "DEFAULT_BATCH_SPLIT",
+    "BackfillRun",
+    "PairPlan",
+    "load_run",
+    "plan_batch",
+    "run_backfill_batch",
+    "run_dir",
+    "run_window_check",
+]
 _DONE_STATUSES = frozenset({backfill.STATUS_COMPLETED, backfill.STATUS_UNAVAILABLE})
 EventSink = Callable[[str, dict[str, Any]], None]
 
 
 @dataclass(frozen=True, kw_only=True)
-class PairPlan:
-    """一个待回填 pair 的计划：批次只影响时序，不影响 `universe_id`。"""
-
-    db_symbol: str
-    lake_pair: str
-    rank: int | None
-    listed_at: str | None
-
-    def payload(self) -> dict[str, Any]:
-        return {
-            "db_symbol": self.db_symbol,
-            "lake_pair": self.lake_pair,
-            "rank": self.rank,
-            "listed_at": self.listed_at,
-        }
-
-
-@dataclass(frozen=True, kw_only=True)
 class BackfillRun:
-    """`DR-003` 的运行记录：目标集合、窗口、限速参数、逐 pair 结果、hostname、起止。"""
+    """`DR-003` 运行记录：目标集合、窗口、限速参数、逐 pair 结果、hostname、起止。"""
 
     run_id: str
     universe_id: str
@@ -116,53 +114,7 @@ class BackfillRun:
 
 
 def _replace(run: BackfillRun, **changes: Any) -> BackfillRun:
-    payload = {
-        "run_id": run.run_id,
-        "universe_id": run.universe_id,
-        "batch": run.batch,
-        "window_start": run.window_start,
-        "window_end": run.window_end,
-        "rate_limit": run.rate_limit,
-        "hostname": run.hostname,
-        "started_at": run.started_at,
-        "pairs": run.pairs,
-        "finished_at": run.finished_at,
-    }
-    payload.update(changes)
-    return BackfillRun(**payload)
-
-
-def plan_batch(
-    definition: UniverseDef,
-    *,
-    batch: int | None = None,
-    pairs: Sequence[str] | None = None,
-    batch_split: int = DEFAULT_BATCH_SPLIT,
-) -> tuple[PairPlan, ...]:
-    """按成交额排名切分批次：批 1 = 前 `batch_split`（含现有 6 对），批 2 = 其余。"""
-    selected = definition.selected
-    if pairs is not None:
-        wanted = {pair.strip() for pair in pairs if pair.strip()}
-        unknown = sorted(wanted - {item.db_symbol for item in definition.candidates})
-        if unknown:
-            raise WindowError(f"以下 pair 不在宇宙定义内: {unknown}")
-        return tuple(_plan(item) for item in selected if item.db_symbol in wanted)
-    if batch is None:
-        return tuple(_plan(item) for item in selected)
-    if batch == 1:
-        chosen = selected[:batch_split]
-    elif batch == 2:
-        chosen = selected[batch_split:]
-    else:
-        raise WindowError(f"批次只能是 1 或 2，得到 {batch!r}")
-    return tuple(_plan(item) for item in chosen)
-
-
-def run_window_check(start: datetime, end: datetime) -> None:
-    if start.tzinfo is None or end.tzinfo is None:
-        raise WindowError("回填窗口必须带时区（UTC）")
-    if start >= end:
-        raise WindowError(f"回填窗口非法：start({start}) 必须早于 end({end})")
+    return dataclasses.replace(run, **changes)
 
 
 def run_backfill_batch(
@@ -366,12 +318,3 @@ def _write_run(run: BackfillRun, reports_dir: Path | None) -> None:
         target.write_bytes(payload)
         return
     atomic_create(target, payload)
-
-
-def _plan(item) -> PairPlan:
-    return PairPlan(
-        db_symbol=item.db_symbol,
-        lake_pair=item.lake_pair,
-        rank=item.rank,
-        listed_at=item.listed_at,
-    )

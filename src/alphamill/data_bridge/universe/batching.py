@@ -1,0 +1,77 @@
+"""批次切分与窗口校验（从 `backfill_runner.py` 拆出，行数治理）。
+
+批次只影响回填与准入的**时序**，不影响 `universe_id`——冻结的是完整的 40 对定义；
+批 1 取成交额排名前 `batch_split`（含现有 6 对），批 2 取其余。
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+from alphamill.data_bridge.universe.definition import UniverseDef
+from alphamill.data_bridge.universe.errors import WindowError
+
+DEFAULT_BATCH_SPLIT = 30
+
+
+@dataclass(frozen=True, kw_only=True)
+class PairPlan:
+    """一个待回填 pair 的计划：批次只影响时序，不影响 `universe_id`。"""
+
+    db_symbol: str
+    lake_pair: str
+    rank: int | None
+    listed_at: str | None
+
+    def payload(self) -> dict[str, Any]:
+        return {
+            "db_symbol": self.db_symbol,
+            "lake_pair": self.lake_pair,
+            "rank": self.rank,
+            "listed_at": self.listed_at,
+        }
+
+
+def plan_batch(
+    definition: UniverseDef,
+    *,
+    batch: int | None = None,
+    pairs: Sequence[str] | None = None,
+    batch_split: int = DEFAULT_BATCH_SPLIT,
+) -> tuple[PairPlan, ...]:
+    """按成交额排名切分批次：批 1 = 前 `batch_split`（含现有 6 对），批 2 = 其余。"""
+    selected = definition.selected
+    if pairs is not None:
+        wanted = {pair.strip() for pair in pairs if pair.strip()}
+        unknown = sorted(wanted - {item.db_symbol for item in definition.candidates})
+        if unknown:
+            raise WindowError(f"以下 pair 不在宇宙定义内: {unknown}")
+        return tuple(_plan(item) for item in selected if item.db_symbol in wanted)
+    if batch is None:
+        return tuple(_plan(item) for item in selected)
+    if batch == 1:
+        chosen = selected[:batch_split]
+    elif batch == 2:
+        chosen = selected[batch_split:]
+    else:
+        raise WindowError(f"批次只能是 1 或 2，得到 {batch!r}")
+    return tuple(_plan(item) for item in chosen)
+
+
+def run_window_check(start: datetime, end: datetime) -> None:
+    if start.tzinfo is None or end.tzinfo is None:
+        raise WindowError("回填窗口必须带时区（UTC）")
+    if start >= end:
+        raise WindowError(f"回填窗口非法：start({start}) 必须早于 end({end})")
+
+
+def _plan(item) -> PairPlan:
+    return PairPlan(
+        db_symbol=item.db_symbol,
+        lake_pair=item.lake_pair,
+        rank=item.rank,
+        listed_at=item.listed_at,
+    )

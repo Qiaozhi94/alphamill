@@ -25,20 +25,57 @@
 
 from __future__ import annotations
 
-import json
-import socket
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from alphamill.data_bridge.universe.canonical import utc_iso
 from alphamill.data_bridge.universe.errors import QualityGateError
+from alphamill.data_bridge.universe.gate_sql import (
+    AGGREGATES,
+    aggregate_mismatch,
+    backfill_status,
+    duplicate_keys,
+    row_bounds,
+)
+from alphamill.data_bridge.universe.verdicts import (
+    VERDICT_ACTIVE,
+    VERDICT_INCOMPLETE,
+    VERDICT_QUARANTINED,
+    VERDICTS,
+    PairGateResult,
+    admitted_pairs,
+    current_verdicts,
+    export_admitted,
+    record_verdicts,
+)
 
-VERDICT_ACTIVE = "ACTIVE"
-VERDICT_QUARANTINED = "QUARANTINED"
-VERDICT_INCOMPLETE = "INCOMPLETE"
-VERDICTS = (VERDICT_ACTIVE, VERDICT_QUARANTINED, VERDICT_INCOMPLETE)
+# 判定记录与导出准入集合的实现搬到了 `verdicts.py`（文件行数治理）；这里保留同名
+# re-export，调用方（含 `admission.py` 与测试）的导入路径不变。
+__all__ = [
+    "AGGREGATES",
+    "DEFAULT_MISSING_RATIO",
+    "GateThresholds",
+    "PairGateResult",
+    "REASON_AGGREGATE",
+    "REASON_BOUNDARY",
+    "REASON_DUPLICATE",
+    "REASON_INCOMPLETE",
+    "REASON_MISSING_RATIO",
+    "VERDICT_ACTIVE",
+    "VERDICT_INCOMPLETE",
+    "VERDICT_QUARANTINED",
+    "VERDICTS",
+    "admitted_pairs",
+    "check_pair",
+    "current_verdicts",
+    "effective_window",
+    "expected_minutes",
+    "export_admitted",
+    "gate_pairs",
+    "record_verdicts",
+]
 
 REASON_MISSING_RATIO = "missing_ratio_exceeded"
 REASON_BOUNDARY = "boundary_not_closed"
@@ -47,27 +84,6 @@ REASON_AGGREGATE = "aggregate_mismatch"
 REASON_INCOMPLETE = "backfill_incomplete"
 
 DEFAULT_MISSING_RATIO = 0.01
-AGGREGATES = {
-    "ohlcv_5m": "5 minutes",
-    "ohlcv_15m": "15 minutes",
-    "ohlcv_1h": "1 hour",
-    "ohlcv_4h": "4 hours",
-    "ohlcv_1d": "1 day",
-}
-_INSERT_SQL = """
-INSERT INTO universe_quality_verdicts (
-    universe_id, exchange, market_type, db_symbol, lake_pair,
-    verdict, reason_code, metrics, judged_at, hostname
-) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-"""
-_CURRENT_SQL = """
-SELECT DISTINCT ON (lake_pair)
-       universe_id, exchange, market_type, db_symbol, lake_pair,
-       verdict, reason_code, metrics, judged_at, hostname
-FROM universe_quality_verdicts
-{where}
-ORDER BY lake_pair, judged_at DESC, id DESC
-"""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -79,26 +95,6 @@ class GateThresholds:
     def __post_init__(self) -> None:
         if not 0.0 <= self.missing_ratio <= 1.0:
             raise QualityGateError(f"missing_ratio 阈值非法: {self.missing_ratio!r}")
-
-
-@dataclass(frozen=True, kw_only=True)
-class PairGateResult:
-    db_symbol: str
-    lake_pair: str
-    exchange: str
-    market_type: str
-    verdict: str
-    reason_code: str | None
-    metrics: dict[str, Any]
-
-    def document(self) -> dict[str, Any]:
-        return {
-            "db_symbol": self.db_symbol,
-            "lake_pair": self.lake_pair,
-            "verdict": self.verdict,
-            "reason_code": self.reason_code,
-            "metrics": self.metrics,
-        }
 
 
 def effective_window(
@@ -154,7 +150,7 @@ def check_pair(
     }
 
     if require_backfill_complete:
-        status = _backfill_status(conn, exchange, db_symbol, window_start, window_end)
+        status = backfill_status(conn, exchange, db_symbol, window_start, window_end)
         metrics["backfill_status"] = status
         if status != "complete":
             return _result(
@@ -167,7 +163,7 @@ def check_pair(
                 metrics,
             )
 
-    rows, first, last = _row_bounds(conn, source_table, exchange, db_symbol, start, end)
+    rows, first, last = row_bounds(conn, source_table, exchange, db_symbol, start, end)
     metrics.update(
         {
             "rows": rows,
@@ -218,7 +214,7 @@ def check_pair(
             metrics,
         )
 
-    duplicates = _duplicate_keys(conn, source_table, exchange, db_symbol, start, end)
+    duplicates = duplicate_keys(conn, source_table, exchange, db_symbol, start, end)
     metrics["duplicate_keys"] = duplicates
     if duplicates:
         return _result(
@@ -231,7 +227,7 @@ def check_pair(
             metrics,
         )
 
-    aggregates = _aggregate_mismatch(conn, exchange, start, end)
+    aggregates = aggregate_mismatch(conn, exchange, start, end)
     metrics["aggregates"] = aggregates
     if any(not item["match"] for item in aggregates.values()):
         return _result(
@@ -278,83 +274,6 @@ def gate_pairs(
     ]
 
 
-def record_verdicts(
-    conn,
-    results: Iterable[PairGateResult],
-    *,
-    universe_id: str,
-    hostname: str | None = None,
-    judged_at: datetime | None = None,
-    commit: bool = True,
-) -> int:
-    """只追加写判定记录（通过与失败同样保留）。"""
-    host = hostname or socket.gethostname()
-    moment = judged_at or datetime.now(UTC)
-    payload = [
-        (
-            universe_id,
-            result.exchange,
-            result.market_type,
-            result.db_symbol,
-            result.lake_pair,
-            result.verdict,
-            result.reason_code,
-            json.dumps(result.metrics, sort_keys=True, ensure_ascii=False),
-            moment,
-            host,
-        )
-        for result in results
-    ]
-    if not payload:
-        return 0
-    with conn.cursor() as cur:
-        for values in payload:
-            cur.execute(_INSERT_SQL, values)
-    if commit:
-        conn.commit()
-    return len(payload)
-
-
-def current_verdicts(conn, *, universe_id: str | None = None) -> dict[str, PairGateResult]:
-    """每个 pair 的最新判定（准入状态真相源）。"""
-    where = "WHERE universe_id = %s" if universe_id else ""
-    params: tuple[Any, ...] = (universe_id,) if universe_id else ()
-    with conn.cursor() as cur:
-        cur.execute(_CURRENT_SQL.format(where=where), params)
-        rows = cur.fetchall()
-    out: dict[str, PairGateResult] = {}
-    for row in rows:
-        metrics = row[7]
-        if isinstance(metrics, str):
-            metrics = json.loads(metrics)
-        out[str(row[4])] = PairGateResult(
-            db_symbol=str(row[3]),
-            lake_pair=str(row[4]),
-            exchange=str(row[1]),
-            market_type=str(row[2]),
-            verdict=str(row[5]),
-            reason_code=None if row[6] is None else str(row[6]),
-            metrics=dict(metrics or {}),
-        )
-    return out
-
-
-def admitted_pairs(conn, *, universe_id: str | None = None) -> frozenset[str]:
-    """准入集合：判定为 ACTIVE 的 `lake_pair`（导出清单的交集之一）。"""
-    return frozenset(
-        pair
-        for pair, result in current_verdicts(conn, universe_id=universe_id).items()
-        if result.verdict == VERDICT_ACTIVE
-    )
-
-
-def export_admitted(conn, at: datetime, *, universe_id: str | None = None) -> frozenset[str]:
-    """导出侧准入集合 = 台账可交易 ∩ 质量门 ACTIVE（`FR-006`）。"""
-    from alphamill.data_bridge.universe.membership import universe_at
-
-    return admitted_pairs(conn, universe_id=universe_id) & universe_at(conn, at)
-
-
 def _result(
     db_symbol: str,
     lake_pair: str,
@@ -373,78 +292,3 @@ def _result(
         reason_code=reason_code,
         metrics=metrics,
     )
-
-
-def _backfill_status(
-    conn, exchange: str, db_symbol: str, window_start: datetime, window_end: datetime
-) -> str | None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT status FROM backfill_progress
-            WHERE exchange = %s AND symbol = %s AND timeframe = '1m'
-              AND target_start = %s AND target_end = %s
-            """,
-            (exchange, db_symbol, window_start, window_end),
-        )
-        row = cur.fetchone()
-    return None if not row else str(row[0])
-
-
-def _row_bounds(conn, table: str, exchange: str, db_symbol: str, start: datetime, end: datetime):
-    with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT count(*), min(time), max(time) FROM {table}"  # noqa: S608 - 表名来自受控参数
-            " WHERE exchange = %s AND symbol = %s AND time >= %s AND time < %s",
-            (exchange, db_symbol, start, end),
-        )
-        row = cur.fetchone()
-    return int(row[0]), row[1], row[2]
-
-
-def _duplicate_keys(
-    conn, table: str, exchange: str, db_symbol: str, start: datetime, end: datetime
-) -> int:
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            SELECT count(*) FROM (
-                SELECT exchange, symbol, time FROM {table}
-                WHERE exchange = %s AND symbol = %s AND time >= %s AND time < %s
-                GROUP BY exchange, symbol, time HAVING count(*) > 1
-            ) dup
-            """,  # noqa: S608 - 表名来自受控参数
-            (exchange, db_symbol, start, end),
-        )
-        return int(cur.fetchone()[0])
-
-
-def _aggregate_mismatch(conn, exchange: str, start: datetime, end: datetime) -> dict[str, Any]:
-    """连续聚合与 1m 基表按桶重算精确一致（差得不多也不放行）。"""
-    out: dict[str, Any] = {}
-    with conn.cursor() as cur:
-        for view, bucket in AGGREGATES.items():
-            cur.execute(
-                f"SELECT count(*) FROM {view}"  # noqa: S608 - 视图名来自模块常量
-                " WHERE exchange = %s AND bucket >= %s AND bucket < %s",
-                (exchange, start, end),
-            )
-            view_rows = int(cur.fetchone()[0])
-            cur.execute(
-                f"""
-                SELECT count(*) FROM (
-                    SELECT symbol, time_bucket('{bucket}', time) AS b
-                    FROM ohlcv_1m
-                    WHERE exchange = %s AND time >= %s AND time < %s
-                    GROUP BY symbol, b
-                ) t
-                """,  # noqa: S608 - 桶宽来自模块常量
-                (exchange, start, end),
-            )
-            base_buckets = int(cur.fetchone()[0])
-            out[view] = {
-                "rows": view_rows,
-                "base_buckets": base_buckets,
-                "match": view_rows == base_buckets,
-            }
-    return out

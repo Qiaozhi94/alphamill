@@ -5,13 +5,12 @@
 - `MarketRecord` / `MarketSnapshot`：交易所数据的**规范化快照**（纯数据、可落盘、可复算）；
 - `evaluate(snapshot, criteria)`：**纯函数**——同一快照 + 同一口径必然得到同一候选清单
   与同一 `universe_id`（`AC-001`），且候选按成交额排名有序（供批次切分）；
-- `fetch_snapshot(criteria, ...)`：**唯一网络路径**（ccxt 隐式 API 取 USDT 成交额口径）。
+- `fetch_snapshot(criteria, ...)`：**唯一网络路径**（ccxt 隐式 API 取 USDT 成交额口径），
   失败一律抛 `ExchangeUnreachableError`，不降级、不拿 24h ticker 顶替 90 天口径。
 
-排除规则的判别数据（稳定币集合、指数篮子集合、杠杆代币后缀）是本模块的常量而不是
-口径文件的一部分：口径文件只登记**规则名**（`DR-001` 的 `exclude_rules`），规则内容随
-代码评审演进。杠杆代币后缀另加「标的段 ≥3 字符」护栏，避免把 `JUP` 这类正常代币误判成
-`UP` 结尾的杠杆代币。
+排除规则的判别数据（稳定币集合、指数篮子、杠杆代币后缀）是本模块常量而非口径文件的一部分：
+口径文件只登记**规则名**（`DR-001` 的 `exclude_rules`），规则内容随代码评审演进。杠杆代币
+后缀另加「标的段 ≥3 字符」护栏，避免把 `JUP` 这类正常代币误判成 `UP` 结尾的杠杆代币。
 """
 
 from __future__ import annotations
@@ -44,12 +43,17 @@ INDEX_BASKET_BASES = frozenset({"BTCDOM", "DEFI"})
 LEVERAGED_SUFFIXES = ("BULL", "BEAR", "DOWN", "UP")
 MIN_LEVERAGED_UNDERLYING = 3
 
+#: 研究数据集 `ohlcv_1m` 的湖内命名空间是 **spot**（`derivatives_*` 才是 perp）；口径里的
+#: `market_type` 是**排名市场**。两者混用会让候选 lake_pair 与湖内分区对不上（F003 的张量
+#: 掩码按 `lake_pair` 过滤）；准入时按同一 `db_symbol` 同源派生出 perp 命名空间一并进台账。
+DATA_MARKET_TYPE = "spot"
+LAKE_MARKET_TYPES = ("spot", "perp")
+
 REASON_STABLECOIN = "stablecoin_pair"
 REASON_LEVERAGED = "leveraged_token"
 REASON_INDEX = "index_basket"
 REASON_LISTED_DAYS = "listed_days_not_enough"
 REASON_RANK = "rank_below_top_n"
-
 _TURNOVER_DECIMALS = 6
 
 
@@ -68,7 +72,7 @@ class MarketRecord:
 
 @dataclass(frozen=True, kw_only=True)
 class MarketSnapshot:
-    """一次交易所快照；`snapshot_at` 是口径与候选清单可复现的锚点。"""
+    """一次交易所快照；`snapshot_at` 是候选清单可复现的锚点。"""
 
     exchange: str
     market_type: str
@@ -97,7 +101,7 @@ class MarketSnapshot:
 
 @dataclass(frozen=True, kw_only=True)
 class Candidate:
-    """逐候选筛选指标（含被排除者与排除原因）——`DR-001` 要求全部入档。"""
+    """逐候选筛选指标（含被排除者与原因），`DR-001` 要求全部入档。"""
 
     db_symbol: str
     lake_pair: str
@@ -147,7 +151,7 @@ class Evaluation:
 
 
 def evaluate(snapshot: MarketSnapshot, criteria: Criteria) -> Evaluation:
-    """纯函数：快照 + 口径 → 有序候选清单（含排除者与原因）。"""
+    """纯函数：快照 + 口径 → 有序候选清单（含排除者与原因）"""
     if snapshot.market_type != criteria.market_type:
         raise ExchangeUnreachableError(
             f"快照 market_type={snapshot.market_type!r} 与口径 {criteria.market_type!r} 不一致"
@@ -227,7 +231,7 @@ def _structural_exclusion(base: str, quote: str, rules: tuple[str, ...]) -> str 
 
 
 def build_exchange(exchange_id: str):
-    """构造 ccxt 交易所实例（只读公开行情，不需要 API key）。"""
+    """构造 ccxt 交易所实例（只读公开行情）。"""
     import ccxt
 
     exchange_class = getattr(ccxt, exchange_id, None)
@@ -248,7 +252,7 @@ def fetch_snapshot(
     exchange: Any | None = None,
     now: datetime | None = None,
 ) -> MarketSnapshot:
-    """唯一网络路径：拉取目标市场的日线成交额，产出规范化快照。"""
+    """唯一网络路径：拉取目标市场日线成交额，产出规范化快照。"""
     if criteria.market_type != "perp":
         raise ExchangeUnreachableError(
             f"发现仅实现 USDⓈ-M 永续路线（market_type=perp），得到 {criteria.market_type!r}"
@@ -289,10 +293,9 @@ def fetch_snapshot(
 
 
 def _sleep(seconds: float) -> None:
-    """可替换的等待原语（测试注入用；发现是一次性批处理，不做并发）。"""
     import time
 
-    time.sleep(seconds)
+    time.sleep(seconds)  # 测试注入点
 
 
 def _is_target_market(market: dict[str, Any], criteria: Criteria) -> bool:
@@ -309,7 +312,7 @@ def _record_for(client: Any, market: dict[str, Any], criteria: Criteria) -> Mark
     base = str(market["base"])
     quote = str(market["quote"])
     db_symbol = f"{base}/{quote}"
-    lake_pair, _ = symbol_map.derive_pairs(db_symbol, criteria.market_type)
+    lake_pair, _ = symbol_map.derive_pairs(db_symbol, DATA_MARKET_TYPE)
     created = market.get("created") or (market.get("info") or {}).get("onboardDate")
     if not created:
         raise ExchangeUnreachableError(f"{market.get('symbol')} 缺少 onboardDate，无法判定上线天数")
