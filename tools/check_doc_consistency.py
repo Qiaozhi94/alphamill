@@ -60,7 +60,7 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
         requires=(
             (ARCH, '"universe_digest"'),
             (ARCH, '"calendar_digest"'),
-            (ARCH, "lake/_metadata/universes/<digest>.csv"),
+            (ARCH, "lake/_metadata/universes/<digest>.json"),
             (ARCH, 'sha256(canonical_json({"universe": <universe_digest>,'),
             (ARCH, '"calendar": <calendar_digest>}))'),
             (ARCH, "`universe_path` / `calendar_path`"),

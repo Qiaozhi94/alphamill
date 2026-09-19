@@ -6,7 +6,7 @@ related_features: [F001, F002, F003, F007]
 topics: [data-bridge, universe, backfill, data-quality, point-in-time, m2]
 doc_kind: tasks
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-19
 ---
 
 # F008：宇宙扩容与 point-in-time 宇宙台账 - 任务
@@ -21,6 +21,7 @@ updated: 2026-09-14
 - 全部新测试必须落在 `tests/unit` 或 `tests/integration`——`tools/verify.py` 只收集这两个目录。
 - **机器边界**（架构 §7.1、`docs/SOP.md` §3）：回填、质量门、导出、备份在执行机 `qiaozhi-lt` 执行并记 hostname；开发机 `qiaozhi-gp` 只跑单元与契约测试。
 - **不动 `F002` 已冻结语义**：导出/对账/manifest/修订规则一律沿用，本 feature 只扩 pair 集合并新增元数据 artifact。
+- `[TEST]` 组（§3）是开发前置门：从 US-001~US-004 的旅程步骤派生（每旅程 ≥1 条可执行断言），编写早（Phase 1 先立红灯）、执行晚（收尾全量跑）；缺失即被 SDD Flow T3 拒绝流转（见 `design.md` 开发前置约束）。
 - 回填是 1~2 周 wall-clock 的 owner 主导长跑；它**不阻塞**除产能对照外的任何一项，开发与测试用 fixture 推进。
 
 ## 1. 前置条件
@@ -37,8 +38,8 @@ updated: 2026-09-14
 - [ ] T005 (`FR-002`, `DR-001`, `AC-002`): 实现 `definition.py`——`UniverseDef` canonical JSON、`universe_id` 内容寻址、人工确认冻结与版本化 — verify: `tests/unit/test_f008_universe_def.py`
 - [ ] T006 (`DR-002`): 编写 `db/migrations/` 前向迁移建 `universe_membership` 表与 `(lake_pair, valid_from)` 索引 — verify: `tests/unit/test_apply_migrations.py`
 - [ ] T007 (`FR-005`, `DR-002`, `AC-007`, `AC-008`): 实现 `membership.py`——只追加写入封装、区间不重叠约束、`universe_at(T)`（左闭右开）；按 `DQ-001` 结论决定是否加数据库触发器兜底并记录结论 — verify: `tests/unit/test_f008_membership.py`
-- [ ] T008 (`FR-005`, `DR-002`): 为现有 6 对补 `initial_seed` 台账记录，`valid_from` 取各自实际数据起点 — verify: `tests/integration/test_f008_export_integration.py`
-- [ ] T009 (`FR-006`, `IR-002`, `AC-009`): 实现 `artifact.py`——台账 canonical 序列化与 digest 发布，复用 `symbol_map` 的内容寻址发布原语 — verify: `tests/integration/test_f008_export_integration.py`
+- [ ] T008 (`FR-005`, `DR-002`): 为现有 6 对补 `initial_seed` 台账记录，`valid_from` 取各自实际数据起点 — verify: `tests/unit/test_f008_membership.py`
+- [ ] T009 (`FR-006`, `IR-002`, `IR-003`, `AC-009`, `AC-013`): 实现 `artifact.py`——按 `IR-002` 冻结的 canonical JSON schema（顶层 `{schema_version, members}`、成员严格三键、最小 PIT 投影）序列化并按 `sha256:` 前缀 digest 原子发布；产物必须能被 `factor_factory.generators.universe.load_explicit_universe` 直接加载 — verify: `tests/unit/test_f008_artifact.py` + `tests/integration/test_f008_export_integration.py`
 - [ ] T010 (`TR-001`): 实现 `universe.member_changed` 事件写入与按 run/pair 查询 — verify: `tests/integration/test_f008_backfill.py`
 
 ### Phase 2：回填编排与质量门
@@ -47,14 +48,14 @@ updated: 2026-09-14
 - [ ] T012 (`FR-003`, `NFR-001`, `AC-004`): 实现限速与指数退避（重试上限、失败不提速），速率预算在 pair 间共享 — verify: `tests/unit/test_f008_rate_limit.py`
 - [ ] T013 (`FR-003`, `DR-003`, `NFR-002`, `AC-003`): 实现 `backfill_runner.py`——批次编排、`(lake_pair, last_cursor)` 断点、逐 pair 进度与失败隔离、`BackfillRun` 落盘 — verify: `tests/integration/test_f008_backfill.py`
 - [ ] T014 (`TR-002`, `AC-010`): 实现 `backfill.progress` / `backfill.failed` 事件与 hostname 标注 — verify: `tests/integration/test_f008_backfill.py`
-- [ ] T015 (`FR-004`, `DR-004`, `AC-005`): 实现 `quality_gate.py`——复用 `tools/f001_backfill_report.py` 的缺失率/边界闭合/连续聚合口径并参数化到多 pair，逐 pair 判定记录（通过与失败同样保留） — verify: `tests/integration/test_f008_quality_gate.py`
-- [ ] T016 (`FR-004`, `AC-006`): 实现"实际可得窗口"缺失率语义——上线晚于窗口起点不算缺失，真实上市时间写入台账 `valid_from` — verify: `tests/unit/test_f008_quality_gate_window.py`
-- [ ] T017 (`FR-006`): 实现准入联动——固定 库追加 → artifact 发布 → 纳入 F002 导出清单 三步顺序，任一步失败不进入下一步 — verify: `tests/integration/test_f008_export_integration.py`
-- [ ] T018 (`IR-001`): 实现 CLI 五个子命令与全部启动期拒绝条件（未冻结/窗口非法/磁盘不足/回填未完成就跑门禁） — verify: `tests/unit/test_f008_cli_contract.py`
+- [ ] T015 (`FR-004`, `DR-004`, `AC-005`): 实现 `quality_gate.py`——复用 `tools/f001_backfill_report.py` 的缺失率/边界闭合/重复主键/连续聚合四项口径并参数化到多 pair，逐 pair 判定记录（通过与失败同样保留，该记录是准入状态真相源） — verify: `tests/integration/test_f008_quality_gate.py`
+- [ ] T016 (`FR-004`, `AC-006`, `DR-002`): 实现"实际可得窗口"缺失率语义——上线晚于窗口起点不算缺失；真实上市时间写入台账 `valid_from`（可交易期语义，与准入时点无关） — verify: `tests/unit/test_f008_quality_gate_window.py`
+- [ ] T017 (`FR-006`, `DR-004`): 实现准入联动——固定 库追加 → artifact 发布 → 写准入记录并进入导出清单 三步顺序，任一步失败不进入下一步；导出侧经 `lake_pairs_map(admitted=...)` 过滤，`admitted=None` 时行为与 F002 现状逐字节一致，且断言 `symbol_map` 保持全量（与导出清单允许不等） — verify: `tests/integration/test_f008_export_integration.py`
+- [ ] T018 (`IR-001`, `AC-012`): 实现 CLI 五个子命令与全部启动期拒绝条件（未冻结/窗口非法/磁盘不足/`freeze` 缺 `--confirm`/回填未完成就跑门禁），各自以可区分的非零原因退出 — verify: `tests/unit/test_f008_cli_contract.py`
 
 ### Phase 3：真实扩容执行
 
-- [ ] T019 (`FR-001`, `FR-002`): 用 T001 的口径跑一次真实发现，人工复核 40 个候选（重点看第 25–40 名的流动性是否仍支持 ≥30 笔/90 天可达性）后冻结目标宇宙 — verify: `alphamill-universe show --universe <id>` 输出 + 冻结记录
+- [ ] T019 (`FR-001`, `FR-002`): 用 T001 的口径跑一次真实发现，人工复核 40 个候选（逐候选核对成交额排名、上线天数与排除原因均按 `DR-001` 入档）后冻结目标宇宙 — verify: `alphamill-universe show --universe <id>` 输出 + 冻结记录
 - [ ] T020 (`FR-003`, `NFR-001`): 在执行机回填**批 1**（成交额前 30，含现有 6 对）——owner 主导，失败 pair 单独重跑 — verify: 批 1 的 `BackfillRun` 逐 pair `status=completed`
 - [ ] T021 (`FR-003`, `NFR-001`): 回填**批 2**（第 31–40），复用同一套编排；批 1 已过门的 pair 不受影响 — verify: 批 2 的 `BackfillRun` 逐 pair `status=completed`
 - [ ] T022 (`FR-004`): 每批回填完成后立即对该批 pair 跑质量门，通过者准入、失败者隔离并记录原因；**批 1 过门即可供 `F003` 使用，不必等批 2** — verify: `pytest -q tests/integration/test_f008_quality_gate.py` + 逐 pair 判定记录
@@ -69,6 +70,15 @@ updated: 2026-09-14
 - [ ] T028 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 - [ ] T029: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
 
+### [TEST] 组：层 2 旅程验收轨（必填）
+
+从体验旅程派生，Phase 1 先以红灯立起夹具，收尾全量执行；真实环境项在执行机 `qiaozhi-lt` 取证。
+
+- [ ] T030 [TEST] (`US-001`, `AC-001`, `AC-002`, `AC-012`): 旅程 US-001 端到端验收——对固定交易所快照 fixture 连跑两次 `discover` 得同一候选清单与同一 `universe_id`；逐候选指标与排除原因入档；未冻结清单驱动 `backfill` 被非零拒绝；`freeze` 缺 `--confirm` 被拒；冻结后成员增删产生新 `universe_id` 且旧版本只读 — verify: `pytest -q tests/unit/test_f008_discover.py tests/unit/test_f008_universe_def.py tests/unit/test_f008_cli_contract.py`
+- [ ] T031 [TEST] (`US-002`, `AC-003`, `AC-004`, `AC-010`): 旅程 US-002 端到端验收——单 pair 窗口回填跑到一半中断后重跑，从断点继续、无重复行、行数与预期一致；注入限流错误触发指数退避且不超上限、速率不因失败提高；单 pair 失败不影响其他 pair 的已完成进度；`BackfillRun` 与进度/失败事件可按 run 与 pair 查询且带 hostname — verify: `pytest -q tests/unit/test_f008_rate_limit.py tests/integration/test_f008_backfill.py`
+- [ ] T032 [TEST] (`US-003`, `AC-005`, `AC-006`, `AC-009`): 旅程 US-003 端到端验收——缺失率超限/边界未闭合/连续聚合不一致/重复主键四类 fixture 均被隔离并各记原因码、均不进导出清单；上线晚于窗口起点的 pair 按实际可得窗口算缺失率不被误判；全项通过者按 库追加 → artifact 发布 → 写准入记录 三步准入，发布的 artifact 可被下游 `load_explicit_universe` 加载，且 `symbol_map` 与导出清单允许不等 — verify: `pytest -q tests/integration/test_f008_quality_gate.py tests/unit/test_f008_quality_gate_window.py tests/integration/test_f008_export_integration.py`
+- [ ] T033 [TEST] (`US-004`, `AC-007`, `AC-008`, `AC-013`): 旅程 US-004 端到端验收——含上市/退市/中途进出的成员 fixture 上 `universe_at(T)` 在各时点返回正确集合（左闭右开）；原地改写已发布历史区间被拒、退出只以追加新区间表达且历史数据不删；`schema_version` 不符或出现未知键时加载被拒 — verify: `pytest -q tests/unit/test_f008_membership.py tests/unit/test_f008_artifact.py`
+
 ## 4. 依赖与并行关系
 
 - `T001 -> T019`：规模与阈值没定就不能跑真实发现与回填。
@@ -81,6 +91,7 @@ updated: 2026-09-14
 - `T020 -> T022`、`T021 -> T022`：每批回填完成后各跑一次质量门；批 2 不阻塞批 1 的准入。
 - `T022 -> T023`：两批都过门后才做容量实测（实测对象是最终的 40 对）。
 - `T003 [P]`：只产接口 fixture，与定义/台账实现无共享状态。
+- `T004..T018 -> T030/T031/T032/T033`：[TEST] 组四条旅程验收以各实现任务与其验收套件为前提（夹具编写早、全量执行晚）；T032 的导出联动与 T033 的 artifact 加载断言还依赖 T009/T017。
 - 与 `F003` 的关系：**批 1 过门（T022 的第一次执行）即满足 `F003` T035 的 ≥30 对前提**，不必等批 2 或 T023；在此之前 F003 的一切工作不被阻塞。
 
 ## 5. 明确后移
@@ -88,4 +99,5 @@ updated: 2026-09-14
 - 多交易所聚合与跨所 symbol 归一 → 后续 Feature：当前数据路线只有 Binance（F001 裁决）。
 - 实时上下架监听与自动扩缩容 → 后续 Feature：M2 只需批处理周期发现成员变化。
 - calendar artifact（交易日历/停机窗口）→ `F007` 或后续 Feature：ADR-0007 把它与 universe 并列，但 crypto 24/7 下优先级低于宇宙台账。
-- 扩容到 40 对以上（含 50 对方案）与分片导出优化 → 视 T024 的实测余量再决定：50 对的全量导出约 32min、NAS 约 73,500 个分区文件，噪声改善仅 11%，当前不做；台账支持增量加 pair，需要时不必重来一轮。
+- 逐期重算排名的 PIT 宇宙构造（消除成员选取前视）→ 后续 Feature：需要全市场历史成交额，不在 M2 范围；台账只追加结构天然支持升级（裁决见 `spec.md` §7）。
+- 扩容到 40 对以上（含 50 对方案）与分片导出优化 → 视 T023/T026 的实测余量再决定：50 对的全量导出约 32min、NAS 约 73,500 个分区文件，噪声改善仅 11%，当前不做；台账支持增量加 pair，需要时不必重来一轮。

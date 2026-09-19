@@ -1,7 +1,7 @@
 # ADR-0007：研究快照绑定 —— 独立 DatasetVersion 的不可变组合
 
 - 日期：2026-09-13
-- 状态：Accepted（2026-09-18 修订：universe/calendar 拆为两个独立 artifact 引用并冻结 `universe_calendar_digest` 组合公式，见文末「修订记录」）
+- 状态：Accepted（2026-09-18 / 2026-09-19 修订：universe/calendar 拆为两个独立 artifact 引用并冻结 `universe_calendar_digest` 组合公式；universe artifact 载体改为 canonical JSON。见文末「修订记录」）
 - 决策人：Georg
 - 背景：PRD FR1/FR7；F002 dataset 独立版本；F007 多数据集评测与实验身份；ADR-0006
 
@@ -47,7 +47,7 @@ dataset 的延迟或失败阻塞全湖发布，反转 F002 已确立的独立失
 
    `universe_calendar_digest` 由两个独立 artifact 的 digest 按冻结的组合公式导出：
    `sha256(canonical_json({"universe": <universe_digest>, "calendar": <calendar_digest>}))`。
-   universe digest 是 F008 内容寻址宇宙台账（`lake/_metadata/universes/<digest>.csv`）的 digest；
+   universe digest 是 F008 内容寻址宇宙台账（`lake/_metadata/universes/<digest>.json`）的 digest；
    calendar digest 是规范化 calendar JSON 的内容摘要。组合公式是 F007 DR-006 与 F003 过渡
    元组绑定的同一冻结式，不得回退为「单一 JSON 文件摘要」。`snapshot_id` 仍只哈希
    `universe_calendar_digest`（它已确定性地决定 digest 对），不重复哈希两个成员 digest。
@@ -79,7 +79,7 @@ dataset 的延迟或失败阻塞全湖发布，反转 F002 已确立的独立失
 - snapshot artifact 存放于 `reports/research_snapshots/<snapshot_id>/manifest.json`；它只引用 lake
   manifest，不复制数据，因此不突破“研究只读 lake”红线。
 - symbol-map artifact 由 F002 内容寻址保存于 `lake/_metadata/symbol_maps/<digest>.csv`；universe
-  artifact 由 **F008** 内容寻址台账拥有（`lake/_metadata/universes/<digest>.csv`，`F008 IR-002`
+  artifact 由 **F008** 内容寻址台账拥有（`lake/_metadata/universes/<digest>.json`，`F008 IR-002`
   提供加载与 `universe_at(T)` 语义），F007 只读消费、**不复制进 reports**；calendar JSON 由
   `experiment_store` 规范化并保存于 `reports/research_snapshots/_inputs/universe_calendars/<digest>.json`
   （该目录只承载 calendar）。ResearchSnapshot provenance 以 `universe_path` / `calendar_path`
@@ -112,3 +112,11 @@ dataset 的延迟或失败阻塞全湖发布，反转 F002 已确立的独立失
   `sha256(canonical_json({"universe": <universe_digest>, "calendar": <calendar_digest>}))`。
   动因：F007 检视 D030——DR-006 拆分后 ADR 原文仍写单一 JSON 摘要，产生第二真相源。
   身份语义不变（`snapshot_id` 仍哈希组合摘要）。
+- 2026-09-19：universe artifact 的载体格式由 CSV 改为 **canonical JSON**
+  （`lake/_metadata/universes/<digest>.json`）。schema 与 digest 约定由 `F008 IR-002` 冻结：
+  顶层键严格等于 `{schema_version, members}`，成员键严格等于 `{lake_pair, valid_from, valid_to}`，
+  digest 带 `sha256:` 前缀且前缀进文件名；artifact 只承载最小 PIT 投影，审计列留在联机库。
+  动因：F008 文档检视第 1 轮——CSV 无处承载 `F008 IR-003` 要求的 `schema_version`，
+  且已落地的下游消费者 `src/alphamill/factor_factory/generators/universe.py` 正是按该 JSON schema 实现。
+  身份语义不变：`universe_calendar_digest` 的组合公式、provenance 的
+  `universe_path` / `calendar_path` 字段均不受影响。
