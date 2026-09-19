@@ -36,7 +36,7 @@ updated: 2026-09-19
 
 - [ ] T004 (`FR-001`, `AC-001`): 实现 `discover.py`——按成交额排名取前 N、上线天数过滤与排除规则筛候选，记录逐候选指标、排除者与排除原因、快照时间；候选按排名有序以支持批次切分 — verify: `tests/unit/test_f008_discover.py`
 - [ ] T005 (`FR-002`, `DR-001`, `AC-002`): 实现 `definition.py`——`UniverseDef` canonical JSON、`universe_id` 内容寻址、人工确认冻结与版本化 — verify: `tests/unit/test_f008_universe_def.py`
-- [ ] T006 (`DR-002`): 编写 `db/migrations/` 前向迁移建 `universe_membership` 表与 `(lake_pair, valid_from)` 索引 — verify: `tests/unit/test_apply_migrations.py`
+- [ ] T006 (`DR-002`): 编写前向迁移 `db/migrations/005_universe_membership.sql`（现有编号止于 004）建 `universe_membership` 表与 `(lake_pair, valid_from)` 索引；须满足 runner 两条硬约束——幂等（`IF NOT EXISTS`）、无非事务语句，整文件单事务执行 — verify: `tests/unit/test_apply_migrations.py`
 - [ ] T007 (`FR-005`, `DR-002`, `AC-007`, `AC-008`): 实现 `membership.py`——只追加写入封装、区间不重叠约束、`universe_at(T)`（左闭右开）；按 `DQ-001` 结论决定是否加数据库触发器兜底并记录结论 — verify: `tests/unit/test_f008_membership.py`
 - [ ] T008 (`FR-005`, `DR-002`): 为现有 6 对补 `initial_seed` 台账记录，`valid_from` 取各自实际数据起点 — verify: `tests/unit/test_f008_membership.py`
 - [ ] T009 (`FR-006`, `IR-002`, `IR-003`, `AC-009`, `AC-013`): 实现 `artifact.py`——按 `IR-002` 冻结的 canonical JSON schema（顶层 `{schema_version, members}`、成员严格三键、最小 PIT 投影）序列化并按 `sha256:` 前缀 digest 原子发布；产物必须能被 `factor_factory.generators.universe.load_explicit_universe` 直接加载 — verify: `tests/unit/test_f008_artifact.py` + `tests/integration/test_f008_export_integration.py`
@@ -48,14 +48,14 @@ updated: 2026-09-19
 - [ ] T012 (`FR-003`, `NFR-001`, `AC-004`): 实现限速与指数退避（重试上限、失败不提速），速率预算在 pair 间共享 — verify: `tests/unit/test_f008_rate_limit.py`
 - [ ] T013 (`FR-003`, `DR-003`, `NFR-002`, `AC-003`): 实现 `backfill_runner.py`——批次编排、`(lake_pair, last_cursor)` 断点、逐 pair 进度与失败隔离、`BackfillRun` 落盘 — verify: `tests/integration/test_f008_backfill.py`
 - [ ] T014 (`TR-002`, `AC-010`): 实现 `backfill.progress` / `backfill.failed` 事件与 hostname 标注 — verify: `tests/integration/test_f008_backfill.py`
-- [ ] T015 (`FR-004`, `DR-004`, `AC-005`): 实现 `quality_gate.py`——复用 `tools/f001_backfill_report.py` 的缺失率/边界闭合/重复主键/连续聚合四项口径并参数化到多 pair，逐 pair 判定记录（通过与失败同样保留，该记录是准入状态真相源） — verify: `tests/integration/test_f008_quality_gate.py`
+- [ ] T015 (`FR-004`, `DR-004`, `AC-005`): 实现 `quality_gate.py`——复用 `tools/f001_backfill_report.py` 的缺失率/边界闭合/连续聚合三项口径并参数化到多 pair，**另补一项它没有的显式重复主键检查**（`GROUP BY exchange, symbol, time HAVING count(*) > 1`；参考表 `ohlcv_1m` 的主键使重复结构性不可发生，故该项在真实表上恒为 0，其检测路径必须由无主键 scratch 源表 fixture 真实触发，不得写成空转断言），逐 pair 判定记录（通过与失败同样保留，该记录是准入状态真相源） — verify: `tests/integration/test_f008_quality_gate.py`
 - [ ] T016 (`FR-004`, `AC-006`, `DR-002`): 实现"实际可得窗口"缺失率语义——上线晚于窗口起点不算缺失；真实上市时间写入台账 `valid_from`（可交易期语义，与准入时点无关） — verify: `tests/unit/test_f008_quality_gate_window.py`
-- [ ] T017 (`FR-006`, `DR-004`): 实现准入联动——固定 库追加 → artifact 发布 → 写准入记录并进入导出清单 三步顺序，任一步失败不进入下一步；导出侧经 `lake_pairs_map(admitted=...)` 过滤，`admitted=None` 时行为与 F002 现状逐字节一致，且断言 `symbol_map` 保持全量（与导出清单允许不等） — verify: `tests/integration/test_f008_export_integration.py`
-- [ ] T018 (`IR-001`, `AC-012`): 实现 CLI 五个子命令与全部启动期拒绝条件（未冻结/窗口非法/磁盘不足/`freeze` 缺 `--confirm`/回填未完成就跑门禁），各自以可区分的非零原因退出 — verify: `tests/unit/test_f008_cli_contract.py`
+- [ ] T017 (`FR-006`, `DR-004`): 实现准入联动——固定 库追加 → artifact 发布 → 写准入记录并进入导出清单 三步顺序，任一步失败不进入下一步；`admitted = universe_at(本次导出 window_end)`，接线三处缺一不可：`partitions.lake_pairs_map(admitted=…)` + `produce_partitions` 的单元格级剔除（否则未准入 pair 会抛 `DataBridgeError` 而非被排除）+ `exporter.export_dataset/_export_one` 透传；`admitted=None` 时行为与 F002 现状逐字节一致，且断言 `symbol_map` 保持全量（与导出清单允许不等）；全量导出若因收缩命中 `guard_full_shrink`，按 F002 既有语义走 `--allow-shrink` 并在容量报告记录 `shrink_confirmed`，不得放宽守卫 — verify: `tests/integration/test_f008_export_integration.py`
+- [ ] T018 (`IR-001`, `AC-012`): 实现 `universe/__main__.py` 模块入口（`python -m alphamill.data_bridge.universe`，不新增 `[project.scripts]`）的五个子命令与 design §4 登记的全部九类启动期拒绝条件（未冻结/窗口非法/磁盘不足/`freeze` 缺 `--confirm`/`gate` 遇回填未完成/口径缺字段/交易所不可达/候选清单为空/定义或 digest 不存在），各自以可区分的非零原因退出 — verify: `tests/unit/test_f008_cli_contract.py`
 
 ### Phase 3：真实扩容执行
 
-- [ ] T019 (`FR-001`, `FR-002`): 用 T001 的口径跑一次真实发现，人工复核 40 个候选（逐候选核对成交额排名、上线天数与排除原因均按 `DR-001` 入档）后冻结目标宇宙 — verify: `alphamill-universe show --universe <id>` 输出 + 冻结记录
+- [ ] T019 (`FR-001`, `FR-002`): 用 T001 的口径跑一次真实发现，人工复核 40 个候选（逐候选核对成交额排名、上线天数与排除原因均按 `DR-001` 入档）后冻结目标宇宙 — verify: `python -m alphamill.data_bridge.universe show --universe <id>` 输出 + 冻结记录
 - [ ] T020 (`FR-003`, `NFR-001`): 在执行机回填**批 1**（成交额前 30，含现有 6 对）——owner 主导，失败 pair 单独重跑 — verify: 批 1 的 `BackfillRun` 逐 pair `status=completed`
 - [ ] T021 (`FR-003`, `NFR-001`): 回填**批 2**（第 31–40），复用同一套编排；批 1 已过门的 pair 不受影响 — verify: 批 2 的 `BackfillRun` 逐 pair `status=completed`
 - [ ] T022 (`FR-004`): 每批回填完成后立即对该批 pair 跑质量门，通过者准入、失败者隔离并记录原因；**批 1 过门即可供 `F003` 使用，不必等批 2** — verify: `pytest -q tests/integration/test_f008_quality_gate.py` + 逐 pair 判定记录
@@ -79,6 +79,7 @@ updated: 2026-09-19
 - [ ] T033 [TEST] (`US-004`, `AC-007`, `AC-008`, `AC-013`): 旅程 US-004 端到端验收——含上市/退市/中途进出的成员 fixture 上 `universe_at(T)` 在各时点返回正确集合（左闭右开）；原地改写已发布历史区间被拒、退出只以追加新区间表达且历史数据不删；`schema_version` 不符或出现未知键时加载被拒 — verify: `pytest -q tests/unit/test_f008_membership.py tests/unit/test_f008_artifact.py`
 
 - [ ] T034: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
+      （编号说明：`T029` 是空号——原收口任务在检视收口时改编号为 `T034`，以满足 `check_task_dag` 的「收口任务编号最高、须有入边」两条规则。）
 
 ## 4. 依赖与并行关系
 
@@ -107,6 +108,8 @@ updated: 2026-09-19
 - `T024/T025/T026/T027/T028/T030/T031/T032/T033 -> T034`：全部验收套件、真实环境证据、文档修订与旅程验收
   通过后，才回写 spec 验收证据与状态。
 - 与 `F003` 的关系：**批 1 过门（T022 的第一次执行）即满足 `F003` T035 的 ≥30 对前提**，不必等批 2 或 T023；在此之前 F003 的一切工作不被阻塞。
+- `F003 并入 main -> AC-009 跨消费者断言`：`factor_factory/generators/universe.py::load_explicit_universe` 当前只存在于 `feat/F003-alphagen-vendor`（F003 仍 `developing`），AC-009 的「产物可被它直接加载」一条在 F003 落地前**不可执行**——按项目 SOP「已知缺口显式标记」写成 `xfail(strict=True)` 并在 reason 里写明该分支依赖，F003 并入 main 后 XPASS 转红、强制摘除标记并真跑；F008 侧先由 `AC-013`（`tests/unit/test_f008_artifact.py`）锁死同一 schema 的键集合、排序与 digest 规则。
+- `T017 -> T023`：准入过滤与退市/隔离都会减少全量导出的分区数，可能命中 F002 的 `guard_full_shrink`；容量实测（T023）必须显式记录是否用了 `--allow-shrink` 与 manifest 的 `shrink_confirmed`，不得放宽守卫。
 
 ## 5. 明确后移
 

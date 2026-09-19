@@ -195,7 +195,7 @@ updated: 2026-09-19
 
 ### Requirement: 新 pair 质量门（`FR-004`）
 
-系统应当对每个新 pair 执行完整性校验——缺失率（按该 pair 实际可得窗口计算）、时间边界闭合、重复主键、1m 基表与连续聚合按桶重算一致——全部通过才允许进入导出清单；任一项失败即隔离并记录原因码，不得静默放行或放宽阈值。
+系统应当对每个新 pair 执行完整性校验——缺失率（按该 pair 实际可得窗口计算）、时间边界闭合、重复主键（同一 `(exchange, symbol, time)` 出现多行）、1m 基表与连续聚合按桶重算一致——全部通过才允许进入导出清单；任一项失败即隔离并记录原因码，不得静默放行或放宽阈值。参考源表 `ohlcv_1m` 的主键 `(exchange, symbol, time)` 使重复在源侧结构性不可发生，该检查防的是写入/导入路径异常，因此其检测路径必须由测试真实触发（fixture 载体见 `AC-005`），不得写成恒真的空转断言。
 
 #### Scenario: 跨周期对不上
 
@@ -221,7 +221,7 @@ updated: 2026-09-19
 
 ### Requirement: 导出清单与湖内 artifact 联动（`FR-006`）
 
-当 pair 通过质量门时，系统应当把它纳入 `F002` 的导出清单——**导出清单定义为「台账中该时点可交易 且 质量门判定为 ACTIVE」的 pair 集合**（无独立实体，由台账与判定记录联合导出），由导出侧在 pair 选择处按该集合过滤实现，不改 `F002` 的 manifest / 对账 / 修订与失效语义；`symbol_map` 保持全量（回答「库里有什么」），与导出清单（回答「研究能用什么」）**允许不等**，回填写库即让 `symbol_map` 产生新 digest 属预期行为；宇宙台账应当以 canonical JSON 发布为内容寻址 artifact（digest 为 canonical 字节的 SHA-256 并带 `sha256:` 前缀，同 digest 文件必须逐字节一致），供 ResearchSnapshot 按显式 digest 引用。`symbol_map` 因新 pair 产生新 digest 时，旧 digest 应当仍可读取。
+当 pair 通过质量门时，系统应当把它纳入 `F002` 的导出清单——**导出清单定义为「台账中在本次导出窗口终点（`window_end`）可交易 且 质量门判定为 ACTIVE」的 pair 集合**（无独立实体，由台账与判定记录联合导出），由导出侧在 pair 选择处按该集合过滤实现，不改 `F002` 的 manifest / 对账 / 修订与失效语义；`symbol_map` 保持全量（回答「库里有什么」），与导出清单（回答「研究能用什么」）**允许不等**，回填写库即让 `symbol_map` 产生新 digest 属预期行为；宇宙台账应当以 canonical JSON 发布为内容寻址 artifact（digest 为 canonical 字节的 SHA-256 并带 `sha256:` 前缀，同 digest 文件必须逐字节一致），供 ResearchSnapshot 按显式 digest 引用。`symbol_map` 因新 pair 产生新 digest 时，旧 digest 应当仍可读取。
 
 #### Scenario: artifact 内容寻址
 
@@ -299,14 +299,14 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 - [ ] **AC-002** (`FR-002`): 未冻结的候选清单驱动回填被非零拒绝；冻结后成员增删产生新版本且旧版本不可改写 — tests: `tests/unit/test_f008_universe_def.py`
 - [ ] **AC-003** (`FR-003`, `NFR-002`): 回填中断后重跑从断点继续、不写重复行、行数与预期一致 — tests: `tests/integration/test_f008_backfill.py`
 - [ ] **AC-004** (`FR-003`, `NFR-001`): 限流错误触发退避重试且不超过上限，请求速率不因失败而提高 — tests: `tests/unit/test_f008_rate_limit.py`
-- [ ] **AC-005** (`FR-004`, `DR-004`): 缺失率超限、未闭合边界、连续聚合对不上、重复主键四类 fixture 均被拦在导出清单外并各记原因码；全项通过者进入清单 — tests: `tests/integration/test_f008_quality_gate.py`
+- [ ] **AC-005** (`FR-004`, `DR-004`): 缺失率超限、未闭合边界、连续聚合对不上、重复主键四类 fixture 均被拦在导出清单外并各记原因码；全项通过者进入清单（重复主键 fixture 以无主键约束的 scratch 源表承载——参考表 `ohlcv_1m` 的主键使重复无法构造，用真实表只能得到恒真的空转断言） — tests: `tests/integration/test_f008_quality_gate.py`
 - [ ] **AC-006** (`FR-004`): 上线晚于回填窗口起点的 pair 按实际可得窗口计算缺失率，不被误判为缺失 — tests: `tests/unit/test_f008_quality_gate_window.py`
 - [ ] **AC-007** (`FR-005`, `NFR-003`): 含上市/退市/中途进出的 fixture 上，universe_at(T) 在各时点返回正确成员集合 — tests: `tests/unit/test_f008_membership.py`
 - [ ] **AC-008** (`FR-005`, `DR-002`): 尝试原地改写已发布历史区间被拒绝；退出记录保留历史数据不删除 — tests: `tests/unit/test_f008_membership.py`
 - [ ] **AC-009** (`FR-006`, `IR-002`): 台账 artifact 同内容得同 digest 且逐字节一致、内容变化得新 digest 且旧 digest 仍可读；发布出的 artifact 能被下游 `factor_factory.generators.universe.load_explicit_universe` 按 digest 直接加载通过；新 pair 进入导出清单后 symbol_map 同样满足该性质 — tests: `tests/integration/test_f008_export_integration.py`
 - [ ] **AC-010** (`TR-001`, `TR-002`, `DR-003`, `NFR-004`): 成员变更与回填进度/失败事件可按 run 与 pair 查询，且台账可交易期变更与准入状态变更可按 `line` 区分；运行记录标注 hostname — tests: `tests/integration/test_f008_backfill.py`
 - [ ] **AC-011** (`NFR-005`): 扩容后实测记录磁盘占用、单次全量导出耗时与 NAS 备份时长，并与 F002 的 6 对基线对照 — tests: `tests/integration/test_f008_capacity_report.py`
-- [ ] **AC-012** (`IR-001`, `FR-002`, `FR-003`, `FR-004`): CLI 五个子命令的契约与启动期拒绝全覆盖——未冻结驱动 `backfill`、窗口非法、磁盘余量不足、`freeze` 缺 `--confirm`、对回填未完成的 pair 跑 `gate` 判 `INCOMPLETE`，各自以非零退出并给出可区分的原因 — tests: `tests/unit/test_f008_cli_contract.py`
+- [ ] **AC-012** (`IR-001`, `FR-002`, `FR-003`, `FR-004`): CLI 五个子命令的契约与 `design.md` §4 登记的全部九类启动期拒绝全覆盖——`discover` 口径缺字段 / 交易所不可达，`freeze` 缺 `--confirm` / 候选清单为空，`backfill` 定义未冻结 / 窗口非法 / 磁盘余量不足，`gate` 对回填未完成的 pair 判 `INCOMPLETE`，`show` 定义或 digest 不存在——各自以非零退出并给出可区分的原因 — tests: `tests/unit/test_f008_cli_contract.py`
 - [ ] **AC-013** (`IR-003`, `IR-002`, `DR-003`): 台账 artifact 与 `BackfillRun` 均带 `schema_version`；artifact 加载方在 `schema_version` 与期望值不符、顶层或成员出现未知键时拒绝加载并报错，不做宽松忽略 — tests: `tests/unit/test_f008_artifact.py`
 
 ## 7. 测试、依赖与决策
