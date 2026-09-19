@@ -82,3 +82,67 @@ def test_check_end_to_end_not_installed(tmp_path: pathlib.Path) -> None:
     failures = check_dep_pins.check(tmp_path, installed_version=_missing)
     assert len(failures) == 1
     assert "未安装" in failures[0]
+
+
+def test_uninstalled_mining_extra_does_not_fail(tmp_path: pathlib.Path) -> None:
+    # Given: strict dependencies are installed, but the optional mining extra is absent.
+    (tmp_path / "pyproject.toml").write_text(
+        """[project]
+dependencies = ["runtimepkg>=1,<2"]
+[project.optional-dependencies]
+dev = ["devpkg>=1,<2"]
+mining = ["torch>=2.7,<3"]
+""",
+        encoding="utf-8",
+    )
+
+    def _installed_version(name: str) -> str:
+        versions = {"runtimepkg": "1.5", "devpkg": "1.5"}
+        try:
+            return versions[name]
+        except KeyError:
+            raise check_dep_pins.importlib.metadata.PackageNotFoundError(name) from None
+
+    # When: the dependency gate checks all declared dependency groups.
+    failures = check_dep_pins.check(tmp_path, installed_version=_installed_version)
+
+    # Then: an absent non-dev extra does not fail the repository gate.
+    assert failures == []
+
+
+def test_installed_mining_extra_out_of_range_fails(tmp_path: pathlib.Path) -> None:
+    # Given: a mining dependency is installed outside its declared range.
+    (tmp_path / "pyproject.toml").write_text(
+        '[project.optional-dependencies]\nmining = ["torch>=2.7,<3"]\n',
+        encoding="utf-8",
+    )
+
+    # When: the dependency gate checks the installed optional dependency.
+    failures = check_dep_pins.check(tmp_path, installed_version=lambda _name: "3.0.0")
+
+    # Then: an installed optional dependency must still satisfy its range.
+    assert len(failures) == 1
+    assert "torch" in failures[0]
+    assert "3.0.0" in failures[0]
+    assert ">=2.7,<3" in failures[0]
+
+
+def test_missing_runtime_and_dev_dependencies_still_fail(tmp_path: pathlib.Path) -> None:
+    # Given: one runtime dependency and one strict dev dependency are absent.
+    (tmp_path / "pyproject.toml").write_text(
+        """[project]
+dependencies = ["runtimepkg>=1,<2"]
+[project.optional-dependencies]
+dev = ["devpkg>=1,<2"]
+""",
+        encoding="utf-8",
+    )
+
+    def _missing(name: str) -> str:
+        raise check_dep_pins.importlib.metadata.PackageNotFoundError(name)
+
+    # When: the dependency gate checks strict dependencies.
+    failures = check_dep_pins.check(tmp_path, installed_version=_missing)
+
+    # Then: both strict dependency groups remain mandatory.
+    assert {failure.split(":", 1)[0] for failure in failures} == {"runtimepkg", "devpkg"}

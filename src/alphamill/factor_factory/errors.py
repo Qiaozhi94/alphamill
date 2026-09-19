@@ -11,6 +11,10 @@ class FactorFactoryError(Exception):
     """因子工厂所有错误的基类。"""
 
 
+class MiningCapabilityError(FactorFactoryError):
+    """挖掘依赖或所需 CUDA 能力不可用，必须拒绝启动。"""
+
+
 class SchemaValidationError(FactorFactoryError):
     """产物 schema 非法。"""
 
