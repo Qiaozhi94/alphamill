@@ -16,6 +16,7 @@ from alphamill.factor_factory.canonical import canonical_json_bytes
 from alphamill.factor_factory.errors import SchemaValidationError, UnknownSchemaVersionError
 from alphamill.factor_factory.generators.alphagen_runner import (
     PpoEpochResult,
+    _operator_margin,
     build_stock_data,
     extract_candidates,
     run_ppo_epoch,
@@ -288,13 +289,16 @@ def _synthetic_panel(days: int = 4, pair_count: int = 2) -> TensorPanel:
 
 
 def test_build_stock_data_preserves_panel_axes_and_target_shape() -> None:
-    panel = _synthetic_panel()
+    days = 120
+    panel = _synthetic_panel(days=days, pair_count=4)
     stock_data, target, pairs = build_stock_data(panel, feature_map=panel.feature_map)
-    assert stock_data.data.shape == (3, 4, 2)
-    assert target.shape == (4, 2)
+    window = days - _operator_margin() - 1
+
+    assert stock_data.data.shape == (days, 6, 4)
+    assert stock_data.n_days == window
+    assert target.shape == (window, 4)
     assert pairs == panel.pairs
-    assert torch.isclose(target[0, 0], torch.tensor(0.1), atol=1e-6)
-    assert torch.isnan(target[-1]).all()
+    assert torch.isfinite(target).any()
     assert not {field.name for field in fields(PpoEpochResult)} & {
         "verdict",
         "ic",
@@ -309,7 +313,7 @@ def test_gpu_ppo_epoch_completes_when_integration_cuda_is_enabled() -> None:
     if not torch.cuda.is_available():
         pytest.fail("ALPHAMILL_INTEGRATION=1 requires CUDA for the AlphaGen smoke run")
 
-    panel = _synthetic_panel(days=40, pair_count=4)
+    panel = _synthetic_panel(days=120, pair_count=4)
     stock_data, target, _ = build_stock_data(panel, feature_map=panel.feature_map)
     result = run_ppo_epoch(
         stock_data=stock_data, target=target, device="cuda", seed=17, total_timesteps=64

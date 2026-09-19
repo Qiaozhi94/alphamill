@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
+import numpy as np
 import pandas as pd
 
 from alphamill.factor_factory.errors import SchemaValidationError
@@ -21,6 +22,10 @@ if TYPE_CHECKING:
     from alphagen.models.alpha_pool import AlphaPoolBase
 
 ALPHAGEN_RUNNER_VERSION: Final = "1"
+# 顺序必须与 vendor 的 FeatureType 枚举一致（OPEN/CLOSE/HIGH/LOW/VOLUME/VWAP）——
+# vendor 用 int(FeatureType) 直接索引张量的 feature 轴。
+_FEATURE_TYPE_NAMES: Final = ("open", "close", "high", "low", "volume", "vwap")
+_CLOSE_SLOT: Final = _FEATURE_TYPE_NAMES.index("close")
 _VENDOR_ROOT = Path(__file__).with_name("alphagen_vendor").resolve()
 _VENDOR_IMPORT_ROOT = str(_VENDOR_ROOT)
 if _VENDOR_IMPORT_ROOT not in sys.path:
@@ -29,7 +34,12 @@ if _VENDOR_IMPORT_ROOT not in sys.path:
 
 @dataclass(frozen=True, slots=True)
 class LakeStockData:
-    """Feature-first stock data supplied to the AlphaGen compatibility boundary."""
+    """Vendor-layout stock data: ``(n_days, n_features, n_stocks)``.
+
+    The vendor derives its evaluation window as
+    ``data[period.start + backtrack : period.stop + backtrack + n_days - 1, feature, :]``,
+    so axis 0 must be days and the feature axis is indexed by ``FeatureType``.
+    """
 
     data: torch.Tensor
     max_backtrack_days: int = 0
@@ -37,8 +47,8 @@ class LakeStockData:
 
     @property
     def n_days(self) -> int:
-        """Return the number of observations in the panel."""
-        return int(self.data.shape[1])
+        """Evaluation window length: rows minus the backtrack/future margins."""
+        return int(self.data.shape[0]) - self.max_backtrack_days - self.max_future_days
 
     @property
     def n_stocks(self) -> int:
@@ -68,7 +78,7 @@ def _lake_tensor_calculator_class() -> type:
             super().__init__(target)
             self._lake_stock_data = stock_data
             self._stock_data = _VendorStockData(
-                data=stock_data.data.permute(1, 0, 2),
+                data=stock_data.data,
                 max_backtrack_days=stock_data.max_backtrack_days,
                 max_future_days=stock_data.max_future_days,
             )
@@ -121,53 +131,79 @@ def __getattr__(name: str) -> type:
     raise AttributeError(name)
 
 
+def _operator_margin() -> int:
+    """Vendor operators look back/forward by at most the largest delta time."""
+    _add_vendor_root()
+    from alphagen.config import DELTA_TIMES
+
+    return max(DELTA_TIMES)
+
+
 def build_stock_data(
     panel: TensorPanel,
     *,
     feature_map: Mapping[str, int],
     target_horizon: int = 1,
 ) -> tuple[LakeStockData, torch.Tensor, tuple[str, ...]]:
-    """Build feature-first tensors and a forward close-return target.
+    """Build a vendor-layout tensor and a forward close-return target.
 
-    Missing or out-of-universe cells remain NaN. The returned pair order is the
-    panel order, so callers can reproduce the same stock axis on another run.
+    The vendor reads ``data[start:stop, <FeatureType>, :]``, so the tensor MUST be
+    ``(n_days, n_features, n_stocks)`` with the feature axis indexed by ``FeatureType``
+    (open/close/high/low/volume/vwap) — an arbitrary lake ``feature_map`` channel order
+    is not addressable by the vendor's expression language. Absent FeatureTypes and
+    out-of-universe cells stay NaN. The returned pair order is the panel order.
     """
     import torch
 
     if target_horizon < 1:
         raise SchemaValidationError("target_horizon must be at least one bar")
-    ordered_features = tuple(
-        name for name, _ in sorted(feature_map.items(), key=lambda item: item[1])
-    )
-    if not ordered_features or set(feature_map.values()) != set(range(len(feature_map))):
-        raise SchemaValidationError("feature_map channels must be contiguous from zero")
+
+    slots = {
+        name: _FEATURE_TYPE_NAMES.index(basename)
+        for name in feature_map
+        if (basename := name.split(".")[-1].split("@")[0].lower()) in _FEATURE_TYPE_NAMES
+    }
+    if not slots:
+        raise SchemaValidationError(
+            "panel exposes none of the vendor FeatureType columns "
+            f"({', '.join(_FEATURE_TYPE_NAMES)})"
+        )
+    close_columns = [name for name, slot in slots.items() if slot == _CLOSE_SLOT]
+    if not close_columns:
+        raise SchemaValidationError("panel must expose a close column for the target")
 
     pairs = tuple(panel.pairs)
     timestamps = pd.DatetimeIndex(panel.timestamps)
     index = pd.MultiIndex.from_product([timestamps, pairs], names=["timestamp", "pair"])
-    panel_frame = panel.panel.reindex(index)
-    out_of_universe = ~panel_frame["__in_universe__"].eq(True)
-    panel_frame.loc[out_of_universe, list(ordered_features)] = float("nan")
-    values = panel_frame[list(ordered_features)].to_numpy(dtype="float32")
-    days, stocks = len(timestamps), len(pairs)
-    data = torch.from_numpy(values.reshape(days, stocks, len(ordered_features))).permute(2, 0, 1)
+    frame = panel.panel.reindex(index)
+    out_of_universe = ~frame["__in_universe__"].eq(True)
+    masked = frame[list(slots)].mask(out_of_universe, other=float("nan"))
 
-    close_channel = next(
-        (
-            channel
-            for name, channel in feature_map.items()
-            if name.split(".", maxsplit=1)[-1].split("@", maxsplit=1)[0].lower() == "close"
-        ),
-        None,
+    days, stocks = len(timestamps), len(pairs)
+    width = len(_FEATURE_TYPE_NAMES)
+    margin = _operator_margin()
+    if days <= margin + target_horizon:
+        raise SchemaValidationError(
+            f"panel has {days} days but the vendor operator set needs more than "
+            f"{margin + target_horizon}"
+        )
+    values = np.full((days * stocks, width), np.nan, dtype="float32")
+    for name, slot in slots.items():
+        values[:, slot] = masked[name].to_numpy(dtype="float32")
+    data = torch.from_numpy(
+        np.ascontiguousarray(values.reshape(days, stocks, -1).transpose(0, 2, 1))
     )
-    if close_channel is None:
-        raise SchemaValidationError("feature_map must contain a close feature for the target")
-    close = data[close_channel]
-    target = torch.full_like(close, float("nan"))
-    if target_horizon < days:
-        target[:-target_horizon] = close[target_horizon:] / close[:-target_horizon] - 1.0
+
+    span = days - margin - target_horizon
+    close = data[margin : margin + span, _CLOSE_SLOT, :]
+    forward = data[margin + target_horizon : margin + target_horizon + span, _CLOSE_SLOT, :]
+    target = forward / close - 1.0
     target[~torch.isfinite(target)] = float("nan")
-    return LakeStockData(data=data), target, pairs
+    return (
+        LakeStockData(data=data, max_backtrack_days=margin, max_future_days=target_horizon),
+        target,
+        pairs,
+    )
 
 
 def run_ppo_epoch(
