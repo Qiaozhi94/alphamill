@@ -7,6 +7,7 @@ BACKLOG 双向一致性。全部走 verify_repo(root=tmp_path) 端到端断言�
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 
@@ -280,3 +281,54 @@ def test_legacy_review_requires_tests_path_like_code_reviewing(tmp_path: pathlib
     ok, errors = vsl.verify_repo(tmp_path)
     assert not ok
     assert any("缺少 tests: 路径" in e for e in errors)
+
+
+# ---------- AC tests 引用识别（F007 D-??：标识符 backtick 不是 tests 路径） ----------
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "tests/unit/evaluation/test_cost_and_stability.py",
+        "tests/integration/test_f007_cli.py",
+        "deployment/verify.ps1",
+        "tests/fixtures/f007/README.md",
+    ],
+)
+def test_path_shaped_tokens_are_treated_as_tests(token: str) -> None:
+    assert vsl.looks_like_test_path(token) is True
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "promotion_verdict",
+        "E_INPUT_INVALID",
+        "DR-005",
+        "[0,30)",
+        "0.90~0.99",
+        "universe_at(T)",
+        "https://example.com/tests/unit/x.py",
+    ],
+)
+def test_identifier_and_url_backticks_are_not_tests(token: str) -> None:
+    assert vsl.looks_like_test_path(token) is False
+
+
+def test_f007_ac_identifier_backticks_are_not_mistaken_for_test_paths() -> None:
+    """回归：AC 正文的标识符 backtick 不得被判为 tests 路径，路径形 token 必须真实存在。"""
+    spec = (vsl.ROOT / "docs" / "features" / "0.2" / "F007-evaluation-gates" / "spec.md").read_text(
+        encoding="utf-8"
+    )
+    tokens = [
+        token
+        for line in spec.splitlines()
+        if (matched := vsl.AC_RE.match(line))
+        for token in re.findall(r"`([^`]+)`", matched.group(4))
+    ]
+    identifiers = [token for token in tokens if "/" not in token]
+    assert identifiers, "F007 的 AC 正文应含标识符 backtick"
+    assert [token for token in identifiers if vsl.looks_like_test_path(token)] == []
+    paths = [token for token in tokens if vsl.looks_like_test_path(token)]
+    assert paths, "F007 的 AC 正文应已回填 tests 路径"
+    assert all((vsl.ROOT / path).is_file() for path in paths)

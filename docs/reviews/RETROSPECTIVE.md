@@ -671,3 +671,32 @@
 - **流程教训**（D047，`evidence-hash-rewritten`）：真实仓库变异取证必须在改动提交后或 tar 副本上做——R2 曾两次 `git checkout --` 误复原未提交修复；并行会话 append-only 注册表（`tools/check_doc_consistency.py`）使逐 finding 提交不可行，以 finding↔断言映射表替代并在声明中说明。
 - **存活轮数最长**：F007-D003（1→3，partial-symmetric-fix：先修 spec 漏 design，下轮才补齐）；D026/D027/D028/D030/D033 等 R2 修复均带出 R3 残留缺口，按「另立新 finding 不回退原条目」统计。
 - **裁决分布**：47 条全部 accepted（无 rejected/partial），`suggested_fix` 与 `fix_summary` 实质一致率约 80%（偏差集中在 D026 状态机形态、D029 门禁范围、D032「不访问」分支三处，均为修复方声明理由后检视方核对接受）——全接纳且建议命中率高，说明检视建议质量稳定；无对抗性拒绝也说明双方对契约事实无分歧。
+
+## 循环 15：F007 统一评测台与证据门禁 实现代码检视
+
+- report_type: code-review | round: 1（full-scan）→ 2（diff-only）| 状态: 闭环
+- 日期：2026-09-19 | 基线：`99e8092` → 终基线 `1d005d5`
+- 检视人：Sisyphus（首轮独立取证由 Oracle 承担）| 修复方：并行会话
+- 范围：`git diff main...HEAD`（90 文件 / ~15k 行新增），聚焦 design §8 指定的高风险路径：canonical writer、留出访问、统计失败语义、artifact 发布
+- 结论：首轮 1 严重 / 4 高 / 3 中 / 0 低；第 2 轮 diff-only 复核 9/9 `fixed`，Critical/High 清零；R1-001（Critical）与 R1-002（High）的**接线**经**实际执行变异**验证——删掉生产调用 → 对应测试 RED，恢复 → GREEN
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| R1-001 | 必需统计（HAC/bootstrap/BH-FDR/DSR/MinTRL）已实现但从未接入 canonical 流程 | 严重 | 正确性 | 根因 | 原始编码 | fixed | canonical 调成员级统计、finalize 调 cohort 级；异常 → INCOMPLETE | pipeline 接 member_statistics、finalize 接 cohort_statistics | test_f007_controls.py::test_canonical_report_wires_member_required_statistics / ::test_finalize_wires_cohort_level_multiplicity | 1 | 2 | implemented-not-wired |
+| R1-002 | finalize 从不做 \|ρ\| 查重，也不重导 promotion_verdict | 高 | 正确性 | 根因 | 原始编码 | fixed | finalize 内按承诺顺序 resolve_cohort_dedup 后导出 verdict | canonical_ops 内 resolve_cohort_dedup + 重导 verdict，同一次原子写 | test_f007_canonical_registry.py::test_finalize_wires_cohort_dedup_and_overrides_verdict | 1 | 2 | implemented-not-wired |
+| R1-003 | 已发布但未登记的运行无法恢复，cohort 永久挂 OPEN | 高 | 正确性 | 根因 | 原始编码 | fixed | 复用分支返回前幂等补登记 | 复用分支调 ensure_member_registered | test_f007_cli.py::test_published_but_unregistered_run_is_recovered_on_rerun | 1 | 2 | crash-window-loss |
+| R1-004 | 发布后追加事件，改坏自己的 events_digest | 高 | 正确性 | 根因 | 原始编码 | fixed | 登记事件纳入发布前集合 | registered_events 预先纳入 digest、删除发布后 append | test_f007_controls.py::test_published_events_match_manifest_digest_and_are_immutable | 1 | 1 | post-publish-mutation |
+| R1-005 | canonical 未获取单写者 claim | 高 | 正确性 | 根因 | 原始编码 | fixed | 事务用 claim.acquire/release 包裹 | acquire 包裹 + finally 释放；复用分支在 acquire 前返回 | test_f007_cli.py::test_canonical_refuses_when_single_writer_claim_is_held | 1 | 2 | implemented-not-wired |
+| R1-006 | 越权写入只抛异常、不留拒绝事件 | 高 | 正确性 | 根因 | 原始编码 | fixed | 边界捕获后原子追加 gate_rejected 再重抛 | holdout_budget / registry_writeback 各补 append_events(gate_rejected) | test_f007_canonical_registry.py::test_preview_overreach_on_ledger_leaves_gate_rejected_event | 1 | 2 | fail-closed-without-evidence |
+| R1-007 | 同一承诺的多次登记静默 last-wins | 中 | 正确性 | 根因 | 原始编码 | fixed | 二次登记须载荷一致，否则拒绝 | register_member 对同 candidate 冲突载荷抛 RegistryIntegrityError | test_f007_canonical_registry.py::test_conflicting_duplicate_registration_is_rejected | 1 | 2 | silent-overwrite |
+| R1-008 | finalize 重复执行不幂等（finalized_at 为墙钟） | 中 | 正确性 | 根因 | 原始编码 | fixed | 幂等判据排除 finalized_at | population 语义摘要剔除 finalized_at | test_f007_canonical_registry.py::test_finalize_is_idempotent_across_finalized_at_values | 1 | 2 | wallclock-in-identity |
+| R1-009 | registration-last 的顺序契约没有被测试真正断言 | 中 | 测试覆盖 | 症状 | 原始编码 | fixed | 校验后再写 registration + 故障注入断言 | publisher 拆出 _write_registration 在校验后调用 | test_f007_atomic_publish.py::test_registration_is_written_only_after_validation | 1 | 2 | test-asserts-weaker-property |
+
+### 循环 15 模式教训
+
+- **新增最大模式：`implemented-not-wired`（×3）**——T009 的必需统计、T012 的 `resolve_cohort_dedup`、T025 的 `claim.acquire` 都**实现且有单测，却没有任何生产调用者**。单元测试证明「函数对」，证明不了「流程用了它」，于是 FR-004（多重检验/校正）与 FR-008（查重）在**门禁全绿**的情况下实际未被强制执行。这是本 Feature 最贵的教训。
+- **验收任务的隐性失效**：T019/T021/T024 这类「运行测试」验收任务，实际执行的是**复跑单测**——它们本来就绿，于是占位设施被当成已接线。**验收必须证明接线**：新增契约的验收应至少包含一条「删掉生产调用 → 测试变红」的变异证据，否则验收只覆盖了函数级正确性。修复轮已按此补齐（R1-001/R1-002 逐条实测 RED→GREEN）。
+- **`origin` 分布**：9 条全部 `original-coding`（首次实现就带的），**无 `fix-regression`**——本轮修复没有引入新问题，罕见地低于 skill 经验的 20–30% 自伤率；原因推测是修复集中在「接线」这类二值可验证动作，且每条都先做了变异验证再提交。
+- **失败关闭的两种残缺**：`fail-closed-without-evidence`（R1-006：拒绝路径对，但拒绝事件没落盘）与 `post-publish-mutation`/`crash-window-loss`（R1-003/004：证据不可变性与崩溃窗口）——都是「行为对、证据错」，只有读**副作用与持久化**才看得出来，纯单测与快照断言抓不到。
+- **存活轮数**：R1-004 为 1→1（第 1 轮内修复），其余 8 条 1→2。最长存活 1 轮，收敛快。
+- **裁决分布**：9 条全部 accepted（无 rejected/partial），`suggested_fix` 与 `fix_summary` 实质一致率高——检视建议到修复的转化路径通畅，双方对契约事实无分歧。

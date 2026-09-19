@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "note": "F007 预注册 v1：方法与阈值在看结果前冻结（spec FR-004）。任何阈值/方法变更都必须是新 method_id / cost_model_id，不得原地改数。",
+  "method_config": {
+    "id": "method-v1",
+    "normalized": {
+      "ic": {
+        "metric": "rank_ic",
+        "hac_lag": 5,
+        "hac_kernel": "bartlett",
+        "min_observations": 30
+      },
+      "multiplicity": {
+        "family": "cohort",
+        "fdr_method": "benjamini_hochberg",
+        "fdr_alpha": 0.05,
+        "effective_independent": "deflated_sharpe_ratio",
+        "min_track_record_years": 1.0
+      },
+      "bootstrap": {
+        "scheme": "block",
+        "block_size": 5,
+        "n_resamples": 1000,
+        "seed": 7,
+        "interval": "two_sided_95"
+      },
+      "stability": {
+        "split": "purged_embargoed_rolling",
+        "purge": "label_endpoint",
+        "embargo": "max_label_horizon",
+        "min_folds": 3
+      },
+      "dedup": {
+        "metrics": ["oos_pnl", "rolling_ic"],
+        "aggregate": "max_abs_rho",
+        "reject_above": 0.99,
+        "variant_above": 0.90
+      },
+      "required_statistics_fail_closed": true
+    }
+  },
+  "cost_model": {
+    "id": "cm-v1",
+    "normalized": {
+      "tiers": {
+        "zero": {"fee_bps": 0, "slippage_bps": 0},
+        "maker": {"fee_bps": 2, "slippage_bps": 0},
+        "taker": {"fee_bps": 5, "slippage_bps": 2}
+      },
+      "funding_included": true,
+      "breakeven_required": true,
+      "turnover_reported": true,
+      "holding_period_reported": true
+    }
+  },
+  "window": {
+    "label_horizons": [1, 4, 24],
+    "selection": ["2026-01-01T00:00:00Z", "2026-04-01T00:00:00Z"]
+  },
+  "sample_tier": {
+    "unit": "round_trips",
+    "note": "半开区间、以笔计；一「笔」= 一次完整往返交易，无模拟成交时按独立信号观测数计并以 sample_unit 标注（spec FR-005）。",
+    "bounds": [
+      {"tier": "underpowered", "min_inclusive": 0, "max_exclusive": 30},
+      {"tier": "provisional", "min_inclusive": 30, "max_exclusive": 69},
+      {"tier": "trustworthy", "min_inclusive": 69, "max_exclusive": null}
+    ]
+  },
+  "stage_ids": [
+    "signal_quality",
+    "portfolio_transform",
+    "cost_capacity",
+    "temporal_stability",
+    "execution_implementation"
+  ],
+  "failure_taxonomy": {
+    "stage": [
+      "signal_quality",
+      "portfolio_transform",
+      "cost_capacity",
+      "temporal_stability",
+      "execution_implementation"
+    ],
+    "owner": ["data", "signal", "method", "statistics", "cost", "execution", "infra"],
+    "mechanism": [
+      "missing_input",
+      "invalid_input",
+      "capability_unguarded",
+      "lookahead",
+      "estimator_failure",
+      "publish_failure",
+      "underpowered",
+      "cost_negative"
+    ]
+  },
+  "no_lookahead_layers": {
+    "L1": {"owner": "F007", "kind": "ast_purity_and_future_operators"},
+    "L2": {"owner": "F006/M3", "kind": "per_candle_replay_audit"},
+    "L3": {"owner": "F006/M3", "kind": "signal_cache_merge_join_alignment"}
+  }
+}

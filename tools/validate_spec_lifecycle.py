@@ -183,6 +183,19 @@ def discover_features(root: pathlib.Path) -> tuple[dict, list[str]]:
     return feats, errors
 
 
+def looks_like_test_path(token: str) -> bool:
+    """AC 正文里只有形如「仓库内文件路径」的 backtick 才算 tests/验收证据引用。
+
+    接受 `tests/unit/x.py`、`deployment/verify.ps1`、`tests/fixtures/f007/README.md` 这类真实文件；
+    拒绝标识符与取值（`promotion_verdict`、`E_INPUT_INVALID`、`[0,30)`、`universe_at(T)`、`DR-005`）
+    以及 URL——否则所有进入 code-reviewing 的规格都会报一堆假「路径不存在」。判据：非 URL、含 `/`、
+    且最后一段带扩展名。
+    """
+    if token.startswith("http") or "/" not in token:
+        return False
+    return "." in token.rsplit("/", 1)[-1]
+
+
 def check_feature(feat: dict, root: pathlib.Path, errors: list[str]):
     name = feat["dir"].name
 
@@ -268,7 +281,9 @@ def check_feature(feat: dict, root: pathlib.Path, errors: list[str]):
         bad = [r for r in refs if r not in req_ids]
         if bad:
             tag(f"AC-{ac.group(2)} 引用不存在的需求: {', '.join(sorted(bad))}")
-        tests = [t for t in re.findall(r"`([^`]+)`", ac.group(4)) if not t.startswith("http")]
+        tests = [
+            token for token in re.findall(r"`([^`]+)`", ac.group(4)) if looks_like_test_path(token)
+        ]
         if norm_status(spec_fm.get("status")) in ("code-reviewing", "done") and not tests:
             tag(f"AC-{ac.group(2)} 在 {spec_fm.get('status')} 状态缺少 tests: 路径")
         # tests 路径存在性只在 code-reviewing/done 强制；路径格式任何状态都校验。

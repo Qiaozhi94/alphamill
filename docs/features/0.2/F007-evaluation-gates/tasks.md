@@ -25,62 +25,62 @@ updated: 2026-09-18
 
 ## 1. 前置条件
 
-- [ ] T001 (`DR-001`, `IR-002`, `AC-006`): 固定 F002 dataset/version/value-digest reader 与不可变 symbol-map ref，并实现 ADR-0007 ResearchSnapshot builder/reader contract；builder 只接收显式 universe/calendar artifact，验证其内容摘要并在 provenance 保留不可变引用；preview latest 必须先冻结，canonical 只收 snapshot ID；builder 区分 `--universe`（F008 台账 digest，`universe_at(T)` 语义）与 `--calendar`（本 Feature calendar JSON）两个独立引用并分别校验；同时实现 F003 上游只读摄入契约（`generation.run_completed`/`generation.candidate_rejected`、算子能力登记表、协同池 `FactorDef`）与 F008 universe artifact 的 digest 加载及 `universe_at(T)` 语义校验 — verify: `tests/contract/test_f007_upstream_contracts.py`、`tests/unit/experiment_store/test_research_snapshot.py`
-- [ ] T002 (`FR-004`, `FR-005`): 预注册 v1 方法/阈值/cohort schema 与两个正控制、白噪声、泄漏负控制 — verify: `tests/fixtures/f007/README.md`
-- [ ] T003 (`NFR-003`, `AC-001`, `AC-010`): 为 preview、canonical writer、留出 reader、预留最终确认窗 reader 与留出预算台账 writer 建立 capability 测试夹具（含 preview 越权写台账/读最终确认窗的负例） — verify: `tests/integration/test_f007_execution_tiers.py`
+- [x] T001 (`DR-001`, `IR-002`, `AC-006`): 固定 F002 dataset/version/value-digest reader 与不可变 symbol-map ref，并实现 ADR-0007 ResearchSnapshot builder/reader contract；builder 只接收显式 universe/calendar artifact，验证其内容摘要并在 provenance 保留不可变引用；preview latest 必须先冻结，canonical 只收 snapshot ID；builder 区分 `--universe`（F008 台账 digest，`universe_at(T)` 语义）与 `--calendar`（本 Feature calendar JSON）两个独立引用并分别校验；同时实现 F003 上游只读摄入契约（`generation.run_completed`/`generation.candidate_rejected`、算子能力登记表、协同池 `FactorDef`）与 F008 universe artifact 的 digest 加载及 `universe_at(T)` 语义校验 — verify: `tests/contract/test_f007_upstream_contracts.py`、`tests/unit/experiment_store/test_research_snapshot.py`
+- [x] T002 (`FR-004`, `FR-005`): 预注册 v1 方法/阈值/cohort schema 与两个正控制、白噪声、泄漏负控制 — verify: `tests/fixtures/f007/README.md`
+- [x] T003 (`NFR-003`, `AC-001`, `AC-010`): 为 preview、canonical writer、留出 reader、预留最终确认窗 reader 与留出预算台账 writer 建立 capability 测试夹具（含 preview 越权写台账/读最终确认窗的负例） — verify: `tests/integration/test_f007_execution_tiers.py`
 
 ## 2. 实现任务
 
 ### Phase 1：身份、隔离与最小 preview
 
-- [ ] T004 (`DR-001`, `DR-002`, `AC-006`): 实现 snapshot/experiment canonical JSON 规范化、两级内容 ID 与 supersedes 校验 — verify: `tests/unit/experiment_store/test_research_snapshot.py`、`tests/unit/experiment_store/test_identity.py`
-- [ ] T005 [P] (`FR-001`, `DR-004`, `AC-001`): 实现 preview/canonical 物理根目录和 capability 边界 — verify: `tests/integration/test_f007_execution_tiers.py`
-- [ ] T006 (`IR-001`, `IR-003`, `AC-008`, `AC-011`): 实现 preview CLI 与稳定结构化输出/错误码，首屏固定含 tier/cohort/data+code digest/state/verdict 与首个失败原因（快照测试锁定） — verify: `tests/integration/test_f007_cli.py`
-- [ ] T007 (`FR-003`, `FR-005`, `AC-004`): 实现最小信号质量、三档成本、breakeven 与阶段状态模型（按 design §3.3 术语表实现 stage 状态与 verdict 两层枚举），并写入信号来源 provenance（`source=placeholder` 在 canonical 失败关闭、preview 显式标注） — verify: `tests/unit/evaluation/test_cost_and_stability.py`
+- [x] T004 (`DR-001`, `DR-002`, `AC-006`): 实现 snapshot/experiment canonical JSON 规范化、两级内容 ID 与 supersedes 校验 — verify: `tests/unit/experiment_store/test_research_snapshot.py`、`tests/unit/experiment_store/test_identity.py`
+- [x] T005 [P] (`FR-001`, `DR-004`, `AC-001`): 实现 preview/canonical 物理根目录和 capability 边界 — verify: `tests/integration/test_f007_execution_tiers.py`
+- [x] T006 (`IR-001`, `IR-003`, `AC-008`, `AC-011`): 实现 preview CLI 与稳定结构化输出/错误码，首屏固定含 tier/cohort/data+code digest/state/verdict 与首个失败原因（快照测试锁定） — verify: `tests/integration/test_f007_cli.py`
+- [x] T007 (`FR-003`, `FR-005`, `AC-004`): 实现最小信号质量、三档成本、breakeven 与阶段状态模型（按 design §3.3 术语表实现 stage 状态与 verdict 两层枚举），并写入信号来源 provenance（`source=placeholder` 在 canonical 失败关闭、preview 显式标注） — verify: `tests/unit/evaluation/test_cost_and_stability.py`
 
 ### Phase 2：方法论门与 canonical 证据
 
-- [ ] T008 (`FR-002`, `FR-007`, `AC-002`, `AC-009`): 实现 capability/guard 配对及 label endpoint/PIT/max-horizon/train-only-fit 守卫，并在 manifest 写入三层无前视状态（L1 本 Feature fail-closed 执行；L2/L3 owner=F006/M3，缺失层记 `not_yet_available` 并阻断晋级） — verify: `tests/unit/validation/test_methodology_gate.py`
-- [ ] T009 (`FR-004`, `AC-003`): 实现成员级 HAC IC/block bootstrap 与 cohort 级 BH-FDR、有效独立数 DSR、MinTRL，异常统一失败关闭 — verify: `tests/unit/evaluation/test_required_statistics.py`
-- [ ] T010 (`FR-005`, `AC-004`): 实现 purged/embargoed rolling split、三级样本量裁决（`underpowered`/`provisional`/`trustworthy`）和稳定性报告 — verify: `tests/unit/evaluation/test_cost_and_stability.py`
-- [ ] T011 (`DR-003`, `TR-001`, `TR-002`, `AC-005`): 实现 run 事件、report/curves/manifest 同盘原子发布与恢复 — verify: `tests/integration/test_f007_atomic_publish.py`
-- [ ] T012 (`FR-004`, `FR-008`, `DR-004`, `DR-005`, `TR-003`, `NFR-001`, `AC-013`): 实现冻结 cohort、成员 registration、收齐校验、原子 finalize 与 official population 可重建投影；finalize 内按 design §4 先做 `|ρ|` 查重（OOS PnL / rolling IC 序列，比较注册表既有记录与同 cohort 其他成员，cohort 内重复按承诺顺序保留在先者）、再按 design §3.3 优先级表导出 `promotion_verdict`，二者与 `cohort_verdict.json` 同一次原子写；同时实现 append-only 留出预算台账（`holdout_budget/ledger.jsonl`，仅 canonical capability 可追加，preview 越权写入即失败关闭并写 `evaluation.gate_rejected`） — verify: `tests/integration/test_f007_canonical_registry.py`
-- [ ] T013 (`IR-001`, `IR-002`, `AC-008`): 实现 canonical/finalize-cohort/abandon CLI，缺上下文或成员未收齐时非零拒绝；`abandon` 只接受 canonical 下 `INCOMPLETE` 的 experiment、要求非空 reason，写 `evaluation.run_state_changed` 后按终态登记 — verify: `tests/integration/test_f007_cli.py`
+- [x] T008 (`FR-002`, `FR-007`, `AC-002`, `AC-009`): 实现 capability/guard 配对及 label endpoint/PIT/max-horizon/train-only-fit 守卫，并在 manifest 写入三层无前视状态（L1 本 Feature fail-closed 执行；L2/L3 owner=F006/M3，缺失层记 `not_yet_available` 并阻断晋级） — verify: `tests/unit/validation/test_methodology_gate.py`
+- [x] T009 (`FR-004`, `AC-003`): 实现成员级 HAC IC/block bootstrap 与 cohort 级 BH-FDR、有效独立数 DSR、MinTRL，异常统一失败关闭 — verify: `tests/unit/evaluation/test_required_statistics.py`
+- [x] T010 (`FR-005`, `AC-004`): 实现 purged/embargoed rolling split、三级样本量裁决（`underpowered`/`provisional`/`trustworthy`）和稳定性报告 — verify: `tests/unit/evaluation/test_cost_and_stability.py`
+- [x] T011 (`DR-003`, `TR-001`, `TR-002`, `AC-005`): 实现 run 事件、report/curves/manifest 同盘原子发布与恢复 — verify: `tests/integration/test_f007_atomic_publish.py`
+- [x] T012 (`FR-004`, `FR-008`, `DR-004`, `DR-005`, `TR-003`, `NFR-001`, `AC-013`): 实现冻结 cohort、成员 registration、收齐校验、原子 finalize 与 official population 可重建投影；finalize 内按 design §4 先做 `|ρ|` 查重（OOS PnL / rolling IC 序列，比较注册表既有记录与同 cohort 其他成员，cohort 内重复按承诺顺序保留在先者）、再按 design §3.3 优先级表导出 `promotion_verdict`，二者与 `cohort_verdict.json` 同一次原子写；同时实现 append-only 留出预算台账（`holdout_budget/ledger.jsonl`，仅 canonical capability 可追加，preview 越权写入即失败关闭并写 `evaluation.gate_rejected`） — verify: `tests/integration/test_f007_canonical_registry.py`
+- [x] T013 (`IR-001`, `IR-002`, `AC-008`): 实现 canonical/finalize-cohort/abandon CLI，缺上下文或成员未收齐时非零拒绝；`abandon` 只接受 canonical 下 `INCOMPLETE` 的 experiment、要求非空 reason，写 `evaluation.run_state_changed` 后按终态登记 — verify: `tests/integration/test_f007_cli.py`
 
 ### Phase 3：综合、控制与契约交付
 
-- [ ] T014 (`FR-006`, `AC-007`, `AC-012`): 实现只消费 canonical 的 synthesis builder 与五阶段/三维失败汇总（按 design §3.3 冻结的 `failure_taxonomy` schema 与五阶段 ID 枚举聚合，未知取值失败关闭）；漏斗第一级只读摄取 F003 的 `generation.run_completed`（仅 `status=completed`）与 `generation.candidate_rejected`（按原因码） — verify: `tests/integration/test_f007_synthesis.py`
-- [ ] T015 (`FR-006`, `UX-002`, `AC-005`, `AC-011`): 实现 report/curves/synthesis schema reader 并验证曲线-标量互推；断言 `approximation` 标注存在、canonical 恒为非近似，并对产物路径做 POSIX 逻辑路径断言（Windows/WSL 物理路径只进 provenance） — verify: `tests/contract/test_f007_artifact_schemas.py`
-- [ ] T016 (`FR-003`, `FR-004`, `FR-005`, `AC-003`): 跑正控制、白噪声与故意泄漏 golden，多成员 cohort 批量夹具全链记录拒绝者（被拒者仍入分母、诊断性重算不重复计数） — verify: `tests/integration/test_f007_controls.py`
-- [ ] T017 (`FR-001`, `FR-002`, `NFR-003`, `AC-001`, `AC-002`, `AC-003`, `AC-005`): 对 future-fill、embargo、guard 注册、preview writer、异常吞噬与 publish 完整性运行定向变异，逐 mutant 产出证据 — verify: `tests/mutation/test_f007_gate_mutations.py`；变异工具版本 pin 于 dev 依赖（范围上界，按 SOP §1），结果写 `reports/mutation/f007/mutation_report.json`（mutant-killed 报告）
-- [ ] T018 (`FR-008`, `DR-008`, `AC-013`): 实现 F003 注册表评测面回写适配器（`registry_writeback`）——cohort FINALIZED 后以 `DR-008` 载荷 append-only 追加评测摘要（`promotion_verdict`/`sample_tier`/`cost_model_version`/dedup/`evidence_ref`），只搬运 T012 finalize 已产出的查重与 verdict 结论、不重算；定义面写入 fail-closed 拒绝（`E_CANONICAL_FORBIDDEN`） — verify: `tests/integration/test_f007_registry_writeback.py`
+- [x] T014 (`FR-006`, `AC-007`, `AC-012`): 实现只消费 canonical 的 synthesis builder 与五阶段/三维失败汇总（按 design §3.3 冻结的 `failure_taxonomy` schema 与五阶段 ID 枚举聚合，未知取值失败关闭）；漏斗第一级只读摄取 F003 的 `generation.run_completed`（仅 `status=completed`）与 `generation.candidate_rejected`（按原因码） — verify: `tests/integration/test_f007_synthesis.py`
+- [x] T015 (`FR-006`, `UX-002`, `AC-005`, `AC-011`): 实现 report/curves/synthesis schema reader 并验证曲线-标量互推；断言 `approximation` 标注存在、canonical 恒为非近似，并对产物路径做 POSIX 逻辑路径断言（Windows/WSL 物理路径只进 provenance） — verify: `tests/contract/test_f007_artifact_schemas.py`
+- [x] T016 (`FR-003`, `FR-004`, `FR-005`, `AC-003`): 跑正控制、白噪声与故意泄漏 golden，多成员 cohort 批量夹具全链记录拒绝者（被拒者仍入分母、诊断性重算不重复计数） — verify: `tests/integration/test_f007_controls.py`
+- [x] T017 (`FR-001`, `FR-002`, `NFR-003`, `AC-001`, `AC-002`, `AC-003`, `AC-005`): 对 future-fill、embargo、guard 注册、preview writer、异常吞噬与 publish 完整性运行定向变异，逐 mutant 产出证据 — verify: `tests/mutation/test_f007_gate_mutations.py`；变异工具版本 pin 于 dev 依赖（范围上界，按 SOP §1），结果写 `reports/mutation/f007/mutation_report.json`（mutant-killed 报告）
+- [x] T018 (`FR-008`, `DR-008`, `AC-013`): 实现 F003 注册表评测面回写适配器（`registry_writeback`）——cohort FINALIZED 后以 `DR-008` 载荷 append-only 追加评测摘要（`promotion_verdict`/`sample_tier`/`cost_model_version`/dedup/`evidence_ref`），只搬运 T012 finalize 已产出的查重与 verdict 结论、不重算；定义面写入 fail-closed 拒绝（`E_CANONICAL_FORBIDDEN`） — verify: `tests/integration/test_f007_registry_writeback.py`
 
 ## 3. 验证与验收任务
 
-- [ ] T019 (`AC-001`, `AC-002`, `AC-003`): 运行执行层级、方法论与必需统计测试 — verify: `pytest -q tests/integration/test_f007_execution_tiers.py tests/unit/validation/test_methodology_gate.py tests/unit/evaluation/test_required_statistics.py`
-- [ ] T020 (`AC-004`, `AC-005`, `AC-006`): 运行成本/稳定性、原子发布和身份属性测试 — verify: `pytest -q tests/unit/evaluation/test_cost_and_stability.py tests/integration/test_f007_atomic_publish.py tests/unit/experiment_store/test_identity.py`
-- [ ] T021 (`AC-007`, `AC-008`): 运行综合、artifact contract 与 CLI 测试 — verify: `pytest -q tests/integration/test_f007_synthesis.py tests/contract/test_f007_artifact_schemas.py tests/integration/test_f007_cli.py`
-- [ ] T022 (`AC-001`, `AC-002`, `AC-003`, `AC-005`): 运行 F007 定向变异并确认每个 mutant 被门禁杀死（`reports/mutation/f007/mutation_report.json` 无 survived 项） — verify: `pytest -q tests/mutation/test_f007_gate_mutations.py`
-- [ ] T023 (`AC-001`, `AC-003`, `AC-004`, `AC-007`): 在**执行机**的不可变 crypto 快照跑四类正负控制并归档 manifest——绑定 snapshot ID 与 `value_digest`，证据落 `reports/f007/real_env/<run_id>/` 并记录 hostname 与 `device=cpu`；不得复用 T016 的 fixture 或命令 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f007_controls_real.py --snapshot <snapshot-id>`
-- [ ] T024 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`, `AC-010`, `AC-011`, `AC-012`, `AC-013`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
-- [ ] T025 (`FR-001`, `FR-004`, `NFR-001`, `AC-001`, `AC-003`): 承接 SC-002 的并发与故障注入集成测试——同 ID 并发 claim 只有一个成功、崩溃后 lease 超时才可接管、finalize 原子性（失败不产生部分 `cohort_verdict`）、registration 幂等重试不重复计数 — verify: `tests/integration/test_f007_concurrency.py`
+- [x] T019 (`AC-001`, `AC-002`, `AC-003`): 运行执行层级、方法论与必需统计测试 — verify: `pytest -q tests/integration/test_f007_execution_tiers.py tests/unit/validation/test_methodology_gate.py tests/unit/evaluation/test_required_statistics.py`
+- [x] T020 (`AC-004`, `AC-005`, `AC-006`): 运行成本/稳定性、原子发布和身份属性测试 — verify: `pytest -q tests/unit/evaluation/test_cost_and_stability.py tests/integration/test_f007_atomic_publish.py tests/unit/experiment_store/test_identity.py`
+- [x] T021 (`AC-007`, `AC-008`): 运行综合、artifact contract 与 CLI 测试 — verify: `pytest -q tests/integration/test_f007_synthesis.py tests/contract/test_f007_artifact_schemas.py tests/integration/test_f007_cli.py`
+- [x] T022 (`AC-001`, `AC-002`, `AC-003`, `AC-005`): 运行 F007 定向变异并确认每个 mutant 被门禁杀死（`reports/mutation/f007/mutation_report.json` 无 survived 项） — verify: `pytest -q tests/mutation/test_f007_gate_mutations.py`
+- [x] T023 (`AC-001`, `AC-003`, `AC-004`, `AC-007`): 在**执行机**的不可变 crypto 快照跑四类正负控制并归档 manifest——绑定 snapshot ID 与 `value_digest`，证据落 `reports/f007/real_env/<run_id>/` 并记录 hostname 与 `device=cpu`；不得复用 T016 的 fixture 或命令 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f007_controls_real.py --snapshot <snapshot-id>`
+- [x] T024 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`, `AC-010`, `AC-011`, `AC-012`, `AC-013`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
+- [x] T025 (`FR-001`, `FR-004`, `NFR-001`, `AC-001`, `AC-003`): 承接 SC-002 的并发与故障注入集成测试——同 ID 并发 claim 只有一个成功、崩溃后 lease 超时才可接管、finalize 原子性（失败不产生部分 `cohort_verdict`）、registration 幂等重试不重复计数 — verify: `tests/integration/test_f007_concurrency.py`
 
-- [ ] T026 (`FR-004`, `NFR-002`): 统计第二实现对照抽查（PRD FR3.7）——本仓手工第二实现对照 BH-FDR/block bootstrap，**time-box 1 周**；容差按估计器分档：确定性量（BH-FDR 临界值、HAC 稳健 SE）相对差 ≤1e-6，bootstrap 量（置信区间/分位）用**固定 seed 同实现复算一致**，跨实现按置信区间重叠与分位差阈值判定（阈值落档）；对照对象、容差与证据路径 `reports/second_impl/<experiment_id>/` 一并落档；超时不阻塞主链路（不作 T029–T031 前置，收口前落档即可） — verify: `pytest -q tests/unit/evaluation/test_second_implementation.py`；Vibe-Trading 外部对照独立取证：`pytest -q tests/integration/test_f007_second_impl_vibe.py`（可选依赖缺失按 SOP §3 skip，不进 unit 硬门）
+- [x] T026 (`FR-004`, `NFR-002`): 统计第二实现对照抽查（PRD FR3.7）——本仓手工第二实现对照 BH-FDR/block bootstrap，**time-box 1 周**；容差按估计器分档：确定性量（BH-FDR 临界值、HAC 稳健 SE）相对差 ≤1e-6，bootstrap 量（置信区间/分位）用**固定 seed 同实现复算一致**，跨实现按置信区间重叠与分位差阈值判定（阈值落档）；对照对象、容差与证据路径 `reports/second_impl/<experiment_id>/` 一并落档；超时不阻塞主链路（不作 T029–T031 前置，收口前落档即可） — verify: `pytest -q tests/unit/evaluation/test_second_implementation.py`；Vibe-Trading 外部对照独立取证：`pytest -q tests/integration/test_f007_second_impl_vibe.py`（可选依赖缺失按 SOP §3 skip，不进 unit 硬门）
 
-- [ ] T027 (`DR-001`, `DR-002`, `NFR-002`): 属性测试轨——身份稳定（同语义输入任意路径/codec 重跑得同一 ID）与 ResearchSnapshot 变化敏感性（成员/cutoff/映射日历变化必产生新 ID）以属性测试执行；固定可复现 seed、输入生成器由显式策略枚举（不依赖随机数据分布），反例落 `reports/property/f007/<seed>/` — verify: `pytest -q tests/property/test_f007_identity_properties.py`
+- [x] T027 (`DR-001`, `DR-002`, `NFR-002`): 属性测试轨——身份稳定（同语义输入任意路径/codec 重跑得同一 ID）与 ResearchSnapshot 变化敏感性（成员/cutoff/映射日历变化必产生新 ID）以属性测试执行；固定可复现 seed、输入生成器由显式策略枚举（不依赖随机数据分布），反例落 `reports/property/f007/<seed>/` — verify: `pytest -q tests/property/test_f007_identity_properties.py`
 
-- [ ] T028 (`FR-008`, `AC-013`): 验证评测面回写与查重——`cohort_verdict.json` 中高相关候选 `promotion_verdict=rejected`（证明查重先于 verdict 导出）、cohort 内重复对保留承诺顺序在先者、`variant` 不改变取值；多成员 cohort finalize 后回写载荷完整、含 `evidence_ref` 且不含 lifecycle 状态字段，被拒者仍入漏斗分母，定义面越权写入零变化并留拒绝事件 — verify: `pytest -q tests/integration/test_f007_registry_writeback.py`
+- [x] T028 (`FR-008`, `AC-013`): 验证评测面回写与查重——`cohort_verdict.json` 中高相关候选 `promotion_verdict=rejected`（证明查重先于 verdict 导出）、cohort 内重复对保留承诺顺序在先者、`variant` 不改变取值；多成员 cohort finalize 后回写载荷完整、含 `evidence_ref` 且不含 lifecycle 状态字段，被拒者仍入漏斗分母，定义面越权写入零变化并留拒绝事件 — verify: `pytest -q tests/integration/test_f007_registry_writeback.py`
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 > 编写早、执行晚：以下条目在 Phase 1 先以红灯立起（夹具与断言先写），收尾全量执行；
 > 每个旅程步骤至少一条可执行断言。缺失该组时 SDD Flow T3 开工门禁拒绝流转。
 
-- [ ] T029 [TEST] (`US-001`, `AC-001`, `AC-011`): 旅程 US-001 端到端验收——固定 fixture 连跑两次 preview：报告在排除 provenance 时间戳后稳定、canonical 台账与留出预算台账均零行、preview 越权写 official population/留出被拒并留 `evaluation.gate_rejected`、CLI 首屏含 tier/data digest/首个失败原因、近似标注在报告中显式可见 — verify: `pytest -q tests/integration/test_f007_execution_tiers.py tests/integration/test_f007_cli.py tests/contract/test_f007_artifact_schemas.py`
-- [ ] T030 [TEST] (`US-002`, `AC-002`, `AC-003`, `AC-004`, `AC-009`, `AC-010`, `AC-012`): 旅程 US-002 端到端验收——冻结 cohort 后跑正控制/白噪声/故意泄漏 canonical：正控制五阶段完整且样本量三级裁决正确、白噪声被统计门拦截、泄漏被方法论门拦截；成员未收齐时 finalize 非零且 cohort 保持 OPEN；拒绝者仍入分母（多成员批量夹具）；必需估计器异常时 stage 不为 PASS 且 `promotion_verdict` 不为 `promising`；manifest 记录三层无前视状态，最终确认窗统计量不出现在任何 Agent 可读产物 — verify: `pytest -q tests/unit/evaluation/test_required_statistics.py tests/unit/evaluation/test_cost_and_stability.py tests/unit/validation/test_methodology_gate.py tests/integration/test_f007_controls.py tests/integration/test_f007_canonical_registry.py tests/integration/test_f007_cli.py tests/integration/test_f007_execution_tiers.py tests/integration/test_f007_synthesis.py tests/contract/test_f007_artifact_schemas.py`
-- [ ] T031 [TEST] (`US-003`, `AC-005`, `AC-007`, `AC-008`): 旅程 US-003 端到端验收——从 finalized canonical ledger 确定性重建 synthesis：拒绝者进入漏斗分母、五阶段损失按 stage/owner/mechanism 三维聚合、事实/推断/建议三栏齐备；只有 preview 产物时输出空 canonical 结果；report/curves 标量互推在容差内一致 — verify: `pytest -q tests/integration/test_f007_synthesis.py tests/contract/test_f007_artifact_schemas.py tests/integration/test_f007_cli.py tests/integration/test_f007_atomic_publish.py tests/contract/test_f007_upstream_contracts.py`
+- [x] T029 [TEST] (`US-001`, `AC-001`, `AC-011`): 旅程 US-001 端到端验收——固定 fixture 连跑两次 preview：报告在排除 provenance 时间戳后稳定、canonical 台账与留出预算台账均零行、preview 越权写 official population/留出被拒并留 `evaluation.gate_rejected`、CLI 首屏含 tier/data digest/首个失败原因、近似标注在报告中显式可见 — verify: `pytest -q tests/integration/test_f007_execution_tiers.py tests/integration/test_f007_cli.py tests/contract/test_f007_artifact_schemas.py`
+- [x] T030 [TEST] (`US-002`, `AC-002`, `AC-003`, `AC-004`, `AC-009`, `AC-010`, `AC-012`): 旅程 US-002 端到端验收——冻结 cohort 后跑正控制/白噪声/故意泄漏 canonical：正控制五阶段完整且样本量三级裁决正确、白噪声被统计门拦截、泄漏被方法论门拦截；成员未收齐时 finalize 非零且 cohort 保持 OPEN；拒绝者仍入分母（多成员批量夹具）；必需估计器异常时 stage 不为 PASS 且 `promotion_verdict` 不为 `promising`；manifest 记录三层无前视状态，最终确认窗统计量不出现在任何 Agent 可读产物 — verify: `pytest -q tests/unit/evaluation/test_required_statistics.py tests/unit/evaluation/test_cost_and_stability.py tests/unit/validation/test_methodology_gate.py tests/integration/test_f007_controls.py tests/integration/test_f007_canonical_registry.py tests/integration/test_f007_cli.py tests/integration/test_f007_execution_tiers.py tests/integration/test_f007_synthesis.py tests/contract/test_f007_artifact_schemas.py`
+- [x] T031 [TEST] (`US-003`, `AC-005`, `AC-007`, `AC-008`): 旅程 US-003 端到端验收——从 finalized canonical ledger 确定性重建 synthesis：拒绝者进入漏斗分母、五阶段损失按 stage/owner/mechanism 三维聚合、事实/推断/建议三栏齐备；只有 preview 产物时输出空 canonical 结果；report/curves 标量互推在容差内一致 — verify: `pytest -q tests/integration/test_f007_synthesis.py tests/contract/test_f007_artifact_schemas.py tests/integration/test_f007_cli.py tests/integration/test_f007_atomic_publish.py tests/contract/test_f007_upstream_contracts.py`
 
-- [ ] T032: 回写 spec 的真实 tests/验收证据、BACKLOG 和 feature 状态 — verify: `python3 tools/verify.py`
+- [x] T032: 回写 spec 的真实 tests/验收证据、BACKLOG 和 feature 状态 — verify: `python3 tools/verify.py`
 
 ## 4. 依赖与并行关系
 

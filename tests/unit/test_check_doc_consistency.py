@@ -64,6 +64,35 @@ def test_unknown_check_id_absent_from_registry() -> None:
     assert sorted(TEXT_CHECK_IDS) == sorted({c.check_id for c in cdc.TEXT_CHECKS})
 
 
+def test_find_task_line_ignores_checkbox_state() -> None:
+    tasks = (
+        "- [ ] T012 (`FR-004`): 先做查重\n"
+        "- [x] T018 (`FR-008`): 只搬运结论、不重算\n"
+        "- [ ] T0123: 另一条任务\n"
+    )
+    assert cdc.find_task_line(tasks, "T012").startswith("- [ ] T012")
+    assert cdc.find_task_line(tasks, "T018").startswith("- [x] T018")
+    assert cdc.find_task_line(tasks, "T0123").startswith("- [ ] T0123")
+    assert cdc.find_task_line(tasks, "T999") == ""
+
+
+def test_ticking_f007_tasks_keeps_the_dedup_gate_green(tmp_path: pathlib.Path) -> None:
+    """回归：契约断言必须按任务号取行，勾选（`- [x]`）不得让 T012/T018 断言失效。"""
+    for rel in (cdc.F007_SPEC, cdc.F007_DESIGN, cdc.F007_TASKS):
+        dst = tmp_path / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(REPO / rel, dst)
+    assert cdc.check_f007_dedup_precedes_verdict(tmp_path) == []
+    tasks_path = tmp_path / cdc.F007_TASKS
+    tasks_path.write_text(
+        tasks_path.read_text(encoding="utf-8")
+        .replace("- [ ] T012", "- [x] T012")
+        .replace("- [ ] T018", "- [x] T018"),
+        encoding="utf-8",
+    )
+    assert cdc.check_f007_dedup_precedes_verdict(tmp_path) == []
+
+
 def _copy_index_tree(tmp_path: pathlib.Path) -> None:
     shutil.copytree(REPO / "docs" / "features", tmp_path / "docs" / "features")
     shutil.copyfile(REPO / "docs" / "README.md", tmp_path / "docs" / "README.md")
