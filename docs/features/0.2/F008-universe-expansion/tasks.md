@@ -36,16 +36,16 @@ updated: 2026-09-19
 
 - [x] T004 (`FR-001`, `AC-001`): 实现 `discover.py`——按成交额排名取前 N、上线天数过滤与排除规则筛候选，记录逐候选指标、排除者与排除原因、快照时间；候选按排名有序以支持批次切分 — verify: `tests/unit/test_f008_discover.py`
 - [x] T005 (`FR-002`, `DR-001`, `AC-002`): 实现 `definition.py`——`UniverseDef` canonical JSON、`universe_id` 内容寻址、人工确认冻结与版本化 — verify: `tests/unit/test_f008_universe_def.py`
-- [ ] T006 (`DR-002`): 编写前向迁移 `db/migrations/005_universe_membership.sql`（现有编号止于 004）建 `universe_membership` 表与 `(lake_pair, valid_from)` 索引；须满足 runner 两条硬约束——幂等（`IF NOT EXISTS`）、无非事务语句，整文件单事务执行 — verify: `tests/unit/test_apply_migrations.py`
-- [ ] T007 (`FR-005`, `DR-002`, `AC-007`, `AC-008`): 实现 `membership.py`——只追加写入封装、区间不重叠约束、`universe_at(T)`（左闭右开）；按 `DQ-001` 结论决定是否加数据库触发器兜底并记录结论 — verify: `tests/unit/test_f008_membership.py`
+- [x] T006 (`DR-002`): 编写前向迁移 `db/migrations/005_universe_membership.sql`（现有编号止于 004）建 `universe_membership` 表与 `(lake_pair, valid_from)` 索引；须满足 runner 两条硬约束——幂等（`IF NOT EXISTS`）、无非事务语句，整文件单事务执行 — verify: `tests/unit/test_apply_migrations.py`
+- [x] T007 (`FR-005`, `DR-002`, `AC-007`, `AC-008`): 实现 `membership.py`——只追加写入封装、区间不重叠约束、`universe_at(T)`（左闭右开）；按 `DQ-001` 结论决定是否加数据库触发器兜底并记录结论——**结论：应用层单写封装 + 数据库触发器双保险**（`005_universe_membership.sql` 里 `no_mutation` 拒绝 UPDATE/DELETE、`increasing` 拒绝 valid_from 回填与区间重叠） — verify: `tests/unit/test_f008_membership.py`
 - [ ] T008 (`FR-005`, `DR-002`): 为现有 6 对补 `initial_seed` 台账记录，`valid_from` 取各自实际数据起点 — verify: `tests/unit/test_f008_membership.py`
-- [ ] T009 (`FR-006`, `IR-002`, `IR-003`, `AC-009`, `AC-013`): 实现 `artifact.py`——按 `IR-002` 冻结的 canonical JSON schema（顶层 `{schema_version, members}`、成员严格三键、最小 PIT 投影）序列化并按 `sha256:` 前缀 digest 原子发布；产物必须能被 `factor_factory.generators.universe.load_explicit_universe` 直接加载 — verify: `tests/unit/test_f008_artifact.py` + `tests/integration/test_f008_export_integration.py`
+- [x] T009 (`FR-006`, `IR-002`, `IR-003`, `AC-009`, `AC-013`): 实现 `artifact.py`——按 `IR-002` 冻结的 canonical JSON schema（顶层 `{schema_version, members}`、成员严格三键、最小 PIT 投影）序列化并按 `sha256:` 前缀 digest 原子发布；产物必须能被 `factor_factory.generators.universe.load_explicit_universe` 直接加载 — verify: `tests/unit/test_f008_artifact.py` + `tests/integration/test_f008_export_integration.py`
 - [ ] T010 (`TR-001`): 实现 `universe.member_changed` 事件写入与按 run/pair 查询 — verify: `tests/integration/test_f008_backfill.py`
 
 ### Phase 2：回填编排与质量门
 
-- [ ] T011 (`FR-003`): 把 `collector/historical_backfill.py` 从一次性脚本泛化为可编排调用，并从 `docs/SOP.md` 豁免表移除该条目（若本轮未完成泛化则必须显式续期） — verify: `python3 tools/verify.py` + `tests/unit/test_f001_line_limit_exemptions.py`
-- [ ] T012 (`FR-003`, `NFR-001`, `AC-004`): 实现限速与指数退避（重试上限、失败不提速），速率预算在 pair 间共享 — verify: `tests/unit/test_f008_rate_limit.py`
+- [x] T011 (`FR-003`): 把 `collector/historical_backfill.py` 从一次性脚本泛化为可编排调用，并从 `docs/SOP.md` 豁免表移除该条目（若本轮未完成泛化则必须显式续期） — verify: `python3 tools/verify.py` + `tests/unit/test_f001_line_limit_exemptions.py`
+- [x] T012 (`FR-003`, `NFR-001`, `AC-004`): 实现限速与指数退避（重试上限、失败不提速），速率预算在 pair 间共享 — verify: `tests/unit/test_f008_rate_limit.py`
 - [ ] T013 (`FR-003`, `DR-003`, `NFR-002`, `AC-003`): 实现 `backfill_runner.py`——批次编排、`(lake_pair, last_cursor)` 断点、逐 pair 进度与失败隔离、`BackfillRun` 落盘 — verify: `tests/integration/test_f008_backfill.py`
 - [ ] T014 (`TR-002`, `AC-010`): 实现 `backfill.progress` / `backfill.failed` 事件与 hostname 标注 — verify: `tests/integration/test_f008_backfill.py`
 - [ ] T015 (`FR-004`, `DR-004`, `AC-005`): 实现 `quality_gate.py`——复用 `tools/f001_backfill_report.py` 的缺失率/边界闭合/连续聚合三项口径并参数化到多 pair，**另补一项它没有的显式重复主键检查**（`GROUP BY exchange, symbol, time HAVING count(*) > 1`；参考表 `ohlcv_1m` 的主键使重复结构性不可发生，故该项在真实表上恒为 0，其检测路径必须由无主键 scratch 源表 fixture 真实触发，不得写成空转断言），逐 pair 判定记录（通过与失败同样保留，该记录是准入状态真相源） — verify: `tests/integration/test_f008_quality_gate.py`
@@ -68,7 +68,7 @@ updated: 2026-09-19
 - [ ] T026 (`AC-011`, `NFR-004`): 在执行机 `qiaozhi-lt` 归档容量与耗时实测证据（含 hostname），开发机跳过属预期不得以其结果替代 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f008_capacity_report.py`
 - [ ] T027: 修订 `docs/alphamill-integration.md` §1.3 的 OKX 过期表述为 Binance 路线 — verify: `python3 tools/check_doc_links.py` + 人工复核该节
 - [ ] T028 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
-- [ ] T029 (`AC-014`, `IR-002`, `FR-006`): 把 `F007` 的 universe 只读消费面从废弃的 CSV 契约迁到 `IR-002` 的 canonical JSON——`evaluation/universe_ledger.py` 改为按 `<digest>.json` 加载（顶层 `{schema_version, members}`、成员严格三键、digest 用解析后重新规范化的字节重算、未知键与版本不符 fail-closed）、`contract_common.py` 的 `UNIVERSE_COLUMNS` 换成 JSON 键集合常量、`upstream_contracts.py` 门面再导出同步，并改三处 CSV fixture 测试（`tests/contract/test_f007_upstream_contracts.py`、`tests/integration/test_f007_controls.py`、`tests/integration/test_f007_cli.py`）；`universe_at(T)` 半开区间语义与 ResearchSnapshot 身份公式不得改动 — verify: `pytest -q tests/contract/test_f007_upstream_contracts.py tests/integration/test_f007_controls.py tests/integration/test_f007_cli.py tests/unit/experiment_store/`
+- [x] T029 (`AC-014`, `IR-002`, `FR-006`): 把 `F007` 的 universe 只读消费面从废弃的 CSV 契约迁到 `IR-002` 的 canonical JSON——`evaluation/universe_ledger.py` 改为按 `<digest>.json` 加载（顶层 `{schema_version, members}`、成员严格三键、digest 用解析后重新规范化的字节重算、未知键与版本不符 fail-closed）、`contract_common.py` 的 `UNIVERSE_COLUMNS` 换成 JSON 键集合常量、`upstream_contracts.py` 门面再导出同步，并改三处 CSV fixture 测试（`tests/contract/test_f007_upstream_contracts.py`、`tests/integration/test_f007_controls.py`、`tests/integration/test_f007_cli.py`）；`universe_at(T)` 半开区间语义与 ResearchSnapshot 身份公式不得改动 — verify: `pytest -q tests/contract/test_f007_upstream_contracts.py tests/integration/test_f007_controls.py tests/integration/test_f007_cli.py tests/unit/experiment_store/`
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
