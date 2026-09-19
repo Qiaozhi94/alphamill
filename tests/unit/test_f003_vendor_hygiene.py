@@ -3,8 +3,11 @@
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Final
+
+import pytest
 
 ROOT: Final = Path(__file__).resolve().parents[2]
 VENDOR_ROOT: Final = ROOT / "src/alphamill/factor_factory/generators/alphagen_vendor"
@@ -25,23 +28,49 @@ def _sha256(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _vendor_tree_files() -> set[str]:
+    """vendor 树内参与基线比对的源文件；忽略 Python 字节码产物。
+
+    导入 vendored 代码（如 T021 adapter）必然会生成 `__pycache__/*.pyc`，那是构建
+    产物而非 vendor 内容——把它计入「未声明文件」会让卫生门对正常使用误报。
+    """
+    return {
+        path.relative_to(VENDOR_ROOT).as_posix()
+        for path in VENDOR_ROOT.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    }
+
+
 def test_vendor_tree_contains_only_frozen_subset_and_local_shim() -> None:
     # Given: the frozen manifest defines the only permitted upstream source files.
     manifest = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
     expected = set(manifest["subset"]) | LOCAL_SHIM_FILES | METADATA_FILES
 
     # When: every file below the vendor root is enumerated without following the network.
-    actual = {
-        path.relative_to(VENDOR_ROOT).as_posix()
-        for path in VENDOR_ROOT.rglob("*")
-        if path.is_file()
-    }
+    actual = _vendor_tree_files()
 
     # Then: no excluded upstream tree or undeclared local file is present.
     assert VENDOR_ROOT.is_dir()
     assert actual == expected, (
         f"missing={sorted(expected - actual)}, unexpected={sorted(actual - expected)}"
     )
+
+
+def test_bytecode_artifacts_are_ignored_but_real_extras_are_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """字节码产物不算越界；真正的多余源文件仍必须判红。"""
+    fake_root = tmp_path / "alphagen_vendor"
+    (fake_root / "alphagen" / "__pycache__").mkdir(parents=True)
+    (fake_root / "alphagen" / "config.py").write_text("x = 1\n", encoding="utf-8")
+    (fake_root / "alphagen" / "__pycache__" / "config.cpython-314.pyc").write_bytes(b"\x00")
+    (fake_root / "alphagen" / "bytecode_only.pyc").write_bytes(b"\x00")
+    monkeypatch.setattr(sys.modules[__name__], "VENDOR_ROOT", fake_root)
+
+    assert _vendor_tree_files() == {"alphagen/config.py"}
+
+    (fake_root / "alphagen" / "smuggled.py").write_text("y = 2\n", encoding="utf-8")
+    assert _vendor_tree_files() == {"alphagen/config.py", "alphagen/smuggled.py"}
 
 
 def test_every_baseline_difference_is_annotated() -> None:
