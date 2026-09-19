@@ -2,7 +2,7 @@
 kind: feature
 id: F008
 version: "0.2"
-status: draft
+status: ready-for-development
 gate_version: 1
 related_features: [F001, F002, F003, F007]
 topics: [data-bridge, universe, backfill, data-quality, point-in-time, m2]

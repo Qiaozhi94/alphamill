@@ -759,3 +759,75 @@
 - **裁决分布**：32 条中 accepted 30、partial 2（`R1-103`、`R2-204`，两条的剩余部分都指定了载体 `R2-209`/`R3-302` 并各自关闭）、rejected 0。无一条被"部分接纳"蒸发。
 - **建议命中率**：`suggested_fix` 与 `fix_summary` 实质一致 29/32（≈91%）。三条不一致：`R1-103`（建议"或多标的 fail-closed"，实际走了聚合路线）、`R1-117`（建议二选一，实际选了删除）、**`R2-202`（建议在第 2、3 轮两次落空——rename/CAS 方向本身就是错的形态，直到第 4 轮改提 `flock` 才命中）**。后者说明：**建议命中率高不等于建议质量高，最贵的那条恰恰是建议连错两轮的那条**；当同一条 finding 的建议连续落空时，检视方应当怀疑自己的方案空间而不是修复方的执行。
 - **角色合并的效果**：`R2-202` 在对抗式分离循环下 3 轮未收敛，角色合并后 1 轮关闭。与 skill 记录的经验一致（分离循环在 4-5 轮修复声明里零自行收敛）。
+
+## 循环 17：F008 宇宙扩容与 point-in-time 宇宙台账 规格文档检视
+
+- report_type: doc-review | round: 1（full-scan）→ 2（diff-only）→ 3（diff-only，裁决后） | 状态: 闭环
+- 日期：2026-09-19 | 基线：`7872666`（F008 `draft`）→ 终基线 `619dadc`（worktree `feat/F008-universe-expansion`，PR #3，CI 35447503084 绿）
+- 检视人：Claude Opus 5（第 2/3 轮按 skill §7 角色合并下场修复）| 裁决：owner（artifact 格式、台账语义、准入通道、前视处理四条）
+- 范围：`docs/features/0.2/F008-universe-expansion/` 三件套，及其与 ADR-0007 / 架构 §4.3 / F007 DR-006 / 已落地的 `factor_factory/generators/universe.py` 的契约一致性
+- 结论：24 条（6 高 / 12 中 / 6 低），全部关闭；其中 4 条为修复引入（`fix-regression`，自伤率 4/12 ≈ 67% 按轮次内新发现计）。3 条 High 属"规格本身矛盾"，按 skill §7 升级为规格裁决，冻结修复直至 owner 拍板。
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| universe-artifact-format-conflict | universe artifact 规定为 CSV 富列，但已落地的下游消费者只接受严格 JSON schema | 高 | 正确性 | 根因 | 跨 feature 契约漂移 | fixed | 在 spec IR-002 与 design §3 冻结 artifact 的确切 schema（键集合、类型、digest 前缀、文件扩展名），二选一：对齐既有实现改为 JSON 最小 PIT 投影（{schema_version, members[{lake_pair, valid_from, valid_to}]}），或走规格裁决同时改 ADR-0007/F007 DR-006/F003 universe.py | artifact 载体裁决为 canonical JSON：spec IR-002 冻结顶层/成员严格键集合、排序与 `sha256:` 前缀；design §3 整段重写并声明与 `load_explicit_universe` 逐字段一致；ADR-0007 补 2026-09-19 修订记录；架构 §4.3、F007 spec DR-006/design §4 路径同步 `.csv`→`.json` | tools/check_doc_consistency.py::architecture_universe_calendar_split_aligned（断言已同步为 <digest>.json，门禁通过）；实现期由 AC-009/T009 的“产物可被 load_explicit_universe 加载”锁定 | 1 | 2 | cross-feature-contract-drift |
+| quality-gate-not-actually-gating-export | “质量门是导出清单唯一准入通道”在 F002 现状下不可实现，回填写库即自动准入 | 高 | 正确性 | 根因 | 契约漂移 | fixed | 先定义“导出清单”的实体载体（新增准入表或 registry 侧 pair 过滤），并显式声明它是否触碰 F002 exporter/symbol_map——若必须改，把“不改 F002 已冻结语义”的约束改写为“只在 pair 选择处插入过滤，不动 manifest/对账/修订语义”，并为“未过门 pair 不得出现在导出 manifest.pairs 与 symbol_map”补一条 AC | 裁决：在导出侧 pair 选择处过滤——`lake_pairs_map` 加可选 `admitted` 参数（默认 None 保持现行为），导出清单定义为「台账可交易 ∩ 质量门 ACTIVE」的联合导出，无独立实体；`symbol_map` 不过滤、保持全量，与导出清单允许不等 | AC-009/T017 — tests/integration/test_f008_export_integration.py（含 admitted=None 与 F002 现状逐字节一致、symbol_map 全量两条断言） | 1 | 3 | gate-without-teeth |
+| valid-from-semantics-conflict | 台账 valid_from 有三种互斥语义（准入时间/真实上市时间/实际数据起点） | 高 | 正确性 | 根因 | 原始编码 | fixed | 明确台账区间的被定义对象是“研究宇宙成员资格”还是“标的可交易期”；若是前者，§5 状态机保留“准入时点写 valid_from”，把真实上市时间放独立列 listed_at；若是后者，改写 §5 并说明未过门 pair 也会出现在 universe_at(T) 结果里 | 裁决：台账区间 = 标的可交易期（valid_from=上市 / valid_to=退市），准入状态拆到质量门判定记录（DR-004）；§5 状态机改写为两条独立时间线，DR-002 的 reason 收敛为 listed/delisted/initial_seed | AC-007/AC-008 — tests/unit/test_f008_membership.py | 1 | 3 | ambiguous-key-semantics |
+| universe-selection-lookahead | 按快照时点成交额排名选 40 对再回填历史，宇宙成员本身带前视选择偏差，spec 未承认 | 高 | 正确性 | 根因 | 原始编码 | fixed | 在 §1 与 NFR-003 显式区分两类偏差——本 feature 消除的是“成员区间”偏差，未消除的是“成员选取”偏差；要么把残余偏差写成已知限制并给出后续（按滚动窗口逐期重算排名的 PIT 宇宙），要么把 criteria 改为逐期重算并相应改 universe_id 语义 | 裁决：承认为已知限制——§1 问题、§3 非目标、NFR-003 均写明「消除成员区间偏差、不消除成员选取偏差」，并要求下游把「按 frozen_at 排名选取的 40 对宇宙」作为结论前提标注；逐期重算列入 tasks §5 后移 | 无代码回归（文档约束）；下游标注由 F003 运行记录的 universe 字段承载 | 1 | 3 | survivorship-bias-residual |
+| ir001-ir003-no-acceptance | IR-001（CLI 五子命令与拒绝条件）与 IR-003（schema_version）无任何 AC 覆盖 | 高 | 测试覆盖 | 根因 | 原始编码 | fixed | 新增 AC-012 (IR-001) 覆盖五个子命令与四类启动期拒绝（tests/unit/test_f008_cli_contract.py，该文件已被 T018 引用但不挂任何 AC），新增 AC-013 (IR-003) 覆盖 schema_version 存在性与版本不符时拒绝加载 | 新增 AC-012（CLI 五子命令 + 五类启动期拒绝各以可区分非零原因退出）与 AC-013（schema_version 与未知键拒绝）；T018 挂 AC-012，design §8 测试映射同步 | AC-012 — tests/unit/test_f008_cli_contract.py；AC-013 — tests/unit/test_f008_artifact.py | 1 | 2 | requirement-without-ac |
+| missing-test-group | tasks.md 缺 [TEST] 旅程验收组，design 自己声明它是开工门禁 | 高 | 测试覆盖 | 根因 | 流程缺陷 | fixed | 在 tasks.md §3 增加 “### [TEST] 组：层 2 旅程验收轨（必填）”，按 US-001~US-004 各派生 ≥1 条端到端断言（参照 F003 T036-T038 / F007 T029-T031 的写法），并在 §0 补一条执行规则说明“编写早、执行晚” | tasks §3 末尾新增 [TEST] 组 T030–T033，按 US-001~US-004 各一条端到端验收；§0 补“编写早执行晚”执行规则，§4 补 T004..T018 → T030..T033 依赖 | tools/check_task_dag.py（通过）；组内四条各自的 pytest verify 命令 | 1 | 2 | marked-ready-not-gated |
+| schema-version-no-carrier | IR-003 要求台账带 schema_version，但 canonical CSV 格式里没有承载位置 | 中 | 正确性 | 根因 | 原始编码 | fixed | 与 universe-artifact-format-conflict 一并裁决：JSON 方案天然有 top-level schema_version；若坚持 CSV，需明确它是表头注释行、独立列还是旁车 JSON，并写进 canonical 字节定义（会影响 digest） | JSON 顶层整数字段 `schema_version` 承载，且参与 canonical 字节因而参与 digest；IR-003 补“加载方校验版本不符即拒绝” | AC-013 — tests/unit/test_f008_artifact.py | 1 | 2 | — |
+| digest-prefix-undefined | digest 是否带 sha256: 前缀未定义，与既有实现不一致会直接导致引用解析失败 | 中 | 正确性 | 根因 | 契约漂移 | fixed | 在 FR-006/IR-002 写死 “digest = 'sha256:' + hexdigest，且前缀进文件名”，与 data_bridge/symbol_map.py:124 的 content_digest 和 factor_factory/canonical.py:39 的 sha256_prefixed_bytes 对齐 | spec FR-006/IR-002 与 design §3 写死 `digest = "sha256:" + hexdigest` 且前缀进文件名，并标注与 symbol_map.content_digest / canonical.sha256_prefixed_bytes 同一约定 | AC-009 — tests/integration/test_f008_export_integration.py | 1 | 2 | cross-feature-contract-drift |
+| duplicate-key-check-unverified | FR-004 列出“重复主键”检查项，但 AC-005 只覆盖三类 fixture，重复主键无验收 | 中 | 测试覆盖 | 根因 | 原始编码 | fixed | AC-005 的 fixture 扩到四类（缺失率/边界未闭合/连续聚合不一致/重复主键），或把“重复主键”从 FR-004 移除并说明由 F002 既有对账保证 | AC-005 fixture 由三类扩到四类（含重复主键），T015 口径同步为四项，design §8 映射同步 | AC-005 — tests/integration/test_f008_quality_gate.py | 1 | 2 | requirement-without-ac |
+| row-count-inconsistent | 回填行数 4200 万与 4600 万在同一份 spec 内混用 | 中 | 质量 | 根因 | 原始编码 | fixed | 统一为 “40 对外推约 4200 万行（PRD FR1.5 的 4600 万对应约 44 对）”，把 US-002 与 §7 依赖两处的 4600 万改掉或显式标注为 PRD 原值 | US-002 与 §7 依赖两处 4600 万改为 4200 万；PRD 的 4600 万在 §7 决策表保留并标注为约 44 对口径 | tools/check_doc_consistency.py（通过） | 1 | 2 | — |
+| capacity-gate-not-quantified | “实测显著劣于外推必须报告”没有量化阈值，AC-011 无法成为可断言门禁 | 中 | 测试覆盖 | 根因 | 原始编码 | fixed | 给 NFR-005 一个数值判据（如“实测导出耗时 > 外推值 1.5 倍或 > 40min 即判红”），让 tests/integration/test_f008_capacity_report.py 有可失败的断言，而不是只落盘记录 | NFR-005 补量化判红阈值：导出耗时 > 外推值 1.5 倍（> 38min）或磁盘/NAS 文件数 > 1.3 倍即判不可接受 | AC-011 — tests/integration/test_f008_capacity_report.py | 1 | 2 | gate-without-teeth |
+| wrong-task-references | 三处引用了错误的任务号（T022/T024），真正的容量实测是 T023/T026 | 中 | 质量 | 根因 | 原始编码 | fixed | spec §7「为什么不是 50 对」的 “若 T022 实测余量充足” 与 design §9 同句改为 T023；tasks §5 的 “视 T024 的实测余量” 改为 T023/T026 | spec §7「为什么不是 50 对」与 tasks §5 的 T022/T024 均改为 T023/T026（复核发现 design §9 并无该引用，首轮 location 记宽） | tools/check_task_dag.py（通过） | 1 | 2 | — |
+| reachability-criterion-orphan | T019 引入 spec 未定义的筛选口径“≥30 笔/90 天可达性” | 中 | 正确性 | 根因 | 契约漂移 | fixed | 该参数属 F003 objective 的 reachability_min_trades_90d；要么把它作为 criteria 的第五项写进 FR-001/DR-001（并进 universe_id），要么把 T019 的复核口径改为“人工确认排名与排除规则”，不引入未入档阈值 | T019 的复核口径改为“逐候选核对成交额排名、上线天数与排除原因均按 DR-001 入档”，移除未入档的「≥30 笔/90 天」阈值 | AC-001 — tests/unit/test_f008_discover.py | 1 | 2 | — |
+| disk-precheck-not-in-spec | “磁盘余量不足即启动期拒绝”只在 design/tasks 出现，spec 无对应需求 | 低 | 正确性 | 根因 | 契约漂移 | fixed | 在 FR-003 或 IR-001 补一句“启动期校验磁盘余量，不足以非零退出拒绝”，使 T018 的该项断言有需求锚点 | FR-003 补“启动期校验磁盘余量，不足即非零退出拒绝”，AC-012 覆盖该拒绝路径 | AC-012 — tests/unit/test_f008_cli_contract.py | 1 | 2 | — |
+| dr002-missing-ingested-at | DR-002 的字段元组缺 ingested_at，design §3 却把它列为表列 | 低 | 质量 | 根因 | 契约漂移 | fixed | 把 ingested_at 补进 DR-002 的字段列表并说明 bitemporal 用途，或从 design §3 移除 | DR-002 字段元组补 `ingested_at` 并说明 bitemporal 用途；同时补“湖内快照只含最小 PIT 投影” | tools/validate_spec_lifecycle.py（通过） | 1 | 2 | — |
+| t008-verify-mismatch | T008（补 initial_seed 台账）的 verify 指向导出集成测试，与任务内容不匹配 | 低 | 质量 | 根因 | 原始编码 | fixed | verify 改为 tests/unit/test_f008_membership.py（或新增 initial_seed 专项断言），导出集成测试留给 T009/T017 | T008 的 verify 由 test_f008_export_integration.py 改为 tests/unit/test_f008_membership.py | tools/check_task_dag.py（通过） | 1 | 2 | — |
+| decision-table-duplicated | spec §7 与 design §9 决策表六行几乎逐字重复，双份维护易漂移 | 低 | 质量 | 根因 | 原始编码 | fixed | spec §7 保留产品层取舍（规模/阈值/退市处理），design §9 只保留技术取舍（artifact vs dataset、真相源位置、行数豁免），重复项改为单向引用 | design §9 的「规模与阈值」「退市 pair」两行改为引用 spec §7（产品取舍唯一拥有者），design 只留技术侧含义 | tools/check_doc_consistency.py（通过） | 1 | 2 | — |
+| export-manifest-term-undefined | “导出清单”作为核心术语全文使用但未定义载体 | 低 | 质量 | 症状补丁 | 原始编码 | fixed | 随 quality-gate-not-actually-gating-export 一并定义；在 design §3 增加该载体的存储形态与唯一写入者 | 随准入通道裁决一并定义：导出清单 = 台账可交易 ∩ ACTIVE 的联合查询结果，无第三实体；写入 spec FR-006 与 design §3 | AC-009 — tests/integration/test_f008_export_integration.py | 1 | 3 | — |
+| r001-backfillrun-missing-schema-version | IR-003 要求运行记录带 schema_version，DR-003 的字段清单没有它 | 中 | 正确性 | 根因 | 原始编码 | fixed | 在 DR-003 补 schema_version 字段并让 AC-013 一并断言 | DR-003 字段清单补 `schema_version`（引 IR-003），AC-013 的断言对象由 artifact 扩到 artifact + BackfillRun | AC-013 — tests/unit/test_f008_artifact.py | 2 | 2 | — |
+| r002-ac013-wrong-test-path | 新增的 AC-013 断言 artifact 加载，测试路径却指向库侧 membership 套件 | 中 | 测试覆盖 | 根因 | 修复引入 | fixed | artifact 契约断言应落在 artifact 自己的测试文件 | AC-013 的 tests 改为 tests/unit/test_f008_artifact.py（新文件），design §8 映射、T009 与 T033 的 verify 同步补该路径 | tools/check_task_dag.py（通过） | 2 | 2 | ac-test-path-mismatch |
+| r003-test-group-numbering-order | 新增的 [TEST] 组编号 T030–T033 排在 T024 之前，与“按顺序逐项实现”冲突 | 低 | 质量 | 根因 | 修复引入 | fixed | 新增任务块的位置应与编号单调一致 | 把 [TEST] 组整块移到 §3 末尾（T029 之后），并移除多余的「验收套件与质量门」分节标题 | tools/check_task_dag.py（通过） | 2 | 2 | — |
+| r004-admission-written-as-ledger-time | US-003 场景 3 仍把准入写成「在台账登记生效时间」，与拆分后的语义冲突 | 中 | 正确性 | 根因 | 修复引入 | fixed | 语义拆分必须同步扫一遍所有引用旧语义的场景句 | 改为「写入准入记录（ACTIVE）并进入导出清单；台账区间由上市/退市事实决定，不因准入改写」 | AC-005 — tests/integration/test_f008_quality_gate.py | 3 | 3 | partial-symmetric-fix |
+| r005-delist-vs-dropout-conflated | 「退市」与「跌出流动性阈值」被当成同一件事写进台账退出 | 中 | 正确性 | 根因 | 原始编码 | fixed | 可交易期与成员资格是两个谓词，退出路径也要分开 | 拆开——退市追加台账 valid_to(reason=delisted)；跌出阈值但仍可交易只在新版定义中落选并移出导出清单，台账区间不动。§3 边界场景、§5 状态机、§7 决策表与 Q-003 同步 | AC-007/AC-008 — tests/unit/test_f008_membership.py | 3 | 3 | ambiguous-key-semantics |
+| r006-member-changed-event-ambiguous | universe.member_changed 在两条时间线拆分后无法区分变更来源 | 中 | 正确性 | 根因 | 修复引入 | fixed | 事件流承载两条语义线时必须带来源判别字段 | TR-001 payload 增 `line` 字段（tradability / admission）并各自限定 reason 取值；design 事件契约与幂等键同步加 line；AC-010 补可区分断言 | AC-010 — tests/integration/test_f008_backfill.py | 3 | 3 | — |
+
+### 模式教训
+
+**来源分布**：原始编码 13 / 契约漂移 5 / 修复引入 4 / 跨 feature 契约漂移 1 / 流程缺陷 1。
+
+**反复出现的模式**（按 `pattern_tag` 聚合）：`cross-feature-contract-drift` ×2, `gate-without-teeth` ×2, `ambiguous-key-semantics` ×2, `requirement-without-ac` ×2, `survivorship-bias-residual` ×1, `marked-ready-not-gated` ×1, `ac-test-path-mismatch` ×1, `partial-symmetric-fix` ×1。
+
+1. **文档写的契约 vs 代码已落地的契约**（`cross-feature-contract-drift` ×2）——本轮最贵的一条。
+   ADR-0007、F007 DR-006、F008 IR-002 三份文档一致写 CSV，而下游 `generators/universe.py` 早已按
+   JSON 落地并有通过的集成测试。**三份文档互相一致，不等于它们与代码一致**；跨 feature 契约检视
+   必须去读消费方的实现，不能只做文档间比对。
+2. **语义拆分的连带漏项**（`partial-symmetric-fix`、`ambiguous-key-semantics` ×2）——把 `valid_from`
+   从"三义"收敛成"可交易期"后，第 3 轮仍在三处发现引用旧语义的句子（US-003 场景、"退市 vs 跌出阈值"
+   混为一谈、`member_changed` 事件无法区分来源）。**改语义必须全文扫引用，不能只改定义处**。
+3. **门禁把错误答案锁死**（`gate-without-teeth` ×2）——`tools/check_doc_consistency.py:63` 断言架构文
+   必须含 `<digest>.csv`。门禁有牙是好事，但它锁的是"当时认为对的东西"；裁决改变契约时，门禁断言
+   是联动修改清单的一部分，漏改则 verify 判红。另一条是 `NFR-005` 的"显著劣于外推"无量化阈值，
+   写成了永远无法判红的门。
+4. **需求写了但没有 AC**（`requirement-without-ac` ×2）——`IR-001`/`IR-003` 与"重复主键"检查项都在
+   第 4 节有定义、在 tasks 有任务，唯独没进验收清单。`tasks.md` 里出现了一个不挂任何 AC 的测试文件
+   （`test_f008_cli_contract.py`）是这类漏洞的可检信号。
+5. **diff 复核的价值被证实**：三轮共 6 条轮次内新发现，4 条是 `fix-regression`——第 1 轮物理上不存在
+   这些问题。最长存活 2 轮（valid-from-semantics-conflict、universe-selection-lookahead、quality-gate-not-actually-gating-export，均为待 owner 裁决项）。
+
+**裁决分布**：accepted 24 / partial 0 / rejected 0。全接纳按 skill 的说法是"检视在凑数"的信号，
+但本轮 18 条首轮发现中有 3 条直接改变了设计方向（artifact 格式、台账语义、准入通道），另有 6 条阻塞流转，
+不属于凑数；无 rejected 更可能反映的是"检视方与修复方在第 2 轮后合并为同一角色"——**这本身是需要警惕的
+制衡削弱**，下次同类检视若仍由同一 agent 双角色，应在报告里显式记录哪些条目被自己否决过。
+
+### 过程事故：并行会话清空工作树
+
+第 2 轮的 7 个文档改动（未提交）在 20:40 被另一个并行会话清理工作树（提交 `41c3911` 前）全部丢弃——
+`git stash` 为空、不在任何 commit 中、无法从 git 恢复。改动靠会话内的替换脚本原样重放才找回。
+
+**教训**：多会话并行改同一仓库时，未提交的工作树改动没有任何保护。重放后立即 `git add` 进 index
+（能挡 `git checkout -- .`，挡不住 `git reset --hard`），并尽快落到独立 worktree 的分支上。
+本次最终把 F008 文档收进 `feat/F008-universe-expansion` worktree，与 F003 的代码分支物理隔离。

@@ -68,7 +68,6 @@ updated: 2026-09-19
 - [ ] T026 (`AC-011`, `NFR-004`): 在执行机 `qiaozhi-lt` 归档容量与耗时实测证据（含 hostname），开发机跳过属预期不得以其结果替代 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f008_capacity_report.py`
 - [ ] T027: 修订 `docs/alphamill-integration.md` §1.3 的 OKX 过期表述为 Binance 路线 — verify: `python3 tools/check_doc_links.py` + 人工复核该节
 - [ ] T028 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
-- [ ] T029: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
@@ -78,6 +77,8 @@ updated: 2026-09-19
 - [ ] T031 [TEST] (`US-002`, `AC-003`, `AC-004`, `AC-010`): 旅程 US-002 端到端验收——单 pair 窗口回填跑到一半中断后重跑，从断点继续、无重复行、行数与预期一致；注入限流错误触发指数退避且不超上限、速率不因失败提高；单 pair 失败不影响其他 pair 的已完成进度；`BackfillRun` 与进度/失败事件可按 run 与 pair 查询且带 hostname — verify: `pytest -q tests/unit/test_f008_rate_limit.py tests/integration/test_f008_backfill.py`
 - [ ] T032 [TEST] (`US-003`, `AC-005`, `AC-006`, `AC-009`): 旅程 US-003 端到端验收——缺失率超限/边界未闭合/连续聚合不一致/重复主键四类 fixture 均被隔离并各记原因码、均不进导出清单；上线晚于窗口起点的 pair 按实际可得窗口算缺失率不被误判；全项通过者按 库追加 → artifact 发布 → 写准入记录 三步准入，发布的 artifact 可被下游 `load_explicit_universe` 加载，且 `symbol_map` 与导出清单允许不等 — verify: `pytest -q tests/integration/test_f008_quality_gate.py tests/unit/test_f008_quality_gate_window.py tests/integration/test_f008_export_integration.py`
 - [ ] T033 [TEST] (`US-004`, `AC-007`, `AC-008`, `AC-013`): 旅程 US-004 端到端验收——含上市/退市/中途进出的成员 fixture 上 `universe_at(T)` 在各时点返回正确集合（左闭右开）；原地改写已发布历史区间被拒、退出只以追加新区间表达且历史数据不删；`schema_version` 不符或出现未知键时加载被拒 — verify: `pytest -q tests/unit/test_f008_membership.py tests/unit/test_f008_artifact.py`
+
+- [ ] T034: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
 
 ## 4. 依赖与并行关系
 
@@ -90,8 +91,21 @@ updated: 2026-09-19
 - `T015 -> T017 -> T022`：质量门是导出清单的唯一准入通道。
 - `T020 -> T022`、`T021 -> T022`：每批回填完成后各跑一次质量门；批 2 不阻塞批 1 的准入。
 - `T022 -> T023`：两批都过门后才做容量实测（实测对象是最终的 40 对）。
-- `T003 [P]`：只产接口 fixture，与定义/台账实现无共享状态。
-- `T004..T018 -> T030/T031/T032/T033`：[TEST] 组四条旅程验收以各实现任务与其验收套件为前提（夹具编写早、全量执行晚）；T032 的导出联动与 T033 的 artifact 加载断言还依赖 T009/T017。
+- `T003 -> T004`：发现实现以交易所接口 fixture 为前提（`[P]` 仅表示它与定义/台账实现无共享状态，可并行起步）。
+- `T004 -> T005`：先有候选清单才谈得上冻结为定义。
+- `T009 -> T017`：artifact 发布是准入联动三步的中间环节。
+- `T010 -> T014`：成员事件写入先于回填事件的统一落盘与 hostname 标注。
+- `T013 -> T020`、`T019 -> T020`：编排实现与真实冻结都是批 1 回填的前提。
+- `T016 -> T022`：实际可得窗口语义先落地，质量门才不会误判晚上线的 pair。
+- `T023 -> T026`：先有全量导出与备份实测，才谈得上在执行机归档证据。
+- `T004/T005/T018 -> T030`、`T012/T013/T014 -> T031`、`T015/T016/T017 -> T032`、`T007/T008/T009 -> T033`：
+  [TEST] 组四条旅程验收各以对应实现任务为前提（夹具编写早、全量执行晚）。
+- `T004/T005/T007/T008/T012/T016 -> T024`：单元套件以发现、定义、台账与限速/窗口语义实现为前提。
+- `T009/T013/T014/T015/T017 -> T025`：集成套件以回填编排、质量门与导出联动实现为前提。
+- `T011 -> T027`：先完成 `historical_backfill.py` 泛化（含 SOP 豁免表处理），再统一修订 integration §1.3 的过期表述。
+- `T024/T025 -> T028`：统一质量门在各验收套件之后跑。
+- `T024/T025/T026/T027/T028/T030/T031/T032/T033 -> T034`：全部验收套件、真实环境证据、文档修订与旅程验收
+  通过后，才回写 spec 验收证据与状态。
 - 与 `F003` 的关系：**批 1 过门（T022 的第一次执行）即满足 `F003` T035 的 ≥30 对前提**，不必等批 2 或 T023；在此之前 F003 的一切工作不被阻塞。
 
 ## 5. 明确后移
