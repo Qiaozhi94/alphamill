@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TypeAlias
 
 from alphamill.factor_factory.canonical import JSONValue
-from alphamill.factor_factory.errors import CompilerNotRegisteredError
+from alphamill.factor_factory.errors import CompilerNotRegisteredError, SchemaValidationError
 from alphamill.factor_factory.factor import FactorCompute, FactorResolver, FactorScope
 from alphamill.factor_factory.generators.expression_compiler import compile_postfix
 
@@ -31,6 +31,8 @@ class CompilerRegistry:
         self._compilers = dict(compilers or {})
 
     def register(self, generator: str, compiler: FactorCompiler) -> None:
+        if generator in self._compilers:
+            raise SchemaValidationError(f"compiler already registered: {generator!r}")
         self._compilers[generator] = compiler
 
     def require(self, generator: str) -> FactorCompiler:

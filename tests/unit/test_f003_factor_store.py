@@ -18,9 +18,12 @@ from alphamill.factor_factory.errors import (
     UnknownSchemaVersionError,
 )
 from alphamill.factor_factory.factor import FactorDef, FactorScope
-from alphamill.factor_factory.generators.expression_compiler import referenced_features
+from alphamill.factor_factory.generators.expression_compiler import (
+    compile_postfix,
+    referenced_features,
+)
 from alphamill.factor_factory.hypotheses.catalog import DEFAULT_CATALOG
-from alphamill.factor_factory.registry.compiler_registry import DEFAULT_COMPILERS
+from alphamill.factor_factory.registry.compiler_registry import DEFAULT_COMPILERS, CompilerRegistry
 from alphamill.factor_factory.registry.factor_store import (
     FACTOR_DTO_FIELDS,
     build_factor,
@@ -356,3 +359,13 @@ def test_load_requires_completed_run_by_default(tmp_path: Path) -> None:
 
     with pytest.raises(FactorStoreError, match="run.json"):
         load(path)
+
+
+def test_compiler_registry_rejects_duplicate_registration() -> None:
+    """注册表必须拒绝重复注册，而不是静默覆盖（否则后注册者悄悄换掉编译器）。"""
+    registry = CompilerRegistry({"manual": compile_postfix})
+
+    with pytest.raises(SchemaValidationError, match="already registered"):
+        registry.register("manual", compile_postfix)
+
+    assert registry.require("manual") is compile_postfix
