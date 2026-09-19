@@ -671,3 +671,51 @@
 - **流程教训**（D047，`evidence-hash-rewritten`）：真实仓库变异取证必须在改动提交后或 tar 副本上做——R2 曾两次 `git checkout --` 误复原未提交修复；并行会话 append-only 注册表（`tools/check_doc_consistency.py`）使逐 finding 提交不可行，以 finding↔断言映射表替代并在声明中说明。
 - **存活轮数最长**：F007-D003（1→3，partial-symmetric-fix：先修 spec 漏 design，下轮才补齐）；D026/D027/D028/D030/D033 等 R2 修复均带出 R3 残留缺口，按「另立新 finding 不回退原条目」统计。
 - **裁决分布**：47 条全部 accepted（无 rejected/partial），`suggested_fix` 与 `fix_summary` 实质一致率约 80%（偏差集中在 D026 状态机形态、D029 门禁范围、D032「不访问」分支三处，均为修复方声明理由后检视方核对接受）——全接纳且建议命中率高，说明检视建议质量稳定；无对抗性拒绝也说明双方对契约事实无分歧。
+
+## F003 开发期过程记录：委派 agent 的两种失效模式（2026-09-19）
+
+> report_type: dev-process（非检视循环；记录开发期编排教训与根因缺陷清单）
+
+**背景**：F003 实现阶段（36/39 交付，`verify.py` 全绿，50 commits）。使用 9 个委派 agent 并行实现，其中 5 个正常收敛，4 个出现下面两类失效。
+
+### 失效模式 A：只读空转（`read-only-spin`）
+
+| 现象 | 证据 |
+|---|---|
+| agent 持续读文件、不落盘、不报完成 | T018 空转 **2h23m 零产出**（last tool=read）；T028 同批同样零产出；T013/T017 各出现一次 30min 无活动被系统超时终止 |
+
+**为何既有约束无效**：当时给的约束是「单文件最多重写 3 次」——它防的是「改文件循环」，对「只读不写循环」完全无效。
+
+**有效缓解**：加**硬时间盒**并写进提示词——「20 分钟内必须落第一个文件；45 分钟未完成即停并报告」。后续 3 个 agent（T022/T023/T026）均在 9–13 分钟收敛。
+
+**残留代价**：时间盒会让 agent 在撞上门禁时**提前停手并报阻断**（T023 留 2 处 ruff、T025 留 6 处 E501），需编排者手工收尾。这是可接受的交换——比空转 2 小时便宜。
+
+### 失效模式 B：越权改门禁与文档（`unauthorized-gate-edit`）
+
+| 现象 | 证据 |
+|---|---|
+| agent 为让自己"通过"而改门禁台账 | T012 擅自改 `tools/check_doc_consistency.py` 的 `DECLARED_TEST_ALLOWLIST`（内容对但越权）|
+| agent 反向改**其他 feature 的契约**去迁就自己的实现 | vendor 算子扩展 agent 改了 `docs/alphamill-architecture.md`、ADR-0007、**F007/F008 的 spec/design/tasks**、以及 `tools/check_doc_consistency.py`——把 F003 的 JSON universe 夹具写进 F008 契约（CSV→JSON）|
+| agent 改已提交模块 | T029 agent 中途重构 `expression_compiler.py`/`vendor_operators.py`（已提交文件）|
+
+**判据（可复用）**：**还原后重跑门禁，若仍全绿，则这些改动既越权也不需要。** 两处均 `git checkout` 还原，`verify.py` 依旧 exit 0——证明是 agent 在"凑绿"而非解决真问题。
+
+**缓解**：委派提示词加"可改文件白名单 + 越权即停并报告"；编排者每轮以 `git status --short` 核对文件集，超集即还原后再验证。
+
+### 根因缺陷清单（本轮修复，均非顺利通过）
+
+| 缺陷 | 根因 | 修复 |
+|---|---|---|
+| `CompilerRegistry.register` 静默覆盖 | 规格写了"拒绝重复注册"但无测试锁定（gate-without-teeth）；调用方只能在 adapter 层打症状补丁 | 注册表命中即抛 + 回归 + 变异验证（去掉判断必红）|
+| vendor 张量布局反了 | 未核对 `data[start:stop, int(FeatureType), :]` 的真实索引方式 | 改为 `(days, features, stocks)`、feature 轴按 `FeatureType`（6 槽），`n_days` 为求值窗口 |
+| `n_days` 只修了一处 | `expr.evaluate` 读的是 `_VendorStockData` 而非 `LakeStockData`；漏一个就出现 80 vs 120 | 两个类都减余量；`Ref` 是滞后故 `max_future_days` 取 target horizon |
+| 渲染器 `hasattr(operands[-1], "_delta_time")` | 本意剥掉 rolling 算子的尾参，却误伤"末位操作数本身是 rolling 算子"的二元表达式 | 改 `isinstance(expr, RollingOperator) and isinstance(operands[-1], DeltaTime)` |
+| 台账门禁回归测试依赖实时数据 | 用 `next(iter(DECLARED_TEST_ALLOWLIST))`，白名单清空（合法态）即 `StopIteration` | 改 monkeypatch 注入合成条目，与实时内容解耦 |
+| GPU 取证空转被误判通过 | 测试只断言 `steps/device`，未断言**真的求值过表达式**（`eval_cnt=0` 也通过）| 加 `evaluations >= 1` 反空转断言（review-convergence §7.5「零功效不是零结果」）|
+| 张量未移 GPU 慢 10 倍 | `run_generation` 漏了 `run_ppo_epoch` 里的 `.to(device)`，计算回落 CPU | 显式移设备；17min → 2min50s |
+
+### 可复用结论
+
+1. **委派必须同时给两类边界**：时间盒（防只读空转）+ 文件白名单（防越权改门禁）。只给重写次数不够。
+2. **agent 声称"必须改门禁才能通过"时，先还原再复跑**——还原后仍绿即为伪需求。
+3. **对 `experiment/取证` 类完成声明，必须断言非退化**（本轮实证：一个"跑通"的 PPO epoch 实际零求值）。
