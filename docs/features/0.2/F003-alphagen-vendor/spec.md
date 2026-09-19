@@ -345,6 +345,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 | 单卡三负载抢占 | 时段表 + 单槽 FIFO（带 `queue_seq`/超时的可验证协议）+ 启动前显存自检 | 架构 §7.1：队列赢，绝不并行赌 OOM——Kronos 常驻与挖掘训练在同一张卡上 | 夜槽卸载的 live owner = F003（经架构 §7.1 服务生命周期契约，服务端实现归 BACKLOG 待分配 feature，失败 fail-closed 留队列）；FIFO 协议由两个并发挖掘运行独立取证 |
 | 开发机无 GPU | **预期状态，不是阻塞**：`qiaozhi-gp` 是 AMD iGPU 掌机，只跑编码/单元/门禁；挖掘训练、显存与产能证据一律在 `qiaozhi-lt` 取，验收证据记录 hostname 与设备 | 架构 §7.1 机器边界；`docs/SOP.md` §3：开发机 skip 不是证据也不是失败 | 执行机实测可用显存在 tasks T004 标定 |
 | 执行机后续整体迁移到 `qiaozhi-lab` | F003 只面向**当前执行机 `qiaozhi-lt`** 验收；显存上限、时段表与产能结论都标注取证机器，迁移后重跑而非继承 | 迁移同时换平台（Win11+WSL2 → 原生 Ubuntu）与换架构（Blackwell sm_120 需 CUDA 12.8+ 的 torch 构建），沿用旧结论会失真 | 迁移动作按独立 Feature 立项（架构 §7.1） |
+| **冒烟闸门 time-box 裁决（2026-09-19 实跑）** | **L0 锁定**：主引擎 AlphaGen 保留，不降级 L1，不产 L2（time-box 无此裁决权） | 第 1 天判据「跑通 ≥1 个 PPO epoch」pass（真实 615 次求值、252 个候选通过生成侧自检）；第 2 天判据「vendor 张量 IC vs pandas 参考对齐」pass（1200 点、`max_abs_diff=0.0`）；ADR-0001 两条 M2 义务入当日 manifest（生成侧逐级计数；下游 `owner=F007` + `state=not_yet_available` 显式占位，未省略未记 0）；无触发降级，`trigger=null` | 取证机器 `qiaozhi-lt` / `device=cuda` / RTX 4060 / torch 2.10.0+cu128；当日 manifest 归档于 `reports/generation/smoke/`（运行证据，`.gitignore` 不入库，需复跑可重放）；L1→L2 仍须 L1 连续 2 周满足 ADR-0001 判据，不由本裁决触发 |
 
 ## 8. 待确认问题
 
