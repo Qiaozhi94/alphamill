@@ -63,6 +63,7 @@ class PpoEpochResult:
     steps: int
     device: str
     pool_size: int
+    evaluations: int
     duration_s: float
     pool: AlphaPoolBase
 
@@ -118,7 +119,7 @@ class _VendorStockData:
 
     @property
     def n_days(self) -> int:
-        return int(self.data.shape[0])
+        return int(self.data.shape[0]) - self.max_backtrack_days - self.max_future_days
 
     @property
     def n_stocks(self) -> int:
@@ -256,6 +257,7 @@ def run_ppo_epoch(
         steps=total_timesteps,
         device=device,
         pool_size=pool.size,
+        evaluations=core.eval_cnt,
         duration_s=time.perf_counter() - start,
         pool=pool,
     )

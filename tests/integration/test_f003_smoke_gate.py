@@ -316,8 +316,9 @@ def test_gpu_ppo_epoch_completes_when_integration_cuda_is_enabled() -> None:
     panel = _synthetic_panel(days=120, pair_count=4)
     stock_data, target, _ = build_stock_data(panel, feature_map=panel.feature_map)
     result = run_ppo_epoch(
-        stock_data=stock_data, target=target, device="cuda", seed=17, total_timesteps=64
+        stock_data=stock_data, target=target, device="cuda", seed=17, total_timesteps=512
     )
-    assert result.steps == 64
+    assert result.steps == 512
     assert result.device == "cuda"
+    assert result.evaluations >= 1, "a smoke epoch that evaluates no expression is vacuous"
     assert isinstance(extract_candidates(result.pool), list)
