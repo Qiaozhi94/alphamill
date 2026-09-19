@@ -63,21 +63,21 @@ updated: 2026-09-19
 
 ## 3. 验证与验收任务
 
-- [ ] T024 (`AC-001`, `AC-002`, `AC-004`, `AC-006`, `AC-007`, `AC-008`): 运行发现、定义、限速、窗口语义与台账单元套件 — verify: `pytest -q tests/unit/test_f008_discover.py tests/unit/test_f008_universe_def.py tests/unit/test_f008_rate_limit.py tests/unit/test_f008_quality_gate_window.py tests/unit/test_f008_membership.py`
-- [ ] T025 (`AC-003`, `AC-005`, `AC-009`, `AC-010`): 运行回填、质量门与导出联动集成套件 — verify: `pytest -q tests/integration/test_f008_backfill.py tests/integration/test_f008_quality_gate.py tests/integration/test_f008_export_integration.py`
+- [x] T024 (`AC-001`, `AC-002`, `AC-004`, `AC-006`, `AC-007`, `AC-008`): 运行发现、定义、限速、窗口语义与台账单元套件 — verify: `pytest -q tests/unit/test_f008_discover.py tests/unit/test_f008_universe_def.py tests/unit/test_f008_rate_limit.py tests/unit/test_f008_quality_gate_window.py tests/unit/test_f008_membership.py`
+- [x] T025 (`AC-003`, `AC-005`, `AC-009`, `AC-010`): 运行回填、质量门与导出联动集成套件 — verify: `pytest -q tests/integration/test_f008_backfill.py tests/integration/test_f008_quality_gate.py tests/integration/test_f008_export_integration.py`
 - [ ] T026 (`AC-011`, `NFR-004`): 在执行机 `qiaozhi-lt` 归档容量与耗时实测证据（含 hostname），开发机跳过属预期不得以其结果替代 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f008_capacity_report.py`
 - [x] T027: 修订 `docs/alphamill-integration.md` §1.3 的 OKX 过期表述为 Binance 路线 — verify: `python3 tools/check_doc_links.py` + 人工复核该节
-- [ ] T028 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
+- [x] T028 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 - [x] T029 (`AC-014`, `IR-002`, `FR-006`): 把 `F007` 的 universe 只读消费面从废弃的 CSV 契约迁到 `IR-002` 的 canonical JSON——`evaluation/universe_ledger.py` 改为按 `<digest>.json` 加载（顶层 `{schema_version, members}`、成员严格三键、digest 用解析后重新规范化的字节重算、未知键与版本不符 fail-closed）、`contract_common.py` 的 `UNIVERSE_COLUMNS` 换成 JSON 键集合常量、`upstream_contracts.py` 门面再导出同步，并改三处 CSV fixture 测试（`tests/contract/test_f007_upstream_contracts.py`、`tests/integration/test_f007_controls.py`、`tests/integration/test_f007_cli.py`）；`universe_at(T)` 半开区间语义与 ResearchSnapshot 身份公式不得改动 — verify: `pytest -q tests/contract/test_f007_upstream_contracts.py tests/integration/test_f007_controls.py tests/integration/test_f007_cli.py tests/unit/experiment_store/`
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 从体验旅程派生，Phase 1 先以红灯立起夹具，收尾全量执行；真实环境项在执行机 `qiaozhi-lt` 取证。
 
-- [ ] T030 [TEST] (`US-001`, `AC-001`, `AC-002`, `AC-012`): 旅程 US-001 端到端验收——对固定交易所快照 fixture 连跑两次 `discover` 得同一候选清单与同一 `universe_id`；逐候选指标与排除原因入档；未冻结清单驱动 `backfill` 被非零拒绝；`freeze` 缺 `--confirm` 被拒；冻结后成员增删产生新 `universe_id` 且旧版本只读 — verify: `pytest -q tests/unit/test_f008_discover.py tests/unit/test_f008_universe_def.py tests/unit/test_f008_cli_contract.py`
-- [ ] T031 [TEST] (`US-002`, `AC-003`, `AC-004`, `AC-010`): 旅程 US-002 端到端验收——单 pair 窗口回填跑到一半中断后重跑，从断点继续、无重复行、行数与预期一致；注入限流错误触发指数退避且不超上限、速率不因失败提高；单 pair 失败不影响其他 pair 的已完成进度；`BackfillRun` 与进度/失败事件可按 run 与 pair 查询且带 hostname — verify: `pytest -q tests/unit/test_f008_rate_limit.py tests/integration/test_f008_backfill.py`
-- [ ] T032 [TEST] (`US-003`, `AC-005`, `AC-006`, `AC-009`): 旅程 US-003 端到端验收——缺失率超限/边界未闭合/连续聚合不一致/重复主键四类 fixture 均被隔离并各记原因码、均不进导出清单；上线晚于窗口起点的 pair 按实际可得窗口算缺失率不被误判；全项通过者按 库追加 → artifact 发布 → 写准入记录 三步准入，发布的 artifact 可被下游 `load_explicit_universe` 加载，且 `symbol_map` 与导出清单允许不等 — verify: `pytest -q tests/integration/test_f008_quality_gate.py tests/unit/test_f008_quality_gate_window.py tests/integration/test_f008_export_integration.py`
-- [ ] T033 [TEST] (`US-004`, `AC-007`, `AC-008`, `AC-013`): 旅程 US-004 端到端验收——含上市/退市/中途进出的成员 fixture 上 `universe_at(T)` 在各时点返回正确集合（左闭右开）；原地改写已发布历史区间被拒、退出只以追加新区间表达且历史数据不删；`schema_version` 不符或出现未知键时加载被拒 — verify: `pytest -q tests/unit/test_f008_membership.py tests/unit/test_f008_artifact.py`
+- [x] T030 [TEST] (`US-001`, `AC-001`, `AC-002`, `AC-012`): 旅程 US-001 端到端验收——对固定交易所快照 fixture 连跑两次 `discover` 得同一候选清单与同一 `universe_id`；逐候选指标与排除原因入档；未冻结清单驱动 `backfill` 被非零拒绝；`freeze` 缺 `--confirm` 被拒；冻结后成员增删产生新 `universe_id` 且旧版本只读 — verify: `pytest -q tests/unit/test_f008_discover.py tests/unit/test_f008_universe_def.py tests/unit/test_f008_cli_contract.py`
+- [x] T031 [TEST] (`US-002`, `AC-003`, `AC-004`, `AC-010`): 旅程 US-002 端到端验收——单 pair 窗口回填跑到一半中断后重跑，从断点继续、无重复行、行数与预期一致；注入限流错误触发指数退避且不超上限、速率不因失败提高；单 pair 失败不影响其他 pair 的已完成进度；`BackfillRun` 与进度/失败事件可按 run 与 pair 查询且带 hostname — verify: `pytest -q tests/unit/test_f008_rate_limit.py tests/integration/test_f008_backfill.py`
+- [x] T032 [TEST] (`US-003`, `AC-005`, `AC-006`, `AC-009`): 旅程 US-003 端到端验收——缺失率超限/边界未闭合/连续聚合不一致/重复主键四类 fixture 均被隔离并各记原因码、均不进导出清单；上线晚于窗口起点的 pair 按实际可得窗口算缺失率不被误判；全项通过者按 库追加 → artifact 发布 → 写准入记录 三步准入，发布的 artifact 可被下游 `load_explicit_universe` 加载，且 `symbol_map` 与导出清单允许不等 — verify: `pytest -q tests/integration/test_f008_quality_gate.py tests/unit/test_f008_quality_gate_window.py tests/integration/test_f008_export_integration.py`
+- [x] T033 [TEST] (`US-004`, `AC-007`, `AC-008`, `AC-013`): 旅程 US-004 端到端验收——含上市/退市/中途进出的成员 fixture 上 `universe_at(T)` 在各时点返回正确集合（左闭右开）；原地改写已发布历史区间被拒、退出只以追加新区间表达且历史数据不删；`schema_version` 不符或出现未知键时加载被拒 — verify: `pytest -q tests/unit/test_f008_membership.py tests/unit/test_f008_artifact.py`
 
 - [ ] T034: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
       （编号说明：原收口任务在检视收口时由 `T029` 改编号为 `T034`，以满足 `check_task_dag` 的「收口任务编号最高、须有入边」两条规则；`T029` 现由「F007 消费面迁移」占用——它是开工前检查发现的契约漂移修复，必须排在最高编号之前。）

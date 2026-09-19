@@ -193,7 +193,7 @@ def test_run_record_and_events_carry_hostname_and_pair(f008_conn, tmp_path) -> N
     # 进度事件按 pair 粒度落盘（design §4）：一个 pair 完成即一条 progress
     assert kinds == ["backfill.progress"]
     assert all(payload["run_id"] == run.run_id for _, payload in events)
-    assert all(payload["lake_pair"] == "BTC-USDT-PERP" for _, payload in events)
+    assert all(payload["lake_pair"] == "BTC-USDT" for _, payload in events)
     assert all(payload["hostname"] == "qiaozhi-gp" for _, payload in events)
     assert events[-1][1]["rows"] == 150
 
