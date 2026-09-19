@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import os
 import random
 from datetime import UTC, datetime, timedelta
 
+import pandas as pd
 import pytest
 
 from alphamill.factor_factory.factor import FactorDef
+from alphamill.factor_factory.generators import alphagen_generation as gen
 from alphamill.factor_factory.generators import reproducibility as rp
 from alphamill.factor_factory.generators.base import GenerationRequest, Window
+from alphamill.factor_factory.generators.binding import SnapshotRefBinding
+from alphamill.factor_factory.generators.lake_tensor import TensorPanel
 from alphamill.factor_factory.generators.manual import seeds
 from alphamill.factor_factory.registry import run_store
 
@@ -136,3 +141,100 @@ def test_pool_member_set_is_content_addressed() -> None:
 def test_reproducibility_surface_exposes_no_verdict_fields() -> None:
     assert not VERDICT_FIELDS & set(rp.RunIdentity.__dataclass_fields__)
     assert not VERDICT_FIELDS & set(rp.derive_seed.__code__.co_names)
+
+
+def _capacity_panel(days: int = 240, pair_count: int = 6) -> TensorPanel:
+    timestamps = pd.date_range("2026-01-01", periods=days, freq="h", tz="UTC")
+    pairs = tuple(f"PAIR-{index}" for index in range(pair_count))
+    rows = [
+        (t, p, 10 + d + i, 100 + d, 20 + d + i)
+        for d, t in enumerate(timestamps)
+        for i, p in enumerate(pairs)
+    ]
+    frame = pd.DataFrame(
+        rows,
+        columns=[
+            "timestamp",
+            "pair",
+            "synthetic.close@1h",
+            "synthetic.volume@1h",
+            "synthetic.high@1h",
+        ],
+    ).set_index(["timestamp", "pair"])
+    frame["__in_universe__"] = True
+    return TensorPanel(
+        datasets=("synthetic",),
+        resample="1h",
+        pairs=pairs,
+        timestamps=timestamps,
+        panel=frame,
+        feature_map={"synthetic.volume@1h": 0, "synthetic.close@1h": 1, "synthetic.high@1h": 2},
+        feature_map_digest="sha256:test",
+        universe_source="test",
+    )
+
+
+def test_generation_outcome_exposes_no_verdict_fields() -> None:
+    assert not VERDICT_FIELDS & set(gen.GenerationRunOutcome.__dataclass_fields__)
+
+
+def test_write_generation_manifest_persists_counts_hostname_and_device(tmp_path) -> None:
+    outcome = gen.GenerationRunOutcome(
+        run_id="run-t029",
+        hostname="host-t029",
+        device="cpu",
+        proposed=5,
+        evaluations=4,
+        rejected={"lookahead": 2},
+        registered=3,
+        candidates=(("feature:close",),) * 3,
+    )
+    run_dir = run_store.generation_run_dir(outcome.run_id, reports_root=tmp_path)
+    path = gen.write_generation_manifest(
+        outcome,
+        run_dir=run_dir,
+        binding=SnapshotRefBinding(mode="snapshot", research_snapshot_id="snapshot-t029"),
+        window=Window(start=FIXED_NOW - timedelta(days=1), end=FIXED_NOW, resample="1h"),
+        seed=7,
+        config={"generator": "alphagen"},
+        pair_count=6,
+        symbol_map_digest="sha256:sm",
+        universe_digest="sha256:universe",
+        started_at=FIXED_NOW,
+        finished_at=FIXED_NOW + timedelta(seconds=5),
+    )
+
+    run = run_store.load_run(path)
+    assert run.status == "completed"
+    assert run.hostname == "host-t029"
+    assert run.device == "cpu"
+    assert run.counts.proposed == 5
+    assert run.counts.registered == 3
+    assert run.counts.rejected.lookahead == 2
+    assert run.universe is not None and run.universe.pair_count == 6
+
+
+def test_generation_run_registers_fifty_candidates_when_integration_cuda_enabled() -> None:
+    if os.environ.get("ALPHAMILL_INTEGRATION") != "1":
+        pytest.skip("ALPHAMILL_INTEGRATION=1 is required")
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.fail("ALPHAMILL_INTEGRATION=1 requires CUDA for the capacity run")
+
+    from alphamill.factor_factory.generators.alphagen_runner import build_stock_data
+
+    panel = _capacity_panel()
+    stock_data, target, _ = build_stock_data(panel, feature_map=panel.feature_map)
+    outcome = gen.run_generation(
+        stock_data=stock_data,
+        target=target,
+        device="cuda",
+        seed=11,
+        total_timesteps=4096,
+        pool_capacity=5,
+    )
+
+    assert outcome.device == "cuda"
+    assert outcome.evaluations >= outcome.registered
+    assert sum(outcome.rejected.values()) + outcome.registered == outcome.proposed
+    assert outcome.registered >= 50, f"registered only {outcome.registered}"

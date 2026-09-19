@@ -263,35 +263,32 @@ def run_ppo_epoch(
     )
 
 
-def extract_candidates(pool: AlphaPoolBase) -> list[tuple[str, ...]]:
-    """Render accepted vendor expressions as compiler-compatible postfix tokens."""
+def render_expression(expr: Expression) -> tuple[str, ...]:
+    """Render one vendor expression as compiler-compatible postfix tokens."""
     _add_vendor_root()
     from alphagen.data.expression import Constant, DeltaTime, Feature, Operator, RollingOperator
 
-    def render(expr: Expression) -> tuple[str, ...]:
-        if isinstance(expr, Feature):
-            return (f"feature:{expr._feature.name.lower()}",)
-        if isinstance(expr, Constant):
-            return (f"constant:{expr.value:g}",)
-        if isinstance(expr, DeltaTime):
-            return (f"delta:{expr._delta_time}",)
-        if isinstance(expr, Operator):
-            tokens: list[str] = []
-            operands = expr.operands
-            render_operands = operands
-            if (
-                isinstance(expr, RollingOperator)
-                and operands
-                and isinstance(operands[-1], DeltaTime)
-            ):
-                render_operands = operands[:-1]
-            for operand in render_operands:
-                tokens.extend(render(operand))
-            name = _operator_token(type(expr).__name__, operands)
-            return (*tokens, name)
-        return (str(expr),)
+    if isinstance(expr, Feature):
+        return (f"feature:{expr._feature.name.lower()}",)
+    if isinstance(expr, Constant):
+        return (f"constant:{expr.value:g}",)
+    if isinstance(expr, DeltaTime):
+        return (f"delta:{expr._delta_time}",)
+    if isinstance(expr, Operator):
+        tokens: list[str] = []
+        operands = expr.operands
+        render_operands = operands
+        if isinstance(expr, RollingOperator) and operands and isinstance(operands[-1], DeltaTime):
+            render_operands = operands[:-1]
+        for operand in render_operands:
+            tokens.extend(render_expression(operand))
+        return (*tokens, _operator_token(type(expr).__name__, operands))
+    return (str(expr),)
 
-    return [render(expr) for expr in pool.exprs[: pool.size] if expr is not None]
+
+def extract_candidates(pool: AlphaPoolBase) -> list[tuple[str, ...]]:
+    """Render accepted vendor expressions as compiler-compatible postfix tokens."""
+    return [render_expression(expr) for expr in pool.exprs[: pool.size] if expr is not None]
 
 
 def _add_vendor_root() -> None:

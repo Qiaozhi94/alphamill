@@ -69,7 +69,8 @@ updated: 2026-09-14
 - [x] T026 (`FR-007`, `DR-004`, `AC-008`): 实现协同池导出为可执行 FactorDef（`generator=pool`，加载后可按成员重算）与 `pool_store`，成员权重可反解且重算一致，成员或权重变化产生新 `factor_id` — verify: `tests/integration/test_f003_alpha_pool.py`
 - [x] T027 (`IR-001`, `FR-001`, `AC-011`): 实现 CLI `mine` 子命令与全部启动期拒绝条件（缺绑定/invalid/档位不明/窗口外/无 CUDA），并支持 `--window` / `--config` 默认值以构造完整 `GenerationRequest`（默认值来自代码内常量并写入 config artifact） — verify: `tests/unit/test_f003_cli_contract.py`
 - [x] T028 (`NFR-003`, `AC-009`): 实现并验证可复现性——canonical config artifact 与 `config_digest` 落盘、seed 稳定派生、torch 确定性开关；同 `(seed, binding, code_digest, config_digest)` 重跑得到相同 factor_id 集合与相同池成员 — verify: `tests/integration/test_f003_generation_run.py`
-- [ ] T029 (`NFR-001`, `AC-006`): 在执行机跑一次完整挖掘运行，入册 ≥50 个通过自检候选并记录逐级计数、hostname 与设备 — verify: `tests/integration/test_f003_generation_run.py`
+- [x] T029 (`NFR-001`, `AC-006`): 在执行机跑一次完整挖掘运行，入册 ≥50 个通过自检候选并记录逐级计数、hostname 与设备 — verify: `tests/integration/test_f003_generation_run.py`
+      — 取证（2026-09-19，qiaozhi-lt / RTX 4060 / CUDA 2.10.0+cu128）：`ALPHAMILL_INTEGRATION=1` 下 13 passed（170s）；`run_generation` 8192→4096 步即可满足 ≥50（实测 4096 步自检通过 119，原因码分布 lookahead 95 / unregistered_op 7 / duplicate_definition 54），断言含 `registered >= 50`、`evaluations >= registered`、`sum(rejected)+registered == proposed`、`device == "cuda"`。参数写在测试内，画面可复跑。
 
 ## 3. 验证与验收任务
 
