@@ -28,7 +28,7 @@ updated: 2026-09-14
 
 - [x] T001 (`FR-003`, `AC-003`): 冻结并校验 F008 宇宙台账 artifact 的消费契约（按 digest 加载、`universe_at(T)` 与 `schema_version` 可读），产出 T020 的输入夹具；F008 未落地时以显式 universe 配置作为等价夹具 — verify: `tests/unit/test_f003_binding.py`
 - [x] T002 (`FR-003`, `DR-001`): 固定绑定文件格式并验证目标 dataset 的 valid 版本与 `value_digest` 可由 F002 reader 解析 — verify: `tests/unit/test_f003_binding.py`
-- [ ] T003 (`FR-002`): clone 上游 AlphaGen、记录 commit hash、核对核心子集的实际文件布局，产出 vendor 清单初稿，并**冻结可复现的上游基线**（逐文件 sha256 清单写入 `alphagen_vendor/_upstream_baseline.json`） — verify: `src/alphamill/factor_factory/generators/alphagen_vendor/VENDORED.md`
+- [x] T003 (`FR-002`): clone 上游 AlphaGen、记录 commit hash、核对核心子集的实际文件布局，产出 vendor 清单初稿，并**冻结可复现的上游基线**（逐文件 sha256 清单写入 `alphagen_vendor/_upstream_baseline.json`） — verify: `src/alphamill/factor_factory/generators/alphagen_vendor/VENDORED.md`
 - [ ] T004 (`NFR-002`, `NFR-005`): 打通并标定执行机 `qiaozhi-lt`——**先恢复 shell 接入**（env-manager 台账记录 2026-09-14 全端口复测 22/2222/2200/8022/3389/5985 全闭，当前无 shell 路径，按 `references/access-methods.md` §4 启用 Windows OpenSSH）；再在其 WSL2 内实测 CUDA 可用性与可用显存，按 §7.1 标定显存上限写进配置（不写死代码）；确认该机 F002 湖可读且通过完整性校验 — verify: `tests/unit/test_f003_gpu_slot.py`（能力探测纯函数）+ 在 `qiaozhi-lt` 上用 `alphamill.data_bridge.reader` 读一次真实快照
 
 ## 2. 实现任务
@@ -47,8 +47,8 @@ updated: 2026-09-14
 ### Phase 2：AlphaGen vendor 与冒烟闸门（US-002，2 个工作日 time-box）
 
 - [ ] T013 (`FR-002`, `AC-002`): vendor 核心子集落地（表达式/算子、张量求值器、线性协同池、RL 环境），丢弃 `requirements.txt` 与 `alphagen_qlib/`，逐处改动标注并补齐 `VENDORED.md` 五项，且与 T003 冻结的上游基线逐文件比对（差异集合 == 标注集合） — verify: `tests/unit/test_f003_vendor_hygiene.py`
-- [ ] T014 (`FR-002`): `pyproject.toml` 新增 `mining` 可选依赖组（torch / numpy / stable-baselines3 / gymnasium 全部写版本范围；torch 需显式选 CUDA 构建，且必须覆盖 `qiaozhi-lab` 的 Blackwell sm_120，为迁移留路）、`ruff extend-exclude` 排除 vendor 目录，并在 `docs/SOP.md` Code Quality 豁免表登记 vendor 目录 — verify: `python3 tools/verify.py`
-- [ ] T015 (`FR-002`, `NFR-004`): 扩展 `tools/check_dep_pins.py` 为"可选 extras 已安装才校验范围"，并在 runner 入口加 mining extra 能力自检 fail-closed（两者必须同时落地） — verify: `tests/unit/test_check_dep_pins.py`
+- [x] T014 (`FR-002`): `pyproject.toml` 新增 `mining` 可选依赖组（torch / numpy / stable-baselines3 / gymnasium 全部写版本范围；torch 需显式选 CUDA 构建，且必须覆盖 `qiaozhi-lab` 的 Blackwell sm_120，为迁移留路）、`ruff extend-exclude` 排除 vendor 目录，并在 `docs/SOP.md` Code Quality 豁免表登记 vendor 目录 — verify: `python3 tools/verify.py`
+- [x] T015 (`FR-002`, `NFR-004`): 扩展 `tools/check_dep_pins.py` 为"可选 extras 已安装才校验范围"，并在 runner 入口加 mining extra 能力自检 fail-closed（两者必须同时落地） — verify: `tests/unit/test_check_dep_pins.py`
 - [ ] T016 (`FR-006`, `AC-007`): 实现冒烟闸门判据判定器、当日冒烟 manifest（含 ADR-0001 两条 M2 义务：生成侧逐级计数、下游级 `owner=F007`+`not_yet_available` 占位、奖励频率抽查）、档位状态机与降级裁决（L1→L0 回切须新 time-box 记录），并提供 `smoke` 的默认 config/window 构造 — verify: `tests/integration/test_f003_smoke_gate.py`
 - [ ] T017 (`FR-006`, `AC-007`): 在执行机用最小数据切片跑通 1 个 PPO epoch（含 gym→gymnasium env wrapper 适配）——冒烟第 1 天判据 — verify: `tests/integration/test_f003_smoke_gate.py`
 - [ ] T018 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
