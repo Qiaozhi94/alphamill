@@ -107,6 +107,10 @@ def _write_payload(temp: Path, request: PublishRequest, *, canonical: bool) -> N
     )
     write_curves(temp / CURVES_NAME, request.curves)
     append_events(temp / EVENTS_FILENAME, request.events)
+
+
+def _write_registration(temp: Path, request: PublishRequest, *, canonical: bool) -> None:
+    """`registration.json` 在校验通过后**最后**写：目录可见时最后一块拼图即注册凭据。"""
     if canonical and request.registration is None:
         raise PublishError("canonical 发布必须提供 registration.json 内容")
     if request.registration is not None:
@@ -161,6 +165,7 @@ def publish(
         assert_same_filesystem(temp, target.parent)
         _write_payload(temp, request, canonical=canonical)
         _validate_batch(temp, request)
+        _write_registration(temp, request, canonical=canonical)
         if target.exists():
             existing = _semantic_signature(target, canonical=canonical)
             if existing != _semantic_signature(temp, canonical=canonical):

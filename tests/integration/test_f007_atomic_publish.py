@@ -171,6 +171,27 @@ def test_quarantine_keeps_failed_attempt_out_of_the_consumer_path(tmp_path):
     assert quarantined and quarantined[0].is_dir()
 
 
+def test_registration_is_written_only_after_validation(tmp_path):
+    """R1-009 回归：registration-last——校验失败时 registration.json 不得写进失败批次。
+
+    修复前 `_write_payload` 在校验前就写 registration.json，故障注入后 quarantine 目录里
+    会残留 registration.json；本断言在删除「校验后再写 registration」次序时变红。
+    """
+    context = context_for(TIER_CANONICAL, tmp_path)
+    sidecar = _curves()
+    summary = dict(sidecar.scalar_summary())
+    summary["max_drawdown"] = 999.0
+    request = _request(
+        canonical=True, report={"schema_version": 1, "curves_summary": summary}
+    )
+    with pytest.raises(PublishError, match="互推不符"):
+        publish(context, request, quarantine_on_failure=True)
+    assert not publisher.target_dir(context, request).exists()
+    quarantined = list((tmp_path / "bench" / "_quarantine").glob("*.tmp-*"))
+    assert quarantined and quarantined[0].is_dir()
+    assert not (quarantined[0] / REGISTRATION_NAME).exists()
+
+
 def test_republish_with_identical_semantics_is_idempotent(tmp_path):
     context = context_for(TIER_PREVIEW, tmp_path)
     request = _request()
