@@ -1,7 +1,7 @@
 # AlphaGen 上游冻结基线
 
-> 本目录在 T003 只冻结可复现的上游基线，不包含任何 AlphaGen 源码。源码 vendor
-> 由 T013 完成。
+> T003 冻结可复现的上游基线；T013 从该基线落地 AlphaGen 核心子集，并保留最小、
+> 可逐文件审计的本地差异。
 
 ## 上游 pin
 
@@ -57,11 +57,20 @@ vendor 目录外。
 
 ## 修改清单
 
-**none yet — vendoring happens in T013; this file is the frozen baseline**
+- `alphamill_qlib_shim.py`：新增最小本地类型面，仅定义上游核心实际消费的
+  `FeatureType` 枚举与 `StockData` Protocol；不包含 qlib 初始化、取数或 dataframe 转换。
+- `alphagen/data/expression.py`：把 `StockData` / `FeatureType` 的来源从
+  `alphagen_qlib.stock_data` 改为本地 shim，修改行带 `# [alphamill]` 标注。
+- `alphagen/data/tokens.py`：把 `FeatureType` 的来源从 `alphagen_qlib.stock_data`
+  改为本地 shim，修改行带 `# [alphamill]` 标注。
 
-T013 必须从本文件记录的 immutable commit 取 blob，并以 `_upstream_baseline.json` 为逐文件
-比较真相源。规则为“差异集合 == 标注集合”：每个与 baseline 不同的 vendor 文件都必须带
-`# [alphamill] <原因>`，且每处修改都须有对应标注；胶水代码不得放进 vendor 目录。
+qlib 解耦决策：不 vendor `alphagen_qlib/`，也不复制其具体 calculator。vendor 内的 shim
+只保留表达式求值所需的张量类型契约；AlphaMill 湖到张量的具体适配器仍放在 vendor 目录外，
+保持依赖方向为 glue → vendor。
+
+T013 从本文件记录的 immutable commit 取 blob，并以 `_upstream_baseline.json` 为逐文件比较
+真相源。规则为“差异集合 == 标注集合”：每个与 baseline 不同的 vendor 文件都必须带
+`# [alphamill] <原因>`，且每处修改都须有对应标注；其余 18 个 upstream blob 保持逐字节一致。
 
 ## 许可说明
 
