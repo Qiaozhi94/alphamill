@@ -51,7 +51,7 @@ updated: 2026-09-14
 - [x] T015 (`FR-002`, `NFR-004`): 扩展 `tools/check_dep_pins.py` 为"可选 extras 已安装才校验范围"，并在 runner 入口加 mining extra 能力自检 fail-closed（两者必须同时落地） — verify: `tests/unit/test_check_dep_pins.py`
 - [x] T016 (`FR-006`, `AC-007`): 实现冒烟闸门判据判定器、当日冒烟 manifest（含 ADR-0001 两条 M2 义务：生成侧逐级计数、下游级 `owner=F007`+`not_yet_available` 占位、奖励频率抽查）、档位状态机与降级裁决（L1→L0 回切须新 time-box 记录），并提供 `smoke` 的默认 config/window 构造 — verify: `tests/integration/test_f003_smoke_gate.py`
 - [ ] T017 (`FR-006`, `AC-007`): 在执行机用最小数据切片跑通 1 个 PPO epoch（含 gym→gymnasium env wrapper 适配）——冒烟第 1 天判据 — verify: `tests/integration/test_f003_smoke_gate.py`
-- [ ] T018 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
+- [x] T018 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
 - [ ] T019 (`FR-006`): 在执行机实跑 time-box（第 1、2 天判据），产出裁决记录（L0 锁定或 L1 降级；L2 不属 time-box 裁决）与触发判据写入当日 manifest；**不在此步回写 spec**（回写在 T032，须先归档证据） — verify: `tests/integration/test_f003_smoke_gate.py` + 当日 manifest 含裁决与触发判据
 
 ### Phase 3：完整数据面、适配器与生成侧自检

@@ -884,9 +884,7 @@ TEST_REF_RE = re.compile(r"tests/[A-Za-z0-9_/.-]+\.py")
 # F003-R4-005：三件套声明了但尚未落盘的测试文件白名单（载体台账）。
 # 条目 = 文件路径 → 首个声明它的未开工任务。文件落盘后必须移除条目（转为存在性
 # 校验，防止过期豁免把「删除已落盘载体」盖住）；引用未登记的幽灵文件同样判红。
-DECLARED_TEST_ALLOWLIST: dict[str, str] = {
-    "tests/unit/test_f003_ic_parity.py": "T018",
-}
+DECLARED_TEST_ALLOWLIST: dict[str, str] = {}
 
 
 # F003-R4-004/R6-001：架构 §7.1「观测 → 处置决策表」的期望内容（逐行、按序）。
