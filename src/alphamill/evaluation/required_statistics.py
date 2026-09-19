@@ -151,50 +151,90 @@ def _sharpe(series: Sequence[float]) -> float:
 
 def cohort_statistics(
     *,
-    p_values: Sequence[float],
+    member_p_values: Mapping[str, float],
+    member_returns: Mapping[str, Sequence[float]],
     correlations: Sequence[float],
-    member_returns: Sequence[Sequence[float]],
     alpha: float = 0.05,
 ) -> dict[str, Any]:
-    """cohort 级必需统计；任一估计器异常即把整体标为 `INCOMPLETE`（不产出部分结论）。"""
+    """cohort 级必需统计；任一必需估计器异常/缺失即整体 `INCOMPLETE`（不产出部分结论）。
+
+    输入按 `candidate_id` 映射对齐（不再用并发列表），返回逐成员的 `bh_rejected` 与 `dsr`，
+    供 finalize 把多重检验结论接进 `statistically_dead`。
+    """
+    if not member_p_values:
+        return {
+            "status": "INCOMPLETE",
+            "fdr_alpha": alpha,
+            "reason": "无成员 p 值，BH-FDR 不可判定",
+        }
+    candidates = list(member_p_values)
     try:
-        bh = benjamini_hochberg(p_values, alpha=alpha)
+        bh = benjamini_hochberg([float(member_p_values[name]) for name in candidates], alpha=alpha)
     except StatisticsError as exc:
         return {"status": "INCOMPLETE", "fdr_alpha": alpha, "reason": f"BH-FDR 估计器异常: {exc}"}
-    result: dict[str, Any] = {"status": "PASS", "fdr_alpha": alpha, "bh": bh.to_payload()}
+    result: dict[str, Any] = {
+        "status": "PASS",
+        "fdr_alpha": alpha,
+        "bh": bh.to_payload(),
+        "bh_rejected": {
+            name: bool(flag) for name, flag in zip(candidates, bh.rejected, strict=True)
+        },
+    }
     try:
         trials = effective_trials(correlations) if correlations else 1.0
     except StatisticsError as exc:
-        result["status"] = "INCOMPLETE"
-        result["reason"] = f"有效独立数估计器异常: {exc}"
-        return result
+        return {**result, "status": "INCOMPLETE", "reason": f"有效独立数估计器异常: {exc}"}
     result["effective_trials"] = trials
     n_trials = max(1, math.ceil(trials))
-    best: tuple[float, int] | None = None
-    for series in member_returns:
+
+    sharpes: dict[str, float] = {}
+    for candidate, series in member_returns.items():
         try:
-            sharpe = _sharpe(series)
+            sharpes[candidate] = _sharpe(series)
         except StatisticsError:
             continue
-        if best is None or sharpe > best[0]:
-            best = (sharpe, len(series))
-    if best is not None:
-        sharpe, n_observations = best
+    if not sharpes:
+        return {
+            **result,
+            "status": "INCOMPLETE",
+            "reason": "无成员可计算 Sharpe，DSR/MinTRL 不可判定",
+        }
+    best_candidate = max(sharpes, key=lambda name: sharpes[name])
+    best_sharpe = sharpes[best_candidate]
+    result["best_candidate"] = best_candidate
+    result["best_sharpe"] = best_sharpe
+    if best_sharpe <= 0.0:
+        return {
+            **result,
+            "status": "INCOMPLETE",
+            "reason": f"最佳成员 Sharpe={best_sharpe:.6g} <= 0，DSR/MinTRL 无有限解",
+        }
+    dsr_map: dict[str, float | None] = {}
+    for candidate, sharpe in sharpes.items():
+        n_observations = len(member_returns[candidate])
+        if n_observations < 2:
+            dsr_map[candidate] = None
+            continue
         sharpe_std = math.sqrt((1.0 + 0.5 * sharpe * sharpe) / n_observations)
         try:
-            result["dsr"] = deflated_sharpe_ratio(
+            dsr_map[candidate] = deflated_sharpe_ratio(
                 sharpe,
                 n_trials=n_trials,
                 sharpe_std=sharpe_std,
                 n_observations=n_observations,
             )
-        except StatisticsError as exc:
-            result["dsr"] = None
-            result["dsr_reason"] = str(exc)
-        if sharpe > 0.0:
-            try:
-                result["mintrl"] = min_track_record_length(sharpe, target_sharpe=0.0)
-            except StatisticsError as exc:
-                result["mintrl"] = None
-                result["mintrl_reason"] = str(exc)
+        except StatisticsError:
+            dsr_map[candidate] = None
+    if dsr_map.get(best_candidate) is None:
+        return {
+            **result,
+            "status": "INCOMPLETE",
+            "dsr": dsr_map,
+            "reason": "最佳成员 DSR 估计器异常",
+        }
+    result["dsr"] = dsr_map
+    try:
+        result["mintrl"] = min_track_record_length(best_sharpe, target_sharpe=0.0)
+    except StatisticsError as exc:
+        return {**result, "status": "INCOMPLETE", "reason": f"MinTRL 估计器异常: {exc}"}
     return result

@@ -169,12 +169,31 @@ def context_for(execution_tier: str, reports: Path) -> TierContext:
     )
 
 
+FORBIDDEN_AGENT_KEY_TOKENS = ("final_window", "holdout")
+
+
 def assert_no_canonical_leak(payload: Mapping[str, object], *, agent_readable: bool) -> None:
-    """Agent/preview 可读产物不得含最终确认窗统计量；违规即失败关闭（`NFR-003`）。"""
+    """Agent/preview 可读产物不得含最终确认窗统计量；违规即失败关闭（`NFR-003`）。
+
+    递归扫描嵌套 dict/list 的**键名**（只扫顶层会让嵌套泄漏静默通过，`R1-106`）。
+    """
     if not agent_readable:
         return
-    forbidden = sorted(key for key in payload if "final_window" in key or "holdout" in key)
+    forbidden: list[str] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, Mapping):
+            for key, value in node.items():
+                text = str(key)
+                if any(token in text for token in FORBIDDEN_AGENT_KEY_TOKENS):
+                    forbidden.append(text)
+                walk(value)
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                walk(item)
+
+    walk(payload)
     if forbidden:
         raise CapabilityError(
-            f"Agent/preview 可读产物含最终确认窗/留出字段: {forbidden}（fail-closed）"
+            f"Agent/preview 可读产物含最终确认窗/留出字段: {sorted(set(forbidden))}（fail-closed）"
         )

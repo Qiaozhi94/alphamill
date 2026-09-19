@@ -345,6 +345,18 @@ def test_event_validation_rejects_unknown_type_and_state():
         )
 
 
+def test_registered_event_uses_actual_terminal_state_and_validates_transition():
+    """R1-113 回归：登记事件 `from_state` 取实际终态；非法迁移被 `assert_transition` 拒绝。"""
+    from alphamill.evaluation.canonical_registration import registered_events
+    from alphamill.evaluation.run_state import RunStateError
+
+    event = registered_events(EXPERIMENT, COHORT, "cand", from_state="INCOMPLETE")[0]
+    assert event.from_state == "INCOMPLETE"
+    assert event.to_state == "REGISTERED"
+    with pytest.raises(RunStateError, match="非法状态迁移"):
+        registered_events(EXPERIMENT, COHORT, "cand", from_state="REGISTERED")
+
+
 def test_registered_event_is_idempotent_on_experiment_id(tmp_path):
     path = tmp_path / "events.jsonl"
     event = build_event(

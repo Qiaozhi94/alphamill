@@ -43,19 +43,23 @@ def pearson(left: Sequence[float], right: Sequence[float]) -> float:
 
 
 def max_abs_rho(left: DedupCandidate, right: DedupCandidate) -> float:
-    """两个成员在 OOS PnL 与 rolling IC 两个口径上的绝对相关最大值。"""
+    """两个成员在 OOS PnL 与 rolling IC 两个口径上的绝对相关最大值。
+
+    逐口径比较：**长度不等或单侧缺失的口径直接跳过**，不因此让整个查重失败；只有两个口径
+    都不可比时才抛 `DedupError`。这样单个跨窗口成员不会把整个 cohort 的统计拖成 INCOMPLETE。
+    """
     scores = []
-    for name, first, second in (
-        ("oos_pnl", left.oos_pnl, right.oos_pnl),
-        ("rolling_ic", left.rolling_ic, right.rolling_ic),
+    for first, second in (
+        (left.oos_pnl, right.oos_pnl),
+        (left.rolling_ic, right.rolling_ic),
     ):
         if not first or not second:
             continue
         if len(first) != len(second):
-            raise DedupError(f"{name} 序列长度不一致: {len(first)} vs {len(second)}")
+            continue
         scores.append(abs(pearson(first, second)))
     if not scores:
-        raise DedupError("两个口径都缺序列，查重不可判定")
+        raise DedupError("两个口径都不可比或缺失，查重不可判定")
     return max(scores)
 
 
@@ -114,15 +118,6 @@ def decide_verdict(rho: float) -> str:
     return "none"
 
 
-def _comparable(left: DedupCandidate, right: DedupCandidate) -> bool:
-    """两成员只有在至少一个口径上序列等长时才可比较；跨窗口/跨形状的成员不构成重复对。"""
-    pairs = (
-        (left.oos_pnl, right.oos_pnl),
-        (left.rolling_ic, right.rolling_ic),
-    )
-    return any(first and second and len(first) == len(second) for first, second in pairs)
-
-
 def decide_dedup(
     candidate: DedupCandidate,
     *,
@@ -142,9 +137,10 @@ def decide_dedup(
     best_rho = -1.0
     best_against: str | None = None
     for counterpart in comparators:
-        if not _comparable(candidate, counterpart):
+        try:
+            rho = max_abs_rho(candidate, counterpart)
+        except DedupError:
             continue
-        rho = max_abs_rho(candidate, counterpart)
         if best_against is None or rho > best_rho:
             best_rho = rho
             best_against = counterpart.factor_id

@@ -67,13 +67,15 @@ def load_run_config(path: Path) -> RunConfig:
 def load_unified_panel(
     path: Path,
 ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[float, ...], tuple[float, ...]]:
-    """读取统一列集的信号夹具，保留 `symbol` 列以支持横截面逐期 IC；列集不符或数值非法即拒绝。"""
+    """读取统一列集的信号夹具，保留 `symbol` 列以支持横截面逐期 IC。
+
+    强制 `(time, symbol)` 唯一，并按 `(symbol, time)` 规范化排序：结果不得依赖 CSV 原始行序，
+    否则同一面板换个行序会改变成本换手与样本量档位（`R1-103`）。按 symbol 分组排序保留了
+    「每标的时序」的既有夹具语义（冻结控制期望以此为准），只消除行序不确定性。
+    """
     if not path.is_file():
         raise UpstreamContractError(f"信号文件不存在: {path}")
-    times: list[str] = []
-    symbols: list[str] = []
-    signals: list[float] = []
-    labels: list[float] = []
+    rows: list[tuple[str, str, float, float]] = []
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         if tuple(reader.fieldnames or ()) != REQUIRED_COLUMNS:
@@ -82,15 +84,26 @@ def load_unified_panel(
             )
         for index, row in enumerate(reader, start=2):
             try:
-                signals.append(float(row[SIGNAL_COLUMN]))
-                labels.append(float(row[LABEL_COLUMN]))
+                signal = float(row[SIGNAL_COLUMN])
+                label = float(row[LABEL_COLUMN])
             except (TypeError, ValueError) as exc:
                 raise UpstreamContractError(f"信号文件第 {index} 行数值非法: {exc}") from exc
-            times.append(row[TIME_COLUMN])
-            symbols.append(row[SYMBOL_COLUMN])
-    if not times:
+            rows.append((row[TIME_COLUMN], row[SYMBOL_COLUMN], signal, label))
+    if not rows:
         raise UpstreamContractError(f"信号文件为空: {path}")
-    return tuple(times), tuple(symbols), tuple(signals), tuple(labels)
+    seen: set[tuple[str, str]] = set()
+    for time, symbol, _signal, _label in rows:
+        key = (time, symbol)
+        if key in seen:
+            raise UpstreamContractError(f"信号文件存在重复 (time,symbol): {key}")
+        seen.add(key)
+    rows.sort(key=lambda item: (item[1], item[0]))
+    return (
+        tuple(row[0] for row in rows),
+        tuple(row[1] for row in rows),
+        tuple(row[2] for row in rows),
+        tuple(row[3] for row in rows),
+    )
 
 
 def load_unified_frame(path: Path) -> tuple[tuple[str, ...], tuple[float, ...], tuple[float, ...]]:

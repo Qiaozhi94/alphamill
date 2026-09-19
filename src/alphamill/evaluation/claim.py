@@ -93,10 +93,22 @@ class Claim:
 
 
 def read_claim(root: Path, key: str) -> Claim | None:
+    """读取 claim；文件不存在**或内容损坏/为空**都返回 `None`，不抛 `JSONDecodeError`。
+
+    损坏的 claim（如崩溃时只创建了空文件）是「失效锁」，由 `recover` 接管，不能让它把
+    `experiment_id` 永久堵死（`R1-105`）。
+    """
     path = claim_path(root, key)
     if not path.is_file():
         return None
-    return Claim.from_payload(json.loads(path.read_text(encoding="utf-8")))
+    try:
+        return Claim.from_payload(json.loads(path.read_text(encoding="utf-8")))
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError, OSError):
+        return None
+
+
+def claim_file_exists(root: Path, key: str) -> bool:
+    return claim_path(root, key).is_file()
 
 
 def acquire(
@@ -126,7 +138,7 @@ def acquire(
         handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError as exc:
         existing = read_claim(root, key)
-        holder = existing.owner_token if existing else "<unreadable>"
+        holder = existing.owner_token if existing else "<corrupt>"
         raise ClaimBusyError(f"{key} 已被 {holder} 持有，拒绝并发写入") from exc
     with os.fdopen(handle, "w", encoding="utf-8") as stream:
         json.dump(claim.to_payload(), stream, ensure_ascii=False, sort_keys=True)
@@ -135,14 +147,17 @@ def acquire(
 
 def release(root: Path, key: str, *, owner_token: str) -> None:
     """只允许持有同一 token 的一方释放；他人/已释放即拒绝（不误删他人锁）。"""
+    path = claim_path(root, key)
+    if not path.is_file():
+        return
     existing = read_claim(root, key)
     if existing is None:
-        return
+        raise ClaimBusyError(f"{key} 的 claim 不可识别（损坏），拒绝释放")
     if existing.owner_token != owner_token:
         raise ClaimBusyError(
             f"{key} 由 {existing.owner_token} 持有，{owner_token} 不得释放他人 claim"
         )
-    claim_path(root, key).unlink(missing_ok=True)
+    path.unlink(missing_ok=True)
 
 
 def assert_takeover_allowed(
@@ -172,12 +187,20 @@ def recover(
     process_alive: bool | None = None,
     temp_published: bool = False,
 ) -> Claim:
-    """在满足接管条件后原子替换 claim；不满足即拒绝，原锁保持不变。"""
+    """接管失效锁后原子替换 claim；不满足接管条件即拒绝，原锁保持不变。
+
+    文件不存在 → 直接 `acquire`；文件存在但**损坏/为空** → 视为失效锁，清掉后 `acquire`；
+    否则必须满足三条件（lease 过期 ∧ 无活进程 ∧ temp 未发布）。
+    """
+    path = claim_path(root, key)
+    if not path.is_file():
+        return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)
     existing = read_claim(root, key)
     if existing is None:
+        path.unlink(missing_ok=True)
         return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)
     assert_takeover_allowed(
         existing, now=now, process_alive=process_alive, temp_published=temp_published
     )
-    claim_path(root, key).unlink(missing_ok=True)
+    path.unlink(missing_ok=True)
     return acquire(root, key, owner_token=owner_token, lease_seconds=lease_seconds, now=now)

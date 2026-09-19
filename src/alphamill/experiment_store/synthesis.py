@@ -72,6 +72,7 @@ class SynthesisReport:
     facts: tuple[Mapping[str, Any], ...]
     inferences: tuple[Mapping[str, Any], ...]
     recommendations: tuple[Mapping[str, Any], ...]
+    effective_trials: float | None = None
     generated_at: str = field(default="")
 
     def semantic_payload(self) -> dict[str, Any]:
@@ -86,6 +87,7 @@ class SynthesisReport:
             "facts": [dict(item) for item in self.facts],
             "inferences": [dict(item) for item in self.inferences],
             "recommendations": [dict(item) for item in self.recommendations],
+            "effective_trials": self.effective_trials,
         }
 
     def to_payload(self) -> dict[str, Any]:
@@ -127,6 +129,7 @@ def _assemble(
     facts, inferences, recommendations = build_columns(
         status=status, funnel=funnel, stage_counts=stage_counts, failures=failures
     )
+    effective_trials = funnel.get("cohort", {}).get("effective_trials")
     report = SynthesisReport(
         schema_version=SCHEMA_VERSION,
         synthesis_id="",
@@ -138,6 +141,7 @@ def _assemble(
         facts=facts,
         inferences=inferences,
         recommendations=recommendations,
+        effective_trials=effective_trials,
         generated_at=generated_at or datetime.now(UTC).isoformat(),
     )
     return replace(report, synthesis_id=compute_synthesis_id(report.semantic_payload()))
@@ -170,11 +174,19 @@ def build_synthesis(
     reports = _member_reports(root, cohort_id)
     funnel = empty_funnel()
     funnel["generation"] = generation_funnel(generation)
+    final_verdicts = {entry.candidate_id: entry.promotion_verdict for entry in entries}
+    effective_trials = None
+    if verdict is not None:
+        statistics = (verdict.get("cohort_statistics") or {}).get("cohort_statistics") or {}
+        effective_trials = statistics.get("effective_trials")
+        for member in verdict.get("members") or ():
+            final_verdicts[str(member["candidate_id"])] = str(member["promotion_verdict"])
     funnel["cohort"] = {
         "trial_count": len(population.commitment_ids(definition)),
         "member_count": len(entries),
-        "rejected_count": sum(1 for entry in entries if entry.promotion_verdict == "rejected"),
-        "promotion_verdicts": {entry.candidate_id: entry.promotion_verdict for entry in entries},
+        "rejected_count": sum(1 for value in final_verdicts.values() if value == "rejected"),
+        "promotion_verdicts": final_verdicts,
+        "effective_trials": effective_trials,
     }
     return _assemble(
         cohort_id=cohort_id,
@@ -244,6 +256,7 @@ def load_synthesis(root: Path, cohort_id: str, synthesis_id: str) -> SynthesisRe
         facts=tuple(payload["facts"]),
         inferences=tuple(payload["inferences"]),
         recommendations=tuple(payload["recommendations"]),
+        effective_trials=payload.get("effective_trials"),
         generated_at=payload.get("generated_at", ""),
     )
 

@@ -148,6 +148,7 @@ def test_block_bootstrap_interval_spanning_zero_does_not_exclude_it():
     [
         ({"block_size": 0}, "block_size"),
         ({"block_size": 999}, "block_size"),
+        ({"block_size": 20}, "block_size"),
         ({"n_resamples": 0}, "重采样次数"),
         ({"alpha": 1.0}, "alpha"),
     ],

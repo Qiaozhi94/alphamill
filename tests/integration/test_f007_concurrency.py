@@ -16,6 +16,7 @@ from alphamill.evaluation.claim import (
     ClaimBusyError,
     acquire,
     assert_takeover_allowed,
+    claim_file_exists,
     claim_path,
     is_process_alive,
     read_claim,
@@ -139,6 +140,24 @@ def test_recover_takes_over_only_after_crash(tmp_path):
 def test_recover_on_free_claim_just_acquires(tmp_path):
     claim = recover(tmp_path, EXPERIMENT, owner_token="runner-a", now=NOW)
     assert claim.owner_token == "runner-a"
+
+
+def test_corrupt_claim_is_treated_as_stale_and_recoverable(tmp_path):
+    """R1-105 回归：空/损坏 claim 不再抛 JSONDecodeError，acquire 报 busy、recover 可接管。"""
+    claim_path(tmp_path, EXPERIMENT).write_text("", encoding="utf-8")
+    assert read_claim(tmp_path, EXPERIMENT) is None
+    assert claim_file_exists(tmp_path, EXPERIMENT) is True
+    with pytest.raises(ClaimBusyError, match="corrupt"):
+        acquire(tmp_path, EXPERIMENT, owner_token="runner-b", now=NOW)
+    taken = recover(tmp_path, EXPERIMENT, owner_token="recovery", now=NOW)
+    assert taken.owner_token == "recovery"
+    assert read_claim(tmp_path, EXPERIMENT).owner_token == "recovery"
+
+
+def test_release_refuses_corrupt_claim(tmp_path):
+    claim_path(tmp_path, EXPERIMENT).write_text("{not json", encoding="utf-8")
+    with pytest.raises(ClaimBusyError, match="不可识别"):
+        release(tmp_path, EXPERIMENT, owner_token="runner-a")
 
 
 def test_process_liveness_probe_is_conservative():

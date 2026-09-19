@@ -458,6 +458,41 @@ def test_canonical_refuses_when_single_writer_claim_is_held(cohort_env, capsys):
     assert "error_code=E_COHORT_FROZEN" in capsys.readouterr().out
 
 
+def test_canonical_recovers_expired_dead_claim(cohort_env, capsys):
+    """R1-105 回归：崩溃遗留的过期死进程 claim 由生产路径 recover 接管，不永久堵死。"""
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"], json=True)) == 0
+    payload = _payload(capsys.readouterr().out)
+    shutil.rmtree(Path(payload["artifact_dir"]))
+    claims_root = cohort_env["reports"] / "_claims"
+    claims_root.mkdir(parents=True, exist_ok=True)
+    (claims_root / f"{payload['experiment_id']}.claim").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "key": payload["experiment_id"],
+                "owner_token": "dead-runner",
+                "started_at": "2000-01-01T00:00:00+00:00",
+                "lease_seconds": 1,
+                "pid": 999999,
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"], json=True)) == 0
+    again = _payload(capsys.readouterr().out)
+    assert again["reused"] is False
+
+
+def test_canonical_reuse_rejects_different_signal_input(cohort_env, capsys):
+    """R1-114 回归：同一实验身份下复用已发布结论前必须比对信号输入摘要。"""
+    assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 0
+    capsys.readouterr()
+    args = _canonical_args(cohort_env, cohort_env["cohort_id"])
+    args[args.index("--signals") + 1] = str(NOISE)
+    assert main(args) == 1
+    assert "error_code=E_INPUT_INVALID" in capsys.readouterr().out
+
+
 def test_canonical_rejects_dirty_worktree(cohort_env, monkeypatch, capsys):
     monkeypatch.setattr("alphamill.evaluation.code_build.worktree_dirty", lambda root=None: True)
     assert main(_canonical_args(cohort_env, cohort_env["cohort_id"])) == 1

@@ -134,6 +134,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     synthesis = subcommands.add_parser("synthesis", help="从 canonical 台账生成综合报告")
     synthesis.add_argument("--cohort", required=True)
+    synthesis.add_argument(
+        "--generation-events",
+        dest="generation_events",
+        type=Path,
+        default=None,
+        help="F003 generation 事件 JSONL（漏斗第一级；缺省为空）",
+    )
     synthesis.add_argument("--json", action="store_true")
     return parser
 
@@ -202,7 +209,14 @@ def _run_abandon(args: argparse.Namespace) -> int:
 
 
 def _run_synthesis(args: argparse.Namespace) -> int:
-    report = build_synthesis(cohort_id=args.cohort)
+    generation_events: tuple[dict, ...] = ()
+    if args.generation_events is not None:
+        generation_events = tuple(
+            json.loads(line)
+            for line in args.generation_events.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+    report = build_synthesis(cohort_id=args.cohort, generation_events=generation_events)
     path = publish_synthesis(report)
     print(f"cohort={args.cohort}")
     print(f"synthesis_id={report.synthesis_id}")

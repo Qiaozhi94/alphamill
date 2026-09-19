@@ -187,21 +187,36 @@ def test_roundtrip_preserves_identity_and_normalized_form():
 
 @pytest.mark.parametrize(
     ("value", "expected"),
-    [(0.05, "0.05"), (0.050, "0.05"), (5e-2, "0.05"), (100.0, "100"), (-0.0, "0"), (0.1, "0.1")],
+    [
+        (0.05, "0.05"),
+        (0.050, "0.05"),
+        (5e-2, "0.05"),
+        (100.0, "100"),
+        (-0.0, "0"),
+        (0.1, "0.1"),
+        (5, "5"),
+        (5.0, "5"),
+    ],
 )
 def test_decimal_text_has_no_exponent_or_trailing_zeros(value: float, expected: str):
     assert decimal_text(value) == expected
 
 
-def test_normalize_numbers_keeps_ints_and_bools_but_scales_floats():
-    assert normalize_numbers({"a": 1, "b": 0.05, "c": True}) == {"a": 1, "b": "0.05", "c": True}
+def test_normalize_numbers_scales_ints_and_floats_alike_but_keeps_bools():
+    """R1-115：`5` 与 `5.0` 必须落到同一身份文本；bool 仍保持原样。"""
+    assert normalize_numbers({"a": 1, "b": 0.05, "c": True}) == {
+        "a": "1",
+        "b": "0.05",
+        "c": True,
+    }
+    assert normalize_numbers({"hac_lag": 5}) == normalize_numbers({"hac_lag": 5.0})
 
 
 def test_normalized_config_stores_decimal_text():
     context = make_context()
     assert context.normalized()["method_config"]["normalized"] == {
         "fdr_alpha": "0.05",
-        "hac_lag": 5,
+        "hac_lag": "5",
     }
 
 

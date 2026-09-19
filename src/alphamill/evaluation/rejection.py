@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 from alphamill.evaluation import publisher
-from alphamill.evaluation.canonical_result import CanonicalResult
 from alphamill.evaluation.capabilities import TierContext
 from alphamill.evaluation.contract_common import TIER_CANONICAL
 from alphamill.evaluation.events import (
@@ -138,7 +137,7 @@ def register_rejection(
     violation_message: str,
     code_build_digest: str = "",
     stage_id: str = STAGE_SIGNAL_QUALITY,
-) -> CanonicalResult:
+) -> Path:
     """发布并登记一个 REJECTED 终态成员；返回已发布目录。"""
     stages = rejected_stage_results(
         stage_id=stage_id, expression=expression, observed_at=observed_at

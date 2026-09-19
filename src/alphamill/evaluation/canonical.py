@@ -35,7 +35,11 @@ from alphamill.evaluation.code_build import (
     assert_worktree_clean_for_canonical,
 )
 from alphamill.evaluation.code_build import code_build_digest as compute_code_build_digest
-from alphamill.evaluation.contract_common import TIER_CANONICAL, UpstreamContractError
+from alphamill.evaluation.contract_common import (
+    TIER_CANONICAL,
+    UpstreamContractError,
+    content_digest,
+)
 from alphamill.evaluation.run_config import load_run_config
 from alphamill.evaluation.run_state import STATE_EVIDENCE_READY
 from alphamill.experiment_store import population
@@ -97,6 +101,11 @@ def run_canonical(
     target = tier_context.bench_dir(object_id or factor_ref, snapshot.snapshot_id, experiment_id)
     if publisher.is_published(target, canonical=True):
         manifest = json.loads((target / CANONICAL_STATE_MANIFEST).read_text(encoding="utf-8"))
+        recorded_digest = manifest.get("signal_digest")
+        if recorded_digest and recorded_digest != content_digest(signals_path.read_bytes()):
+            raise CanonicalError(
+                "已发布结论与本次信号输入不一致（signal_digest 不符）；语义变化必须新建实验"
+            )
         ensure_member_registered(
             reports=reports,
             cohort_id=cohort_id,
@@ -122,7 +131,7 @@ def run_canonical(
         )
 
     claim_token = f"canonical-{os.getpid()}-{uuid.uuid4().hex}"
-    claim.acquire(reports / CLAIMS_SUBDIR, experiment_id, owner_token=claim_token)
+    claim.recover(reports / CLAIMS_SUBDIR, experiment_id, owner_token=claim_token)
     try:
         return execute_canonical(
             reports=reports,

@@ -77,10 +77,11 @@ def parse_utc(value: Any, field: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def decimal_text(value: float) -> str:
-    """浮点 → 无指数、无多余尾零的十进制定标文本（design §3.1 的数值规范化口径）。
+def decimal_text(value: float | int) -> str:
+    """数值 → 无指数、无多余尾零的十进制定标文本（design §3.1 的数值规范化口径）。
 
-    `0.050` / `5e-2` / `0.05` 必须落到同一个字符串，否则语义相同的配置会得到不同实验身份。
+    `0.050` / `5e-2` / `0.05` / `5` / `5.0` 必须落到同一个字符串，否则语义相同的配置会得到
+    不同实验身份（`R1-115`）。
     """
     if value != value or value in (float("inf"), float("-inf")):
         raise SnapshotInputError(f"配置数值必须是有限十进制: {value!r}")
@@ -93,10 +94,10 @@ def decimal_text(value: float) -> str:
 
 
 def normalize_numbers(value: Any) -> Any:
-    """递归规范化数值：float → 定标文本，int/bool 保持原样（bool 先于 int 判定）。"""
+    """递归规范化数值：int/float → 同一定标文本（bool 先于 int 判定，保持原样）。"""
     if isinstance(value, bool):
         return value
-    if isinstance(value, float):
+    if isinstance(value, (int, float)):
         return decimal_text(value)
     if isinstance(value, Mapping):
         return {str(key): normalize_numbers(item) for key, item in value.items()}

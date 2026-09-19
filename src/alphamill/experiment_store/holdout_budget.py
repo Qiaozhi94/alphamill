@@ -78,7 +78,12 @@ class HoldoutBudgetEntry:
         for name in ("candidate_id", "iso_week", "experiment_id", "cohort_id", "verdict"):
             if not getattr(self, name):
                 raise HoldoutBudgetError(f"留出台账条目缺 {name}")
-        datetime.fromisoformat(self.recorded_at)
+        try:
+            datetime.fromisoformat(self.recorded_at)
+        except (TypeError, ValueError) as exc:
+            raise HoldoutBudgetError(
+                f"recorded_at 不是合法 ISO-8601: {self.recorded_at!r}"
+            ) from exc
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
