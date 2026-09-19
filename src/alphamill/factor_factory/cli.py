@@ -15,21 +15,31 @@ from types import MappingProxyType
 from typing import Final, Literal, TypeAlias
 
 from alphamill.factor_factory import canonical, errors
-from alphamill.factor_factory.generators import base, binding
+from alphamill.factor_factory.generators import base, binding, gpu_slot
 from alphamill.factor_factory.generators.egress_guard import install_egress_guard
-from alphamill.factor_factory.generators.manual.seeds import (
-    MANUAL_GENERATOR_VERSION,
-    ManualGenerator,
-)
+from alphamill.factor_factory.generators.manual import seeds as manual_seeds
+from alphamill.factor_factory.generators.mining_capability import require_mining_capabilities
 from alphamill.factor_factory.generators.write_guard import install_write_path_guard
 from alphamill.factor_factory.registry import factor_store, run_store
 
 EXIT_OK: Final = 0
 EXIT_FAILED: Final = 1
 EXIT_REJECTED: Final = 2
-
-_DEFAULT_CONFIG: Final[Mapping[str, canonical.JSONValue]] = MappingProxyType({})
+_DEFAULT_MINE_CONFIG: Final[Mapping[str, canonical.JSONValue]] = MappingProxyType(
+    {
+        "tier_level": "manual",
+        "vram_limit_gb": 6.0,
+        "queue_timeout_s": 1800,
+        "training_window_start": "22:00",
+        "training_window_end": "06:30",
+    }
+)
 _EMPTY_CONFIG_DIGEST: Final = canonical.sha256_prefixed_bytes(canonical.canonical_json_bytes({}))
+_MANUAL_CODE_DIGEST: Final = canonical.sha256_prefixed_bytes(
+    canonical.canonical_json_bytes(
+        {"generator": "manual", "version": manual_seeds.MANUAL_GENERATOR_VERSION}
+    )
+)
 _Outcome: TypeAlias = tuple[Literal["completed", "rejected", "failed"], str, str | None]
 
 
@@ -44,20 +54,27 @@ class _SeedState:
     window: base.Window | None = None
     universe: run_store.UniverseSummary | None = None
     counts: base.GenerationCounts = base.GenerationCounts(0, base.RejectionCounts(), 0)
+    device: Literal["cpu", "cuda"] = "cpu"
+    vram_limit_gb: float | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the Phase-1 parser containing only ``seed`` and ``show``."""
+    """Build the generation CLI parser."""
     parser = argparse.ArgumentParser(prog="alphamill-generate")
     commands = parser.add_subparsers(dest="command", required=True)
-    seed = commands.add_parser("seed")
-    seed.add_argument("--generator", choices=("manual",), required=True)
-    seed.add_argument("--binding", type=Path)
-    seed.add_argument("--seed", type=int, required=True)
-    seed.add_argument(
-        "--window", choices=(base.DEFAULT_WINDOW_PRESET,), default=base.DEFAULT_WINDOW_PRESET
-    )
-    seed.add_argument("--config", type=Path)
+    for name in ("seed", "mine"):
+        command = commands.add_parser(name)
+        command.add_argument("--generator", choices=("manual",), required=True)
+        command.add_argument("--binding", type=Path)
+        command.add_argument("--seed", type=int, required=True)
+        command.add_argument(
+            "--window", choices=(base.DEFAULT_WINDOW_PRESET,), default=base.DEFAULT_WINDOW_PRESET
+        )
+        command.add_argument("--config", type=Path)
+        if name == "mine":
+            command.add_argument("--quota", type=int, default=base.DEFAULT_SEED_QUOTA)
+            command.add_argument("--allow-cpu", action="store_true")
+            command.add_argument("--allow-offhours", action="store_true")
     show = commands.add_parser("show")
     selector = show.add_mutually_exclusive_group(required=True)
     selector.add_argument("--run")
@@ -67,7 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _load_config(path: Path | None) -> dict[str, canonical.JSONValue]:
     if path is None:
-        return dict(_DEFAULT_CONFIG)
+        return {}
     try:
         payload: canonical.JSONValue = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -85,19 +102,15 @@ def _manifest(state: _SeedState, outcome: _Outcome) -> run_store.GenerationRun:
         generator="manual",
         engine=run_store.EngineInfo(
             vendor_commit=None,
-            code_digest=canonical.sha256_prefixed_bytes(
-                canonical.canonical_json_bytes(
-                    {"generator": "manual", "version": MANUAL_GENERATOR_VERSION}
-                )
-            ),
+            code_digest=_MANUAL_CODE_DIGEST,
             dependencies={"alphamill": "0.1.0", "python": platform.python_version()},
         ),
         binding=state.binding,
         seed=state.seed,
         config_digest=state.config_digest,
-        device="cpu",
+        device=state.device,
         hostname=socket.gethostname(),
-        vram_limit_gb=None,
+        vram_limit_gb=state.vram_limit_gb,
         universe=state.universe,
         tier_level="manual",
         window=state.window,
@@ -117,32 +130,32 @@ def _manifest(state: _SeedState, outcome: _Outcome) -> run_store.GenerationRun:
     )
 
 
-def _finish_error(state: _SeedState, outcome: _Outcome, exit_code: int) -> int:
+def _finish_error(state: _SeedState, outcome: _Outcome) -> int:
     try:
         run_store.finalize_run(state.run_dir, _manifest(state, outcome))
     except (errors.FactorFactoryError, OSError) as exc:
         print(f"cannot publish terminal run: {exc}", file=sys.stderr)
     print(outcome[2], file=sys.stderr)
-    return exit_code
+    return EXIT_REJECTED if outcome[0] == "rejected" else EXIT_FAILED
+
+
+def _reject(state: _SeedState, termination: str, reason: str) -> int:
+    return _finish_error(state, ("rejected", termination, reason))
 
 
 def _event_stream(descriptor: int, mode: str, buffering: int = -1) -> io.FileIO:
     return io.FileIO(descriptor, mode=mode, closefd=True)
 
 
-def _run_seed(args: argparse.Namespace, reports_root: Path, lake_root: Path | None) -> int:
+def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Path | None) -> int:
+    mining = args.command == "mine"
     run_id = run_store.new_run_id("manual")
-    state = _SeedState(
-        run_id,
-        run_store.generation_run_dir(run_id, reports_root=reports_root),
-        datetime.now(UTC),
-        args.seed,
-    )
+    run_dir = run_store.generation_run_dir(run_id, reports_root=reports_root)
+    state = _SeedState(run_id, run_dir, datetime.now(UTC), args.seed)
+    slot: gpu_slot.GpuSlot | None = None
     binding_path: Path | None = args.binding
     if binding_path is None:
-        return _finish_error(
-            state, ("rejected", "missing_binding", "--binding is required"), EXIT_REJECTED
-        )
+        return _reject(state, "missing_binding", "--binding is required")
     try:
         validated = binding.validate_binding(
             binding.load_binding_file(binding_path), lake_root=lake_root
@@ -154,10 +167,15 @@ def _run_seed(args: argparse.Namespace, reports_root: Path, lake_root: Path | No
             "end": canonical.utc_iso(window.end),
             "resample": window.resample,
         }
+        supplied_config = _load_config(args.config)
+        if mining and args.config is not None and "tier_level" not in supplied_config:
+            return _reject(state, "unknown_tier", "tier_level is required in --config")
+        quota = args.quota if mining else base.DEFAULT_SEED_QUOTA
         config = {
-            **_load_config(args.config),
+            **(_DEFAULT_MINE_CONFIG if mining else {}),
+            **supplied_config,
             "generator": "manual",
-            "quota": base.DEFAULT_SEED_QUOTA,
+            "quota": quota,
             "window": window_config,
         }
         universe = run_store.UniverseSummary(
@@ -173,19 +191,54 @@ def _run_seed(args: argparse.Namespace, reports_root: Path, lake_root: Path | No
             window=window,
             universe=universe,
         )
+        if mining and config.get("tier_level") != "manual":
+            return _reject(state, "unknown_tier", "tier_level is missing or unknown")
+        if mining:
+            slot_config = gpu_slot.GpuSlotConfig(
+                vram_limit_gb=float(config["vram_limit_gb"]),
+                window_start=str(config["training_window_start"]),
+                window_end=str(config["training_window_end"]),
+                queue_timeout_s=int(config["queue_timeout_s"]),
+            )
+            require_mining_capabilities(require_cuda=not args.allow_cpu)
+            now = datetime.now(UTC)
+            window_open = gpu_slot.in_training_window(
+                now,
+                window_start=slot_config.window_start,
+                window_end=slot_config.window_end,
+            )
+            if not window_open and not args.allow_offhours:
+                return _reject(
+                    state, "outside_training_window", "outside configured training window"
+                )
+            if not args.allow_cpu:
+                reading = gpu_slot.query_vram()
+                if not gpu_slot.vram_is_sufficient(reading, limit_gb=slot_config.vram_limit_gb):
+                    return _reject(
+                        state, "cuda_unavailable", "CUDA VRAM is unavailable or insufficient"
+                    )
+                state = replace(state, device="cuda", vram_limit_gb=slot_config.vram_limit_gb)
+                candidate_slot = gpu_slot.GpuSlot(
+                    locks_dir=reports_root / ".locks", config=slot_config
+                )
+                slot_now = datetime.combine(
+                    now.date(), datetime.strptime(slot_config.window_start, "%H:%M").time(), UTC
+                )
+                candidate_slot.acquire(state.run_id, now=slot_now if args.allow_offhours else None)
+                slot = candidate_slot
         request = base.GenerationRequest(
             generator="manual",
             binding=validated.source,
             seed=state.seed,
             window=window,
             config=config,
-            quota=base.DEFAULT_SEED_QUOTA,
+            quota=quota,
         )
         with (
             install_egress_guard(),
             install_write_path_guard(state.run_dir, reports_root=reports_root),
         ):
-            result = ManualGenerator(run_id=state.run_id).produce(request)
+            result = manual_seeds.ManualGenerator(run_id=state.run_id).produce(request)
             state = replace(state, counts=result.counts)
             for factor in result.factors:
                 factor_store.write(state.run_dir, factor)
@@ -201,21 +254,25 @@ def _run_seed(args: argparse.Namespace, reports_root: Path, lake_root: Path | No
         return EXIT_OK
     except (errors.FactorFactoryError, OSError, RuntimeError, TypeError, ValueError) as exc:
         match exc:
+            case gpu_slot.GpuQueueTimeoutError():
+                return _reject(state, "queue_timeout", str(exc))
+            case errors.MiningCapabilityError():
+                return _reject(state, "capability_unavailable", str(exc))
             case errors.BindingValidationError():
-                outcome = ("rejected", "invalid_binding", str(exc))
-                exit_code = EXIT_REJECTED
+                return _reject(state, "invalid_binding", str(exc))
             case errors.UnknownSchemaVersionError():
-                outcome = ("rejected", "unknown_schema_version", str(exc))
-                exit_code = EXIT_REJECTED
+                return _reject(state, "unknown_schema_version", str(exc))
+            case errors.SchemaValidationError() | TypeError() | ValueError() if mining:
+                return _reject(state, "invalid_config", str(exc))
             case _:
-                outcome = ("failed", type(exc).__name__, str(exc))
-                exit_code = EXIT_FAILED
-        return _finish_error(state, outcome, exit_code)
+                return _finish_error(state, ("failed", type(exc).__name__, str(exc)))
+    finally:
+        if slot is not None:
+            slot.release(state.run_id)
 
 
 def _safe_identifier(value: str) -> bool:
-    characters_are_safe = all(character.isalnum() or character in "._-" for character in value)
-    return bool(value) and ".." not in value and characters_are_safe
+    return bool(value) and ".." not in value and all(c.isalnum() or c in "._-" for c in value)
 
 
 def _show_run(reports_root: Path, run_id: str) -> int:
@@ -275,12 +332,14 @@ def main(
     selected_reports_root = reports_root or Path(__file__).resolve().parents[3] / "reports"
     try:
         match args.command:
-            case "seed":
-                return _run_seed(args, selected_reports_root, lake_root)
+            case "seed" | "mine":
+                return _run_generation(args, selected_reports_root, lake_root)
             case "show":
-                if args.run is not None:
-                    return _show_run(selected_reports_root, args.run)
-                return _show_factor(selected_reports_root, args.factor)
+                return (
+                    _show_run(selected_reports_root, args.run)
+                    if args.run is not None
+                    else _show_factor(selected_reports_root, args.factor)
+                )
             case unknown:
                 parser.error(f"unknown command: {unknown}")
     except errors.UnknownSchemaVersionError as exc:

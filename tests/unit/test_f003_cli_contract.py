@@ -291,3 +291,334 @@ def test_show_rejects_unknown_run_schema_version(tmp_path: Path) -> None:
     exit_code = main(["show", "--run", run_path.parent.name], reports_root=reports_root)
 
     assert exit_code == EXIT_REJECTED
+
+
+class _AvailableVram:
+    free_gb = 8.0
+
+
+def _prepare_mine_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    window_open: bool = True,
+    vram: _AvailableVram | None = None,
+) -> list[bool]:
+    from alphamill.factor_factory import cli as cli_module
+
+    capability_calls: list[bool] = []
+
+    def require_capabilities(*, require_cuda: bool) -> None:
+        capability_calls.append(require_cuda)
+
+    monkeypatch.setattr(cli_module, "require_mining_capabilities", require_capabilities)
+    monkeypatch.setattr(
+        cli_module.gpu_slot,
+        "in_training_window",
+        lambda _now, *, window_start, window_end: window_open,
+    )
+    monkeypatch.setattr(cli_module.gpu_slot, "query_vram", lambda: vram)
+    return capability_calls
+
+
+def _read_mine_run(
+    reports_root: Path,
+) -> tuple[Path, dict[str, JSONValue], list[dict[str, JSONValue]]]:
+    [run_path] = sorted((reports_root / "generation").glob("*/run.json"))
+    run = json.loads(run_path.read_text(encoding="utf-8"))
+    events_path = run_path.parent / "events.jsonl"
+    events = (
+        [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines()]
+        if events_path.exists()
+        else []
+    )
+    return run_path, run, events
+
+
+def _assert_mine_rejected(
+    reports_root: Path, exit_code: int, *, termination: str
+) -> dict[str, JSONValue]:
+    run_path, run, events = _read_mine_run(reports_root)
+    assert exit_code == EXIT_REJECTED
+    assert run["status"] == "rejected"
+    assert run["termination"] == termination
+    assert run["reason"]
+    assert run["started_at"]
+    assert run["finished_at"]
+    assert not list((run_path.parent / "factors").glob("*.json"))
+    assert "generation.run_completed" not in [event["event_type"] for event in events]
+    return run
+
+
+def test_mine_manual_allow_cpu_completes_and_writes_factors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    capability_calls = _prepare_mine_runtime(monkeypatch)
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--allow-cpu",
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    run_path, run, events = _read_mine_run(reports_root)
+    assert exit_code == EXIT_OK
+    assert run["status"] == "completed"
+    assert run["device"] == "cpu"
+    assert list((run_path.parent / "factors").glob("*.json"))
+    assert [event["event_type"] for event in events] == ["generation.run_completed"]
+    assert capability_calls == [False]
+
+
+def test_mine_missing_binding_writes_rejected_terminal_run(tmp_path: Path) -> None:
+    reports_root = tmp_path / "reports"
+
+    exit_code = main(
+        ["mine", "--generator", "manual", "--seed", "17", "--allow-cpu"],
+        reports_root=reports_root,
+        lake_root=tmp_path / "lake",
+    )
+
+    _assert_mine_rejected(reports_root, exit_code, termination="missing_binding")
+
+
+def test_mine_invalid_binding_writes_rejected_terminal_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    payload = json.loads(binding_path.read_text(encoding="utf-8"))
+    payload["members"]["signals_log"]["value_digest"] = "sha256:" + "f" * 64
+    binding_path.write_text(json.dumps(payload), encoding="utf-8")
+    _prepare_mine_runtime(monkeypatch)
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--allow-cpu",
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    run = _assert_mine_rejected(reports_root, exit_code, termination="invalid_binding")
+    assert "value_digest" in str(run["reason"])
+
+
+def test_mine_unknown_tier_writes_rejected_terminal_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    config_path = tmp_path / "unknown-tier.json"
+    config_path.write_text('{"tier_level":"unknown"}', encoding="utf-8")
+    _prepare_mine_runtime(monkeypatch)
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--config",
+            str(config_path),
+            "--allow-cpu",
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    _assert_mine_rejected(reports_root, exit_code, termination="unknown_tier")
+
+
+def test_mine_outside_training_window_writes_rejected_terminal_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    capability_calls = _prepare_mine_runtime(monkeypatch, window_open=False)
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    _assert_mine_rejected(reports_root, exit_code, termination="outside_training_window")
+    assert capability_calls == [True]
+
+
+def test_mine_without_cuda_writes_rejected_terminal_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    capability_calls = _prepare_mine_runtime(monkeypatch)
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    _assert_mine_rejected(reports_root, exit_code, termination="cuda_unavailable")
+    assert capability_calls == [True]
+
+
+def test_mine_capability_failure_writes_rejected_terminal_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from alphamill.factor_factory import cli as cli_module
+
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+
+    def reject_capabilities(*, require_cuda: bool) -> None:
+        raise cli_module.errors.MiningCapabilityError(f"capability unavailable: {require_cuda}")
+
+    monkeypatch.setattr(cli_module, "require_mining_capabilities", reject_capabilities)
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--allow-cpu",
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    _assert_mine_rejected(reports_root, exit_code, termination="capability_unavailable")
+
+
+def test_mine_allow_offhours_and_cpu_bypasses_resource_refusals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch, window_open=False)
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--allow-cpu",
+            "--allow-offhours",
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    _, run, events = _read_mine_run(reports_root)
+    assert exit_code == EXIT_OK
+    assert run["status"] == "completed"
+    assert [event["event_type"] for event in events] == ["generation.run_completed"]
+
+
+def test_mine_defaults_are_expanded_in_canonical_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch)
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--allow-cpu",
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    run_path, _, _ = _read_mine_run(reports_root)
+    config = json.loads((run_path.parent / "config.json").read_text(encoding="utf-8"))
+    assert exit_code == EXIT_OK
+    assert config["tier_level"] == "manual"
+    assert config["quota"] > 0
+    assert config["window"]["preset"] == DEFAULT_WINDOW_PRESET
+    assert config["window"]["start"]
+    assert config["window"]["end"]
+    assert config["window"]["resample"] == "1h"
+
+
+def test_mine_queue_timeout_writes_rejected_terminal_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from alphamill.factor_factory import cli as cli_module
+    from alphamill.factor_factory.generators.gpu_slot import QueueRecord
+
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch, vram=_AvailableVram())
+
+    def timeout(_slot, run_id: str, *, now: datetime | None = None) -> None:
+        raise cli_module.gpu_slot.GpuQueueTimeoutError(
+            record=QueueRecord(
+                queue_seq=1,
+                run_id=run_id,
+                event="timeout",
+                ts=datetime(2026, 9, 19, 23, tzinfo=UTC),
+                vram_free_gb=8.0,
+            )
+        )
+
+    monkeypatch.setattr(cli_module.gpu_slot.GpuSlot, "acquire", timeout)
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    _assert_mine_rejected(reports_root, exit_code, termination="queue_timeout")
