@@ -14,6 +14,7 @@
         "family": "cohort",
         "fdr_method": "benjamini_hochberg",
         "fdr_alpha": 0.05,
+        "dsr_threshold": 0.95,
         "effective_independent": "deflated_sharpe_ratio",
         "min_track_record_years": 1.0
       },

@@ -153,6 +153,12 @@ def build_equity_curves(
     """由逐期成本后收益构造标准曲线（权益、回撤与分位/IC 侧车）。"""
     if len(periods) != len(times):
         raise CurvesError(f"收益与时间轴长度不一致: {len(periods)} vs {len(times)}")
+    for index in range(1, len(times)):
+        if times[index] <= times[index - 1]:
+            raise CurvesError(
+                "时间轴必须严格递增（多标的面板需先按 timestamp 聚合，不得回跳）: "
+                f"{times[index - 1]} -> {times[index]}"
+            )
     equity: list[float] = []
     running = 1.0
     peak = 1.0

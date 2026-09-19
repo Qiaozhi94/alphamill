@@ -189,6 +189,7 @@ def test_finalized_cohort_produces_funnel_and_failure_buckets(reports):
         "member_count": 2,
         "rejected_count": 0,
         "promotion_verdicts": {CANDIDATE_A: "promising", CANDIDATE_B: "dead"},
+        "effective_trials": None,
     }
     assert report.stage_funnel[STAGE_COST_CAPACITY] == {
         "PASS": 1,

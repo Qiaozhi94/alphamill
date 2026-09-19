@@ -13,20 +13,13 @@ from pathlib import Path
 import pytest
 
 from alphamill.evaluation.capabilities import CapabilityError, context_for
-from alphamill.evaluation.events import (
-    EVENT_GATE_REJECTED,
-    EVENT_REGISTERED,
-    build_event,
-    read_events,
-)
+from alphamill.evaluation.events import EVENT_REGISTERED, build_event
 from alphamill.evaluation.registry_writeback import (
     DR008_FIELDS,
     WritebackError,
     build_summaries,
-    definition_face_rejections_path,
     evaluation_face_path,
     read_evaluation_face,
-    write_definition_face,
     writeback_evaluation_face,
 )
 from alphamill.evaluation.run_state import STATE_EVIDENCE_READY, STATE_REGISTERED
@@ -172,32 +165,30 @@ def test_preview_context_cannot_write_back(reports):
 def test_lifecycle_and_unknown_fields_are_rejected(reports):
     cohort_id = _finalized(reports)
     payload = build_summaries(cohort_id)[0].to_payload()
-    for injected in ({"lifecycle_state": "active"}, {"decay_score": 0.1}, {"expression": "close"}):
-        from alphamill.evaluation.registry_writeback import assert_payload_is_dr008
+    from alphamill.evaluation.registry_writeback import assert_payload_is_dr008
 
-        with pytest.raises(WritebackError, match="DR-008 之外的字段"):
-            assert_payload_is_dr008({**payload, **injected})
+    with pytest.raises(WritebackError, match="DR-008 之外的字段"):
+        assert_payload_is_dr008({**payload, "lifecycle_state": "active"})
+    with pytest.raises(WritebackError, match="DR-008 之外的字段"):
+        assert_payload_is_dr008({**payload, "decay_score": 0.1})
+    for field in ("expression", "definition_digest", "definition_version"):
+        with pytest.raises(WritebackError, match="定义面字段"):
+            assert_payload_is_dr008({**payload, field: "x"})
 
 
-def test_definition_face_write_is_forbidden_and_leaves_zero_changes(reports):
+def test_definition_face_payload_is_rejected_and_definitions_untouched(reports):
+    """R1-117：定义面归属由 DR-008 校验覆盖，不存在只有测试才调用的陷阱写入函数。"""
+    cohort_id = _finalized(reports)
     definition = reports / "factor_registry" / "definitions"
-    definition.mkdir(parents=True)
+    definition.mkdir(parents=True, exist_ok=True)
     (definition / "existing.json").write_text(
         json.dumps({"definition_version": 1}), encoding="utf-8"
     )
     before = sorted(path.name for path in definition.iterdir())
-    with pytest.raises(CapabilityError) as excinfo:
-        write_definition_face(
-            root=reports,
-            experiment_id=EXPERIMENT_A,
-            cohort_id="cohort_sha256:" + "c" * 64,
-            expression="close",
-            definition_digest="sha256:x",
-        )
-    assert excinfo.value.code == "E_CANONICAL_FORBIDDEN"
+    from alphamill.evaluation.registry_writeback import assert_payload_is_dr008
+
+    payload = build_summaries(cohort_id)[0].to_payload()
+    with pytest.raises(WritebackError, match="定义面字段"):
+        assert_payload_is_dr008({**payload, "expression": "close"})
     assert sorted(path.name for path in definition.iterdir()) == before
-    rejections = read_events(definition_face_rejections_path(reports))
-    assert len(rejections) == 1
-    assert rejections[0].type == EVENT_GATE_REJECTED
-    assert rejections[0].reason_code == "E_CANONICAL_FORBIDDEN"
     assert rs.reports_root() == reports

@@ -52,6 +52,11 @@ def statistics_parameters(method_config: Mapping[str, Any]) -> dict[str, Any]:
         "n_resamples": int(bootstrap.get("n_resamples", DEFAULT_RESAMPLES)),
         "seed": int(bootstrap.get("seed", DEFAULT_SEED)),
         "fdr_alpha": float(multiplicity.get("fdr_alpha", DEFAULT_FDR_ALPHA)),
+        "dsr_threshold": (
+            float(multiplicity["dsr_threshold"])
+            if multiplicity.get("dsr_threshold") is not None
+            else None
+        ),
     }
 
 
@@ -151,50 +156,112 @@ def _sharpe(series: Sequence[float]) -> float:
 
 def cohort_statistics(
     *,
-    p_values: Sequence[float],
+    member_p_values: Mapping[str, float],
+    member_returns: Mapping[str, Sequence[float]],
     correlations: Sequence[float],
-    member_returns: Sequence[Sequence[float]],
     alpha: float = 0.05,
+    dsr_threshold: float | None = None,
+    required_candidates: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """cohort 级必需统计；任一估计器异常即把整体标为 `INCOMPLETE`（不产出部分结论）。"""
+    """cohort 级必需统计；必需输入缺失或估计器异常即整体 `INCOMPLETE`（不产出部分结论）。
+
+    输入按 `candidate_id` 映射对齐；`required_candidates` 覆盖不全也判 INCOMPLETE（`R2-207`）。
+    `dsr_threshold` 必须来自预注册配置，缺省即 INCOMPLETE 而非猜一个（`R2-205`）。
+    `best_sharpe <= 0` 是有结论的负结果：MinTRL 记 `not_applicable`、统计保持 PASS，成员由
+    `statistically_dead` 走 `dead`（`R2-206`）。
+    """
+    if not member_p_values:
+        return {
+            "status": "INCOMPLETE",
+            "fdr_alpha": alpha,
+            "reason": "无成员 p 值，BH-FDR 不可判定",
+        }
+    if required_candidates is not None and set(member_p_values) != set(required_candidates):
+        missing = sorted(set(required_candidates) - set(member_p_values))
+        return {
+            "status": "INCOMPLETE",
+            "fdr_alpha": alpha,
+            "reason": f"部分成员缺 p 值，多重检验覆盖不全: {missing}",
+        }
+    if dsr_threshold is None:
+        return {
+            "status": "INCOMPLETE",
+            "fdr_alpha": alpha,
+            "reason": "预注册方法配置缺 dsr_threshold，DSR 判死阈值不可判定",
+        }
+    candidates = list(member_p_values)
     try:
-        bh = benjamini_hochberg(p_values, alpha=alpha)
+        bh = benjamini_hochberg([float(member_p_values[name]) for name in candidates], alpha=alpha)
     except StatisticsError as exc:
         return {"status": "INCOMPLETE", "fdr_alpha": alpha, "reason": f"BH-FDR 估计器异常: {exc}"}
-    result: dict[str, Any] = {"status": "PASS", "fdr_alpha": alpha, "bh": bh.to_payload()}
+    result: dict[str, Any] = {
+        "status": "PASS",
+        "fdr_alpha": alpha,
+        "dsr_threshold": dsr_threshold,
+        "bh": bh.to_payload(),
+        "bh_rejected": {
+            name: bool(flag) for name, flag in zip(candidates, bh.rejected, strict=True)
+        },
+    }
     try:
         trials = effective_trials(correlations) if correlations else 1.0
     except StatisticsError as exc:
-        result["status"] = "INCOMPLETE"
-        result["reason"] = f"有效独立数估计器异常: {exc}"
-        return result
+        return {**result, "status": "INCOMPLETE", "reason": f"有效独立数估计器异常: {exc}"}
     result["effective_trials"] = trials
     n_trials = max(1, math.ceil(trials))
-    best: tuple[float, int] | None = None
-    for series in member_returns:
+
+    sharpes: dict[str, float] = {}
+    for candidate, series in member_returns.items():
         try:
-            sharpe = _sharpe(series)
+            sharpes[candidate] = _sharpe(series)
         except StatisticsError:
             continue
-        if best is None or sharpe > best[0]:
-            best = (sharpe, len(series))
-    if best is not None:
-        sharpe, n_observations = best
+    if not sharpes:
+        return {
+            **result,
+            "status": "INCOMPLETE",
+            "reason": "无成员可计算 Sharpe，DSR/MinTRL 不可判定",
+        }
+    dsr_map: dict[str, float | None] = {}
+    for candidate, sharpe in sharpes.items():
+        n_observations = len(member_returns[candidate])
+        if n_observations < 2:
+            dsr_map[candidate] = None
+            continue
         sharpe_std = math.sqrt((1.0 + 0.5 * sharpe * sharpe) / n_observations)
         try:
-            result["dsr"] = deflated_sharpe_ratio(
+            dsr_map[candidate] = deflated_sharpe_ratio(
                 sharpe,
                 n_trials=n_trials,
                 sharpe_std=sharpe_std,
                 n_observations=n_observations,
             )
+        except StatisticsError:
+            dsr_map[candidate] = None
+    result["dsr"] = dsr_map
+
+    best_candidate = max(sharpes, key=lambda name: sharpes[name])
+    best_sharpe = sharpes[best_candidate]
+    result["best_candidate"] = best_candidate
+    result["best_sharpe"] = best_sharpe
+    if best_sharpe <= 0.0:
+        result["mintrl"] = None
+        result["mintrl_reason"] = "not_applicable: 最佳成员 Sharpe <= 0"
+    else:
+        try:
+            result["mintrl"] = min_track_record_length(best_sharpe, target_sharpe=0.0)
         except StatisticsError as exc:
-            result["dsr"] = None
-            result["dsr_reason"] = str(exc)
-        if sharpe > 0.0:
-            try:
-                result["mintrl"] = min_track_record_length(sharpe, target_sharpe=0.0)
-            except StatisticsError as exc:
-                result["mintrl"] = None
-                result["mintrl_reason"] = str(exc)
+            return {**result, "status": "INCOMPLETE", "reason": f"MinTRL 估计器异常: {exc}"}
+
+    statistical_dead: dict[str, bool] = {}
+    for candidate in candidates:
+        bh_significant = result["bh_rejected"].get(candidate, True)
+        sharpe = sharpes.get(candidate)
+        dsr_value = dsr_map.get(candidate)
+        statistical_dead[candidate] = (
+            not bh_significant
+            or (sharpe is not None and sharpe <= 0.0)
+            or (dsr_value is not None and dsr_value < dsr_threshold)
+        )
+    result["statistically_dead"] = statistical_dead
     return result

@@ -299,22 +299,26 @@ def official_population(root: Path, cohort_id: str) -> dict[str, Any]:
 
 
 def assert_projection_rebuilds(root: Path, cohort_id: str) -> None:
-    """删除派生索引后必须能完全重建：两次投影必须逐字段相等，且计数自洽。"""
-    first = official_population(root, cohort_id)
-    second = official_population(root, cohort_id)
-    if first != second:
+    """删除派生索引后必须能完全重建：先删索引，再要求投影与删除前逐字段相等且计数自洽。"""
+    before = official_population(root, cohort_id)
+    derived = cohort_dir(root, cohort_id) / "index"
+    reset_derived_indexes(root, cohort_id)
+    if derived.exists():
+        raise RegistryIntegrityError("派生索引未被删除，重建前提不成立")
+    after = official_population(root, cohort_id)
+    if after != before:
         raise RegistryIntegrityError(f"official population 投影不确定: {cohort_id}")
-    verdict = first["verdict"]
+    verdict = after["verdict"]
     if verdict is None:
         return
-    if verdict["trial_count"] != len(first["cohort"]["commitments"]):
+    if verdict["trial_count"] != len(after["cohort"]["commitments"]):
         raise RegistryIntegrityError("verdict trial_count 与承诺成员数不符")
     if (
         verdict["member_count"] + len(missing_commitments(root, cohort_id))
         != verdict["trial_count"]
     ):
         raise RegistryIntegrityError("verdict member_count 与登记集合不符")
-    final_members = verdict.get("members") or first["registrations"]
+    final_members = verdict.get("members") or after["registrations"]
     rejected = sum(1 for member in final_members if member["promotion_verdict"] == "rejected")
     if rejected != verdict["rejected_count"]:
         raise RegistryIntegrityError("verdict rejected_count 与登记集合不符")

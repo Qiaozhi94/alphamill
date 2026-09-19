@@ -170,8 +170,5 @@ def run_preview(
         signal_provenance=evaluation.signal_provenance,
         first_failure=first_failure(evaluation.stage_results),
     )
-    assert_no_canonical_leak(
-        {"experiment_id": result.experiment_id, "sample_tier": result.sample_tier},
-        agent_readable=True,
-    )
+    assert_no_canonical_leak(result.to_payload(), agent_readable=True)
     return result

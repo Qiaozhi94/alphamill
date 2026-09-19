@@ -13,7 +13,7 @@ from alphamill.evaluation import publisher
 from alphamill.evaluation.canonical_registration import registered_events
 from alphamill.evaluation.canonical_result import CanonicalResult
 from alphamill.evaluation.capabilities import TierContext
-from alphamill.evaluation.contract_common import TIER_CANONICAL
+from alphamill.evaluation.contract_common import TIER_CANONICAL, content_digest
 from alphamill.evaluation.events import (
     EVENT_RUN_STATE_CHANGED,
     RunEvent,
@@ -35,6 +35,7 @@ from alphamill.evaluation.run_state import (
     STATE_REJECTED,
     STATE_RUNNING,
     STATE_VALIDATING,
+    assert_transition,
 )
 from alphamill.experiment_store import population
 from alphamill.experiment_store import research_snapshot as rs
@@ -51,6 +52,7 @@ from alphamill.validation.no_lookahead import (
 
 def _run_events(experiment_id: str, cohort_id: str, terminal_state: str) -> tuple[RunEvent, ...]:
     def event(source: str, target: str, sequence: int, stage: str = "") -> RunEvent:
+        assert_transition(source, target)
         return build_event(
             experiment_id=experiment_id,
             execution_tier=TIER_CANONICAL,
@@ -93,6 +95,7 @@ def execute_canonical(
         ),
     )
     moment = observed_at or datetime.now(UTC).isoformat()
+    signal_digest = content_digest(signals_path.read_bytes())
     if not verdict.passed:
         published = register_rejection(
             tier_context=tier_context,
@@ -105,6 +108,7 @@ def execute_canonical(
             expression=expression,
             observed_at=moment,
             violation_message="; ".join(item.message for item in verdict.violations),
+            signal_digest=signal_digest,
             code_build_digest=code_digest,
         )
         return CanonicalResult(
@@ -138,10 +142,13 @@ def execute_canonical(
     terminal_state = (
         STATE_EVIDENCE_READY if evaluation.stage_results.evidence_complete else STATE_INCOMPLETE
     )
-    member_events = registered_events(experiment_id, cohort_id, candidate_id)
+    member_events = registered_events(
+        experiment_id, cohort_id, candidate_id, from_state=terminal_state
+    )
     events = _run_events(experiment_id, cohort_id, terminal_state) + member_events
     curves = build_equity_curves(
-        evaluation.period_returns, times=[datetime.fromisoformat(stamp) for stamp in times]
+        evaluation.period_returns,
+        times=[datetime.fromisoformat(stamp) for stamp in evaluation.curve_times],
     )
     promotion = derive_promotion_verdict(
         PromotionInputs(
@@ -176,6 +183,7 @@ def execute_canonical(
             "object_id": object_id or factor_ref,
             "cohort_id": cohort_id,
             "candidate_id": candidate_id,
+            "signal_digest": signal_digest,
             "sample_tier": evaluation.sample_tier,
             "cost_verdict": evaluation.cost_verdict,
             "approximation": dict(evaluation.approximation),

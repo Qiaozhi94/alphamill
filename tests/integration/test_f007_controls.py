@@ -361,6 +361,31 @@ def test_finalize_wires_cohort_level_multiplicity(sandbox, capsys):
     assert stats["effective_trials"] >= 1.0
 
 
+def test_synthesis_carries_effective_trials_and_final_verdicts(sandbox, capsys):
+    """R1-108 回归：synthesis 必须带有效独立数，并用 cohort verdict 的最终成员结论。"""
+    for name in sorted(CONTROLS):
+        assert main(_run(sandbox, name)) == 0
+        capsys.readouterr()
+    assert main(["finalize-cohort", "--cohort", sandbox["cohort_id"]]) == 0
+    capsys.readouterr()
+    report = build_synthesis(cohort_id=sandbox["cohort_id"], generated_at=NOW)
+    assert report.status == STATUS_FINALIZED
+    assert report.effective_trials is not None
+    assert report.funnel["cohort"]["effective_trials"] == report.effective_trials
+    verdict = population.load_verdict(sandbox["reports"], sandbox["cohort_id"])
+    final = verdict["cohort_statistics"]["promotion_verdicts"]
+    assert report.funnel["cohort"]["promotion_verdicts"] == final
+
+
+def test_rejection_manifest_records_signal_digest(sandbox, capsys):
+    """R2-208 回归：方法论拒绝路径的 manifest 也必须写 signal_digest。"""
+    assert main(_run(sandbox, "future_fill_leakage")) == 0
+    capsys.readouterr()
+    manifest_path = next((sandbox["reports"] / "bench").rglob("manifest.json"))
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload["signal_digest"].startswith("sha256:")
+
+
 def test_published_events_match_manifest_digest_and_are_immutable(sandbox, capsys):
     """R1-004 回归：已发布批次的 events_digest 必须与实际事件一致，且复用不得改动它。
 

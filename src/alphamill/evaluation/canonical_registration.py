@@ -25,6 +25,7 @@ from alphamill.evaluation.run_state import (
     STATE_EVIDENCE_READY,
     STATE_REGISTERED,
     STATE_REJECTED,
+    assert_transition,
 )
 from alphamill.experiment_store import population
 from alphamill.experiment_store.promotion import PromotionInputs, derive_promotion_verdict
@@ -43,14 +44,20 @@ def stage_results_from_manifest(manifest: Mapping[str, Any]) -> Any:
 
 
 def registered_events(
-    experiment_id: str, cohort_id: str, candidate_id: str
+    experiment_id: str,
+    cohort_id: str,
+    candidate_id: str,
+    *,
+    from_state: str = STATE_EVIDENCE_READY,
 ) -> tuple[RunEvent, ...]:
+    """构造终态登记事件；`from_state` 取实际终态（`EVIDENCE_READY`/`INCOMPLETE`/`REJECTED`）。"""
+    assert_transition(from_state, STATE_REGISTERED)
     return (
         build_event(
             experiment_id=experiment_id,
             execution_tier=TIER_CANONICAL,
             cohort_id=cohort_id,
-            from_state=STATE_EVIDENCE_READY,
+            from_state=from_state,
             to_state=STATE_REGISTERED,
             event_type=EVENT_REGISTERED,
             evidence_refs=(candidate_id,),
@@ -83,6 +90,7 @@ def _published_registered_event(
         if event.type == EVENT_REGISTERED:
             return event
     from_state = STATE_REJECTED if state == STATE_REJECTED else STATE_EVIDENCE_READY
+    assert_transition(from_state, STATE_REGISTERED)
     return build_event(
         experiment_id=experiment_id,
         execution_tier=TIER_CANONICAL,

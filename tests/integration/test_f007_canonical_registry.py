@@ -216,8 +216,17 @@ def test_pearson_and_max_abs_rho_pick_the_larger_metric():
         pearson((1.0, 1.0), (1.0, 2.0))
     with pytest.raises(DedupError, match="长度不一致"):
         pearson((1.0, 2.0), (1.0,))
-    with pytest.raises(DedupError, match="两个口径都缺序列"):
+    with pytest.raises(DedupError, match="不可比"):
         max_abs_rho(DedupCandidate("a"), DedupCandidate("b"))
+    equal_oos_mismatched_ic_left = DedupCandidate(
+        "a", oos_pnl=(1.0, 2.0, 3.0), rolling_ic=(1.0, 2.0)
+    )
+    equal_oos_mismatched_ic_right = DedupCandidate(
+        "b", oos_pnl=(1.0, 2.0, 3.0), rolling_ic=(1.0, 2.0, 3.0, 4.0)
+    )
+    assert max_abs_rho(
+        equal_oos_mismatched_ic_left, equal_oos_mismatched_ic_right
+    ) == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize(
@@ -331,6 +340,29 @@ def test_ledger_rejects_non_canonical_entries():
         _entry(execution_tier="preview")
     with pytest.raises(HoldoutBudgetError, match="缺 verdict"):
         _entry(verdict="")
+
+
+def test_ledger_invalid_recorded_at_is_mapped_to_holdout_error(tmp_path):
+    """R1-120 回归：非法 recorded_at 必须抛 HoldoutBudgetError，read_ledger 能接住。"""
+    path = ledger_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "candidate_id": "c",
+                "iso_week": "2026-W36",
+                "experiment_id": "e",
+                "cohort_id": "k",
+                "verdict": "promising",
+                "recorded_at": "not-a-date",
+                "execution_tier": "canonical",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(HoldoutBudgetError, match="非法"):
+        read_ledger(tmp_path)
 
 
 def test_preview_overreach_leaves_a_gate_rejected_event():
@@ -543,9 +575,11 @@ def test_finalize_records_counts_and_projection_rebuilds(tmp_path):
         CANDIDATE_A,
         CANDIDATE_B,
     ]
+    derived = pop.cohort_dir(tmp_path, cohort_id) / "index"
+    derived.mkdir(parents=True, exist_ok=True)
+    (derived / "stale.json").write_text("{}", encoding="utf-8")
     pop.assert_projection_rebuilds(tmp_path, cohort_id)
-    pop.reset_derived_indexes(tmp_path, cohort_id)
-    pop.assert_projection_rebuilds(tmp_path, cohort_id)
+    assert not derived.exists()
 
 
 def test_finalize_is_idempotent_across_finalized_at_values(tmp_path):
@@ -575,38 +609,50 @@ def test_finalize_is_idempotent_across_finalized_at_values(tmp_path):
         )
 
 
-def _write_member_evidence(reports, candidate: str, experiment: str, returns) -> str:
+def _write_member_evidence(
+    reports,
+    candidate: str,
+    experiment: str,
+    returns,
+    *,
+    p_value: float = 0.01,
+    with_report: bool = True,
+    alpha: float = 0.05,
+    dsr_threshold: float = 0.95,
+) -> str:
     directory = reports / "bench" / candidate / "snapshot" / experiment
     directory.mkdir(parents=True, exist_ok=True)
     times = tuple(
         datetime(2026, 9, 1, tzinfo=UTC) + timedelta(hours=index) for index in range(len(returns))
     )
     write_curves(directory / "curves.parquet", build_equity_curves(returns, times=times))
-    (directory / "report.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "required_statistics": {
-                    "status": "PASS",
-                    "p_value": 0.01,
-                    "method": {"fdr_alpha": 0.05},
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
+    if with_report:
+        (directory / "report.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "required_statistics": {
+                        "status": "PASS",
+                        "p_value": p_value,
+                        "method": {"fdr_alpha": alpha, "dsr_threshold": dsr_threshold},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
     return f"bench/{candidate}/snapshot/{experiment}/curves.parquet"
 
 
 def test_finalize_wires_cohort_dedup_and_overrides_verdict(tmp_path, monkeypatch):
     """R1-002 回归：finalize 内按承诺顺序查重，并据此重导 promotion_verdict（同一次原子写）。
 
+    起点用生产可达的 `blocked_pending_audit`（`R1-116`），避免夹具手工注入不可达的 `promising`；
     删除 finalize 里的 `resolve_cohort_dedup` 调用后 B 不会变 `rejected`，本断言变红。
     """
     reports = tmp_path / "reports"
     monkeypatch.setenv("ALPHAMILL_REPORTS_DIR", str(reports))
     cohort_id, _ = pop.freeze_cohort(reports, _definition(CANDIDATE_A, CANDIDATE_B))
-    series = (0.01, -0.004, 0.006, 0.002, -0.001, 0.005)
+    series = (0.05, 0.04, 0.06, 0.05, 0.055, 0.045)
     for candidate, experiment in ((CANDIDATE_A, EXPERIMENT_A), (CANDIDATE_B, EXPERIMENT_B)):
         pop.register_member(
             reports,
@@ -615,7 +661,7 @@ def test_finalize_wires_cohort_dedup_and_overrides_verdict(tmp_path, monkeypatch
                 candidate_id=candidate,
                 experiment_id=experiment,
                 run_state=STATE_REGISTERED,
-                promotion_verdict="promising",
+                promotion_verdict="blocked_pending_audit",
                 sample_tier="trustworthy",
                 cost_model_version="cm-v1",
                 evidence_ref=_write_member_evidence(reports, candidate, experiment, series),
@@ -629,9 +675,166 @@ def test_finalize_wires_cohort_dedup_and_overrides_verdict(tmp_path, monkeypatch
     assert dedup[CANDIDATE_B]["against_factor_id"] == CANDIDATE_A
     assert dedup[CANDIDATE_A]["verdict"] == "none"
     members = {entry["candidate_id"]: entry for entry in verdict["members"]}
-    assert members[CANDIDATE_A]["promotion_verdict"] == "promising"
+    assert members[CANDIDATE_A]["promotion_verdict"] == "blocked_pending_audit"
     assert members[CANDIDATE_B]["promotion_verdict"] == "rejected"
     assert verdict["rejected_count"] == 1
+    from alphamill.evaluation.registry_writeback import read_evaluation_face
+
+    assert {row["factor_id"] for row in read_evaluation_face(reports)} == {
+        CANDIDATE_A,
+        CANDIDATE_B,
+    }
+
+
+def test_finalize_downgrades_evidence_adequate_when_stats_incomplete(tmp_path, monkeypatch):
+    """R1-101 回归：cohort 统计非 PASS 时证据达标类 verdict 必须降为 `incomplete`。
+
+    只有 `promising` 会被降级是 v0.2 的失效点（`promising` 生产不可达）；本用例锁住
+    `blocked_pending_audit` 也会被统计门降级。
+    """
+    reports = tmp_path / "reports"
+    monkeypatch.setenv("ALPHAMILL_REPORTS_DIR", str(reports))
+    cohort_id, _ = pop.freeze_cohort(reports, _definition(CANDIDATE_A))
+    series = (0.05, 0.04, 0.06, 0.05, 0.055, 0.045)
+    pop.register_member(
+        reports,
+        cohort_id,
+        pop.MemberRegistration(
+            candidate_id=CANDIDATE_A,
+            experiment_id=EXPERIMENT_A,
+            run_state=STATE_REGISTERED,
+            promotion_verdict="blocked_pending_audit",
+            sample_tier="trustworthy",
+            cost_model_version="cm-v1",
+            evidence_ref=_write_member_evidence(
+                reports, CANDIDATE_A, EXPERIMENT_A, series, with_report=False
+            ),
+        ),
+        _registered_event(EXPERIMENT_A, cohort_id),
+    )
+    path = canonical_ops.finalize_cohort(cohort_id, finalized_at=FROZEN_AT)
+    verdict = json.loads(path.read_text(encoding="utf-8"))
+    assert verdict["cohort_statistics"]["cohort_statistics"]["status"] == "INCOMPLETE"
+    members = {entry["candidate_id"]: entry for entry in verdict["members"]}
+    assert members[CANDIDATE_A]["promotion_verdict"] == "incomplete"
+
+
+def test_statistically_insignificant_member_becomes_dead(tmp_path, monkeypatch):
+    """R1-101 回归：cohort 统计 PASS 时 BH-FDR 未显著成员由证据达标降为 `dead`。"""
+    reports = tmp_path / "reports"
+    monkeypatch.setenv("ALPHAMILL_REPORTS_DIR", str(reports))
+    cohort_id, _ = pop.freeze_cohort(reports, _definition(CANDIDATE_A))
+    series = (0.05, 0.04, 0.06, 0.05, 0.055, 0.045)
+    pop.register_member(
+        reports,
+        cohort_id,
+        pop.MemberRegistration(
+            candidate_id=CANDIDATE_A,
+            experiment_id=EXPERIMENT_A,
+            run_state=STATE_REGISTERED,
+            promotion_verdict="blocked_pending_audit",
+            sample_tier="trustworthy",
+            cost_model_version="cm-v1",
+            evidence_ref=_write_member_evidence(
+                reports, CANDIDATE_A, EXPERIMENT_A, series, p_value=0.9
+            ),
+        ),
+        _registered_event(EXPERIMENT_A, cohort_id),
+    )
+    path = canonical_ops.finalize_cohort(cohort_id, finalized_at=FROZEN_AT)
+    verdict = json.loads(path.read_text(encoding="utf-8"))
+    stats = verdict["cohort_statistics"]["cohort_statistics"]
+    assert stats["status"] == "PASS"
+    assert stats["bh_rejected"][CANDIDATE_A] is False
+    members = {entry["candidate_id"]: entry for entry in verdict["members"]}
+    assert members[CANDIDATE_A]["promotion_verdict"] == "dead"
+
+
+def test_finalize_is_stable_after_writeback_records_own_cohort(tmp_path, monkeypatch):
+    """R2-201 回归：回写本 cohort 后再次 finalize 必须逐字段一致，不得读回自己写的结论。"""
+    reports = tmp_path / "reports"
+    monkeypatch.setenv("ALPHAMILL_REPORTS_DIR", str(reports))
+    cohort_id, _ = pop.freeze_cohort(reports, _definition(CANDIDATE_A, CANDIDATE_B))
+    returns_by_candidate = {
+        CANDIDATE_A: (0.05, 0.04, 0.06, 0.05, 0.055, 0.045),
+        CANDIDATE_B: (0.02, -0.01, 0.03, -0.02, 0.01, -0.015),
+    }
+    for candidate, experiment in ((CANDIDATE_A, EXPERIMENT_A), (CANDIDATE_B, EXPERIMENT_B)):
+        pop.register_member(
+            reports,
+            cohort_id,
+            pop.MemberRegistration(
+                candidate_id=candidate,
+                experiment_id=experiment,
+                run_state=STATE_REGISTERED,
+                promotion_verdict="blocked_pending_audit",
+                sample_tier="trustworthy",
+                cost_model_version="cm-v1",
+                evidence_ref=_write_member_evidence(
+                    reports, candidate, experiment, returns_by_candidate[candidate]
+                ),
+            ),
+            _registered_event(experiment, cohort_id),
+        )
+    first = canonical_ops.finalize_cohort(cohort_id, finalized_at=FROZEN_AT)
+    before = first.read_bytes()
+    second = canonical_ops.finalize_cohort(cohort_id, finalized_at="2030-01-01T00:00:00Z")
+    assert second == first
+    assert first.read_bytes() == before
+
+
+def test_finalize_rejects_conflicting_member_fdr_alpha(tmp_path, monkeypatch):
+    """R1-111 回归：成员间 `fdr_alpha` 不一致必须拒绝，不得静默 last-wins。"""
+    reports = tmp_path / "reports"
+    monkeypatch.setenv("ALPHAMILL_REPORTS_DIR", str(reports))
+    cohort_id, _ = pop.freeze_cohort(reports, _definition(CANDIDATE_A, CANDIDATE_B))
+    series = (0.05, 0.04, 0.06, 0.05, 0.055, 0.045)
+    for candidate, experiment, alpha in (
+        (CANDIDATE_A, EXPERIMENT_A, 0.05),
+        (CANDIDATE_B, EXPERIMENT_B, 0.10),
+    ):
+        pop.register_member(
+            reports,
+            cohort_id,
+            pop.MemberRegistration(
+                candidate_id=candidate,
+                experiment_id=experiment,
+                run_state=STATE_REGISTERED,
+                promotion_verdict="blocked_pending_audit",
+                evidence_ref=_write_member_evidence(
+                    reports, candidate, experiment, series, alpha=alpha
+                ),
+            ),
+            _registered_event(experiment, cohort_id),
+        )
+    with pytest.raises(canonical_ops.CanonicalOpError, match="fdr_alpha 不一致"):
+        canonical_ops.finalize_cohort(cohort_id, finalized_at=FROZEN_AT)
+
+
+def test_unreadable_evidence_marks_cohort_incomplete_and_records_rejection(tmp_path, monkeypatch):
+    """R1-112 回归：曲线/报告不可读不得静默剔除成员；必须写 gate_rejected 并标 INCOMPLETE。"""
+    reports = tmp_path / "reports"
+    monkeypatch.setenv("ALPHAMILL_REPORTS_DIR", str(reports))
+    cohort_id, _ = pop.freeze_cohort(reports, _definition(CANDIDATE_A))
+    pop.register_member(
+        reports,
+        cohort_id,
+        pop.MemberRegistration(
+            candidate_id=CANDIDATE_A,
+            experiment_id=EXPERIMENT_A,
+            run_state=STATE_REGISTERED,
+            promotion_verdict="blocked_pending_audit",
+            evidence_ref="bench/missing/snapshot/curves.parquet",
+        ),
+        _registered_event(EXPERIMENT_A, cohort_id),
+    )
+    path = canonical_ops.finalize_cohort(cohort_id, finalized_at=FROZEN_AT)
+    verdict = json.loads(path.read_text(encoding="utf-8"))
+    assert verdict["cohort_statistics"]["cohort_statistics"]["status"] == "INCOMPLETE"
+    events = read_events(pop.cohort_dir(reports, cohort_id) / "gate_rejections.jsonl")
+    assert len(events) == 1
+    assert events[0].type == EVENT_GATE_REJECTED
+    assert CANDIDATE_A in events[0].evidence_refs
 
 
 def test_registrations_return_in_commitment_order(tmp_path):

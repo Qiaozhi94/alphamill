@@ -147,6 +147,14 @@ def test_agent_readable_payload_rejects_final_window_fields():
         assert_no_canonical_leak({"holdout_budget_rows": 3}, agent_readable=True)
 
 
+def test_agent_readable_payload_rejects_nested_final_window_fields():
+    """R1-106 回归：泄漏守卫必须递归扫描嵌套键，不能被顶层两键字典骗过。"""
+    with pytest.raises(CapabilityError, match="最终确认窗"):
+        assert_no_canonical_leak({"outer": [{"holdout_budget_rows": 3}]}, agent_readable=True)
+    with pytest.raises(CapabilityError, match="最终确认窗"):
+        assert_no_canonical_leak({"stages": {"final_window_ic": 0.9}}, agent_readable=True)
+
+
 def test_agent_readable_payload_allows_ordinary_fields():
     assert_no_canonical_leak(
         {"experiment_id": EXPERIMENT, "stage": "signal_quality"}, agent_readable=True

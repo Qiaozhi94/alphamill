@@ -64,6 +64,28 @@ def test_same_semantics_produce_same_id():
     assert make_context().experiment_id == make_context().experiment_id
 
 
+def test_context_schema_version_bumped_and_v1_still_readable():
+    """R2-204：身份口径变更必须升 `CONTEXT_SCHEMA_VERSION`，且旧 v1 产物仍可读。"""
+    assert CONTEXT_SCHEMA_VERSION == 2
+    context = make_context()
+    legacy_payload = {
+        "schema_version": 1,
+        "execution_tier": context.execution_tier,
+        "upstream": dict(context.upstream),
+        "cohort_id": context.cohort_id,
+        "method_config": dict(context.method_config),
+        "window": dict(context.window),
+        "cost_model": dict(context.cost_model),
+        "research_snapshot_id": context.research_snapshot_id,
+        "code_build_digest": context.code_build_digest,
+        "seed": context.seed,
+        "supersedes": None,
+    }
+    legacy = ExperimentContext.from_dict(legacy_payload)
+    assert legacy.schema_version == 1
+    assert legacy.experiment_id != context.experiment_id
+
+
 def test_execution_tier_is_not_part_of_identity():
     canonical = make_context(execution_tier="canonical")
     preview = make_context(execution_tier="preview")
@@ -187,21 +209,36 @@ def test_roundtrip_preserves_identity_and_normalized_form():
 
 @pytest.mark.parametrize(
     ("value", "expected"),
-    [(0.05, "0.05"), (0.050, "0.05"), (5e-2, "0.05"), (100.0, "100"), (-0.0, "0"), (0.1, "0.1")],
+    [
+        (0.05, "0.05"),
+        (0.050, "0.05"),
+        (5e-2, "0.05"),
+        (100.0, "100"),
+        (-0.0, "0"),
+        (0.1, "0.1"),
+        (5, "5"),
+        (5.0, "5"),
+    ],
 )
 def test_decimal_text_has_no_exponent_or_trailing_zeros(value: float, expected: str):
     assert decimal_text(value) == expected
 
 
-def test_normalize_numbers_keeps_ints_and_bools_but_scales_floats():
-    assert normalize_numbers({"a": 1, "b": 0.05, "c": True}) == {"a": 1, "b": "0.05", "c": True}
+def test_normalize_numbers_scales_ints_and_floats_alike_but_keeps_bools():
+    """R1-115：`5` 与 `5.0` 必须落到同一身份文本；bool 仍保持原样。"""
+    assert normalize_numbers({"a": 1, "b": 0.05, "c": True}) == {
+        "a": "1",
+        "b": "0.05",
+        "c": True,
+    }
+    assert normalize_numbers({"hac_lag": 5}) == normalize_numbers({"hac_lag": 5.0})
 
 
 def test_normalized_config_stores_decimal_text():
     context = make_context()
     assert context.normalized()["method_config"]["normalized"] == {
         "fdr_alpha": "0.05",
-        "hac_lag": 5,
+        "hac_lag": "5",
     }
 
 

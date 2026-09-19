@@ -217,8 +217,10 @@ def block_bootstrap_ci(
     size = len(series)
     if size < MIN_PERIODS:
         raise StatisticsError(f"bootstrap 至少需要 {MIN_PERIODS} 期")
-    if block_size < 1 or block_size > size:
-        raise StatisticsError(f"block_size 必须落在 [1, {size}]: {block_size!r}")
+    if block_size < 1 or block_size >= size:
+        raise StatisticsError(
+            f"block_size 必须落在 [1, {size - 1}]（等于序列长度会退化为零宽区间）: {block_size!r}"
+        )
     if n_resamples < 1:
         raise StatisticsError(f"重采样次数必须为正: {n_resamples!r}")
     if not 0.0 < alpha < 1.0:

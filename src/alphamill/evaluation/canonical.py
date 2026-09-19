@@ -16,6 +16,7 @@ canonical 与 preview 的差别是**门禁强度**，不是流程分支：
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import uuid
@@ -35,7 +36,11 @@ from alphamill.evaluation.code_build import (
     assert_worktree_clean_for_canonical,
 )
 from alphamill.evaluation.code_build import code_build_digest as compute_code_build_digest
-from alphamill.evaluation.contract_common import TIER_CANONICAL, UpstreamContractError
+from alphamill.evaluation.contract_common import (
+    TIER_CANONICAL,
+    UpstreamContractError,
+    content_digest,
+)
 from alphamill.evaluation.run_config import load_run_config
 from alphamill.evaluation.run_state import STATE_EVIDENCE_READY
 from alphamill.experiment_store import population
@@ -97,6 +102,15 @@ def run_canonical(
     target = tier_context.bench_dir(object_id or factor_ref, snapshot.snapshot_id, experiment_id)
     if publisher.is_published(target, canonical=True):
         manifest = json.loads((target / CANONICAL_STATE_MANIFEST).read_text(encoding="utf-8"))
+        recorded_digest = manifest.get("signal_digest")
+        if not recorded_digest:
+            raise CanonicalError(
+                "已发布产物缺 signal_digest，无法校验本次输入；语义输入未变请重跑 canonical"
+            )
+        if recorded_digest != content_digest(signals_path.read_bytes()):
+            raise CanonicalError(
+                "已发布结论与本次信号输入不一致（signal_digest 不符）；语义变化必须新建实验"
+            )
         ensure_member_registered(
             reports=reports,
             cohort_id=cohort_id,
@@ -122,7 +136,7 @@ def run_canonical(
         )
 
     claim_token = f"canonical-{os.getpid()}-{uuid.uuid4().hex}"
-    claim.acquire(reports / CLAIMS_SUBDIR, experiment_id, owner_token=claim_token)
+    claim.recover(reports / CLAIMS_SUBDIR, experiment_id, owner_token=claim_token)
     try:
         return execute_canonical(
             reports=reports,
@@ -140,4 +154,10 @@ def run_canonical(
             observed_at=observed_at,
         )
     finally:
-        claim.release(reports / CLAIMS_SUBDIR, experiment_id, owner_token=claim_token)
+        _release_quietly(reports / CLAIMS_SUBDIR, experiment_id, claim_token)
+
+
+def _release_quietly(root: Path, key: str, owner_token: str) -> None:
+    """`finally` 内释放是尽力而为：清理失败不得覆盖已经成功的 canonical 结果（`R2-203`）。"""
+    with contextlib.suppress(claim.ClaimBusyError):
+        claim.release(root, key, owner_token=owner_token)
