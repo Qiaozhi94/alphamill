@@ -3,7 +3,7 @@ kind: feature
 id: F007
 version: "0.2"
 status: done
-status_evidence: merge aa7f958 + CI run 35420117790 全绿（verify py3.11 与 py3.13 均通过）
+status_evidence: merge 635bb6a（PR #2，循环 16 并入后独立复检 32 条 finding 闭环） + CI run 35441883653 全绿（verify py3.11 与 py3.13 均通过）；首次收口证据为 merge aa7f958 + CI run 35420117790
 branch: feat/F007-evaluation-gates
 gate_version: 1
 related_features: [F002, F003, F004, F008]
