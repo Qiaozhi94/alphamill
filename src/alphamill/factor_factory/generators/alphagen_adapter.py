@@ -55,7 +55,7 @@ def compile_alphagen_expression(
     features = dict(feature_map)
     data_columns = data_columns_from_expression(expression, feature_map=features)
     for token in expression:
-        if token.startswith("feature:"):
+        if token.startswith(("feature:", "constant:")):
             continue
         operator_name = token.partition(":")[0]
         if operator_name not in OPERATOR_REGISTRY:

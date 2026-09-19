@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC
@@ -11,9 +12,41 @@ from pandas.api.types import is_bool_dtype
 from alphamill.factor_factory.canonical import JSONValue
 from alphamill.factor_factory.errors import FactorCompilationError
 from alphamill.factor_factory.factor import FactorCompute, FactorResolver, FactorScope
+from alphamill.factor_factory.generators.operator_registry import (
+    OPERATOR_ARITIES,
+    OPERATOR_REGISTRY,
+)
+from alphamill.factor_factory.generators.vendor_operators import (
+    apply_binary,
+    apply_pair_window,
+    apply_unary,
+    apply_window,
+)
 
 _FEATURE_PREFIX = "feature:"
-_WINDOW_OPERATORS = frozenset({"pct_change", "return", "rolling_std"})
+_CONSTANT_PREFIX = "constant:"
+_WINDOW_OPERATORS = frozenset(
+    {
+        "delta",
+        "ema",
+        "mad",
+        "max",
+        "mean",
+        "med",
+        "min",
+        "pct_change",
+        "ref",
+        "return",
+        "rolling_std",
+        "std",
+        "sum",
+        "var",
+        "wma",
+    }
+)
+_UNARY_OPERATORS = frozenset({"abs", "log"})
+_BINARY_OPERATORS = frozenset({"add", "div", "greater", "less", "mul", "sub"})
+_PAIR_OPERATORS = frozenset({"corr", "cov"})
 
 
 class CompileContext(Protocol):
@@ -32,13 +65,34 @@ class _Feature:
 
 
 @dataclass(frozen=True, slots=True)
+class _Constant:
+    value: float
+
+
+@dataclass(frozen=True, slots=True)
 class _Neg:
     pass
 
 
 @dataclass(frozen=True, slots=True)
+class _Unary:
+    operator: str
+
+
+@dataclass(frozen=True, slots=True)
+class _Binary:
+    operator: str
+
+
+@dataclass(frozen=True, slots=True)
 class _Window:
-    operator: Literal["pct_change", "return", "rolling_std"]
+    operator: str
+    periods: int
+
+
+@dataclass(frozen=True, slots=True)
+class _PairWindow:
+    operator: Literal["corr", "cov"]
     periods: int
 
 
@@ -47,7 +101,9 @@ class _CrossSectionalRank:
     pass
 
 
-_Operation = _Feature | _Neg | _Window | _CrossSectionalRank
+_Operation = (
+    _Feature | _Constant | _Neg | _Unary | _Binary | _Window | _PairWindow | _CrossSectionalRank
+)
 
 
 def referenced_features(expression: tuple[str, ...]) -> tuple[str, ...]:
@@ -77,11 +133,25 @@ def compile_postfix(context: CompileContext) -> FactorCompute:
             match operation:
                 case _Feature(name=name):
                     stack.append(frame[name].astype(float))
+                case _Constant(value=value):
+                    stack.append(pd.Series(value, index=frame.index, dtype=float))
                 case _Neg():
                     stack.append(-stack.pop())
+                case _Unary(operator=operator):
+                    stack.append(apply_unary(stack.pop(), operator))
+                case _Binary(operator=operator):
+                    rhs = stack.pop()
+                    lhs = stack.pop()
+                    stack.append(apply_binary(lhs, rhs, operator))
                 case _Window(operator=operator, periods=periods):
-                    operand = stack.pop()
-                    stack.append(_apply_window(operand, operator, periods, context.scope))
+                    stack.append(apply_window(stack.pop(), operator, periods, context.scope))
+                case _PairWindow(operator=operator, periods=periods):
+                    rhs = stack.pop()
+                    lhs = stack.pop()
+                    if universe is not None:
+                        lhs = lhs.where(universe)
+                        rhs = rhs.where(universe)
+                    stack.append(apply_pair_window(lhs, rhs, operator, periods, context.scope))
                 case _CrossSectionalRank():
                     operand = stack.pop().where(universe)
                     stack.append(operand.groupby(level="timestamp", sort=False).rank(pct=True))
@@ -106,26 +176,72 @@ def _parse_operations(context: CompileContext) -> tuple[_Operation, ...]:
             operations.append(_Feature(token.removeprefix(_FEATURE_PREFIX)))
             depth += 1
             continue
-        if depth < 1:
-            raise FactorCompilationError(f"postfix stack underflow at token: {token!r}")
-        if token == "neg":
-            operations.append(_Neg())
+        if token == _CONSTANT_PREFIX[:-1] or token.startswith(_CONSTANT_PREFIX):
+            operations.append(_Constant(_parse_constant(token)))
+            depth += 1
             continue
-        if token == "cs_rank":
+        operator, separator, argument = token.partition(":")
+        if operator == "constant":
+            raise FactorCompilationError(f"malformed constant token: {token!r}")
+        if operator not in OPERATOR_REGISTRY:
+            raise FactorCompilationError(f"unknown expression token: {token!r}")
+        arity = OPERATOR_ARITIES[operator]
+        if depth < arity:
+            raise FactorCompilationError(f"postfix stack underflow at token: {token!r}")
+        if operator == "neg":
+            if separator:
+                raise FactorCompilationError(f"operator does not accept a window: {token!r}")
+            operations.append(_Neg())
+        elif operator == "cs_rank":
+            if separator:
+                raise FactorCompilationError(f"operator does not accept a window: {token!r}")
             if context.scope != "cross_sectional":
                 raise FactorCompilationError("cs_rank requires cross_sectional scope")
             operations.append(_CrossSectionalRank())
-            continue
-        operator, separator, argument = token.partition(":")
-        if separator and operator in _WINDOW_OPERATORS:
-            if not argument.isdecimal() or int(argument) < 1:
-                raise FactorCompilationError(f"malformed window token: {token!r}")
-            operations.append(_Window(operator=operator, periods=int(argument)))
-            continue
-        raise FactorCompilationError(f"unknown expression token: {token!r}")
+        elif operator in _UNARY_OPERATORS:
+            if separator:
+                raise FactorCompilationError(f"operator does not accept a window: {token!r}")
+            operations.append(_Unary(operator))
+        elif operator in _BINARY_OPERATORS:
+            if separator:
+                raise FactorCompilationError(f"operator does not accept a window: {token!r}")
+            operations.append(_Binary(operator))
+        elif operator in _WINDOW_OPERATORS or operator in _PAIR_OPERATORS:
+            periods = _parse_periods(token, argument if separator else None)
+            if operator in _PAIR_OPERATORS:
+                if context.scope != "cross_sectional":
+                    raise FactorCompilationError(f"{operator} requires cross_sectional scope")
+                operations.append(_PairWindow(operator=operator, periods=periods))
+            else:
+                operations.append(_Window(operator=operator, periods=periods))
+        else:
+            raise FactorCompilationError(f"unsupported registered operator: {operator!r}")
+        depth = depth - arity + 1
     if depth != 1:
         raise FactorCompilationError(f"postfix expression leaves {depth} stack values")
     return tuple(operations)
+
+
+def _parse_constant(token: str) -> float:
+    value = token.removeprefix(_CONSTANT_PREFIX)
+    if not value or ":" in value:
+        raise FactorCompilationError(f"malformed constant token: {token!r}")
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise FactorCompilationError(f"malformed constant token: {token!r}") from error
+    if not math.isfinite(parsed):
+        raise FactorCompilationError(f"malformed constant token: {token!r}")
+    return parsed
+
+
+def _parse_periods(token: str, argument: str | None) -> int:
+    if argument is None or not argument.isascii() or not argument.isdecimal():
+        raise FactorCompilationError(f"malformed window token: {token!r}")
+    periods = int(argument)
+    if periods < 1:
+        raise FactorCompilationError(f"malformed window token: {token!r}")
+    return periods
 
 
 def _validate_frame(frame: pd.DataFrame, context: CompileContext) -> None:
@@ -162,29 +278,5 @@ def _universe_mask(frame: pd.DataFrame, scope: FactorScope) -> pd.Series | None:
             return None
         case "cross_sectional":
             return frame["__in_universe__"]
-        case unreachable:
-            assert_never(unreachable)
-
-
-def _apply_window(
-    operand: pd.Series,
-    operator: Literal["pct_change", "return", "rolling_std"],
-    periods: int,
-    scope: FactorScope,
-) -> pd.Series:
-    def apply(values: pd.Series) -> pd.Series:
-        match operator:
-            case "pct_change" | "return":
-                return values.pct_change(periods=periods, fill_method=None)
-            case "rolling_std":
-                return values.rolling(window=periods, min_periods=periods).std()
-            case unreachable:
-                assert_never(unreachable)
-
-    match scope:
-        case "time_series":
-            return apply(operand)
-        case "cross_sectional":
-            return operand.groupby(level="pair", sort=False).transform(apply)
         case unreachable:
             assert_never(unreachable)

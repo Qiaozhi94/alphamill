@@ -149,3 +149,66 @@ def test_scope_does_not_change_manual_seed_purity(scope: FactorScope) -> None:
     assert all(
         result == PurityResult(accepted=True, reason_code=None, detail="") for result in results
     )
+
+
+@pytest.mark.parametrize(
+    "expression",
+    (
+        ("feature:close", "delta:5"),
+        ("feature:close", "sum:5"),
+        ("constant:-10",),
+        ("feature:close", "feature:volume", "corr:10"),
+    ),
+)
+def test_alphagen_vendor_tokens_are_pure(expression: tuple[str, ...]) -> None:
+    result = check_expression(
+        expression,
+        scope="cross_sectional",
+        seen_definition_digests=frozenset(),
+        definition_digest="vendor-definition",
+    )
+
+    assert result == PurityResult(accepted=True, reason_code=None, detail="")
+
+
+def test_vendor_delta_rejects_a_window_outside_the_measured_set() -> None:
+    result = check_expression(
+        ("feature:close", "delta:7"),
+        scope="time_series",
+        seen_definition_digests=frozenset(),
+        definition_digest="vendor-definition",
+    )
+
+    assert not result.accepted
+    assert result.reason_code == "lookahead"
+
+
+def test_vendor_pair_operator_requires_two_operands() -> None:
+    with pytest.raises(SchemaValidationError, match="corr"):
+        check_expression(
+            ("feature:close", "corr:10"),
+            scope="cross_sectional",
+            seen_definition_digests=frozenset(),
+            definition_digest="vendor-definition",
+        )
+
+
+def test_vendor_arity_follows_postfix_token_order() -> None:
+    with pytest.raises(SchemaValidationError, match="add"):
+        check_expression(
+            ("feature:close", "add", "constant:1"),
+            scope="time_series",
+            seen_definition_digests=frozenset(),
+            definition_digest="vendor-definition",
+        )
+
+
+@pytest.mark.parametrize("token", ("constant", "constant:nan", "constant:inf", "constant:1:2"))
+def test_malformed_vendor_constant_raises_schema_error(token: str) -> None:
+    with pytest.raises(SchemaValidationError, match="constant"):
+        check_expression(
+            (token,),
+            scope="time_series",
+            seen_definition_digests=frozenset(),
+            definition_digest="vendor-definition",
+        )

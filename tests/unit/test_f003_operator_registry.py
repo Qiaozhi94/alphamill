@@ -36,8 +36,10 @@ def test_registry_covers_exact_phase_one_dsl_operators() -> None:
         for name, spec in OPERATOR_REGISTRY.items()
     }
 
-    assert actual_metadata == expected_metadata
-    assert tuple(spec.name for spec in enabled_operators()) == tuple(expected_metadata)
+    assert {name: actual_metadata[name] for name in expected_metadata} == expected_metadata
+    assert tuple(spec.name for spec in enabled_operators())[: len(expected_metadata)] == tuple(
+        expected_metadata
+    )
     assert all(spec.description for spec in enabled_operators())
     assert "feature" not in OPERATOR_REGISTRY
     assert "feature:close" not in OPERATOR_REGISTRY
@@ -110,6 +112,43 @@ def test_capability_manifest_round_trips_through_json() -> None:
     manifest = capability_manifest()
 
     assert json.loads(json.dumps(manifest)) == manifest
+
+
+def test_registry_includes_all_alphagen_vendor_operators() -> None:
+    vendor_metadata = {
+        "abs": ("time_series", None, None),
+        "add": ("time_series", None, None),
+        "corr": ("cross_sectional", 1, "bars"),
+        "cov": ("cross_sectional", 1, "bars"),
+        "delta": ("time_series", 1, "bars"),
+        "div": ("time_series", None, None),
+        "ema": ("time_series", 1, "bars"),
+        "greater": ("time_series", None, None),
+        "less": ("time_series", None, None),
+        "log": ("time_series", None, None),
+        "mad": ("time_series", 1, "bars"),
+        "max": ("time_series", 1, "bars"),
+        "mean": ("time_series", 1, "bars"),
+        "med": ("time_series", 1, "bars"),
+        "min": ("time_series", 1, "bars"),
+        "mul": ("time_series", None, None),
+        "ref": ("time_series", 1, "bars"),
+        "std": ("time_series", 1, "bars"),
+        "sub": ("time_series", None, None),
+        "sum": ("time_series", 1, "bars"),
+        "var": ("time_series", 1, "bars"),
+        "wma": ("time_series", 1, "bars"),
+    }
+
+    actual_metadata = {
+        name: (spec.kind, spec.window_bars, spec.window_parameter)
+        for name, spec in OPERATOR_REGISTRY.items()
+        if name in vendor_metadata
+    }
+
+    assert actual_metadata == vendor_metadata
+    assert tuple(spec.name for spec in enabled_operators())[-22:] == tuple(vendor_metadata)
+    assert all(OPERATOR_REGISTRY[name].description for name in vendor_metadata)
 
 
 def test_operator_registry_rejects_mutation() -> None:

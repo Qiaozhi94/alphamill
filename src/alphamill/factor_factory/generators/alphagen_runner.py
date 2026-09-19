@@ -266,7 +266,7 @@ def run_ppo_epoch(
 def extract_candidates(pool: AlphaPoolBase) -> list[tuple[str, ...]]:
     """Render accepted vendor expressions as compiler-compatible postfix tokens."""
     _add_vendor_root()
-    from alphagen.data.expression import Constant, DeltaTime, Feature, Operator
+    from alphagen.data.expression import Constant, DeltaTime, Feature, Operator, RollingOperator
 
     def render(expr: Expression) -> tuple[str, ...]:
         if isinstance(expr, Feature):
@@ -279,7 +279,11 @@ def extract_candidates(pool: AlphaPoolBase) -> list[tuple[str, ...]]:
             tokens: list[str] = []
             operands = expr.operands
             render_operands = operands
-            if operands and hasattr(operands[-1], "_delta_time"):
+            if (
+                isinstance(expr, RollingOperator)
+                and operands
+                and isinstance(operands[-1], DeltaTime)
+            ):
                 render_operands = operands[:-1]
             for operand in render_operands:
                 tokens.extend(render(operand))
