@@ -2,7 +2,7 @@
 kind: feature
 id: F009
 version: "0.2"
-related_features: [F003, F004]
+related_features: [F003, F004, F010]
 topics: [kronos, lifecycle, control-plane, gpu-slot, m2]
 doc_kind: tasks
 created: 2026-09-20
@@ -29,19 +29,19 @@ updated: 2026-09-20
 ## 1. 前置条件
 
 - [ ] T001 (`FR-001`): 确认 spec §8 与 design §10 无开放项，且三件套的接口表与架构 §7.1 逐格一致（动作 / 幂等 / 超时 / 错误码 / 字段集五列） — verify: `spec.md` §8、`design.md` §10、`docs/alphamill-architecture.md` §7.1
-- [ ] T002 (`SC-005`, `NFR-006`): 核实 GPU 基座现状并把 F010「Kronos GPU 推理基座」登记进 `BACKLOG.md`「规划中」，使 F009 的硬前置在账面上可见 — verify: `BACKLOG.md` 规划中表含 F010 行 + `docs/alphamill-architecture.md` §7.1 GPU 基座前置条
+- [ ] T002 (`SC-005`, `NFR-006`): 核对 F010「Kronos GPU 推理基座」已是**活跃 Feature**（`docs/features/0.2/F010-kronos-gpu-runtime/`，非"规划中预留"），并确认两边的完成边界无环：本 feature 的 AC-012 止于载体与先红态，解除 xfail 与真实证据归 F010 AC-009/T011 — verify: `BACKLOG.md` 活跃行 + F010 `spec.md` §7 依赖段 + `docs/alphamill-architecture.md` §7.1 GPU 基座前置条
 
 ## 2. 实现任务
 
 ### Phase 1：契约骨架、期望态与状态查询
 
 - [ ] T003 (`FR-005`, `IR-002`, `IR-004`, `AC-005`): 实现 `require_contract_version` 依赖、**恰为单键**的错误信封与请求体校验（空体/`{}` 放行，含额外键以 `E_BAD_REQUEST` 拒绝，**不复用** `E_UNSUPPORTED_VERSION`）；头缺失不按默认版本放行 — verify: `tests/unit/test_f009_lifecycle_errors.py`
-- [ ] T004 (`FR-001`, `IR-001`, `IR-003`, `AC-001`): 新建 `lifecycle.py` 与 `LifecycleController`：`desired` 存储 + `state` 由 `(desired, model_loaded)` 派生 + `operation` 台账；挂 `GET /lifecycle/status` 返回八字段 — verify: `tests/unit/test_f009_lifecycle_contract.py`
-- [ ] T005 [P] (`FR-007`, `NFR-005`, `AC-007`): 新建 `vram.py`（`mem_get_info` → `nvidia-smi` → 不可得三级回退，不查进程列表）与 `lifecycle_config.py`（三个超时与探测方式的环境变量契约，非法值启动期判红不回退默认） — verify: `tests/unit/test_f009_vram_probe.py`
+- [ ] T004 (`FR-001`, `IR-001`, `IR-003`, `AC-001`): 新建 `lifecycle.py` 与 `LifecycleController`：`desired` 存储 + `state` 由 `(desired, model_loaded)` 派生出 `running`/`stopped`/**`transitional`** 三值 + `operation` 台账；挂 `GET /lifecycle/status` 返回八字段，动作执行窗口内返回 `transitional` 且 `operation` 非空；status **不进单飞执行器**，自带 `time.monotonic()` deadline，动作进行中照样可达 — verify: `tests/unit/test_f009_lifecycle_contract.py`
+- [ ] T005 [P] (`FR-007`, `NFR-005`, `AC-007`): 新建 `vram.py`（`mem_get_info` → `nvidia-smi` → 不可得三级回退，不查进程列表；探测接受**剩余预算**参数并受 `KRONOS_VRAM_PROBE_TIMEOUT_S` 约束，超时按读数不可得处理）与 `lifecycle_config.py`（FR-007 五个变量的完整契约：`KRONOS_VRAM_PROBE_MODE=auto|torch|nvidia_smi`、`KRONOS_VRAM_PROBE_TIMEOUT_S`、三个服务端 deadline；单一来源模式不跨源回退；非法值/枚举外值启动期判红不回退默认） — verify: `tests/unit/test_f009_vram_probe.py`
 
 ### Phase 2：停机稳定性（本 feature 的真正增量）
 
-- [ ] T006 (`FR-002`, `NFR-004`, `AC-002`): 在 `kronos_real.py` 新增 `unload()`（与 `eager_load()` 对称、共用 `_lock`、`empty_cache`），挂 `POST /lifecycle/stop`：置 `desired=stopped`、卸载、返回 `{state, vram_bytes}`，幂等且**不终止进程** — verify: `tests/unit/test_f009_lifecycle_contract.py`
+- [ ] T006 (`FR-002`, `NFR-004`, `AC-002`): 在 `kronos_real.py` 新增 `unload()`（与 `eager_load()` 对称、共用 `_lock`、`empty_cache`），挂 `POST /lifecycle/stop`：置 `desired=stopped`、卸载、返回 `{state, vram_bytes}`，幂等且**不终止进程**；卸载失败返回 `E_UNLOAD_FAILED`，落点按 design §5 表——丢引用前回落 `running`、丢引用后（含 `empty_cache` 抛错）保持 `stopped`，两者返回前都已清 `operation` — verify: `tests/unit/test_f009_lifecycle_contract.py`
 - [ ] T007 (`FR-003`, `AC-003`): 实现推理准入——`desired=stopped` 时 `generate_signal()` **不触碰** `_load_predictor()`，走 F004 既有兜底路径且来源不标 `kronos`；`/predict` 与 `/predict_batch` 共用该分支 — verify: `tests/unit/test_f009_stopped_admission.py`
 - [ ] T008 (`FR-004`, `AC-004`): 挂 `POST /lifecycle/restore`：置 `desired=running`、复用 `_load_predictor()` 既有早返回实现幂等；加载失败返回 `E_UNAVAILABLE`、`desired` 回落 `stopped`、**进程不退出**（与 F004 启动期预检失败即退出区分） — verify: `tests/unit/test_f009_lifecycle_contract.py`
 
@@ -54,10 +54,10 @@ updated: 2026-09-20
 ### Phase 4：部署、跨 Feature 交付边与先红态转正
 
 - [ ] T012 (`NFR-001`, `IR-005`, `AC-009`): 控制面路由**只在 real 实例注册**（`KRONOS_USE_REAL_MODEL=true`），mock 上 `/lifecycle/*` 返回 404；同时验证默认镜像 `import torch` 仍判红 — verify: `tests/integration/test_f009_lifecycle_deployment.py`
-- [ ] T013 (`NFR-002`, `NFR-003`, `AC-009`): compose 控制面端口绑 `127.0.0.1` 不发布 `0.0.0.0`；三个超时与探测方式环境变量同步 `deployment/.env.example`；在执行机部署 `kronos-signal-real` 新镜像 — verify: `tests/integration/test_f009_lifecycle_deployment.py` + 执行机 `docker compose config`
-- [ ] T014 (`FR-009`, `AC-010`): 修 F003 客户端的跨 Feature 交付边——`status`/`stop`/`restore` 分别使用 5s/60s/120s 可配超时（原为统一 10s，会把正常卸载误判成失败）；"已释放"判定补训练预算条件（预算由 `mine_config` 从 `vram_limit_gb` 透传，无默认值）与 `vram_readable` 分账；三条退出路径的 `restore` 已于 F003 循环 14 落地。两半均已在分支 `feat/F003-alphagen-vendor`（`0ccf69e` / `ffdd805`）落地，本任务只核对断言与变异判红 — verify: `tests/unit/test_f003_gpu_slot.py`
+- [ ] T013 (`NFR-002`, `NFR-003`, `AC-009`): compose 控制面端口绑 `127.0.0.1` 不发布 `0.0.0.0`（`127.0.0.1:8002:8001`）；**同一提交内迁移 F004 已验收端口契约**——改写 `docs/features/0.2/F004-kronos-inference-runtime/` 的 spec/design 端口文字、`tests/unit/test_f004_compose_profile_contract.py` 行内精确断言与变异表条目，保留「host 8002 不顶替 mock 8001」与「container 8001」原意（不迁移则统一门禁立刻判红，且这笔账不属于 F010）；FR-007 五个环境变量同步 `deployment/.env.example`；在执行机部署 `kronos-signal-real` 新镜像 — verify: `tests/integration/test_f009_lifecycle_deployment.py` + `tests/unit/test_f004_compose_profile_contract.py` + 执行机 `docker compose config`
+- [ ] T014 (`FR-009`, `AC-010`): 修 F003 客户端的跨 Feature 交付边（分支 `feat/F003-alphagen-vendor`）——① 分动作超时（`0ccf69e` 已落）；② "已释放"判定的训练预算条件与 `vram_readable` 分账（`ffdd805` / `2d75894` 已落）；③ **客户端 deadline = 服务端 deadline + 余量**（缺省 5s，可配），否则收不到 `E_TIMEOUT` 只收到 `OSError`；④ **恢复责任改为"本轮发出过 `stop`"触发**（`KronosOffloadOutcome` 增该事实，`cli.py` 的 finally 据此恢复），使超时/断连后的迟到完成不会永久停机；⑤ `state=transitional` 判 fail-closed。③④⑤ 为本轮新增 — verify: `tests/unit/test_f003_gpu_slot.py`、`tests/unit/test_f003_cli_contract.py`
 - [ ] T015 (`FR-008`, `AC-011`): 转正 F003 契约测试——移除模块级 `xfail(strict=True)`，补 `E_BUSY`（动作进行中）、`E_TIMEOUT`（短超时注入）与额外参数拒绝（断言恰为 `{"error": "E_BAD_REQUEST"}`，**不得**是 `E_UNSUPPORTED_VERSION`）三类用例 — verify: `tests/integration/test_f003_kronos_lifecycle.py`
-- [ ] T016 (`SC-005`, `AC-012`, `NFR-006`): 把显存真实下降的判据写成机器可判定断言（`after < before` **且**卸载后整卡可用显存 ≥ 训练预算 `vram_limit_gb`），落在**独立载体** `tests/integration/test_f009_vram_release.py`，以 `xfail(strict=True)` 标注 F010 未落地的先红态并写明解除条件。**不得放进 `test_f003_kronos_lifecycle.py`**——F003 T033 要求该文件在 `--runxfail` 下 0 xfailed，先红态放进去会让 F009 落地后 T033 仍然不可能通过 — verify: `tests/integration/test_f009_vram_release.py`
+- [ ] T016 (`SC-005`, `AC-012`, `NFR-006`): 把显存真实下降的判据写成机器可判定断言（`after < before` **且**卸载后整卡可用显存 ≥ 训练预算 `vram_limit_gb`），落在**独立载体** `tests/integration/test_f009_vram_release.py`，以 `xfail(strict=True)` 标注先红态并写明**解除条件与解除者**（F010 的 T011/AC-009；本 feature 不负责解除，也不以其为完成条件）。**不得放进 `test_f003_kronos_lifecycle.py`**——F003 T033 要求该文件在 `--runxfail` 下 0 xfailed，先红态放进去会让 F009 落地后 T033 仍然不可能通过 — verify: `tests/integration/test_f009_vram_release.py`
 
 ## 3. 验证与验收任务
 
@@ -65,8 +65,8 @@ updated: 2026-09-20
 - [ ] T018 (`AC-003`): 运行停机准入套件并给出变异判红证明（去掉准入分支即红：`_load_predictor` 被调用次数从 0 变正） — verify: `tests/unit/test_f009_stopped_admission.py`
 - [ ] T019 (`AC-005`, `AC-006`, `AC-007`, `AC-008`): 运行错误面、单飞与超时、显存探测与配置、日志套件，逐条给出变异判红证明 — verify: `tests/unit/test_f009_lifecycle_errors.py`、`tests/unit/test_f009_vram_probe.py`、`tests/unit/test_f009_lifecycle_logging.py`
 - [ ] T020 (`AC-009`): 运行部署集成套件（mock 404、默认镜像 torch 否证、compose 暴露面） — verify: `tests/integration/test_f009_lifecycle_deployment.py`
-- [ ] T021 (`AC-010`): 运行客户端交付边套件（分动作超时逐个不同、三条退出路径均 restore） — verify: `tests/unit/test_f003_gpu_slot.py`
-- [ ] T022 (`AC-011`, `AC-012`): 在执行机取控制面语义证据——`ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q --runxfail tests/integration/test_f003_kronos_lifecycle.py`，该文件 **0 xfailed**（载体拆分后此文件内不得残留任何先红态）；再**单独**跑 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f009_vram_release.py`（**不加 `--runxfail`**）确认显存用例在 F010 落地前仍是 xfail 先红态、且不是 XPASS；两次都记录 hostname 与 device — verify: `tests/integration/test_f003_kronos_lifecycle.py`、`tests/integration/test_f009_vram_release.py`
+- [ ] T021 (`AC-010`): 运行客户端交付边套件并逐条给出变异判红证明——`test_f003_gpu_slot.py`（deadline 逐个不同且各自大于服务端值、`transitional` fail-closed、预算与 `vram_readable` 判定）与 `test_f003_cli_contract.py`（正常结束 / 取锁失败 / 运行异常三条退出路径各恰调用一次 `restore`；变异：把触发条件改回 `action=="stopped"` 即判红） — verify: `tests/unit/test_f003_gpu_slot.py`、`tests/unit/test_f003_cli_contract.py`
+- [ ] T022 (`AC-011`, `AC-012`): 在执行机取控制面语义证据——`ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q --runxfail tests/integration/test_f003_kronos_lifecycle.py`，该文件 **0 xfailed**（载体拆分后此文件内不得残留任何先红态）；再**单独**跑 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f009_vram_release.py`（**不加 `--runxfail`**）确认显存用例仍是 xfail 先红态、且不是 XPASS（解除它是 F010 T011 的事，不在本 feature 的收口条件里）；两次都记录 hostname 与 device — verify: `tests/integration/test_f003_kronos_lifecycle.py`、`tests/integration/test_f009_vram_release.py`
 - [ ] T023 (`AC-001`, `AC-005`, `AC-009`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 
 ### [TEST] 组：层 2 旅程验收轨（必填）

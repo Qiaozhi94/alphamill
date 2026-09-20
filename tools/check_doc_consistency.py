@@ -499,11 +499,23 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             # 动作生效，契约测试正是打 GET /lifecycle/status 做版本拒绝）。
             # F009-R1-004 后 status 行只剩该一个错误码——显存读数不可得改由成功响应的
             # vram_readable=false 表达，不再借用 E_UNAVAILABLE。
-            (ARCH, "只读，天然幂等 | 可配（默认 5s） | `E_UNSUPPORTED_VERSION` |"),
+            (
+                ARCH,
+                "只读，天然幂等 | 服务端处理 deadline，可配（默认 5s） | `E_UNSUPPORTED_VERSION` |",
+            ),
             # F009-R2-003：E_UNSUPPORTED_VERSION 是客户端判定「服务端未实现本契约」的
             # 入口，不得被请求体校验复用；这条分工若被删回去，客户端会把自己的请求
             # 构造错误误读成服务端缺失。
             (ARCH, "`E_UNSUPPORTED_VERSION` **只**表示版本协商失败"),
+            # F009-R4-001：过渡态必须有合法 wire 值，否则动作执行窗口内无法构造响应。
+            (ARCH, '其 wire 值就是 `state: "transitional"`'),
+            # F009-R4-004：stop 失败必须有自己的错误码与逐注入点落点。
+            (ARCH, "`E_UNLOAD_FAILED`"),
+            (ARCH, "**失败落点（逐注入点）**"),
+            # F009-R4-002：发出过 stop 即持有恢复责任，这条被删掉就会退回"迟到完成永久停机"。
+            (ARCH, "一旦发出过 `stop`，\n  客户端即持有恢复责任"),
+            # F009-R1-008：status 的 5s 是服务端 deadline，探测只能用剩余预算。
+            (ARCH, "**status 的 deadline 归属**"),
             (ARCH, "请求形态非法（请求体含契约外的键等）一律\n  `E_BAD_REQUEST`"),
             (DESIGN, "Kronos 生命周期 Contract"),
             (TASKS, "test_f003_kronos_lifecycle.py"),
@@ -948,14 +960,19 @@ EXPECTED_OFFLOAD_TABLE: tuple[tuple[str, str, str], ...] = (
         "`memory.used` 达到阈值或任一读数不可得 → **fail-closed** 留在单槽队列",
     ),
     (
-        "`stop` 返回 `E_BUSY` / `E_TIMEOUT`，或 `status.vram_bytes` 确认未释放",
+        "`status.state=transitional`（动作进行中）",
+        "状态未知",
+        "**fail-closed** 留在单槽队列，不得当作已停机",
+    ),
+    (
+        "`stop` 返回 `E_BUSY` / `E_TIMEOUT` / `E_UNLOAD_FAILED`，或 `status.vram_bytes` 确认未释放",
         "停止失败",
-        "**fail-closed** 留在单槽队列",
+        "**fail-closed** 留在单槽队列；已发出过 `stop` 即持有恢复责任，离开前 `restore`",
     ),
     (
         "控制面不可达（连接拒绝/超时），但部署清单中存在该服务",
         "状态未知",
-        "**fail-closed** 留在单槽队列",
+        "**fail-closed** 留在单槽队列；若此前已发出 `stop`，同样保留恢复责任",
     ),
 )
 
