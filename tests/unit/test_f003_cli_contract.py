@@ -591,7 +591,7 @@ def _patch_offload(monkeypatch: pytest.MonkeyPatch, action: str, reason: str) ->
 
     seen: list[str | None] = []
 
-    def offload(*, control_url: str | None, contract_version: str) -> KronosOffloadOutcome:
+    def offload(*, control_url: str | None, **_kwargs) -> KronosOffloadOutcome:
         seen.append(control_url)
         return KronosOffloadOutcome(
             action=action, reason=reason, vram_before_gb=3.0, vram_after_gb=0.2
@@ -684,6 +684,7 @@ def test_mine_queue_timeout_writes_rejected_terminal_run(
 
     lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
     _prepare_mine_runtime(monkeypatch, vram=_AvailableVram())
+    _patch_offload(monkeypatch, "not_needed", "cpu_instance")
 
     def timeout(
         _slot, run_id: str, *, now: datetime | None = None, ignore_window: bool = False

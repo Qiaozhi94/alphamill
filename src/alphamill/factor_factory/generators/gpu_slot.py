@@ -5,18 +5,19 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-import subprocess
 import time
-from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, TextIO, TypeAlias
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from typing import Literal, TextIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from alphamill.factor_factory.errors import FactorFactoryError
+from alphamill.factor_factory.generators.kronos_offload import (
+    KronosOffloadOutcome,
+    offload_kronos,
+)
+from alphamill.factor_factory.generators.vram import VramReading, query_vram, vram_is_sufficient
 
 DEFAULT_WINDOW_TZ = "Asia/Shanghai"
 
@@ -30,35 +31,6 @@ class GpuSlotConfig:
     # 就需要本地日历才能读）。时区随执行机走并经配置承载，迁移 qiaozhi-lab 时只改配置。
     window_tz: str = DEFAULT_WINDOW_TZ
     queue_timeout_s: int = 1800
-
-
-@dataclass(frozen=True, kw_only=True)
-class VramReading:
-    total_gb: float
-    free_gb: float
-
-
-def query_vram() -> VramReading | None:
-    """Read the first NVIDIA GPU without consulting process listings."""
-    try:
-        output = subprocess.run(
-            (
-                "nvidia-smi",
-                "--query-gpu=memory.total,memory.free",
-                "--format=csv,noheader,nounits",
-            ),
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
-        total, free = output.splitlines()[0].split(",", maxsplit=1)
-        return VramReading(total_gb=float(total) / 1024, free_gb=float(free) / 1024)
-    except (IndexError, OSError, subprocess.SubprocessError, ValueError):
-        return None
-
-
-def vram_is_sufficient(reading: VramReading | None, *, limit_gb: float) -> bool:
-    return reading is not None and reading.free_gb >= limit_gb
 
 
 def in_training_window(
@@ -219,130 +191,16 @@ class GpuSlot:
         return min(waiting, key=lambda record: record.queue_seq).run_id if waiting else None
 
 
-@dataclass(frozen=True, kw_only=True)
-class KronosOffloadOutcome:
-    action: Literal["stopped", "not_needed", "fail_closed"]
-    reason: str
-    vram_before_gb: float | None
-    vram_after_gb: float | None
-
-
-_Payload: TypeAlias = dict[str, int | str | bool]
-_Send: TypeAlias = Callable[[Literal["GET", "POST"], str], tuple[int, _Payload]]
-
-
-def _http_request(
-    method: Literal["GET", "POST"], url: str, contract_version: str, timeout_s: float
-) -> tuple[int, _Payload]:
-    request = Request(url, headers={"X-Contract-Version": contract_version}, method=method)
-    try:
-        response = urlopen(request, timeout=timeout_s)
-    except HTTPError as exc:
-        response = exc
-    with response:
-        status, content = response.status, response.read()
-    try:
-        decoded = json.loads(content) if content else {}
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        decoded = {}
-    if not isinstance(decoded, dict):
-        return status, {}
-    payload = {
-        str(key): value for key, value in decoded.items() if isinstance(value, (bool, int, str))
-    }
-    return status, payload
-
-
-def offload_kronos(
-    *,
-    control_url: str | None,
-    contract_version: str,
-    client=None,
-    vram_reader: Callable[[], VramReading | None] = query_vram,
-    timeout_s: float = 10.0,
-) -> KronosOffloadOutcome:
-    """Stop a GPU Kronos tenant or fail closed according to architecture §7.1."""
-    if control_url is None:
-        return _outcome("not_needed", "service_not_deployed")
-    requester = _http_request if client is None else client.request
-    service_present = True if client is None else client.service_present
-    idle_threshold_gb = None if client is None else client.idle_threshold_gb
-    base_url = control_url.rstrip("/")
-
-    def send(method: Literal["GET", "POST"], path: str) -> tuple[int, _Payload]:
-        return requester(method, f"{base_url}{path}", contract_version, timeout_s)
-
-    try:
-        status_code, status = send("GET", "/lifecycle/status")
-    except OSError:
-        action = "fail_closed" if service_present else "not_needed"
-        return _outcome(action, "control_plane_unreachable")
-    endpoint_absent = status_code == 404 or status.get("error") == "E_UNSUPPORTED_VERSION"
-    if endpoint_absent or status.get("contract_version", contract_version) != contract_version:
-        return _fallback_probe(send, idle_threshold_gb, vram_reader)
-    before = _status_vram_gb(status)
-    if status_code >= 400 or "error" in status:
-        return _outcome("fail_closed", "status_failed", (before, None))
-    if status.get("device") == "cpu":
-        return _outcome("not_needed", "cpu_instance", (before, None))
-    if status.get("state") == "stopped":
-        return _outcome("not_needed", "already_stopped", (before, before))
-    if status.get("state") != "running":
-        return _outcome("fail_closed", "status_unknown", (before, None))
-    try:
-        stop_code, stopped = send("POST", "/lifecycle/stop")
-        if stop_code >= 400 or "error" in stopped or stopped.get("state") != "stopped":
-            return _outcome("fail_closed", "stop_failed", (before, None))
-        confirm_code, confirmed = send("GET", "/lifecycle/status")
-    except OSError:
-        return _outcome("fail_closed", "control_plane_unreachable", (before, None))
-    after = _status_vram_gb(confirmed)
-    released = (
-        confirm_code < 400
-        and confirmed.get("state") == "stopped"
-        and before is not None
-        and after is not None
-        and after < before
-    )
-    action = "stopped" if released else "fail_closed"
-    return _outcome(action, "vram_released" if released else "vram_not_released", (before, after))
-
-
-def _fallback_probe(
-    send: _Send,
-    idle_threshold_gb: float | None,
-    vram_reader: Callable[[], VramReading | None],
-) -> KronosOffloadOutcome:
-    reason = "endpoint_absent_no_gpu_tenant"
-    try:
-        health_code, health = send("GET", "/health")
-    except OSError:
-        return _outcome("fail_closed", reason)
-    if health_code >= 400 or health.get("device") not in {"cpu", "cuda"}:
-        return _outcome("fail_closed", reason)
-    if health.get("device") == "cpu":
-        return _outcome("not_needed", reason)
-    reading = vram_reader()
-    if reading is None or idle_threshold_gb is None:
-        return _outcome("fail_closed", reason)
-    used_gb = max(0.0, reading.total_gb - reading.free_gb)
-    action = "not_needed" if used_gb < idle_threshold_gb else "fail_closed"
-    return _outcome(action, reason, (used_gb, None))
-
-
-def _status_vram_gb(payload: _Payload) -> float | None:
-    value = payload.get("vram_bytes")
-    return value / 1_000_000_000 if type(value) is int else None
-
-
-def _outcome(
-    action: Literal["stopped", "not_needed", "fail_closed"],
-    reason: str,
-    readings: tuple[float | None, float | None] = (None, None),
-) -> KronosOffloadOutcome:
-    return KronosOffloadOutcome(
-        action=action,
-        reason=reason,
-        vram_before_gb=readings[0],
-        vram_after_gb=readings[1],
-    )
+__all__ = (
+    "DEFAULT_WINDOW_TZ",
+    "GpuQueueTimeoutError",
+    "GpuSlot",
+    "GpuSlotConfig",
+    "KronosOffloadOutcome",
+    "QueueRecord",
+    "VramReading",
+    "in_training_window",
+    "offload_kronos",
+    "query_vram",
+    "vram_is_sufficient",
+)

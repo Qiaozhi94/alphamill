@@ -17,7 +17,11 @@ from alphamill.factor_factory.generators.egress_guard import install_egress_guar
 from alphamill.factor_factory.generators.manual import seeds as manual_seeds
 from alphamill.factor_factory.generators.mining_capability import require_mining_capabilities
 from alphamill.factor_factory.generators.write_guard import install_write_path_guard
-from alphamill.factor_factory.mine_config import DEFAULT_MINE_CONFIG, load_config
+from alphamill.factor_factory.mine_config import (
+    DEFAULT_MINE_CONFIG,
+    load_config,
+    resolve_kronos_offload,
+)
 from alphamill.factor_factory.registry import factor_store, run_store
 
 EXIT_OK: Final = 0
@@ -70,10 +74,6 @@ def build_parser() -> argparse.ArgumentParser:
     selector.add_argument("--run")
     selector.add_argument("--factor")
     return parser
-
-
-def _optional_text(value: canonical.JSONValue) -> str | None:
-    return value if isinstance(value, str) and value.strip() else None
 
 
 def _manifest(state: _SeedState, outcome: _Outcome) -> run_store.GenerationRun:
@@ -200,10 +200,7 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
                     )
                 state = replace(state, device="cuda", vram_limit_gb=slot_config.vram_limit_gb)
                 # 夜槽先卸载 Kronos 常驻推理并确认显存释放，失败即不取锁（架构 §7.1）。
-                offload = gpu_slot.offload_kronos(
-                    control_url=_optional_text(config.get("kronos_control_url")),
-                    contract_version=str(config["kronos_contract_version"]),
-                )
+                offload = resolve_kronos_offload(config)
                 state = replace(state, kronos_offload=asdict(offload))
                 if offload.action == "fail_closed":
                     return _reject(state, "kronos_offload_failed", offload.reason)

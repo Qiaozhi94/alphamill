@@ -281,10 +281,24 @@ def test_configured_window_changes_slot_behavior(
     opened.release("opened", now=now)
 
 
+def test_missing_control_url_fails_closed_unless_service_is_known_absent() -> None:
+    """R007 判红点：漏配控制面地址不等于"确未部署"。
+
+    架构 §7.1 决策表第一行要求"部署清单中无该服务"这项证据才判 not_needed；
+    只看到一个 None 就继续夜槽，等于在执行机漏配时直接去抢 Kronos 占着的卡。
+    """
+    forgotten = offload_kronos(control_url=None, contract_version="1")
+    assert forgotten.action == "fail_closed"
+    assert forgotten.reason == "control_url_not_configured"
+
+    absent = offload_kronos(control_url=None, contract_version="1", service_deployed=False)
+    assert absent.action == "not_needed"
+    assert absent.reason == "service_not_deployed"
+
+
 @pytest.mark.parametrize(
     ("url", "client", "action"),
     [
-        (None, None, "not_needed"),
         (
             "http://kronos",
             _FakeClient(service_present=False, connection_refused=True),

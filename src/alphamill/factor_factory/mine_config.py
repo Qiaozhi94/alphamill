@@ -24,6 +24,9 @@ DEFAULT_MINE_CONFIG: Final[Mapping[str, canonical.JSONValue]] = MappingProxyType
         # 执行机必须显式配置，否则按观测→处置决策表 fail-closed，不抢卡。
         "kronos_control_url": None,
         "kronos_contract_version": "1",
+        # 部署清单事实：True = 本机部署了 Kronos。为 True 而未配 control_url 即
+        # fail-closed（漏配不等于没部署）；确未部署的机器显式置 False。
+        "kronos_deployed": True,
     }
 )
 
@@ -39,3 +42,18 @@ def load_config(path: Path | None) -> dict[str, canonical.JSONValue]:
     if not isinstance(payload, dict):
         raise errors.SchemaValidationError("config must be a JSON object")
     return payload
+
+
+def _optional_text(value: canonical.JSONValue) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def resolve_kronos_offload(
+    config: Mapping[str, canonical.JSONValue],
+) -> gpu_slot.KronosOffloadOutcome:
+    """按配置执行夜槽卸载决策（架构 §7.1 观测→处置决策表）。"""
+    return gpu_slot.offload_kronos(
+        control_url=_optional_text(config.get("kronos_control_url")),
+        contract_version=str(config["kronos_contract_version"]),
+        service_deployed=bool(config["kronos_deployed"]),
+    )
