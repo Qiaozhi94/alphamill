@@ -14,8 +14,11 @@ from pathlib import Path
 from typing import Literal, TextIO, TypeAlias
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from alphamill.factor_factory.errors import FactorFactoryError
+
+DEFAULT_WINDOW_TZ = "Asia/Shanghai"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -23,6 +26,9 @@ class GpuSlotConfig:
     vram_limit_gb: float
     window_start: str
     window_end: str
+    # 架构 §7.1 的时段表按**执行机本地时间**表述（行标签「工作日夜」「周末白天」本身
+    # 就需要本地日历才能读）。时区随执行机走并经配置承载，迁移 qiaozhi-lab 时只改配置。
+    window_tz: str = DEFAULT_WINDOW_TZ
     queue_timeout_s: int = 1800
 
 
@@ -55,10 +61,23 @@ def vram_is_sufficient(reading: VramReading | None, *, limit_gb: float) -> bool:
     return reading is not None and reading.free_gb >= limit_gb
 
 
-def in_training_window(now: datetime, *, window_start: str, window_end: str) -> bool:
+def in_training_window(
+    now: datetime, *, window_start: str, window_end: str, window_tz: str = DEFAULT_WINDOW_TZ
+) -> bool:
+    """Test an instant against the execution host's LOCAL training window.
+
+    Storage stays UTC everywhere; only this comparison is zone-aware, because the
+    architecture §7.1 schedule is written in the execution host's local time.
+    """
     start = datetime.strptime(window_start, "%H:%M").time()
     end = datetime.strptime(window_end, "%H:%M").time()
-    current = now.time().replace(tzinfo=None)
+    try:
+        zone = ZoneInfo(window_tz)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise FactorFactoryError(f"unknown training window timezone: {window_tz!r}") from exc
+    if now.tzinfo is None:
+        raise FactorFactoryError("training window needs a timezone-aware instant")
+    current = now.astimezone(zone).time()
     return start <= current < end if start <= end else current >= start or current < end
 
 
@@ -97,6 +116,7 @@ class GpuSlot:
                 current,
                 window_start=self._config.window_start,
                 window_end=self._config.window_end,
+                window_tz=self._config.window_tz,
             )
             if window_open and self._waiting_head() == run_id:
                 descriptor = os.open(self._slot_path, os.O_CREAT | os.O_RDWR, 0o644)

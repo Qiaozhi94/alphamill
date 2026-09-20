@@ -7,11 +7,10 @@ import os
 import platform
 import socket
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from types import MappingProxyType
 from typing import Final, Literal, TypeAlias
 
 from alphamill.factor_factory import canonical, errors
@@ -20,20 +19,12 @@ from alphamill.factor_factory.generators.egress_guard import install_egress_guar
 from alphamill.factor_factory.generators.manual import seeds as manual_seeds
 from alphamill.factor_factory.generators.mining_capability import require_mining_capabilities
 from alphamill.factor_factory.generators.write_guard import install_write_path_guard
+from alphamill.factor_factory.mine_config import DEFAULT_MINE_CONFIG, load_config
 from alphamill.factor_factory.registry import factor_store, run_store
 
 EXIT_OK: Final = 0
 EXIT_FAILED: Final = 1
 EXIT_REJECTED: Final = 2
-_DEFAULT_MINE_CONFIG: Final[Mapping[str, canonical.JSONValue]] = MappingProxyType(
-    {
-        "tier_level": "manual",
-        "vram_limit_gb": 6.0,
-        "queue_timeout_s": 1800,
-        "training_window_start": "22:00",
-        "training_window_end": "06:30",
-    }
-)
 _EMPTY_CONFIG_DIGEST: Final = canonical.sha256_prefixed_bytes(canonical.canonical_json_bytes({}))
 _MANUAL_CODE_DIGEST: Final = canonical.sha256_prefixed_bytes(
     canonical.canonical_json_bytes(
@@ -80,18 +71,6 @@ def build_parser() -> argparse.ArgumentParser:
     selector.add_argument("--run")
     selector.add_argument("--factor")
     return parser
-
-
-def _load_config(path: Path | None) -> dict[str, canonical.JSONValue]:
-    if path is None:
-        return {}
-    try:
-        payload: canonical.JSONValue = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise errors.SchemaValidationError(f"config file cannot be read: {path}") from exc
-    if not isinstance(payload, dict):
-        raise errors.SchemaValidationError("config must be a JSON object")
-    return payload
 
 
 def _manifest(state: _SeedState, outcome: _Outcome) -> run_store.GenerationRun:
@@ -167,12 +146,12 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
             "end": canonical.utc_iso(window.end),
             "resample": window.resample,
         }
-        supplied_config = _load_config(args.config)
+        supplied_config = load_config(args.config)
         if mining and args.config is not None and "tier_level" not in supplied_config:
             return _reject(state, "unknown_tier", "tier_level is required in --config")
         quota = args.quota if mining else base.DEFAULT_SEED_QUOTA
         config = {
-            **(_DEFAULT_MINE_CONFIG if mining else {}),
+            **(DEFAULT_MINE_CONFIG if mining else {}),
             **supplied_config,
             "generator": "manual",
             "quota": quota,
@@ -198,6 +177,7 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
                 vram_limit_gb=float(config["vram_limit_gb"]),
                 window_start=str(config["training_window_start"]),
                 window_end=str(config["training_window_end"]),
+                window_tz=str(config["training_window_tz"]),
                 queue_timeout_s=int(config["queue_timeout_s"]),
             )
             require_mining_capabilities(require_cuda=not args.allow_cpu)
@@ -206,6 +186,7 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
                 now,
                 window_start=slot_config.window_start,
                 window_end=slot_config.window_end,
+                window_tz=slot_config.window_tz,
             )
             if not window_open and not args.allow_offhours:
                 return _reject(

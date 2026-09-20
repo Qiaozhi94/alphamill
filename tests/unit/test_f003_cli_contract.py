@@ -314,7 +314,7 @@ def _prepare_mine_runtime(
     monkeypatch.setattr(
         cli_module.gpu_slot,
         "in_training_window",
-        lambda _now, *, window_start, window_end: window_open,
+        lambda _now, *, window_start, window_end, window_tz: window_open,
     )
     monkeypatch.setattr(cli_module.gpu_slot, "query_vram", lambda: vram)
     return capability_calls

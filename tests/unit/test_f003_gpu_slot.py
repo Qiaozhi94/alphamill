@@ -6,11 +6,14 @@ import multiprocessing
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
+from alphamill.factor_factory.errors import FactorFactoryError
 from alphamill.factor_factory.generators import gpu_slot
 from alphamill.factor_factory.generators.gpu_slot import (
+    DEFAULT_WINDOW_TZ,
     GpuQueueTimeoutError,
     GpuSlot,
     GpuSlotConfig,
@@ -23,7 +26,8 @@ from alphamill.factor_factory.generators.gpu_slot import (
 
 Payload = dict[str, int | str | bool]
 Response = tuple[int, Payload]
-NIGHT = datetime(2026, 9, 19, 23, 0, tzinfo=UTC)
+# 时段表按执行机本地时间（架构 §7.1）；夜槽夹具一律用本地挂钟构造。
+NIGHT = datetime(2026, 9, 19, 23, 0, tzinfo=ZoneInfo(DEFAULT_WINDOW_TZ))
 
 
 class _FakeClient:
@@ -85,12 +89,45 @@ def _contend_and_release(locks_dir: str, config: GpuSlotConfig) -> None:
     [(23, 0, True), (5, 0, True), (12, 0, False), (21, 59, False), (6, 29, True), (6, 30, False)],
 )
 def test_training_window_across_midnight(hour: int, minute: int, expected: bool) -> None:
-    # Given: the configured overnight boundary and a UTC wall-clock time.
-    now = datetime(2026, 9, 19, hour, minute, tzinfo=UTC)
+    # Given: a LOCAL wall-clock time on the execution host (架构 §7.1 时段表按本地时间).
+    now = datetime(2026, 9, 19, hour, minute, tzinfo=ZoneInfo(DEFAULT_WINDOW_TZ))
     # When: membership is evaluated.
     actual = in_training_window(now, window_start="22:00", window_end="06:30")
     # Then: start is inclusive and end is exclusive across midnight.
     assert actual is expected
+
+
+def test_training_window_reads_local_clock_not_utc_clock() -> None:
+    """R001 判红点：同一挂钟读数在本地为夜槽、在 UTC 下不是。
+
+    2026-09-19T22:30+08:00 是执行机的夜槽；它的 UTC 表示是 14:30Z。若实现拿
+    UTC 挂钟比时段表，这个瞬间会被判成窗口外，而 22:30Z（本地次日 06:30）
+    会被误判成窗口内——真正的夜槽永不开启、放行的却是 Kronos 白天常驻时段。
+    """
+    night_local = datetime(2026, 9, 19, 22, 30, tzinfo=ZoneInfo(DEFAULT_WINDOW_TZ))
+    assert night_local.astimezone(UTC).hour == 14
+
+    assert in_training_window(night_local, window_start="22:00", window_end="06:30") is True, (
+        "执行机本地 22:30 必须落在夜槽内"
+    )
+    assert (
+        in_training_window(
+            datetime(2026, 9, 19, 22, 30, tzinfo=UTC), window_start="22:00", window_end="06:30"
+        )
+        is False
+    ), "22:30Z 对应本地次日 06:30，已在夜槽之外"
+
+
+def test_training_window_rejects_unknown_timezone_and_naive_instant() -> None:
+    with pytest.raises(FactorFactoryError, match="timezone"):
+        in_training_window(
+            datetime(2026, 9, 19, 23, 0, tzinfo=UTC),
+            window_start="22:00",
+            window_end="06:30",
+            window_tz="Mars/Olympus",
+        )
+    with pytest.raises(FactorFactoryError, match="timezone-aware"):
+        in_training_window(datetime(2026, 9, 19, 23, 0), window_start="22:00", window_end="06:30")
 
 
 @pytest.mark.parametrize(
@@ -184,7 +221,7 @@ def test_configured_window_changes_slot_behavior(
 ) -> None:
     # Given: the same time is outside one configured window and inside another.
     monkeypatch.setattr(gpu_slot, "query_vram", lambda: VramReading(total_gb=8, free_gb=8))
-    now = datetime(2026, 9, 19, 21, 30, tzinfo=UTC)
+    now = datetime(2026, 9, 19, 21, 30, tzinfo=ZoneInfo(DEFAULT_WINDOW_TZ))
     closed = GpuSlot(locks_dir=tmp_path, config=_config(timeout=0))
     # When: both configurations attempt acquisition.
     with pytest.raises(GpuQueueTimeoutError):
