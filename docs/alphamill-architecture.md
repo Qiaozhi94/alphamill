@@ -596,16 +596,36 @@ mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围—�
 
 | 动作 | 语义 | 幂等性 | 超时 | 错误码 |
 |---|---|---|---|---|
-| `status` | 返回 `{state: running\|stopped, contract_version, model_loaded, vram_bytes, device}` | 只读，天然幂等 | 可配（默认 5s） | `E_UNAVAILABLE` / `E_UNSUPPORTED_VERSION` |
-| `stop` | 优雅停止推理并释放显存，返回释放后的 `vram_bytes` | 重复调用返回 `state=stopped`，不报错 | 可配（默认 60s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
-| `restore` | 恢复常驻推理，返回 `state=running` | 重复调用返回 `state=running` | 可配（默认 120s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
+| `status` | 返回 `{state: running\|stopped, desired: running\|stopped, contract_version, model_loaded, vram_bytes, vram_readable, device, operation}` | 只读，天然幂等 | 可配（默认 5s） | `E_UNSUPPORTED_VERSION` |
+| `stop` | 置期望态为 `stopped`、卸载模型并释放显存，返回释放后的 `vram_bytes` | 重复调用返回 `state=stopped`，不报错 | 可配（默认 60s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
+| `restore` | 置期望态为 `running`、恢复常驻推理，返回 `state=running` | 重复调用返回 `state=running` | 可配（默认 120s） | `E_BUSY` / `E_TIMEOUT` / `E_UNAVAILABLE` / `E_UNSUPPORTED_VERSION` |
+
+- **期望态与派生态**：`state` 不是"模型此刻在不在内存里"的同义词，而是 `(desired, model_loaded)`
+  的函数——`stopped ≡ desired=stopped ∧ model_loaded=false`，`running ≡ desired=running ∧
+  model_loaded=true`，两者之外为过渡态（见 `operation`）。**`desired=stopped` 期间推理端点
+  不得隐式重新加载模型**：请求走兜底信号路径并如实标注非 `kronos` 来源（F004 C002 同一纪律）。
+  没有这条，`stop` 之后任何一次 `/predict` 都会把显存吃回去，`stopped` 不可能稳定存在。
+- **单飞与进行中语义**：同一时刻至多一个生命周期动作在执行。`status.operation` 为
+  `null` 或 `{id, action: stop\|restore, started_at}`；动作进行中时**任何**冲突的生命周期
+  动作立即返回 `E_BUSY`，不排队、不叠加。`E_TIMEOUT` 的含义是"**动作仍在进行**，服务端不
+  中断它"——不是失败终态；客户端据此 fail-closed，并以 `status` 的 `operation=null` 作为
+  最终落点可观测的判据。中途失败必须清理已分配的显存后再落回两个稳定态之一，不留半加载态。
 
 - **wire 绑定**：控制面经 HTTP 暴露——`GET /lifecycle/status`、`POST /lifecycle/stop`、
   `POST /lifecycle/restore`（JSON）；所有请求必须带 `X-Contract-Version` 头（当前 `1`），
-  服务端不支持该版本时返回 `E_UNSUPPORTED_VERSION`；错误响应统一信封 `{"error": "E_*"}`。
+  服务端不支持该版本时返回 `E_UNSUPPORTED_VERSION`；**错误响应信封恰为 `{"error": "E_*"}`
+  单键对象**，不携带其他字段。成功响应与错误响应互斥：任一动作要么返回该信封，要么返回
+  其动作表所列的成功字段集，不存在"既成功又带 error"的混合形态。
   客户端可见行为由契约测试 `tests/integration/test_f003_kronos_lifecycle.py` 锁定；
+- **显存读数不可得**：`status` 仍是成功响应（**不是** `E_UNAVAILABLE`），以
+  `vram_readable: false` + `vram_bytes: null` 如实表达；编排按"读数不可得"处置
+  （fail-closed），而不是把它当成控制面故障；
 - **显存确认**：`stop` 之后编排必须经 `status` 的 `vram_bytes` 或设备侧读数确认显存已释放，
-  未确认不得取锁训练；
+  未确认不得取锁训练；**"已释放"的判据是读数真实下降且降到训练预算之下**，仅凭
+  `vram_bytes` 是合法整数不构成确认；
+- **客户端超时**：编排必须按动作分别设置超时（`status` 5s / `stop` 60s / `restore` 120s
+  的可配缺省），不得对三个动作共用单一超时——用 `status` 的超时去卡 `stop` 会把正常
+  卸载误判成失败；
 - **契约版本**：`contract_version` 不匹配（`E_UNSUPPORTED_VERSION`）视为服务端未实现该契约；
 - **观测 → 处置决策表**：「服务确未部署」等判定只依据可观测行为与编排自身的部署清单
   （compose 项目），不猜测服务内部状态；客户端必须按表实现并在单测中逐行断言：
@@ -618,4 +638,10 @@ mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围—�
   | `stop` 返回 `E_BUSY` / `E_TIMEOUT`，或 `status.vram_bytes` 确认未释放 | 停止失败 | **fail-closed** 留在单槽队列 |
   | 控制面不可达（连接拒绝/超时），但部署清单中存在该服务 | 状态未知 | **fail-closed** 留在单槽队列 |
 - **所有权**：契约正文由本节拥有；客户端调用与运行取证归 F003（训练窗口编排），服务端实现归
-  `kronos-signal-real` 交付（BACKLOG「Kronos 服务生命周期端点」，待分配 feature）。
+  F009（`docs/features/0.2/F009-kronos-lifecycle-endpoints/`）。
+- **GPU 基座前置**：本契约的显存语义只在 GPU 实例上成立。截至 2026-09-20，`kronos-signal-real`
+  是 CPU 实例（`KRONOS_DEVICE: cpu`、CPU wheel、healthcheck 以 `device=cpu` 为通过条件，
+  且这些事实被 F004 的变异门锁死），**仓内没有任何 GPU Kronos 实例**。GPU 基座（CUDA 镜像、
+  compose 设备预留、device/healthcheck 断言改写、F004 回归契约迁移）归独立 Feature，
+  是 F009 真实卸载取证与 F003 T033 的**硬前置**；在它落地前，控制面可交付、可契约验收，
+  但"显存真实下降"一类结论一律不得声称成立。
