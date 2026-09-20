@@ -106,7 +106,9 @@ class GpuSlot:
         self._config = config
         self._held: dict[str, int] = {}
 
-    def acquire(self, run_id: str, *, now: datetime | None = None) -> QueueRecord:
+    def acquire(
+        self, run_id: str, *, now: datetime | None = None, ignore_window: bool = False
+    ) -> QueueRecord:
         """Wait FIFO; insufficient **or unreadable** VRAM rejoins the tail.
 
         An unreadable probe is not evidence of a free card: on the execution host a
@@ -114,12 +116,16 @@ class GpuSlot:
         is explicit that the queue wins rather than gambling on OOM, so this path is
         fail-closed. CPU-only runs never reach here — the CLI takes no slot under
         ``--allow-cpu``.
+
+        ``ignore_window`` is the explicit ``--allow-offhours`` escape hatch: it
+        bypasses the schedule check only — never the VRAM probe, and never the
+        clock that stamps queue records.
         """
         self._append(run_id, "queued", None, now)
         started = time.monotonic()
         while True:
             current = now if now is not None else datetime.now(UTC)
-            window_open = in_training_window(
+            window_open = ignore_window or in_training_window(
                 current,
                 window_start=self._config.window_start,
                 window_end=self._config.window_end,

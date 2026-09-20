@@ -594,7 +594,9 @@ def test_mine_queue_timeout_writes_rejected_terminal_run(
     lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
     _prepare_mine_runtime(monkeypatch, vram=_AvailableVram())
 
-    def timeout(_slot, run_id: str, *, now: datetime | None = None) -> None:
+    def timeout(
+        _slot, run_id: str, *, now: datetime | None = None, ignore_window: bool = False
+    ) -> None:
         raise cli_module.gpu_slot.GpuQueueTimeoutError(
             record=QueueRecord(
                 queue_seq=1,

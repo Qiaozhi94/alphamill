@@ -235,6 +235,31 @@ def test_unreadable_vram_never_acquires_the_slot(
     assert all(record.vram_free_gb is None for record in slot.queue_records())
 
 
+def test_allow_offhours_bypasses_window_without_faking_the_clock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R006 判红点：越窗要走显式开关，队列时间戳必须是真实时钟。
+
+    旧实现把 now 伪造成当天的 window_start 喂给 acquire 来骗过窗口判定，代价是整条
+    队列审计的 ts 全是同一个编造值，AC-010「每类状态记录含时间戳」随之失真。
+    """
+    monkeypatch.setattr(gpu_slot, "query_vram", lambda: VramReading(total_gb=8, free_gb=8))
+    slot = GpuSlot(locks_dir=tmp_path, config=_config(timeout=0))
+    daytime = datetime(2026, 9, 19, 12, 0, tzinfo=ZoneInfo(DEFAULT_WINDOW_TZ))
+
+    with pytest.raises(GpuQueueTimeoutError):
+        slot.acquire("closed", now=daytime)
+
+    before = datetime.now(UTC)
+    record = slot.acquire("opened", ignore_window=True)
+    after = datetime.now(UTC)
+    slot.release("opened")
+
+    assert record.event == "acquired"
+    assert before <= record.ts <= after, "越窗取锁的时间戳必须是真实时钟，不是窗口起点"
+    assert record.ts.date() != daytime.date() or record.ts.hour != daytime.hour
+
+
 def test_configured_window_changes_slot_behavior(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

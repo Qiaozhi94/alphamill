@@ -202,10 +202,7 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
                 candidate_slot = gpu_slot.GpuSlot(
                     locks_dir=reports_root / ".locks", config=slot_config
                 )
-                slot_now = datetime.combine(
-                    now.date(), datetime.strptime(slot_config.window_start, "%H:%M").time(), UTC
-                )
-                candidate_slot.acquire(state.run_id, now=slot_now if args.allow_offhours else None)
+                candidate_slot.acquire(state.run_id, ignore_window=args.allow_offhours)
                 slot = candidate_slot
         request = base.GenerationRequest(
             generator="manual",
