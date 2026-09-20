@@ -2,7 +2,7 @@
 kind: feature
 id: F009
 version: "0.2"
-status: draft
+status: doc-reviewing
 gate_version: 1
 related_features: [F003, F004]
 topics: [kronos, lifecycle, control-plane, gpu-slot, m2]
