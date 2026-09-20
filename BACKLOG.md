@@ -7,7 +7,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 |---|---|---|---|
 | F003-alphagen-vendor | 0.2 | developing | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
 | F008-universe-expansion | 0.2 | ready-for-development | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
-| F009-kronos-lifecycle-endpoints | 0.2 | doc-reviewing | [spec](docs/features/0.2/F009-kronos-lifecycle-endpoints/spec.md) |
+| F009-kronos-lifecycle-endpoints | 0.2 | ready-for-development | [spec](docs/features/0.2/F009-kronos-lifecycle-endpoints/spec.md) |
 
 > **F009 与 F003 的前置边**：F009 的端点缺失**不阻塞 F003 开工与接口验收**（客户端按
 > 架构 §7.1 观测→处置决策表 fail-closed 兜底）。
