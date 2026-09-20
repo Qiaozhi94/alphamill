@@ -835,7 +835,7 @@
 ## 循环 15：F009 Kronos 服务生命周期控制面端点 规格文档检视
 
 - report_type: doc-review
-- 周期：2026-09-20（3 轮；Round 1 全量扫描由独立会话完成，Round 2 full-scan 升级复核，Round 3 封顶 diff 复核）
+- 周期：2026-09-20（3 轮 + 1 条跨会话补正；Round 1 全量扫描由独立会话完成，Round 2 full-scan 升级复核，Round 3 封顶 diff 复核）
 - 状态：闭环（stop_condition_met: true，readiness: PASS）
 - 基线：`main@8e85171` → 修复终态 `main@1d985d1`；契约修订 `57c9edb`；消费端 `feat/F003-alphagen-vendor@0ccf69e..ffdd805`
 - 被检对象：`docs/features/0.2/F009-kronos-lifecycle-endpoints/{spec,design,tasks}.md` 及相邻契约（架构 §7.1、F003 客户端与契约测试、F004 基座与回归门、BACKLOG）
@@ -851,7 +851,7 @@
 | F009-R1-004 | 错误码与错误响应形态越过架构契约 | high | correctness | root-cause | spec-drift | fixed | 先在架构唯一化再同步三方 | 信封恰为单键、成功与错误互斥；读数不可得改由 vram_readable=false + vram_bytes=null 表达；restore 补 E_UNAVAILABLE | 文档侧：架构 §7.1 动作表 + IR-004 + design §4 | 1 | 2 | cross-feature-contract-drift |
 | F009-R1-005 | mock 纳入契约后与权威范围及自身不变量冲突 | high | correctness | root-cause | spec-drift | fixed | 移出契约或单独定义 CPU 状态机 | 推翻早先 Q-002，改为 mock 不注册 /lifecycle/*（404）；裁决写入 §7 决策表与 §8 | 实现期载体 tests/integration/test_f009_lifecycle_deployment.py（AC-009） | 1 | 2 | cross-feature-contract-drift |
 | F009-R1-006 | 下游 F003 无 restore 且用单一 10 秒超时 | high | correctness | root-cause | spec-drift | fixed | 补明确的跨 Feature 客户端交付边 | FR-009/AC-010 把客户端纳入验收；超时改分动作 5/60/120s（0ccf69e），restore 由循环 14 R012 落地 | tests/unit/test_f003_gpu_slot.py::test_each_lifecycle_action_uses_its_own_contract_timeout；test_f003_cli_contract.py::test_mine_restores_kronos_after_stopping_it | 1 | 2 | cross-feature-contract-drift |
-| F009-R1-007 | 现有契约测试不能证明显存真实释放 | high | test-coverage | root-cause | process-gap | fixed | 强化真实下降/阈值断言并变异判红 | 判据改为"下降且降到训练预算之下"，写进架构 §7.1、AC-012 与 design §8 | 实现期载体 tests/integration/test_f009_vram_release.py（见 R2-001 对落点的修正） | 1 | 2 | gate-weaker-than-claim |
+| F009-R1-007 | 现有契约测试不能证明显存真实释放 | high | test-coverage | root-cause | process-gap | fixed | 强化真实下降/阈值断言并变异判红 | 判据改为「下降且卸载后整卡可用显存达到训练预算」，写进架构 §7.1、AC-012 与 design §8（首次落笔误写成已用侧，见 R2-005） | 实现期载体 tests/integration/test_f009_vram_release.py（见 R2-001 对落点的修正） | 1 | 2 | gate-weaker-than-claim |
 | F009-R1-008 | status 的超时机制没有设计落点 | medium | correctness | root-cause | original-coding | fixed | 裁决 deadline owner 并补探测超时 | 三个超时一并纳入 FR-007 环境变量契约，design §4 接口表逐格列出 | 实现期载体 tests/unit/test_f009_vram_probe.py（AC-007） | 1 | 2 | mechanism-weaker-than-claim |
 | F009-R1-009 | 显存探测可配置的契约不可实现也不可验收 | medium | correctness | root-cause | original-coding | fixed | 定义变量、值域、默认和非法值策略 | FR-007 明确变量名/值域/默认值/非法值启动期判红不回退；AC-007 覆盖 | 同上 | 1 | 2 | underspecified-config-contract |
 | F009-R1-010 | status 始终可达与既有启动失败即退出冲突 | medium | correctness | root-cause | spec-drift | fixed | 区分启动失败与运行期 restore 失败 | design §7 显式区分：启动期预检失败进程退出（F004 不改）；运行期 restore 失败进程存活 + E_UNAVAILABLE | 实现期载体 tests/unit/test_f009_lifecycle_contract.py（AC-004） | 1 | 2 | cross-feature-contract-drift |
@@ -862,6 +862,7 @@
 | F009-R2-003 | 额外请求参数复用 E_UNSUPPORTED_VERSION，与端点缺失判定混淆 | medium | correctness | root-cause | fix-regression | fixed | 契约补 E_BAD_REQUEST 并同步三方 | 架构 §7.1 补 E_BAD_REQUEST 与"错误码各司其职"条；F009 IR-004/FR-005/AC-005 与 design §4/§7 同步；check_doc_consistency 新增两条钉点 | tools/check_doc_consistency.py::kronos_lifecycle_contract_defined（变异判红：删分工条即红） | 2 | 2 | error-code-overloaded |
 | F009-R2-004 | §5 状态机把"动作进行中被拒"画成 running→running | low | quality | root-cause | fix-regression | fixed | 改写状态机文本或加过渡态自环 | 拆为 running 自环（幂等/请求被拒）与过渡态自环（E_BUSY） | 文档侧：spec §5 | 2 | 2 | — |
 | F009-R3-001 | 载体拆分打断 DAG：T022 的 verify 文件无生产者前置 | medium | correctness | root-cause | fix-regression | fixed | 补 T015 -> T022 边 | 拆开原 T015->T016->T022 三元链，显式补 T015->T022；F009 处于 doc-reviewing 不在 check_task_dag 强制作用域，verify.py 是绿的，只有手动跑 check_tasks 才看得到 | tools/check_task_dag.py::check_tasks 手动校验 | 3 | 3 | gate-scope-blind-spot |
+| F009-R2-005 | 显存判据写成已用侧「降到训练预算之下」，与夜槽真正要判的方向相反 | high | correctness | root-cause | fix-regression | fixed | 判据改挂可用侧 | 架构 §7.1 与 F009 三件套统一为「读数真实下降，且卸载后整卡可用显存达到训练预算」（与取锁同阈值 vram_limit_gb）；实现本就是可用侧（vram_is_sufficient 判 free_gb >= limit），本条修的是契约措辞与实现之间的口径漂移 | tests/unit/test_f003_gpu_slot.py::test_release_requires_falling_below_the_training_budget | 2 | 2 | spec-impl-wording-drift |
 | F009-R3-002 | spec §1/§3 残留"在旧文件补显存判据用例"的引用 | low | quality | root-cause | fix-regression | fixed | 与 AC-012/T016 的新载体口径对齐 | 两处改写并在 design §1 影响面同步注明拆分原因 | 文档侧 | 3 | 3 | — |
 
 ### 裁决记录
@@ -873,7 +874,8 @@
 - **`cross-feature-contract-drift` 占 18 条中的 6 条，且跨越了全部三轮**。Round 1 的 R1-001/004/005/006 是原始漂移；Round 2 的 R2-001/002 是**修复动作自己造出来的新漂移**——收紧了契约却没同步消费端、拆了载体却没同步另一个 feature 的门禁。结论：这个 feature 位于 F003/F004/架构三方接缝上，任何一侧的单边修改都会立刻产生漂移。**教训**：改契约的提交必须在同一轮内把三侧（契约正文 / 本 feature 文档 / 消费端实现）一起过一遍，不能"先改契约，消费端下轮再说"。
 - **`fix-regression` 有 6 条（R2-001..004、R3-001..002），占总数三分之一**。这远高于循环 14 的 1/13。直接原因是本轮是 `rewrite` 而非打补丁——重写的自伤面天然更大。**因此 rewrite 裁决必须配套"升级 full-scan 的复核轮"**，diff-only 在重写场景下覆盖不住。Round 2 显式升级 full-scan 是正确的，Round 3 封顶轮仍抓到 R3-001 则说明封顶轮不是形式主义。
 - **R3-001 暴露了一个门禁作用域盲区**（`gate-scope-blind-spot`）：`check_task_dag` 只对进入开发流转的状态生效，`doc-reviewing` 的 feature 不在作用域内。于是 `verify.py` 全绿，而 tasks 的 DAG 实际是断的。这不是门禁写错了——作用域设计有其理由（draft/doc-reviewing 期间 tasks 尚在变动）——但**文档检视轮必须手动对 tasks 跑一次 `check_tasks`**，不能以 verify.py 绿作为 DAG 无误的证据。建议写进 SOP 的文档检视清单。
-- **`origin` 分布**：spec-drift 6、original-coding 3、process-gap 3、fix-regression 6。与循环 14（12 original-coding / 1 fix-regression）正好相反：代码检视面对的是"从没被看过的实现"，文档检视面对的是"反复被改的契约"，两者的主风险完全不同。
+- **R2-005 是一条「文档比实现更弱」的漂移**：8GB 卡上「已用 5GB」同时满足「低于 6GB 预算」和「取不到 6GB」——收紧 R1-007 的判据时把它写在了已用侧，而夜槽要判的是可用侧。实现（`vram_is_sufficient` 判 `free_gb >= limit_gb`）一直是对的，错的只有契约措辞，由并行会话在本循环收尾时发现并补正。**教训**：给判据加强度时必须同时问「这个量从哪一侧度量」，否则加的是一条看起来更严、实际判错方向的门。
+- **`origin` 分布**：spec-drift 6、original-coding 3、process-gap 3、fix-regression 7。与循环 14（12 original-coding / 1 fix-regression）正好相反：代码检视面对的是"从没被看过的实现"，文档检视面对的是"反复被改的契约"，两者的主风险完全不同。
 - **存活轮数**：R1 的 12 条均为 1→2（存活 1 轮），R2 的 4 条为 2→2，R3 的 2 条为 3→3。没有跨多轮悬而未决的条目，未触发不收敛升级协议。
 - **裁决分布**：accepted 17 / partial 1 / rejected 0。**建议命中率**：18 条中 15 条 `fix_summary` 与 `suggested_fix` 实质一致；三条偏离都是往更彻底的方向走——R1-001 从"纳入或等待"具体化为立 F010 并配先红态纪律；R1-007 的判据同时写进了契约正文而不只是 AC；R2-003 的修复顺带给 `check_doc_consistency` 加了会判红的钉点。
 - **跨循环联动**：R1-006 与循环 14 的 R012 是同一条缺陷的两半（restore 所有权 / 分动作超时），由两个独立视角分别发现——代码检视从实现侧撞上"停了不恢复"，文档检视从契约侧看出"客户端没有 restore 且超时口径错"。这条互证说明两类检视不是重复劳动。
