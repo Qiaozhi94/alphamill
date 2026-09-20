@@ -293,7 +293,7 @@ def test_show_rejects_unknown_run_schema_version(tmp_path: Path) -> None:
     assert exit_code == EXIT_REJECTED
 
 
-class _AvailableVram:
+class _AvailableVram:  # noqa: D101
     free_gb = 8.0
 
 
@@ -476,6 +476,12 @@ def test_mine_without_cuda_writes_rejected_terminal_run(
 ) -> None:
     lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
     capability_calls = _prepare_mine_runtime(monkeypatch)
+    # 本用例只关心「没有 CUDA」，因此显式声明本机未部署 Kronos——否则会先在卸载
+    # 决策上 fail-closed（R007：漏配地址不等于确未部署），拿不到想验的终态。
+    config_path = tmp_path / "mine.json"
+    config_path.write_text(
+        json.dumps({"tier_level": "manual", "kronos_deployed": False}), encoding="utf-8"
+    )
 
     exit_code = main(
         [
@@ -486,13 +492,16 @@ def test_mine_without_cuda_writes_rejected_terminal_run(
             str(binding_path),
             "--seed",
             "17",
+            "--config",
+            str(config_path),
         ],
         reports_root=reports_root,
         lake_root=lake_root,
     )
 
-    _assert_mine_rejected(reports_root, exit_code, termination="cuda_unavailable")
+    run = _assert_mine_rejected(reports_root, exit_code, termination="cuda_unavailable")
     assert capability_calls == [True]
+    assert run["device"] == "cpu", "被拒的运行不得在 manifest 里自称跑在 GPU 上"
 
 
 def test_mine_capability_failure_writes_rejected_terminal_run(
@@ -674,6 +683,64 @@ def test_mine_records_kronos_offload_outcome_in_run_manifest(
         "vram_before_gb": 3.0,
         "vram_after_gb": 0.2,
     }
+
+
+def test_mine_offloads_kronos_before_measuring_vram(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R013 判红点：先卸载再量显存。
+
+    白天 Kronos 常驻 ≤3GB，8GB 卡上剩余 ~5GB < 夜槽要的 6GB。若显存预检排在卸载之前，
+    这个**主场景**会被判 cuda_unavailable 而拒绝，卸载永远没机会把空间腾出来。
+    """
+    from alphamill.factor_factory import cli as cli_module
+
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch)
+    order: list[str] = []
+
+    def readings() -> _AvailableVram:
+        order.append("probe")
+        vram = _AvailableVram()
+        vram.free_gb = 7.5 if "offload" in order else 5.0
+        return vram
+
+    monkeypatch.setattr(cli_module.gpu_slot, "query_vram", readings)
+
+    def offload(**_kwargs):
+        order.append("offload")
+        return cli_module.gpu_slot.KronosOffloadOutcome(
+            action="stopped", reason="vram_released", vram_before_gb=5.0, vram_after_gb=7.5
+        )
+
+    monkeypatch.setattr(cli_module.gpu_slot, "offload_kronos", offload)
+    monkeypatch.setattr(cli_module.gpu_slot, "restore_kronos", lambda **_kwargs: True)
+    monkeypatch.setattr(cli_module.gpu_slot.GpuSlot, "acquire", lambda _s, run_id, **_k: None)
+    monkeypatch.setattr(cli_module.gpu_slot.GpuSlot, "release", lambda _s, run_id, **_k: None)
+    config_path = tmp_path / "mine.json"
+    config_path.write_text(
+        json.dumps({"tier_level": "manual", "kronos_control_url": "http://127.0.0.1:8002"}),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--config",
+            str(config_path),
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    assert exit_code == EXIT_OK, "卸载腾出空间后应当放行，而不是先判 cuda_unavailable"
+    assert order.index("offload") < order.index("probe"), "显存必须在卸载之后量"
 
 
 def test_mine_restores_kronos_after_stopping_it(

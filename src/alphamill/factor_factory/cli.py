@@ -196,18 +196,22 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
                     state, "outside_training_window", "outside configured training window"
                 )
             if not args.allow_cpu:
-                reading = gpu_slot.query_vram()
-                if not gpu_slot.vram_is_sufficient(reading, limit_gb=slot_config.vram_limit_gb):
-                    return _reject(
-                        state, "cuda_unavailable", "CUDA VRAM is unavailable or insufficient"
-                    )
-                state = replace(state, device="cuda", vram_limit_gb=slot_config.vram_limit_gb)
-                # 夜槽先卸载 Kronos 常驻推理并确认显存释放，失败即不取锁（架构 §7.1）。
+                # 先卸载 Kronos 再量显存：白天 Kronos 常驻 ≤3GB，8GB 卡上剩余不足夜槽
+                # 需要的 ≤6GB 独占——这正是卸载要解决的主场景，量在卸载之前等于永远
+                # 救不了它（架构 §7.1 时段表）。
                 offload = resolve_kronos_offload(config)
                 stopped_kronos = offload if offload.action == "stopped" else None
                 state = replace(state, kronos_offload=asdict(offload))
                 if offload.action == "fail_closed":
                     return _reject(state, "kronos_offload_failed", offload.reason)
+                reading = gpu_slot.query_vram()
+                if not gpu_slot.vram_is_sufficient(reading, limit_gb=slot_config.vram_limit_gb):
+                    return _reject(
+                        state, "cuda_unavailable", "CUDA VRAM is unavailable or insufficient"
+                    )
+                # device 只在确认显存可用后才写成 cuda——被拒的运行不该在 manifest 里
+                # 自称跑在 GPU 上。
+                state = replace(state, device="cuda", vram_limit_gb=slot_config.vram_limit_gb)
                 candidate_slot = gpu_slot.GpuSlot(
                     locks_dir=reports_root / ".locks", config=slot_config
                 )
