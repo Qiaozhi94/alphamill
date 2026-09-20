@@ -52,7 +52,7 @@ F004 把 GPU 直通显式划在范围外是合理的——它要交付的是编�
 ### 非目标
 
 - 本 feature 不改 Kronos 推理逻辑、不做推理质量或性能优化——只让它跑在 GPU 上；
-- 本 feature 不做生命周期控制面（`status`/`stop`/`restore`）→ **F009**；两者的关系是 F009 依赖本 feature 取显存证据，本 feature 不依赖 F009 即可交付；
+- 本 feature 不做生命周期控制面（`status`/`stop`/`restore`）→ **F009**；方向要说准：**GPU 基座的交付**（US-001/US-002）不依赖 F009，但本 feature 的 **AC-009/T011/T018 是取证任务，消费 F009 的载体与控制面**，因此它们要在 F009 合入主干之后执行。F009 侧不反向等待本 feature（其 AC-012 止于载体与先红态），两边的完成 DAG 因此无环（F009 检视 R4-003）；
 - 本 feature 不做挖掘侧编排与取锁 → F003；
 - 本 feature 不做执行机从 `qiaozhi-lt` 到 `qiaozhi-lab` 的迁移（Win11+WSL2 → 原生 Ubuntu、RTX 4060 → Blackwell sm_120）→ 独立迁移 Feature；但 wheel 的选择须为该迁移留路（见 §7 决策）；
 - 本 feature 不做多 GPU、不做 MPS/MIG 切分、不做显存配额强制（预算仍由 F003 的单槽仲裁在应用层执行）；
@@ -199,7 +199,7 @@ F004 中"必须是 CPU"的断言应当改写为"**默认取值**是 CPU"，其�
 
 ### Requirement: 解除下游先红态（`FR-006`）
 
-本 feature 落地后，F009 的 AC-012 载体 `tests/integration/test_f009_vram_release.py` 应当移除 `xfail(strict=True)` 并在执行机真实通过；F003 的 T033 前置随之解除。
+本 feature 落地后，F009 的 AC-012 载体 `tests/integration/test_f009_vram_release.py` 应当移除 `xfail(strict=True)` 并在执行机真实通过；F003 的 T033 前置随之解除。该载体由 F009 交付并保持先红态，**解除 xfail 的所有权唯一地归本 feature**——F009 不因此项未完成而阻塞收口。
 
 #### Scenario: 先红态转正
 
@@ -286,7 +286,7 @@ F004 中"必须是 CPU"的断言应当改写为"**默认取值**是 CPU"，其�
 ### 依赖
 
 - 上游 Feature / Contract：F004（Dockerfile 两级目标、compose 两个服务、启动预检、契约与变异门）；架构 §7.1（显存预算与 GPU 基座前置条）；F003 `mining` extra 的 CUDA wheel 约定。
-- 下游消费者：**F009**（AC-012 的先红态由本 feature 解除）、**F003**（T033/AC-010 的 GPU 前置由本 feature 解除）。注意方向：F009 不阻塞本 feature，本 feature 阻塞 F009 的显存取证。
+- 下游消费者：**F009**（AC-012 载体的先红态由本 feature 解除）、**F003**（T033 的 GPU 前置由本 feature 解除）。方向：F009 的**完成**不依赖本 feature（其 AC-012 止于载体与先红态）；本 feature 的**取证任务**（AC-009/T011/T018）依赖 F009 已合入主干。两边都不把对方的完成写进自己的完成条件（F009 检视 R4-003）。
 - 外部 / 环境依赖：执行机 `qiaozhi-lt`（Win11 + WSL2 + docker-ce，RTX 4060 Laptop 8GB）的 NVIDIA 驱动与容器 GPU 直通；PyTorch CUDA wheel 源。
 
 ### 决策与风险
