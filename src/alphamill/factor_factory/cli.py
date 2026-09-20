@@ -21,6 +21,7 @@ from alphamill.factor_factory.mine_config import (
     DEFAULT_MINE_CONFIG,
     load_config,
     resolve_kronos_offload,
+    restore_kronos_if_stopped,
 )
 from alphamill.factor_factory.registry import factor_store, run_store
 
@@ -132,6 +133,8 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
     run_dir = run_store.generation_run_dir(run_id, reports_root=reports_root)
     state = _SeedState(run_id, run_dir, datetime.now(UTC), args.seed)
     slot: gpu_slot.GpuSlot | None = None
+    stopped_kronos: gpu_slot.KronosOffloadOutcome | None = None
+    config: dict[str, canonical.JSONValue] = {}
     binding_path: Path | None = args.binding
     if binding_path is None:
         return _reject(state, "missing_binding", "--binding is required")
@@ -201,6 +204,7 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
                 state = replace(state, device="cuda", vram_limit_gb=slot_config.vram_limit_gb)
                 # 夜槽先卸载 Kronos 常驻推理并确认显存释放，失败即不取锁（架构 §7.1）。
                 offload = resolve_kronos_offload(config)
+                stopped_kronos = offload if offload.action == "stopped" else None
                 state = replace(state, kronos_offload=asdict(offload))
                 if offload.action == "fail_closed":
                     return _reject(state, "kronos_offload_failed", offload.reason)
@@ -245,6 +249,15 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
     finally:
         if slot is not None:
             slot.release(state.run_id)
+        if (
+            stopped_kronos is not None
+            and restore_kronos_if_stopped(config, stopped_kronos) is False
+        ):
+            print(
+                f"WARNING: kronos restore failed after run {state.run_id}; "
+                "daytime dry-run has no live signal until it is restored",
+                file=sys.stderr,
+            )
 
 
 def _safe_identifier(value: str) -> bool:

@@ -676,6 +676,63 @@ def test_mine_records_kronos_offload_outcome_in_run_manifest(
     }
 
 
+def test_mine_restores_kronos_after_stopping_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R012 判红点：停了 Kronos 就必须恢复，否则白天 dry-run 一直没有实时信号。
+
+    取锁失败这条路径尤其容易漏——卡没拿到，Kronos 却已经被停了。
+    """
+    from alphamill.factor_factory import cli as cli_module
+
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch, vram=_AvailableVram())
+    _patch_offload(monkeypatch, "stopped", "vram_released")
+    restored: list[str | None] = []
+    monkeypatch.setattr(
+        cli_module.gpu_slot,
+        "restore_kronos",
+        lambda *, control_url, contract_version: restored.append(control_url) or True,
+    )
+
+    def refuse(_self, run_id: str, **_kwargs) -> None:
+        raise cli_module.gpu_slot.GpuQueueTimeoutError(
+            record=cli_module.gpu_slot.QueueRecord(
+                queue_seq=1,
+                run_id=run_id,
+                event="timeout",
+                ts=datetime(2026, 9, 19, 23, tzinfo=UTC),
+                vram_free_gb=8.0,
+            )
+        )
+
+    monkeypatch.setattr(cli_module.gpu_slot.GpuSlot, "acquire", refuse)
+    config_path = tmp_path / "mine.json"
+    config_path.write_text(
+        json.dumps({"tier_level": "manual", "kronos_control_url": "http://127.0.0.1:8002"}),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--config",
+            str(config_path),
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    _assert_mine_rejected(reports_root, exit_code, termination="queue_timeout")
+    assert restored == ["http://127.0.0.1:8002"], "取锁失败也必须把 Kronos 恢复回去"
+
+
 def test_mine_queue_timeout_writes_rejected_terminal_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

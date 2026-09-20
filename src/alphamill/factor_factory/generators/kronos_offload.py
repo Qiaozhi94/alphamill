@@ -151,3 +151,27 @@ def _outcome(
         vram_before_gb=readings[0],
         vram_after_gb=readings[1],
     )
+
+
+def restore_kronos(
+    *,
+    control_url: str | None,
+    contract_version: str,
+    client=None,
+    timeout_s: float = 120.0,
+) -> bool:
+    """训练窗口结束后恢复 Kronos 常驻推理；返回是否确认回到 running。
+
+    停了不恢复等于白天 dry-run 一直拿不到实时信号（架构 §7.1 时段表只在夜槽卸载）。
+    调用方在取锁失败、运行失败与正常结束三条路径上都必须走到这里。
+    """
+    if control_url is None:
+        return False
+    requester = _http_request if client is None else client.request
+    try:
+        status_code, payload = requester(
+            "POST", f"{control_url.rstrip('/')}/lifecycle/restore", contract_version, timeout_s
+        )
+    except OSError:
+        return False
+    return status_code < 400 and "error" not in payload and payload.get("state") == "running"

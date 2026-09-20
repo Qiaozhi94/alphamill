@@ -57,3 +57,16 @@ def resolve_kronos_offload(
         contract_version=str(config["kronos_contract_version"]),
         service_deployed=bool(config["kronos_deployed"]),
     )
+
+
+def restore_kronos_if_stopped(
+    config: Mapping[str, canonical.JSONValue],
+    outcome: gpu_slot.KronosOffloadOutcome | None,
+) -> bool | None:
+    """夜槽结束后恢复常驻推理；未曾停过则无事可做（返回 None）。"""
+    if outcome is None or outcome.action != "stopped":
+        return None
+    return gpu_slot.restore_kronos(
+        control_url=_optional_text(config.get("kronos_control_url")),
+        contract_version=str(config["kronos_contract_version"]),
+    )

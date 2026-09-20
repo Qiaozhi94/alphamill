@@ -16,6 +16,7 @@ from alphamill.factor_factory.errors import FactorFactoryError
 from alphamill.factor_factory.generators.kronos_offload import (
     KronosOffloadOutcome,
     offload_kronos,
+    restore_kronos,
 )
 from alphamill.factor_factory.generators.vram import VramReading, query_vram, vram_is_sufficient
 
@@ -201,6 +202,7 @@ __all__ = (
     "VramReading",
     "in_training_window",
     "offload_kronos",
+    "restore_kronos",
     "query_vram",
     "vram_is_sufficient",
 )
