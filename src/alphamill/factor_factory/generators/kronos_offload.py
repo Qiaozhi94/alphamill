@@ -49,6 +49,13 @@ def _http_request(
     return status, payload
 
 
+# 架构 §7.1 的可配缺省：status 5s / stop 60s / restore 120s。三个动作共用单一超时会
+# 把正常卸载误判成失败——卸载模型 + empty_cache 远超 status 的量级。
+STATUS_TIMEOUT_S = 5.0
+STOP_TIMEOUT_S = 60.0
+RESTORE_TIMEOUT_S = 120.0
+
+
 def offload_kronos(
     *,
     control_url: str | None,
@@ -56,7 +63,8 @@ def offload_kronos(
     service_deployed: bool = True,
     client=None,
     vram_reader: Callable[[], VramReading | None] = query_vram,
-    timeout_s: float = 10.0,
+    status_timeout_s: float = STATUS_TIMEOUT_S,
+    stop_timeout_s: float = STOP_TIMEOUT_S,
 ) -> KronosOffloadOutcome:
     """Stop a GPU Kronos tenant or fail closed according to architecture §7.1.
 
@@ -75,7 +83,8 @@ def offload_kronos(
     base_url = control_url.rstrip("/")
 
     def send(method: Literal["GET", "POST"], path: str) -> tuple[int, _Payload]:
-        return requester(method, f"{base_url}{path}", contract_version, timeout_s)
+        timeout = stop_timeout_s if path.endswith("/stop") else status_timeout_s
+        return requester(method, f"{base_url}{path}", contract_version, timeout)
 
     try:
         status_code, status = send("GET", "/lifecycle/status")
@@ -158,7 +167,7 @@ def restore_kronos(
     control_url: str | None,
     contract_version: str,
     client=None,
-    timeout_s: float = 120.0,
+    timeout_s: float = RESTORE_TIMEOUT_S,
 ) -> bool:
     """训练窗口结束后恢复 Kronos 常驻推理；返回是否确认回到 running。
 

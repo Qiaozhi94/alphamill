@@ -14,6 +14,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from alphamill.factor_factory.errors import FactorFactoryError
 from alphamill.factor_factory.generators.kronos_offload import (
+    RESTORE_TIMEOUT_S,
+    STATUS_TIMEOUT_S,
+    STOP_TIMEOUT_S,
     KronosOffloadOutcome,
     offload_kronos,
     restore_kronos,
@@ -197,6 +200,9 @@ __all__ = (
     "GpuQueueTimeoutError",
     "GpuSlot",
     "GpuSlotConfig",
+    "RESTORE_TIMEOUT_S",
+    "STATUS_TIMEOUT_S",
+    "STOP_TIMEOUT_S",
     "KronosOffloadOutcome",
     "QueueRecord",
     "VramReading",

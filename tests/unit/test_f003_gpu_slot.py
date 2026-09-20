@@ -281,6 +281,46 @@ def test_configured_window_changes_slot_behavior(
     opened.release("opened", now=now)
 
 
+def test_each_lifecycle_action_uses_its_own_contract_timeout() -> None:
+    """F009-R1-006 判红点：三个动作必须用各自的超时，不得共用单一值。
+
+    架构 §7.1 的可配缺省是 status 5s / stop 60s / restore 120s。拿 status 的量级去卡
+    stop，会把一次正常的卸载（丢引用 + empty_cache）误判成失败，夜槽随之 fail-closed。
+    """
+    seen: list[tuple[str, float]] = []
+
+    class _RecordingClient:
+        service_present = True
+        idle_threshold_gb = None
+
+        def request(self, method, url, contract_version, timeout_s):
+            seen.append((url.rsplit("/", 1)[-1], timeout_s))
+            if url.endswith("/status"):
+                state = "stopped" if any(path == "stop" for path, _ in seen) else "running"
+                vram = 250_000_000 if state == "stopped" else 3_000_000_000
+                return _status(state=state, vram_bytes=vram)
+            return 200, {"state": "stopped", "vram_bytes": 250_000_000}
+
+    offload_kronos(control_url="http://kronos", contract_version="1", client=_RecordingClient())
+
+    timeouts = dict(seen)
+    assert timeouts["status"] == gpu_slot.STATUS_TIMEOUT_S == 5.0
+    assert timeouts["stop"] == gpu_slot.STOP_TIMEOUT_S == 60.0
+    assert timeouts["status"] != timeouts["stop"], "status 与 stop 不得共用同一超时"
+
+    restore_seen: list[float] = []
+
+    class _RestoreClient:
+        def request(self, method, url, contract_version, timeout_s):
+            restore_seen.append(timeout_s)
+            return 200, {"state": "running"}
+
+    gpu_slot.restore_kronos(
+        control_url="http://kronos", contract_version="1", client=_RestoreClient()
+    )
+    assert restore_seen == [gpu_slot.RESTORE_TIMEOUT_S] and restore_seen[0] == 120.0
+
+
 def test_missing_control_url_fails_closed_unless_service_is_known_absent() -> None:
     """R007 判红点：漏配控制面地址不等于"确未部署"。
 
