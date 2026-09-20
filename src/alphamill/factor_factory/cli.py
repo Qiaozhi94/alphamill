@@ -21,7 +21,7 @@ from alphamill.factor_factory.mine_config import (
     DEFAULT_MINE_CONFIG,
     load_config,
     resolve_kronos_offload,
-    restore_kronos_if_stopped,
+    restore_kronos_if_needed,
 )
 from alphamill.factor_factory.registry import factor_store, run_store
 
@@ -133,7 +133,7 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
     run_dir = run_store.generation_run_dir(run_id, reports_root=reports_root)
     state = _SeedState(run_id, run_dir, datetime.now(UTC), args.seed)
     slot: gpu_slot.GpuSlot | None = None
-    stopped_kronos: gpu_slot.KronosOffloadOutcome | None = None
+    kronos_offload_attempt: gpu_slot.KronosOffloadOutcome | None = None
     config: dict[str, canonical.JSONValue] = {}
     binding_path: Path | None = args.binding
     if binding_path is None:
@@ -200,7 +200,7 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
                 # 需要的 ≤6GB 独占——这正是卸载要解决的主场景，量在卸载之前等于永远
                 # 救不了它（架构 §7.1 时段表）。
                 offload = resolve_kronos_offload(config)
-                stopped_kronos = offload if offload.action == "stopped" else None
+                kronos_offload_attempt = offload
                 state = replace(state, kronos_offload=asdict(offload))
                 if offload.action == "fail_closed":
                     return _reject(state, "kronos_offload_failed", offload.reason)
@@ -254,8 +254,8 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
         if slot is not None:
             slot.release(state.run_id)
         if (
-            stopped_kronos is not None
-            and restore_kronos_if_stopped(config, stopped_kronos) is False
+            kronos_offload_attempt is not None
+            and restore_kronos_if_needed(config, kronos_offload_attempt) is False
         ):
             print(
                 f"WARNING: kronos restore failed after run {state.run_id}; "

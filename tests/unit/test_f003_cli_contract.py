@@ -594,7 +594,13 @@ def test_mine_defaults_are_expanded_in_canonical_config(
     assert config["window"]["resample"] == "1h"
 
 
-def _patch_offload(monkeypatch: pytest.MonkeyPatch, action: str, reason: str) -> list[str | None]:
+def _patch_offload(
+    monkeypatch: pytest.MonkeyPatch,
+    action: str,
+    reason: str,
+    *,
+    restore_required: bool = False,
+) -> list[str | None]:
     from alphamill.factor_factory import cli as cli_module
     from alphamill.factor_factory.generators.gpu_slot import KronosOffloadOutcome
 
@@ -603,7 +609,11 @@ def _patch_offload(monkeypatch: pytest.MonkeyPatch, action: str, reason: str) ->
     def offload(*, control_url: str | None, **_kwargs) -> KronosOffloadOutcome:
         seen.append(control_url)
         return KronosOffloadOutcome(
-            action=action, reason=reason, vram_before_gb=3.0, vram_after_gb=0.2
+            action=action,
+            reason=reason,
+            vram_before_gb=3.0,
+            vram_after_gb=0.2,
+            restore_required=restore_required,
         )
 
     monkeypatch.setattr(cli_module.gpu_slot, "offload_kronos", offload)
@@ -682,6 +692,8 @@ def test_mine_records_kronos_offload_outcome_in_run_manifest(
         "reason": "vram_released",
         "vram_before_gb": 3.0,
         "vram_after_gb": 0.2,
+        # F009-R4-002：本轮是否背了恢复责任要留在证据里，事后才看得出停了没恢复
+        "restore_required": False,
     }
 
 
@@ -840,3 +852,107 @@ def test_mine_queue_timeout_writes_rejected_terminal_run(
     )
 
     _assert_mine_rejected(reports_root, exit_code, termination="queue_timeout")
+
+
+def _patch_restore(monkeypatch: pytest.MonkeyPatch) -> list[str | None]:
+    """记录 restore 调用；返回的 list 长度就是"恰调用几次"的判据。"""
+    from alphamill.factor_factory import cli as cli_module
+
+    restored: list[str | None] = []
+    monkeypatch.setattr(
+        cli_module.gpu_slot,
+        "restore_kronos",
+        lambda *, control_url, contract_version: restored.append(control_url) or True,
+    )
+    return restored
+
+
+def _mine_with_config(tmp_path: Path, lake_root: Path, reports_root: Path, binding_path: Path):
+    config_path = tmp_path / "mine.json"
+    config_path.write_text(
+        json.dumps({"tier_level": "manual", "kronos_control_url": "http://127.0.0.1:8002"}),
+        encoding="utf-8",
+    )
+    return main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--config",
+            str(config_path),
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+
+def test_mine_restores_kronos_after_a_normal_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F009-R4-005：正常结束这条退出路径也必须恢复，且恰恰一次。
+
+    三条路径里它最容易被"反正跑完了"糊弄过去——但夜槽跑完不恢复，白天照样没有实时信号。
+    """
+    from alphamill.factor_factory import cli as cli_module
+
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch, vram=_AvailableVram())
+    _patch_offload(monkeypatch, "stopped", "vram_released", restore_required=True)
+    restored = _patch_restore(monkeypatch)
+    monkeypatch.setattr(cli_module.gpu_slot.GpuSlot, "acquire", lambda _s, run_id, **_k: None)
+    monkeypatch.setattr(cli_module.gpu_slot.GpuSlot, "release", lambda _s, run_id, **_k: None)
+
+    exit_code = _mine_with_config(tmp_path, lake_root, reports_root, binding_path)
+
+    assert exit_code == EXIT_OK
+    assert restored == ["http://127.0.0.1:8002"], "正常结束必须恰恰恢复一次"
+
+
+def test_mine_restores_kronos_after_a_failing_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F009-R4-005：运行期异常这条退出路径同样必须恢复。
+
+    异常路径上"卡已经拿了、Kronos 已经停了"，不恢复就是把故障放大到第二天的信号面。
+    """
+    from alphamill.factor_factory import cli as cli_module
+
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch, vram=_AvailableVram())
+    _patch_offload(monkeypatch, "stopped", "vram_released", restore_required=True)
+    restored = _patch_restore(monkeypatch)
+    monkeypatch.setattr(cli_module.gpu_slot.GpuSlot, "acquire", lambda _s, run_id, **_k: None)
+    monkeypatch.setattr(cli_module.gpu_slot.GpuSlot, "release", lambda _s, run_id, **_k: None)
+
+    def explode(self, request):
+        raise RuntimeError("generator blew up mid-run")
+
+    monkeypatch.setattr(cli_module.manual_seeds.ManualGenerator, "produce", explode)
+
+    exit_code = _mine_with_config(tmp_path, lake_root, reports_root, binding_path)
+
+    assert exit_code != EXIT_OK
+    assert restored == ["http://127.0.0.1:8002"], "运行异常也必须恰恰恢复一次"
+
+
+def test_mine_restores_kronos_when_stop_timed_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F009-R4-002 判红点：stop 超时判 fail_closed，恢复责任照样成立。
+
+    E_TIMEOUT 的意思是"动作仍在进行"：这一轮不训练，但服务端可能在 61 秒时把模型卸完。
+    只按"同步确认 stopped"登记恢复，那次卸载就永久停在 stopped 没人管。
+    """
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch, vram=_AvailableVram())
+    _patch_offload(monkeypatch, "fail_closed", "stop_failed", restore_required=True)
+    restored = _patch_restore(monkeypatch)
+
+    exit_code = _mine_with_config(tmp_path, lake_root, reports_root, binding_path)
+
+    _assert_mine_rejected(reports_root, exit_code, termination="kronos_offload_failed")
+    assert restored == ["http://127.0.0.1:8002"], "超时返回后的迟到完成必须被 restore 兜住"

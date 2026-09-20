@@ -345,10 +345,12 @@ def test_unreadable_vram_is_distinguished_from_not_released() -> None:
 
 
 def test_each_lifecycle_action_uses_its_own_contract_timeout() -> None:
-    """F009-R1-006 判红点：三个动作必须用各自的超时，不得共用单一值。
+    """F009-R1-006 / R4-002 判红点：每个动作各用各的 deadline，且严格大于服务端值。
 
-    架构 §7.1 的可配缺省是 status 5s / stop 60s / restore 120s。拿 status 的量级去卡
-    stop，会把一次正常的卸载（丢引用 + empty_cache）误判成失败，夜槽随之 fail-closed。
+    架构 §7.1 的服务端缺省是 status 5s / stop 60s / restore 120s。拿 status 的量级去卡
+    stop，会把一次正常的卸载（丢引用 + empty_cache）误判成失败，夜槽随之 fail-closed；
+    而两端取同一数值时，客户端会先超时抛 OSError，服务端规范的 E_TIMEOUT 信封根本收不到
+    ——"动作仍在进行"这条语义就等于没有。故客户端 deadline = 服务端 deadline + 余量。
     """
     seen: list[tuple[str, float]] = []
 
@@ -373,9 +375,14 @@ def test_each_lifecycle_action_uses_its_own_contract_timeout() -> None:
     )
 
     timeouts = dict(seen)
-    assert timeouts["status"] == gpu_slot.STATUS_TIMEOUT_S == 5.0
-    assert timeouts["stop"] == gpu_slot.STOP_TIMEOUT_S == 60.0
+    margin = gpu_slot.CLIENT_DEADLINE_MARGIN_S
+    assert timeouts["status"] == gpu_slot.STATUS_TIMEOUT_S + margin
+    assert timeouts["stop"] == gpu_slot.STOP_TIMEOUT_S + margin
     assert timeouts["status"] != timeouts["stop"], "status 与 stop 不得共用同一超时"
+    # F009-R4-002：客户端 deadline 必须严格大于同一动作的服务端 deadline，否则客户端
+    # 先超时抛 OSError，服务端规范的 E_TIMEOUT 信封根本收不到。
+    assert timeouts["status"] > gpu_slot.STATUS_TIMEOUT_S
+    assert timeouts["stop"] > gpu_slot.STOP_TIMEOUT_S
 
     restore_seen: list[float] = []
 
@@ -387,7 +394,8 @@ def test_each_lifecycle_action_uses_its_own_contract_timeout() -> None:
     gpu_slot.restore_kronos(
         control_url="http://kronos", contract_version="1", client=_RestoreClient()
     )
-    assert restore_seen == [gpu_slot.RESTORE_TIMEOUT_S] and restore_seen[0] == 120.0
+    assert restore_seen == [gpu_slot.RESTORE_TIMEOUT_S + gpu_slot.CLIENT_DEADLINE_MARGIN_S]
+    assert restore_seen[0] > gpu_slot.RESTORE_TIMEOUT_S
 
 
 def test_missing_control_url_fails_closed_unless_service_is_known_absent() -> None:
@@ -541,5 +549,71 @@ def test_success_confirms_vram_release_via_status() -> None:
     )
     # Then: success is reported only after the confirming status reading fell.
     assert outcome == KronosOffloadOutcome(
-        action="stopped", reason="vram_released", vram_before_gb=3, vram_after_gb=0.25
+        action="stopped",
+        reason="vram_released",
+        vram_before_gb=3,
+        vram_after_gb=0.25,
+        restore_required=True,
     )
+
+
+def test_issuing_stop_takes_restore_ownership_even_when_it_fails() -> None:
+    """F009-R4-002 判红点：发出过 stop 就背着恢复责任，与该请求返回什么无关。
+
+    E_TIMEOUT 的语义是"动作仍在进行"——60s 超时返回、61s 后台完成的那次卸载，若客户端
+    只在"同步确认 stopped"时登记恢复，Kronos 就永久停在 stopped，白天 dry-run 再也拿不到
+    实时信号。连接中断同理：请求已经出门，服务端可能正在卸载。
+    """
+    timed_out = offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=1.0,
+        client=_FakeClient(statuses=(_status(),), stop=(200, {"error": "E_TIMEOUT"})),
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=8),
+    )
+    assert timed_out.action == "fail_closed" and timed_out.restore_required
+
+    class _DropAfterStop:
+        service_present = True
+        idle_threshold_gb = None
+
+        def __init__(self) -> None:
+            self.sent: list[str] = []
+
+        def request(self, method, url, contract_version, timeout_s):
+            self.sent.append(url)
+            if url.endswith("/lifecycle/status") and len(self.sent) == 1:
+                return _status()
+            raise ConnectionResetError
+
+    dropped = offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=1.0,
+        client=_DropAfterStop(),
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=8),
+    )
+    assert dropped.action == "fail_closed" and dropped.restore_required
+
+    # 反面：根本没发出过 stop 的路径不得背责任，否则每晚都对没停过的实例空调 restore。
+    never_sent = offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=1.0,
+        client=_FakeClient(statuses=(_status(device="cpu", vram_bytes=0),)),
+    )
+    assert never_sent.action == "not_needed" and not never_sent.restore_required
+
+
+def test_transitional_state_fails_closed() -> None:
+    """F009-R4-001 判红点：动作进行中既不能当作已停机，也不能当作在跑而跳过卸载。"""
+    outcome = offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=1.0,
+        client=_FakeClient(statuses=(_status(state="transitional"),)),
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=8),
+    )
+    assert outcome.action == "fail_closed"
+    assert outcome.reason == "state_transitional"
+    assert not outcome.restore_required, "还没发出 stop，不该背恢复责任"

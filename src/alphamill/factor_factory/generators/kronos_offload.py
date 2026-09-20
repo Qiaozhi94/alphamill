@@ -21,6 +21,10 @@ class KronosOffloadOutcome:
     reason: str
     vram_before_gb: float | None
     vram_after_gb: float | None
+    # 架构 §7.1「迟到副作用的恢复所有权」：只要本轮发出过 /lifecycle/stop 就为 True，
+    # 与该请求返回什么无关。E_TIMEOUT 的语义是"动作仍在进行"，60s 超时返回、61s 后台
+    # 完成的那次卸载若不被恢复，Kronos 会永久停在 stopped。
+    restore_required: bool = False
 
 
 _Payload: TypeAlias = dict[str, int | str | bool]
@@ -51,9 +55,17 @@ def _http_request(
 
 # 架构 §7.1 的可配缺省：status 5s / stop 60s / restore 120s。三个动作共用单一超时会
 # 把正常卸载误判成失败——卸载模型 + empty_cache 远超 status 的量级。
+# 这三个值是**服务端**动作 deadline；客户端的 socket deadline 必须严格更大，否则客户端
+# 先超时抛 OSError，服务端规范的 E_TIMEOUT 信封根本收不到（F009 检视 R4-002）。
 STATUS_TIMEOUT_S = 5.0
 STOP_TIMEOUT_S = 60.0
 RESTORE_TIMEOUT_S = 120.0
+CLIENT_DEADLINE_MARGIN_S = 5.0
+
+
+def client_deadline(server_deadline_s: float, margin_s: float = CLIENT_DEADLINE_MARGIN_S) -> float:
+    """Socket deadline for one action: strictly greater than the server's."""
+    return server_deadline_s + margin_s
 
 
 def offload_kronos(
@@ -66,6 +78,7 @@ def offload_kronos(
     vram_reader: Callable[[], VramReading | None] = query_vram,
     status_timeout_s: float = STATUS_TIMEOUT_S,
     stop_timeout_s: float = STOP_TIMEOUT_S,
+    deadline_margin_s: float = CLIENT_DEADLINE_MARGIN_S,
 ) -> KronosOffloadOutcome:
     """Stop a GPU Kronos tenant or fail closed according to architecture §7.1.
 
@@ -88,7 +101,8 @@ def offload_kronos(
     base_url = control_url.rstrip("/")
 
     def send(method: Literal["GET", "POST"], path: str) -> tuple[int, _Payload]:
-        timeout = stop_timeout_s if path.endswith("/stop") else status_timeout_s
+        server_deadline = stop_timeout_s if path.endswith("/stop") else status_timeout_s
+        timeout = client_deadline(server_deadline, deadline_margin_s)
         return requester(method, f"{base_url}{path}", contract_version, timeout)
 
     try:
@@ -106,20 +120,26 @@ def offload_kronos(
         return _outcome("not_needed", "cpu_instance", (before, None))
     if status.get("state") == "stopped":
         return _outcome("not_needed", "already_stopped", (before, before))
+    if status.get("state") == "transitional":
+        # 动作进行中：既不是可取锁的 stopped，也不是可放心跳过的 running（架构 §7.1 决策表）。
+        return _outcome("fail_closed", "state_transitional", (before, None))
     if status.get("state") != "running":
         return _outcome("fail_closed", "status_unknown", (before, None))
     try:
         stop_code, stopped = send("POST", "/lifecycle/stop")
+        # 请求已经出门——从这里往下，无论结果如何都背着恢复责任。
         if stop_code >= 400 or "error" in stopped or stopped.get("state") != "stopped":
-            return _outcome("fail_closed", "stop_failed", (before, None))
+            return _outcome("fail_closed", "stop_failed", (before, None), restore_required=True)
         confirm_code, confirmed = send("GET", "/lifecycle/status")
     except OSError:
-        return _outcome("fail_closed", "control_plane_unreachable", (before, None))
+        return _outcome(
+            "fail_closed", "control_plane_unreachable", (before, None), restore_required=True
+        )
     after = _status_vram_gb(confirmed)
     if confirmed.get("vram_readable") is False:
         # 读数缺失与"确实没释放"在处置上同为 fail-closed，但事后归因完全不同，
         # 故分开记 reason（架构 §7.1：读数不可得仍是成功响应，不是控制面故障）。
-        return _outcome("fail_closed", "vram_unreadable", (before, None))
+        return _outcome("fail_closed", "vram_unreadable", (before, None), restore_required=True)
     stopped_ok = (
         confirm_code < 400
         and confirmed.get("state") == "stopped"
@@ -128,13 +148,15 @@ def offload_kronos(
         and after < before
     )
     if not stopped_ok:
-        return _outcome("fail_closed", "vram_not_released", (before, after))
+        return _outcome("fail_closed", "vram_not_released", (before, after), restore_required=True)
     # 架构 §7.1 显存确认条：下降还不够，卸载后整卡可用显存必须达到训练预算（与取锁判定
     # 同一谓词）——否则 Kronos 让出来了但卡上还有别的租户，取锁照样 OOM。reason 说的是
     # 「训练预算未能确认」，不是「已用读数低于预算」，两者在 8GB 卡上并不等价。
     if not vram_is_sufficient(vram_reader(), limit_gb=vram_budget_gb):
-        return _outcome("fail_closed", "training_budget_unconfirmed", (before, after))
-    return _outcome("stopped", "vram_released", (before, after))
+        return _outcome(
+            "fail_closed", "training_budget_unconfirmed", (before, after), restore_required=True
+        )
+    return _outcome("stopped", "vram_released", (before, after), restore_required=True)
 
 
 def _fallback_probe(
@@ -168,12 +190,15 @@ def _outcome(
     action: Literal["stopped", "not_needed", "fail_closed"],
     reason: str,
     readings: tuple[float | None, float | None] = (None, None),
+    *,
+    restore_required: bool = False,
 ) -> KronosOffloadOutcome:
     return KronosOffloadOutcome(
         action=action,
         reason=reason,
         vram_before_gb=readings[0],
         vram_after_gb=readings[1],
+        restore_required=restore_required,
     )
 
 
@@ -183,6 +208,7 @@ def restore_kronos(
     contract_version: str,
     client=None,
     timeout_s: float = RESTORE_TIMEOUT_S,
+    deadline_margin_s: float = CLIENT_DEADLINE_MARGIN_S,
 ) -> bool:
     """训练窗口结束后恢复 Kronos 常驻推理；返回是否确认回到 running。
 
@@ -194,7 +220,10 @@ def restore_kronos(
     requester = _http_request if client is None else client.request
     try:
         status_code, payload = requester(
-            "POST", f"{control_url.rstrip('/')}/lifecycle/restore", contract_version, timeout_s
+            "POST",
+            f"{control_url.rstrip('/')}/lifecycle/restore",
+            contract_version,
+            client_deadline(timeout_s, deadline_margin_s),
         )
     except OSError:
         return False

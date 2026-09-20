@@ -64,12 +64,17 @@ def resolve_kronos_offload(
     )
 
 
-def restore_kronos_if_stopped(
+def restore_kronos_if_needed(
     config: Mapping[str, canonical.JSONValue],
     outcome: gpu_slot.KronosOffloadOutcome | None,
 ) -> bool | None:
-    """夜槽结束后恢复常驻推理；未曾停过则无事可做（返回 None）。"""
-    if outcome is None or outcome.action != "stopped":
+    """夜槽结束后恢复常驻推理；本轮没发出过 stop 才是真的无事可做（返回 None）。
+
+    触发条件是"发出过 stop"而不是"确认 stopped"：E_TIMEOUT 之后动作仍在进行，
+    超时返回、后台迟到完成的那次卸载若不恢复，白天 dry-run 从此没有实时信号
+    （架构 §7.1 迟到副作用的恢复所有权）。restore 幂等，没真停机时是一次空操作。
+    """
+    if outcome is None or not (outcome.restore_required or outcome.action == "stopped"):
         return None
     return gpu_slot.restore_kronos(
         control_url=_optional_text(config.get("kronos_control_url")),
