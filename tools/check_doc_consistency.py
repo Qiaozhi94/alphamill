@@ -34,6 +34,7 @@ README = "docs/README.md"
 F007_DESIGN = "docs/features/0.2/F007-evaluation-gates/design.md"
 F007_TASKS = "docs/features/0.2/F007-evaluation-gates/tasks.md"
 F004_SPEC = "docs/features/0.2/F004-kronos-inference-runtime/spec.md"
+F009_SPEC = "docs/features/0.2/F009-kronos-lifecycle-endpoints/spec.md"
 F004_TASKS = "docs/features/0.2/F004-kronos-inference-runtime/tasks.md"
 TEST_LIFECYCLE = "tests/integration/test_f003_kronos_lifecycle.py"
 
@@ -519,6 +520,12 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (ARCH, "请求形态非法（请求体含契约外的键等）一律\n  `E_BAD_REQUEST`"),
             (DESIGN, "Kronos 生命周期 Contract"),
             (TASKS, "test_f003_kronos_lifecycle.py"),
+            # F009-R4-006：GPU 前置只对 SC-005/AC-012 成立。写成 SC-002/AC-010 会让收口时
+            # 把"CPU 上即可验证的停机稳定性"误标成未验证，也会把客户端交付边误当成 GPU 结论。
+            (F009_SPEC, "**SC-005、AC-012 的显存事实部分**"),
+            # F009-R4-003：AC-012 止于载体与先红态，解除 xfail 归 F010——这条被改回
+            # "等 F010 落地"就会重新形成两个 feature 互等的收口环。
+            (F009_SPEC, "**本 AC 到此为止即算满足**"),
             (F004_SPEC, "Kronos 服务生命周期控制面"),
             (F004_TASKS, "tests/integration/test_f003_kronos_lifecycle.py"),
         ),
