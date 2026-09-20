@@ -497,7 +497,14 @@ TEXT_CHECKS: tuple[TextCheck, ...] = (
             (ARCH, "真实推理服务 `kronos-signal-real`"),
             # R4-003：status 行错误码必须含 E_UNSUPPORTED_VERSION（wire 绑定对所有
             # 动作生效，契约测试正是打 GET /lifecycle/status 做版本拒绝）。
-            (ARCH, "`E_UNAVAILABLE` / `E_UNSUPPORTED_VERSION`"),
+            # F009-R1-004 后 status 行只剩该一个错误码——显存读数不可得改由成功响应的
+            # vram_readable=false 表达，不再借用 E_UNAVAILABLE。
+            (ARCH, "只读，天然幂等 | 可配（默认 5s） | `E_UNSUPPORTED_VERSION` |"),
+            # F009-R2-003：E_UNSUPPORTED_VERSION 是客户端判定「服务端未实现本契约」的
+            # 入口，不得被请求体校验复用；这条分工若被删回去，客户端会把自己的请求
+            # 构造错误误读成服务端缺失。
+            (ARCH, "`E_UNSUPPORTED_VERSION` **只**表示版本协商失败"),
+            (ARCH, "请求形态非法（请求体含契约外的键等）一律\n  `E_BAD_REQUEST`"),
             (DESIGN, "Kronos 生命周期 Contract"),
             (TASKS, "test_f003_kronos_lifecycle.py"),
             (F004_SPEC, "Kronos 服务生命周期控制面"),

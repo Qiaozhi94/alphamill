@@ -597,8 +597,13 @@ mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围—�
 | 动作 | 语义 | 幂等性 | 超时 | 错误码 |
 |---|---|---|---|---|
 | `status` | 返回 `{state: running\|stopped, desired: running\|stopped, contract_version, model_loaded, vram_bytes, vram_readable, device, operation}` | 只读，天然幂等 | 可配（默认 5s） | `E_UNSUPPORTED_VERSION` |
-| `stop` | 置期望态为 `stopped`、卸载模型并释放显存，返回释放后的 `vram_bytes` | 重复调用返回 `state=stopped`，不报错 | 可配（默认 60s） | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
-| `restore` | 置期望态为 `running`、恢复常驻推理，返回 `state=running` | 重复调用返回 `state=running` | 可配（默认 120s） | `E_BUSY` / `E_TIMEOUT` / `E_UNAVAILABLE` / `E_UNSUPPORTED_VERSION` |
+| `stop` | 置期望态为 `stopped`、卸载模型并释放显存，返回释放后的 `vram_bytes` | 重复调用返回 `state=stopped`，不报错 | 可配（默认 60s） | `E_BUSY` / `E_TIMEOUT` / `E_BAD_REQUEST` / `E_UNSUPPORTED_VERSION` |
+| `restore` | 置期望态为 `running`、恢复常驻推理，返回 `state=running` | 重复调用返回 `state=running` | 可配（默认 120s） | `E_BUSY` / `E_TIMEOUT` / `E_UNAVAILABLE` / `E_BAD_REQUEST` / `E_UNSUPPORTED_VERSION` |
+
+- **错误码各司其职**：`E_UNSUPPORTED_VERSION` **只**表示版本协商失败，客户端据此判定
+  "服务端未实现本契约"并转入回落探测；请求形态非法（请求体含契约外的键等）一律
+  `E_BAD_REQUEST`。两者不得互相代用——把"你传了个我不认识的参数"编码成"这台服务端没实现
+  契约"，会让客户端把自己的请求构造错误误读成服务端缺失。
 
 - **期望态与派生态**：`state` 不是"模型此刻在不在内存里"的同义词，而是 `(desired, model_loaded)`
   的函数——`stopped ≡ desired=stopped ∧ model_loaded=false`，`running ≡ desired=running ∧

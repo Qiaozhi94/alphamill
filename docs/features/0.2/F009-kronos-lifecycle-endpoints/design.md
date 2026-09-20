@@ -79,12 +79,12 @@ updated: 2026-09-20
 | 方法 | 路径 | 成功响应字段 | 默认超时（环境变量） | 错误码 |
 |---|---|---|---|---|
 | GET | `/lifecycle/status` | `state, desired, contract_version, model_loaded, vram_bytes, vram_readable, device, operation` | 5s (`KRONOS_LIFECYCLE_STATUS_TIMEOUT_S`) | `E_UNSUPPORTED_VERSION` |
-| POST | `/lifecycle/stop` | `state, vram_bytes` | 60s (`KRONOS_LIFECYCLE_STOP_TIMEOUT_S`) | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
-| POST | `/lifecycle/restore` | `state` | 120s (`KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S`) | `E_BUSY` / `E_TIMEOUT` / `E_UNAVAILABLE` / `E_UNSUPPORTED_VERSION` |
+| POST | `/lifecycle/stop` | `state, vram_bytes` | 60s (`KRONOS_LIFECYCLE_STOP_TIMEOUT_S`) | `E_BUSY` / `E_TIMEOUT` / `E_BAD_REQUEST` / `E_UNSUPPORTED_VERSION` |
+| POST | `/lifecycle/restore` | `state` | 120s (`KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S`) | `E_BUSY` / `E_TIMEOUT` / `E_UNAVAILABLE` / `E_BAD_REQUEST` / `E_UNSUPPORTED_VERSION` |
 
 - **错误信封**：恰为 `{"error": "E_*"}` 单键对象，HTTP 200。成功与错误互斥：成功响应不含 `error`，错误响应不含任何其他字段。用 200 而非 4xx/5xx 是因为契约测试只认信封——非 2xx 可能被中间件改写成错误页而丢掉 `error` 字段。
 - **版本协商**：依赖 `require_contract_version` 读 `X-Contract-Version`；缺失或 ≠ `"1"` 即 `E_UNSUPPORTED_VERSION`，**缺失不按默认版本放行**。
-- **请求体**：`stop` / `restore` 接受空体或 `{}`；任何其他键一律 `E_UNSUPPORTED_VERSION`（属于"不认识的请求形态"），防止在契约外偷加 `force` 之类开关。
+- **请求体**：`stop` / `restore` 接受空体或 `{}`；任何其他键一律 `E_BAD_REQUEST`，防止在契约外偷加 `force` 之类开关。**不复用 `E_UNSUPPORTED_VERSION`**——后者是客户端判定"服务端未实现本契约"的入口（决策表第三行回落探测），两者混用会让请求构造错误被误读成服务端缺失。
 - **`operation`**：`null` 或 `{id, action, started_at}`；`id` 为 uuid4 十六进制前 8 位，进入日志行做关联键。
 - **`vram_bytes` 语义**：设备侧整卡已用字节。读数不可得时 `vram_readable=false` + `vram_bytes=null`，**仍是成功响应**；无 CUDA 时 `vram_bytes=0` + `vram_readable=true` + `device=cpu`。
 - **mock**：路由在 `KRONOS_USE_REAL_MODEL=false` 时不注册，`/lifecycle/*` 自然 404。
@@ -143,7 +143,8 @@ desired=stopped  → 直接走 F004 既有兜底信号路径，不触碰 _load_p
 
   | 条件 | 返回 |
   |---|---|
-  | 缺 `X-Contract-Version`、值不匹配、或请求体含额外键 | `E_UNSUPPORTED_VERSION` |
+  | 缺 `X-Contract-Version` 或值不匹配 | `E_UNSUPPORTED_VERSION` |
+  | 请求体含契约外的键 | `E_BAD_REQUEST` |
   | 已有动作进行中 | `E_BUSY` |
   | 动作未在可配超时内完成（后台继续） | `E_TIMEOUT` |
   | 模型资产缺失 / 加载抛错（`restore`） | `E_UNAVAILABLE` |
@@ -163,14 +164,14 @@ desired=stopped  → 直接走 F004 既有兜底信号路径，不触碰 _load_p
 | `AC-002` | unit | 同上：stop 往返与幂等 | `desired` 置位、`_predictor is None`、`empty_cache` 被调用；重复 stop 不报错；stop 后 status/restore 可达（进程未退出） |
 | `AC-003` | unit | `tests/unit/test_f009_stopped_admission.py` | stop 后连打 `/predict`、`/predict_batch`：`_load_predictor` **零次调用**（以 spy 断言）、来源不为 `kronos`、`model_loaded` 恒 false。**变异证明**：去掉准入分支即判红 |
 | `AC-004` | unit | `tests/unit/test_f009_lifecycle_contract.py` | restore 幂等（加载函数只调一次）；加载抛错 → `E_UNAVAILABLE` + `state=stopped` + 进程未退出（断言未抛 SystemExit） |
-| `AC-005` | unit | `tests/unit/test_f009_lifecycle_errors.py` | 版本 999 / 头缺失 / 体含 `{"force": true}` 三种输入均返回**恰为单键**的信封（断言 `set(payload) == {"error"}`）；成功响应不含 `error`；空体与 `{}` 放行 |
+| `AC-005` | unit | `tests/unit/test_f009_lifecycle_errors.py` | 版本 999 / 头缺失 → `E_UNSUPPORTED_VERSION`；体含 `{"force": true}` → `E_BAD_REQUEST`（**断言两者不相等**）；三者均**恰为单键**信封（`set(payload) == {"error"}`）；成功响应不含 `error`；空体与 `{}` 放行 |
 | `AC-006` | unit | 同上：单飞与超时 | 慢动作进行中并发 restore → `E_BUSY` 且原动作不受影响；短超时 → `E_TIMEOUT` 且 `operation` 仍非空；后台完成后 `operation` 转 `null` 且 `state` 与 `desired` 一致；加载中途抛错后显存清理、落回 `stopped` |
 | `AC-007` | unit | `tests/unit/test_f009_vram_probe.py` | 三条回退分支逐条命中；探测命令不含 `--query-compute-apps`；三个超时变量的非法值（0 / 负数 / 非数值）启动期判红，不回退默认 |
 | `AC-008` | unit | `tests/unit/test_f009_lifecycle_logging.py`（caplog） | stop/restore 各一行且含 `operation_id`；超时后的迟到完成补写同 id 的 `result=late_complete`；字段集与 TR-001 逐项一致；不含主机路径与凭据。**变异证明**：删任一必填字段即判红 |
 | `AC-009` | integration | `tests/integration/test_f009_lifecycle_deployment.py`（`ALPHAMILL_INTEGRATION=1`） | mock 实例 `/lifecycle/status` 返回 **404**；默认镜像 `import torch` 判红（沿用 F004 否证式断言）；`docker compose config` 断言控制面端口绑 `127.0.0.1` |
 | `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 客户端对 status/stop/restore 分别使用 5/60/120s（断言传给请求层的 timeout 值逐个不同）；三条退出路径均调用 restore |
 | `AC-011` | 真实环境（执行机） | `tests/integration/test_f003_kronos_lifecycle.py` | 控制面语义用例 `--runxfail` 下 0 xfailed；模块级 xfail 已移除；补齐 `E_BUSY`/`E_TIMEOUT`/额外参数用例 |
-| `AC-012` | 真实环境（**依赖 F010**） | 同上，显存用例以 `xfail(strict=True)` 标注 | 断言 `after < before` **且** `after` 低于训练预算阈值；F010 落地前保持先红态，落地后 XPASS 即红、须显式解除 |
+| `AC-012` | 真实环境（**依赖 F010**） | `tests/integration/test_f009_vram_release.py`（独立载体，不与 F003 的 0-xfailed 门禁同文件） | 断言 `after < before` **且** `after` 低于训练预算阈值；F010 落地前以 `xfail(strict=True)` 保持先红态，落地后 XPASS 即红、须显式解除 |
 
 补充纪律：
 

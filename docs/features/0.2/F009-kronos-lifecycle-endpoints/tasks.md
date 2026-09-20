@@ -35,7 +35,7 @@ updated: 2026-09-20
 
 ### Phase 1：契约骨架、期望态与状态查询
 
-- [ ] T003 (`FR-005`, `IR-002`, `IR-004`, `AC-005`): 实现 `require_contract_version` 依赖、**恰为单键**的错误信封与请求体校验（空体/`{}` 放行，含额外键拒绝）；头缺失不按默认版本放行 — verify: `tests/unit/test_f009_lifecycle_errors.py`
+- [ ] T003 (`FR-005`, `IR-002`, `IR-004`, `AC-005`): 实现 `require_contract_version` 依赖、**恰为单键**的错误信封与请求体校验（空体/`{}` 放行，含额外键以 `E_BAD_REQUEST` 拒绝，**不复用** `E_UNSUPPORTED_VERSION`）；头缺失不按默认版本放行 — verify: `tests/unit/test_f009_lifecycle_errors.py`
 - [ ] T004 (`FR-001`, `IR-001`, `IR-003`, `AC-001`): 新建 `lifecycle.py` 与 `LifecycleController`：`desired` 存储 + `state` 由 `(desired, model_loaded)` 派生 + `operation` 台账；挂 `GET /lifecycle/status` 返回八字段 — verify: `tests/unit/test_f009_lifecycle_contract.py`
 - [ ] T005 [P] (`FR-007`, `NFR-005`, `AC-007`): 新建 `vram.py`（`mem_get_info` → `nvidia-smi` → 不可得三级回退，不查进程列表）与 `lifecycle_config.py`（三个超时与探测方式的环境变量契约，非法值启动期判红不回退默认） — verify: `tests/unit/test_f009_vram_probe.py`
 
@@ -57,7 +57,7 @@ updated: 2026-09-20
 - [ ] T013 (`NFR-002`, `NFR-003`, `AC-009`): compose 控制面端口绑 `127.0.0.1` 不发布 `0.0.0.0`；三个超时与探测方式环境变量同步 `deployment/.env.example`；在执行机部署 `kronos-signal-real` 新镜像 — verify: `tests/integration/test_f009_lifecycle_deployment.py` + 执行机 `docker compose config`
 - [ ] T014 (`FR-009`, `AC-010`): 修 F003 客户端的跨 Feature 交付边——`status`/`stop`/`restore` 分别使用 5s/60s/120s 可配超时（现为统一 10s，会把正常卸载误判成失败）；三条退出路径的 `restore` 已于 F003 循环 14 落地，本任务补断言 — verify: `tests/unit/test_f003_gpu_slot.py`
 - [ ] T015 (`FR-008`, `AC-011`): 转正 F003 契约测试——移除模块级 `xfail(strict=True)`，补 `E_BUSY`（动作进行中）、`E_TIMEOUT`（短超时注入）与额外参数拒绝三类用例 — verify: `tests/integration/test_f003_kronos_lifecycle.py`
-- [ ] T016 (`SC-005`, `AC-012`, `NFR-006`): 把显存真实下降的判据写成机器可判定断言（`after < before` **且** `after` 低于训练预算阈值），以 `xfail(strict=True)` 标注 F010 未落地的先红态并写明解除条件 — verify: `tests/integration/test_f003_kronos_lifecycle.py`
+- [ ] T016 (`SC-005`, `AC-012`, `NFR-006`): 把显存真实下降的判据写成机器可判定断言（`after < before` **且** `after` 低于训练预算阈值），落在**独立载体** `tests/integration/test_f009_vram_release.py`，以 `xfail(strict=True)` 标注 F010 未落地的先红态并写明解除条件。**不得放进 `test_f003_kronos_lifecycle.py`**——F003 T033 要求该文件在 `--runxfail` 下 0 xfailed，先红态放进去会让 F009 落地后 T033 仍然不可能通过 — verify: `tests/integration/test_f009_vram_release.py`
 
 ## 3. 验证与验收任务
 

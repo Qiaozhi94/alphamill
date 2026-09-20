@@ -203,7 +203,7 @@ updated: 2026-09-20
 
 ### Requirement: 契约版本协商与单键错误信封（`FR-005`）
 
-系统应当要求所有生命周期请求携带 `X-Contract-Version` 头（当前 `1`）；版本不匹配或头缺失时应当以 `{"error": "E_UNSUPPORTED_VERSION"}` 拒绝。错误响应应当**恰为该单键对象**，不携带其他字段；成功响应不得含 `error` 键。`stop` / `restore` 的请求体应当为空或空 JSON 对象，携带任何额外参数应当被拒绝。
+系统应当要求所有生命周期请求携带 `X-Contract-Version` 头（当前 `1`）；版本不匹配或头缺失时应当以 `{"error": "E_UNSUPPORTED_VERSION"}` 拒绝。错误响应应当**恰为该单键对象**，不携带其他字段；成功响应不得含 `error` 键。`stop` / `restore` 的请求体应当为空或空 JSON 对象，携带任何额外参数应当以 `{"error": "E_BAD_REQUEST"}` 拒绝。
 
 #### Scenario: 版本不匹配或头缺失
 
@@ -215,7 +215,7 @@ updated: 2026-09-20
 
 - GIVEN `POST /lifecycle/stop` 携带请求体 `{"force": true}`
 - WHEN 服务端处理该请求
-- THEN 以错误信封拒绝，不执行任何停止动作
+- THEN 返回 `{"error": "E_BAD_REQUEST"}` 且不执行任何停止动作（**不得**复用 `E_UNSUPPORTED_VERSION`）
 
 ### Requirement: 单飞仲裁与进行中语义（`FR-006`）
 
@@ -278,7 +278,7 @@ F003 客户端应当按动作分别设置超时（`status` 5s / `stop` 60s / `re
 - **IR-001**：控制面应当提供 `GET /lifecycle/status`、`POST /lifecycle/stop`、`POST /lifecycle/restore` 三个 JSON 端点，路径与方法与架构 §7.1 wire 绑定逐字一致。
 - **IR-002**：请求应当包含 `X-Contract-Version` 头；`stop` / `restore` 的请求体应当为空或 `{}`，其他形态一律拒绝。
 - **IR-003**：`status` 响应应当包含 `state`、`desired`、`contract_version`、`model_loaded`、`vram_bytes`、`vram_readable`、`device`、`operation` 八个字段；`stop` 响应应当包含 `state` 与 `vram_bytes`；`restore` 响应应当包含 `state`。
-- **IR-004**：错误响应应当恰为 `{"error": "E_*"}`，错误码取值限于 `E_UNSUPPORTED_VERSION`（全部动作）/ `E_BUSY`、`E_TIMEOUT`（`stop`、`restore`）/ `E_UNAVAILABLE`（仅 `restore`）。
+- **IR-004**：错误响应应当恰为 `{"error": "E_*"}`，错误码取值限于 `E_UNSUPPORTED_VERSION`（**仅**版本协商失败）/ `E_BAD_REQUEST`（请求形态非法）/ `E_BUSY`、`E_TIMEOUT`（`stop`、`restore`）/ `E_UNAVAILABLE`（仅 `restore`）。`E_UNSUPPORTED_VERSION` 是客户端判定「服务端未实现本契约」的入口，不得被请求体校验复用。
 - **IR-005**：mock 实例不注册 `/lifecycle/*` 路由；对其调用应当返回 404，由客户端决策表第三行处置。
 
 ### UX 需求
@@ -299,7 +299,8 @@ F003 客户端应当按动作分别设置超时（`status` 5s / `stop` 60s / `re
 ```text
 running  -> stopped  stop 成功（desired=stopped ∧ 模型已卸载 ∧ GPU 缓存已释放）
 stopped  -> running  restore 成功（desired=running ∧ 模型加载完成）
-running  -> running  stop 被拒（E_BUSY 有动作进行中）；restore 幂等重入
+running  -> running  restore 幂等重入；请求被 E_BAD_REQUEST / E_UNSUPPORTED_VERSION 拒绝
+过渡态 -> 过渡态  动作进行中时任一生命周期动作被拒（E_BUSY），原动作不受影响
 stopped  -> stopped  stop 幂等重入；restore 失败（E_UNAVAILABLE）；停机期间的推理请求
 *        -> 过渡态   动作进行中（operation 非空）；E_TIMEOUT 不改变期望态，也不是终态
 过渡态   -> 稳定态   动作完成或抛错清理后，落回与 desired 一致的稳定态，operation 转 null
@@ -332,14 +333,14 @@ stopped  -> stopped  stop 幂等重入；restore 失败（E_UNAVAILABLE）；停
 - [ ] **AC-002** (`FR-002`, `NFR-004`): `stop` 置 `desired=stopped`、卸载模型并释放缓存、返回 `state=stopped` 与 `vram_bytes`；重复调用不报错；进程存活（`status`/`restore` 随后可达） — tests: `tests/unit/test_f009_lifecycle_contract.py`
 - [ ] **AC-003** (`FR-003`): `desired=stopped` 期间连续 `/predict` 与 `/predict_batch` 均走兜底路径、来源不标 `kronos`，且 `model_loaded` 始终 false、`state` 始终 `stopped` — tests: `tests/unit/test_f009_stopped_admission.py`
 - [ ] **AC-004** (`FR-004`): `restore` 重新加载返回 `state=running`，重复调用不重复加载；加载失败返回 `E_UNAVAILABLE`、不伪报 `running`、**进程不退出** — tests: `tests/unit/test_f009_lifecycle_contract.py`
-- [ ] **AC-005** (`FR-005`, `IR-002`, `IR-004`): 版本不匹配与头缺失均以恰为单键的 `{"error": "E_UNSUPPORTED_VERSION"}` 拒绝；成功响应不含 `error`；空体与 `{}` 放行、含额外参数的请求体被拒且不执行动作 — tests: `tests/unit/test_f009_lifecycle_errors.py`
+- [ ] **AC-005** (`FR-005`, `IR-002`, `IR-004`): 版本不匹配与头缺失均以恰为单键的 `{"error": "E_UNSUPPORTED_VERSION"}` 拒绝；成功响应不含 `error`；空体与 `{}` 放行；含额外参数的请求体以 `E_BAD_REQUEST` 被拒且不执行动作（两个错误码互不代用） — tests: `tests/unit/test_f009_lifecycle_errors.py`
 - [ ] **AC-006** (`FR-006`): 动作进行中时冲突动作立即 `E_BUSY`；超时返回 `E_TIMEOUT` 且 `operation` 仍非空、后台不被中断；动作完成后 `operation` 转 `null` 且 `state` 与 `desired` 一致；中途抛错清理显存后落回 `stopped` — tests: `tests/unit/test_f009_lifecycle_errors.py`
 - [ ] **AC-007** (`FR-007`, `NFR-005`): 显存探测按 `mem_get_info` → `nvidia-smi` 顺序回退且不查进程列表；三个超时与探测方式由具名环境变量承载，非法值启动期判红不静默回退 — tests: `tests/unit/test_f009_vram_probe.py`
 - [ ] **AC-008** (`TR-001`, `TR-002`, `TR-003`): stop/restore 各写一行含 `operation_id` 的结构化日志；超时后的迟到完成补写同 id 收尾行；字段集与 TR-001 一致且不含主机路径或凭据 — tests: `tests/unit/test_f009_lifecycle_logging.py`
 - [ ] **AC-009** (`NFR-001`, `NFR-003`, `IR-005`): mock 实例不注册 `/lifecycle/*`（返回 404）且默认镜像 `import torch` 仍判红；compose 不把控制面端口发布到 `0.0.0.0` — tests: `tests/integration/test_f009_lifecycle_deployment.py`
 - [ ] **AC-010** (`FR-009`, `SC-004`): F003 客户端对三个动作分别使用 5s/60s/120s 的可配超时；正常结束、取锁失败、运行异常三条路径均调用 `restore` — tests: `tests/unit/test_f003_gpu_slot.py`
 - [ ] **AC-011** (`FR-008`, `SC-003`): 执行机上 `tests/integration/test_f003_kronos_lifecycle.py` 的控制面语义用例 0 xfailed 通过，模块级 `xfail(strict=True)` 已移除，补齐 `E_BUSY`/`E_TIMEOUT`/额外参数用例 — tests: `tests/integration/test_f003_kronos_lifecycle.py`
-- [ ] **AC-012** (`SC-005`, `NFR-006`): 显存真实下降的判据以机器可判定断言落盘（下降且低于训练预算），在 F010 落地前以 `xfail(strict=True)` 保持先红态；本 feature 不得声称该项已验证 — tests: `tests/integration/test_f003_kronos_lifecycle.py`
+- [ ] **AC-012** (`SC-005`, `NFR-006`): 显存真实下降的判据以机器可判定断言落盘（下降且低于训练预算），在 F010 落地前以 `xfail(strict=True)` 保持先红态；本 feature 不得声称该项已验证。**该断言须落在独立载体**——放进 `test_f003_kronos_lifecycle.py` 会与 F003 T033「该文件 0 xfailed」的机器门禁互相拆台（`--runxfail` 使先红态按真失败计） — tests: `tests/integration/test_f009_vram_release.py`
 
 ## 7. 测试、依赖与决策
 
