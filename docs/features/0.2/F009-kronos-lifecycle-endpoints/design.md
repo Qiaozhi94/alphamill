@@ -35,7 +35,7 @@ updated: 2026-09-20
 - Runtime / Agent Adapter：`deployment/docker-compose.yml` 的 `kronos-signal-real`——控制面端口绑回环；新增生命周期环境变量（`.env.example` 同步）。
 - Event / Evidence：结构化日志行（TR-001/002），落容器日志，不入库、不建面板。
 - 文档 / 配置：BACKLOG「规划中」新增 F010 行；`docs/alphamill-integration.md` 补控制面运维段。
-- **跨 Feature**：F003 的 `kronos_offload` 客户端改分动作超时（FR-009）；`tests/integration/test_f003_kronos_lifecycle.py` 转正并补用例；显存判据落独立载体 `tests/integration/test_f009_vram_release.py`（避免与 F003 T033 的 0-xfailed 门禁互相拆台）。
+- **跨 Feature**：F003 的 `kronos_offload` 客户端改分动作超时、并把"已释放"判定收紧到训练预算与 `vram_readable` 分账（FR-009，预算由 `mine_config` 从 `vram_limit_gb` 透传）；`tests/integration/test_f003_kronos_lifecycle.py` 转正并补用例；显存判据落独立载体 `tests/integration/test_f009_vram_release.py`（避免与 F003 T033 的 0-xfailed 门禁互相拆台）。
 
 ## 2. 架构与模块边界
 
@@ -169,9 +169,9 @@ desired=stopped  → 直接走 F004 既有兜底信号路径，不触碰 _load_p
 | `AC-007` | unit | `tests/unit/test_f009_vram_probe.py` | 三条回退分支逐条命中；探测命令不含 `--query-compute-apps`；三个超时变量的非法值（0 / 负数 / 非数值）启动期判红，不回退默认 |
 | `AC-008` | unit | `tests/unit/test_f009_lifecycle_logging.py`（caplog） | stop/restore 各一行且含 `operation_id`；超时后的迟到完成补写同 id 的 `result=late_complete`；字段集与 TR-001 逐项一致；不含主机路径与凭据。**变异证明**：删任一必填字段即判红 |
 | `AC-009` | integration | `tests/integration/test_f009_lifecycle_deployment.py`（`ALPHAMILL_INTEGRATION=1`） | mock 实例 `/lifecycle/status` 返回 **404**；默认镜像 `import torch` 判红（沿用 F004 否证式断言）；`docker compose config` 断言控制面端口绑 `127.0.0.1` |
-| `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 客户端对 status/stop/restore 分别使用 5/60/120s（断言传给请求层的 timeout 值逐个不同）；三条退出路径均调用 restore |
+| `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 客户端对 status/stop/restore 分别使用 5/60/120s（断言传给请求层的 timeout 值逐个不同）；三条退出路径均调用 restore；"已释放"判定含训练预算条件且 `vram_readable=false` 单独记 reason。**变异证明**：去掉预算判据 / 忽略 `vram_readable` 各自判红 |
 | `AC-011` | 真实环境（执行机） | `tests/integration/test_f003_kronos_lifecycle.py` | 控制面语义用例 `--runxfail` 下 0 xfailed；模块级 xfail 已移除；补齐 `E_BUSY`/`E_TIMEOUT`/额外参数用例 |
-| `AC-012` | 真实环境（**依赖 F010**） | `tests/integration/test_f009_vram_release.py`（独立载体，不与 F003 的 0-xfailed 门禁同文件） | 断言 `after < before` **且** `after` 低于训练预算阈值；F010 落地前以 `xfail(strict=True)` 保持先红态，落地后 XPASS 即红、须显式解除 |
+| `AC-012` | 真实环境（**依赖 F010**） | `tests/integration/test_f009_vram_release.py`（独立载体，不与 F003 的 0-xfailed 门禁同文件） | 断言 `after < before` **且**卸载后整卡可用显存 ≥ 训练预算（`vram_limit_gb`，与单槽取锁同阈值）；F010 落地前以 `xfail(strict=True)` 保持先红态，落地后 XPASS 即红、须显式解除 |
 
 补充纪律：
 

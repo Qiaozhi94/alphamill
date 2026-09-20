@@ -245,7 +245,7 @@ updated: 2026-09-20
 
 ### Requirement: 契约测试转正与显存判据（`FR-008`）
 
-系统落地后，`tests/integration/test_f003_kronos_lifecycle.py` 应当移除模块级 `xfail(strict=True)`，并补齐 `E_BUSY` / `E_TIMEOUT` / 额外参数拒绝的用例。**显存释放的判据应当是读数真实下降且降到训练预算之下**，而非 `vram_bytes` 是合法整数；该断言在 GPU 基座（F010）落地前以 `xfail(strict=True)` 显式标注先红态。
+系统落地后，`tests/integration/test_f003_kronos_lifecycle.py` 应当移除模块级 `xfail(strict=True)`，并补齐 `E_BUSY` / `E_TIMEOUT` / 额外参数拒绝的用例。**显存释放的判据应当是读数真实下降，且卸载后整卡可用显存达到训练预算**（与单槽取锁同一阈值 `vram_limit_gb`），而非 `vram_bytes` 是合法整数；该断言落在独立载体 `tests/integration/test_f009_vram_release.py`，在 GPU 基座（F010）落地前以 `xfail(strict=True)` 显式标注先红态。
 
 #### Scenario: 先红态转正
 
@@ -257,11 +257,25 @@ updated: 2026-09-20
 
 F003 客户端应当按动作分别设置超时（`status` 5s / `stop` 60s / `restore` 120s 的可配缺省），不得共用单一超时。客户端应当在正常结束、取锁失败与运行异常三条退出路径上都执行 `restore`。
 
+客户端对"已释放"的判定应当与架构 §7.1 显存确认条**逐字同一**：读数真实下降，且卸载后整卡可用显存达到训练预算；该预算应当与单槽取锁同源（`vram_limit_gb`），不新增第二份配置，未声明时不得猜测缺省值。`vram_readable=false`（读数缺失）应当与"确实没释放"分别记 reason——两者同为 fail-closed，但事后归因完全不同。
+
 #### Scenario: 分动作超时
 
 - GIVEN 一次 `stop` 调用
 - WHEN 客户端发起请求
 - THEN 使用 `stop` 的超时（默认 60s），而不是 `status` 的 5s
+
+#### Scenario: 降了但腾不出训练预算
+
+- GIVEN `stop` 返回 `state=stopped` 且确认读数确实下降
+- WHEN 卸载后整卡可用显存仍达不到训练预算
+- THEN 客户端 fail-closed 不取锁，且 reason 与"读数缺失"区分
+
+#### Scenario: 读数缺失单独记账
+
+- GIVEN 确认用的 `status` 返回 `vram_readable=false`
+- WHEN 客户端判定是否已释放
+- THEN fail-closed，并以"读数缺失"而非"未释放"记 reason
 
 ### 数据 / 实体需求
 
@@ -300,7 +314,7 @@ F003 客户端应当按动作分别设置超时（`status` 5s / `stop` 60s / `re
 running  -> stopped  stop 成功（desired=stopped ∧ 模型已卸载 ∧ GPU 缓存已释放）
 stopped  -> running  restore 成功（desired=running ∧ 模型加载完成）
 running  -> running  restore 幂等重入；请求被 E_BAD_REQUEST / E_UNSUPPORTED_VERSION 拒绝
-过渡态 -> 过渡态  动作进行中时任一生命周期动作被拒（E_BUSY），原动作不受影响
+过渡态   -> 过渡态   动作进行中时任一生命周期动作被拒（E_BUSY），原动作不受影响
 stopped  -> stopped  stop 幂等重入；restore 失败（E_UNAVAILABLE）；停机期间的推理请求
 *        -> 过渡态   动作进行中（operation 非空）；E_TIMEOUT 不改变期望态，也不是终态
 过渡态   -> 稳定态   动作完成或抛错清理后，落回与 desired 一致的稳定态，operation 转 null
@@ -325,7 +339,7 @@ stopped  -> stopped  stop 幂等重入；restore 失败（E_UNAVAILABLE）；停
 - **SC-002**：停机稳定——`stop` 之后推理请求不再唤醒模型，`stopped` 能维持到显式 `restore`；
 - **SC-003**：先红态转正——`tests/integration/test_f003_kronos_lifecycle.py` 的控制面语义用例在执行机以 0 xfailed 通过，`xfail(strict=True)` 模块级标记已移除；
 - **SC-004**：交付边闭合——F003 客户端分动作超时与三条退出路径的 `restore` 均已落地并有断言；
-- **SC-005**（**依赖 F010，本 feature 内不成立**）：显存真实下降——`stop` 后设备侧读数下降且降到训练预算之下。判据已写成机器可判定的断言并以先红态挂起。
+- **SC-005**（**依赖 F010，本 feature 内不成立**）：显存真实下降——`stop` 后设备侧读数下降，且卸载后整卡可用显存达到训练预算（`vram_limit_gb`）。判据已写成机器可判定的断言并以先红态挂起。
 
 ### 验收清单
 
@@ -338,9 +352,9 @@ stopped  -> stopped  stop 幂等重入；restore 失败（E_UNAVAILABLE）；停
 - [ ] **AC-007** (`FR-007`, `NFR-005`): 显存探测按 `mem_get_info` → `nvidia-smi` 顺序回退且不查进程列表；三个超时与探测方式由具名环境变量承载，非法值启动期判红不静默回退 — tests: `tests/unit/test_f009_vram_probe.py`
 - [ ] **AC-008** (`TR-001`, `TR-002`, `TR-003`): stop/restore 各写一行含 `operation_id` 的结构化日志；超时后的迟到完成补写同 id 收尾行；字段集与 TR-001 一致且不含主机路径或凭据 — tests: `tests/unit/test_f009_lifecycle_logging.py`
 - [ ] **AC-009** (`NFR-001`, `NFR-003`, `IR-005`): mock 实例不注册 `/lifecycle/*`（返回 404）且默认镜像 `import torch` 仍判红；compose 不把控制面端口发布到 `0.0.0.0` — tests: `tests/integration/test_f009_lifecycle_deployment.py`
-- [ ] **AC-010** (`FR-009`, `SC-004`): F003 客户端对三个动作分别使用 5s/60s/120s 的可配超时；正常结束、取锁失败、运行异常三条路径均调用 `restore` — tests: `tests/unit/test_f003_gpu_slot.py`
-- [ ] **AC-011** (`FR-008`, `SC-003`): 执行机上 `tests/integration/test_f003_kronos_lifecycle.py` 的控制面语义用例 0 xfailed 通过，模块级 `xfail(strict=True)` 已移除，补齐 `E_BUSY`/`E_TIMEOUT`/额外参数用例 — tests: `tests/integration/test_f003_kronos_lifecycle.py`
-- [ ] **AC-012** (`SC-005`, `NFR-006`): 显存真实下降的判据以机器可判定断言落盘（下降且低于训练预算），在 F010 落地前以 `xfail(strict=True)` 保持先红态；本 feature 不得声称该项已验证。**该断言须落在独立载体**——放进 `test_f003_kronos_lifecycle.py` 会与 F003 T033「该文件 0 xfailed」的机器门禁互相拆台（`--runxfail` 使先红态按真失败计） — tests: `tests/integration/test_f009_vram_release.py`
+- [ ] **AC-010** (`FR-009`, `SC-004`): F003 客户端对三个动作分别使用 5s/60s/120s 的可配超时；正常结束、取锁失败、运行异常三条路径均调用 `restore`；"已释放"判定含训练预算条件（与 `vram_limit_gb` 同源、未声明即不可确认）且 `vram_readable=false` 单独记 reason（变异证明：去掉预算判据 / 忽略 `vram_readable` 各自判红） — tests: `tests/unit/test_f003_gpu_slot.py`
+- [ ] **AC-011** (`FR-008`, `SC-003`): 执行机上 `tests/integration/test_f003_kronos_lifecycle.py` 的控制面语义用例 0 xfailed 通过，模块级 `xfail(strict=True)` 已移除，补齐 `E_BUSY`/`E_TIMEOUT`/额外参数用例（额外参数断言 `E_BAD_REQUEST`，不得是 `E_UNSUPPORTED_VERSION`） — tests: `tests/integration/test_f003_kronos_lifecycle.py`
+- [ ] **AC-012** (`SC-005`, `NFR-006`): 显存真实下降的判据以机器可判定断言落盘（读数下降，且卸载后可用显存达到训练预算 `vram_limit_gb`），在 F010 落地前以 `xfail(strict=True)` 保持先红态；本 feature 不得声称该项已验证。**该断言须落在独立载体**——放进 `test_f003_kronos_lifecycle.py` 会与 F003 T033「该文件 0 xfailed」的机器门禁互相拆台（`--runxfail` 使先红态按真失败计） — tests: `tests/integration/test_f009_vram_release.py`
 
 ## 7. 测试、依赖与决策
 
@@ -369,7 +383,7 @@ stopped  -> stopped  stop 幂等重入；restore 失败（E_UNAVAILABLE）；停
 | **错误信封形态**（检视 R1-004） | 错误响应**恰为单键** `{"error": "E_*"}`；显存读数不可得改由成功响应的 `vram_readable=false` + `vram_bytes=null` 表达 | 原来一边声明精确信封、一边要求错误响应附带 `vram_bytes`，JSON schema 无法定义，客户端也无从区分"控制面故障"与"读数缺失"这两件性质完全不同的事 | 契约测试按字段集精确断言，不做宽松匹配 |
 | **mock 的生命周期语义**（检视 R1-005） | **反转此前的 Q-002 决策**：mock 不注册 `/lifecycle/*`，返回 404 | 架构 §7.1 明确 mock 不在契约范围；且 mock 永远 `model_loaded=false`，与 `running ⇒ model_loaded=true` 及 `restore` 返回 running 不可能同时成立。客户端对 404 的处置决策表第三行已覆盖，不需要 mock 假装实现契约 | 见 §8 Q-002 的裁决更新 |
 | **客户端交付边**（检视 R1-006） | F003 的分动作超时与三条路径的 `restore` 纳入本 feature 的 FR-009 / AC-010 | 服务端端点做完但客户端没有 restore、且用 10s 去卡 60s 的 stop，白天恢复旅程仍无 owner，等于端点白做 | `restore` 半边已在 F003 循环 14 修复（R012）；超时半边归本 feature |
-| **显存判据强度**（检视 R1-007） | 判据改为"读数真实下降且降到训练预算之下"，并要求变异判红 | 原断言只检查 `vram_bytes` 是非负整数——端点完全不释放显存也能通过，门禁弱于成功声明 | 该断言随 F010 解除先红态 |
+| **显存判据强度**（检视 R1-007 / R2-002） | 判据改为"读数真实下降，且卸载后可用显存达到训练预算"，并要求变异判红 | 原断言只检查 `vram_bytes` 是非负整数——端点完全不释放显存也能通过，门禁弱于成功声明 | 该断言随 F010 解除先红态 |
 | HTTP 状态码 vs 错误信封 | 错误也走 HTTP 200 + 单键信封 | 契约测试只认信封；非 2xx 可能被中间件/代理改写成自己的错误页而丢掉 `error` 字段，届时客户端会误判成"端点不存在" | 若将来接入网关需要状态码语义，改架构 §7.1 而非改实现 |
 | `stop` 后重启进程回到 running | 有意为之，不持久化停机意图 | 夜槽每轮都会重新 `stop`；持久化会让人工重启后白天拿不到信号，故障面更差 | — |
 | 控制面无鉴权 | 网络边界替代鉴权：绑回环 + 容器网络 | 单机自用、调用方同宿主；引入凭据管理成本不抵收益 | 执行机分离或跨机调用前必须先补鉴权 |

@@ -55,9 +55,9 @@ updated: 2026-09-20
 
 - [ ] T012 (`NFR-001`, `IR-005`, `AC-009`): 控制面路由**只在 real 实例注册**（`KRONOS_USE_REAL_MODEL=true`），mock 上 `/lifecycle/*` 返回 404；同时验证默认镜像 `import torch` 仍判红 — verify: `tests/integration/test_f009_lifecycle_deployment.py`
 - [ ] T013 (`NFR-002`, `NFR-003`, `AC-009`): compose 控制面端口绑 `127.0.0.1` 不发布 `0.0.0.0`；三个超时与探测方式环境变量同步 `deployment/.env.example`；在执行机部署 `kronos-signal-real` 新镜像 — verify: `tests/integration/test_f009_lifecycle_deployment.py` + 执行机 `docker compose config`
-- [ ] T014 (`FR-009`, `AC-010`): 修 F003 客户端的跨 Feature 交付边——`status`/`stop`/`restore` 分别使用 5s/60s/120s 可配超时（现为统一 10s，会把正常卸载误判成失败）；三条退出路径的 `restore` 已于 F003 循环 14 落地，本任务补断言 — verify: `tests/unit/test_f003_gpu_slot.py`
-- [ ] T015 (`FR-008`, `AC-011`): 转正 F003 契约测试——移除模块级 `xfail(strict=True)`，补 `E_BUSY`（动作进行中）、`E_TIMEOUT`（短超时注入）与额外参数拒绝三类用例 — verify: `tests/integration/test_f003_kronos_lifecycle.py`
-- [ ] T016 (`SC-005`, `AC-012`, `NFR-006`): 把显存真实下降的判据写成机器可判定断言（`after < before` **且** `after` 低于训练预算阈值），落在**独立载体** `tests/integration/test_f009_vram_release.py`，以 `xfail(strict=True)` 标注 F010 未落地的先红态并写明解除条件。**不得放进 `test_f003_kronos_lifecycle.py`**——F003 T033 要求该文件在 `--runxfail` 下 0 xfailed，先红态放进去会让 F009 落地后 T033 仍然不可能通过 — verify: `tests/integration/test_f009_vram_release.py`
+- [ ] T014 (`FR-009`, `AC-010`): 修 F003 客户端的跨 Feature 交付边——`status`/`stop`/`restore` 分别使用 5s/60s/120s 可配超时（原为统一 10s，会把正常卸载误判成失败）；"已释放"判定补训练预算条件（预算由 `mine_config` 从 `vram_limit_gb` 透传，无默认值）与 `vram_readable` 分账；三条退出路径的 `restore` 已于 F003 循环 14 落地。两半均已在分支 `feat/F003-alphagen-vendor`（`0ccf69e` / `ffdd805`）落地，本任务只核对断言与变异判红 — verify: `tests/unit/test_f003_gpu_slot.py`
+- [ ] T015 (`FR-008`, `AC-011`): 转正 F003 契约测试——移除模块级 `xfail(strict=True)`，补 `E_BUSY`（动作进行中）、`E_TIMEOUT`（短超时注入）与额外参数拒绝（断言恰为 `{"error": "E_BAD_REQUEST"}`，**不得**是 `E_UNSUPPORTED_VERSION`）三类用例 — verify: `tests/integration/test_f003_kronos_lifecycle.py`
+- [ ] T016 (`SC-005`, `AC-012`, `NFR-006`): 把显存真实下降的判据写成机器可判定断言（`after < before` **且**卸载后整卡可用显存 ≥ 训练预算 `vram_limit_gb`），落在**独立载体** `tests/integration/test_f009_vram_release.py`，以 `xfail(strict=True)` 标注 F010 未落地的先红态并写明解除条件。**不得放进 `test_f003_kronos_lifecycle.py`**——F003 T033 要求该文件在 `--runxfail` 下 0 xfailed，先红态放进去会让 F009 落地后 T033 仍然不可能通过 — verify: `tests/integration/test_f009_vram_release.py`
 
 ## 3. 验证与验收任务
 
@@ -66,7 +66,7 @@ updated: 2026-09-20
 - [ ] T019 (`AC-005`, `AC-006`, `AC-007`, `AC-008`): 运行错误面、单飞与超时、显存探测与配置、日志套件，逐条给出变异判红证明 — verify: `tests/unit/test_f009_lifecycle_errors.py`、`tests/unit/test_f009_vram_probe.py`、`tests/unit/test_f009_lifecycle_logging.py`
 - [ ] T020 (`AC-009`): 运行部署集成套件（mock 404、默认镜像 torch 否证、compose 暴露面） — verify: `tests/integration/test_f009_lifecycle_deployment.py`
 - [ ] T021 (`AC-010`): 运行客户端交付边套件（分动作超时逐个不同、三条退出路径均 restore） — verify: `tests/unit/test_f003_gpu_slot.py`
-- [ ] T022 (`AC-011`): 在执行机取控制面语义证据——`ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q --runxfail tests/integration/test_f003_kronos_lifecycle.py`，控制面用例 0 xfailed；显存用例按 T016 保持先红态，记录 hostname 与 device — verify: `tests/integration/test_f003_kronos_lifecycle.py`
+- [ ] T022 (`AC-011`, `AC-012`): 在执行机取控制面语义证据——`ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q --runxfail tests/integration/test_f003_kronos_lifecycle.py`，该文件 **0 xfailed**（载体拆分后此文件内不得残留任何先红态）；再**单独**跑 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f009_vram_release.py`（**不加 `--runxfail`**）确认显存用例在 F010 落地前仍是 xfail 先红态、且不是 XPASS；两次都记录 hostname 与 device — verify: `tests/integration/test_f003_kronos_lifecycle.py`、`tests/integration/test_f009_vram_release.py`
 - [ ] T023 (`AC-001`, `AC-005`, `AC-009`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
