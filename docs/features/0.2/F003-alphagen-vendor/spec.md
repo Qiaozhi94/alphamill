@@ -9,7 +9,7 @@ related_features: [F001, F002, F007, F008]
 topics: [factor-factory, alphagen, vendor, generators, m2]
 doc_kind: spec
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-20
 ---
 
 # F003：AlphaGen vendor 与可插拔生成器平面
@@ -304,6 +304,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 
 - [ ] **AC-001** (`FR-001`, `IR-002`): 两个后端经同一 produce() 接口产出通过 schema 校验的 FactorDef；返回值含结论字段时校验失败；落盘 DTO 加载后得到的 FactorDef 可直接执行（compute 由表达式重建、meta 还原） — tests: `tests/unit/test_f003_generator_contract.py`
 - [ ] **AC-002** (`FR-002`): vendor 目录内每处改动带 alphamill 标注、VENDORED.md 记录上游 repo/commit/日期/修改清单/许可，且**改动集合与冻结的上游基线逐文件比对一致（差异集合 = 标注集合）**，vendor 不反向依赖胶水模块 — tests: `tests/unit/test_f003_vendor_hygiene.py`
+  - **证据（2026-09-20）**：vendor 子集完整性此前只在开发机工作树上成立。`.gitignore` 的裸 `models/` 规则（本意是 Kronos 权重）匹配任意层级目录，把 `alphagen/models/{alpha_pool,linear_alpha_pool}.py` 整目录静默排除——`_upstream_baseline.json` 声明 20 个 blob，入库只有 18 个，任何干净 clone 上`from alphagen.models.linear_alpha_pool import MseAlphaPool` 都会失败。已对该路径显式反选并按 pin commit `259687e` 取回两个 blob，sha256 与 baseline 逐字节一致（属无修改集合，不需 `# [alphamill]` 标注）。AC-002 的成立范围由此从「开发机工作树」修正为「干净 clone」，取证载体为 CI（py3.11/py3.13）。
 - [ ] **AC-003** (`FR-003`, `DR-001`): 按显式绑定构造张量；invalid 版本或 digest 不符时拒绝启动并留 `rejected` 终态 run.json（含 termination/reason/时间戳与 DR-001 运行字段）；张量与 reader 行集在抽样点数值一致且不可交易时点掩码为不可用 — tests: `tests/integration/test_f003_lake_tensor.py`
 - [ ] **AC-004** (`FR-004`): 编译后的 compute 闭包与 vendor 张量求值在同一切片容差内一致；meta.expression 可反解为等价表达式；data_columns 由 feature_map 反解得到；落盘后加载的 FactorDef 可直接执行 — tests: `tests/unit/test_f003_alphagen_adapter.py`
 - [ ] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数；拒绝事件含表达式原文与原因码且可按 run 查询（TR-002） — tests: `tests/unit/test_f003_operator_registry.py`
@@ -346,6 +347,7 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 | 开发机无 GPU | **预期状态，不是阻塞**：`qiaozhi-gp` 是 AMD iGPU 掌机，只跑编码/单元/门禁；挖掘训练、显存与产能证据一律在 `qiaozhi-lt` 取，验收证据记录 hostname 与设备 | 架构 §7.1 机器边界；`docs/SOP.md` §3：开发机 skip 不是证据也不是失败 | 执行机实测可用显存在 tasks T004 标定 |
 | 执行机后续整体迁移到 `qiaozhi-lab` | F003 只面向**当前执行机 `qiaozhi-lt`** 验收；显存上限、时段表与产能结论都标注取证机器，迁移后重跑而非继承 | 迁移同时换平台（Win11+WSL2 → 原生 Ubuntu）与换架构（Blackwell sm_120 需 CUDA 12.8+ 的 torch 构建），沿用旧结论会失真 | 迁移动作按独立 Feature 立项（架构 §7.1） |
 | **冒烟闸门 time-box 裁决（2026-09-19 实跑）** | **L0 锁定**：主引擎 AlphaGen 保留，不降级 L1，不产 L2（time-box 无此裁决权） | 第 1 天判据「跑通 ≥1 个 PPO epoch」pass（真实 615 次求值、252 个候选通过生成侧自检）；第 2 天判据「vendor 张量 IC vs pandas 参考对齐」pass（1200 点、`max_abs_diff=0.0`）；ADR-0001 两条 M2 义务入当日 manifest（生成侧逐级计数；下游 `owner=F007` + `state=not_yet_available` 显式占位，未省略未记 0）；无触发降级，`trigger=null` | 取证机器 `qiaozhi-lt` / `device=cuda` / RTX 4060 / torch 2.10.0+cu128；当日 manifest 归档于 `reports/generation/smoke/`（运行证据，`.gitignore` 不入库，需复跑可重放）；L1→L2 仍须 L1 连续 2 周满足 ADR-0001 判据，不由本裁决触发 |
+| **CI 绿度曾是假绿（2026-09-20 修正）** | 两类缺陷并列修复：(a) `alphagen_generation.py` 顶层 from-import 触发 runner 的模块级 `__getattr__`，在无 mining extra 的环境（含 CI）于收集期拉起 torch；`test_f003_smoke_gate.py` 顶层 `import torch` 同理。两者使 pytest 整轮 `Interrupted`，**全部用例一条都没跑**。(b) 见 AC-002 证据的 vendor 缺文件。 | 收集期中断会让所有门禁静默失效——vendor 卫生门（T013 回归）正是被它挡住才没在 CI 暴露 (b)；「CI 红」当时被读成单点失败，实际是全量未执行 | 惰性导入 + 使用点 `pytest.importorskip("torch")`（沿用 `test_f003_generation_run.py` 既有约定），`ALPHAMILL_INTEGRATION` 判定仍排在 skip 之前，执行机 fail-closed 语义不变；修复后 CI py3.11/py3.13 双绿，本地 `tools/verify.py` 1132 passed / 39 skipped |
 
 ## 8. 待确认问题
 

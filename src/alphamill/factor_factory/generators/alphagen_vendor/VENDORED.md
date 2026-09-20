@@ -72,6 +72,14 @@ T013 从本文件记录的 immutable commit 取 blob，并以 `_upstream_baselin
 真相源。规则为“差异集合 == 标注集合”：每个与 baseline 不同的 vendor 文件都必须带
 `# [alphamill] <原因>`，且每处修改都须有对应标注；其余 18 个 upstream blob 保持逐字节一致。
 
+### 入库陷阱：裸 `models/` 规则
+
+仓库根 `.gitignore` 的 `models/`（本意是 Kronos 模型权重）是裸目录规则，会匹配任意层级
+的 `models` 目录，包括本清单的 `alphagen/models/`。2026-09-20 发现该规则曾使
+`alpha_pool.py` 与 `linear_alpha_pool.py` 只存在于工作树、从未入库（清单声明 20 个 blob，
+仓里 18 个）。`.gitignore` 现对该路径显式反选；**重生成或补文件后务必 `git status` 确认
+两者可见**，`tests/unit/test_f003_vendor_hygiene.py` 是该缺口的回归门。
+
 ## 许可说明
 
 上游仓库在 pinned commit **没有 LICENSE**，本清单如实记录为 `license: "none"`。按
