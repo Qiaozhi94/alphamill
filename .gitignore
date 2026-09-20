@@ -46,6 +46,9 @@ deployment/.env
 # Kronos 上游克隆（pin 记录见 vendor/VENDORED.md）与模型权重（migration-plan §三：不进 git）
 vendor/Kronos/
 models/
+# ...例外：AlphaGen vendor 的 alphagen/models/ 是上游源码（线性协同池），不是模型权重；
+# 裸 models/ 规则会把它整目录吞掉，必须显式放回（见 alphagen_vendor/VENDORED.md）。
+!src/alphamill/factor_factory/generators/alphagen_vendor/alphagen/models/
 deployment/backups/
 
 !.gitkeep
