@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-import torch
 
 from alphamill.factor_factory.canonical import canonical_json_bytes
 from alphamill.factor_factory.errors import SchemaValidationError, UnknownSchemaVersionError
@@ -291,6 +290,7 @@ def _synthetic_panel(days: int = 4, pair_count: int = 2) -> TensorPanel:
 
 
 def test_build_stock_data_preserves_panel_axes_and_target_shape() -> None:
+    torch = pytest.importorskip("torch")
     days = 120
     panel = _synthetic_panel(days=days, pair_count=4)
     stock_data, target, pairs = build_stock_data(panel, feature_map=panel.feature_map)
@@ -312,6 +312,7 @@ def test_build_stock_data_preserves_panel_axes_and_target_shape() -> None:
 def test_gpu_ppo_epoch_completes_when_integration_cuda_is_enabled() -> None:
     if os.environ.get("ALPHAMILL_INTEGRATION") != "1":
         pytest.skip("ALPHAMILL_INTEGRATION=1 is required")
+    torch = pytest.importorskip("torch")
     if not torch.cuda.is_available():
         pytest.fail("ALPHAMILL_INTEGRATION=1 requires CUDA for the AlphaGen smoke run")
 
@@ -354,6 +355,7 @@ def _flat_panel(days: int, pair_count: int) -> TensorPanel:
 def test_timebox_judges_l0_lock_with_real_gpu_evidence(tmp_path: Path) -> None:
     if os.environ.get("ALPHAMILL_INTEGRATION") != "1":
         pytest.skip("ALPHAMILL_INTEGRATION=1 is required")
+    torch = pytest.importorskip("torch")
     if not torch.cuda.is_available():
         pytest.fail("ALPHAMILL_INTEGRATION=1 requires CUDA for the smoke time-box")
 

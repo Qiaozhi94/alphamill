@@ -20,7 +20,6 @@ from alphamill.factor_factory.canonical import JSONValue
 from alphamill.factor_factory.errors import FactorFactoryError
 from alphamill.factor_factory.generators.alphagen_runner import (
     LakeStockData,
-    LakeTensorCalculator,
     render_expression,
 )
 from alphamill.factor_factory.generators.base import (
@@ -69,6 +68,11 @@ def run_generation(
     from alphagen.rl.env.wrapper import AlphaEnvWrapper
     from alphagen.utils import reseed_everything
     from sb3_contrib import MaskablePPO
+
+    # LakeTensorCalculator 由 alphagen_runner 的模块级 __getattr__ 惰性构造：顶层
+    # from-import 会在导入本模块时就拉起 vendor→torch，破坏无 mining extra 环境
+    # （含 CI）的可收集性。
+    from alphamill.factor_factory.generators.alphagen_runner import LakeTensorCalculator
 
     collected: list[object] = []
 
