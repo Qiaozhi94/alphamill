@@ -16,120 +16,126 @@ updated: 2026-09-20
 ## 0. 输入与约束
 
 - **行为契约**：`spec.md`
-- **PRD / Architecture / System Design**：`docs/alphamill-architecture.md` §7.1（生命周期契约正文、wire 绑定、观测→处置决策表；本 feature **只实现不改**，改动须先改该节并同步 `tools/check_doc_consistency.py` 的 `offload_decision_table_rows` 期望值）
-- **ADR / 上游 Contract**：ADR-0002（Kronos 上游 clone + pin，推理薄壳归本仓 `src/alphamill/kronos_service/`）；ADR-0005（不新增口径载体，门禁裁决不页面化）
+- **PRD / Architecture / System Design**：`docs/alphamill-architecture.md` §7.1（契约正文所有者；本次的期望态、单飞与进行中语义、单键错误信封、显存确认判据、分动作超时、GPU 基座前置均已先行落在该节。**本 feature 只实现不改**；再有契约缺陷须先改该节并同步 `tools/check_doc_consistency.py` 的 `offload_decision_table_rows` 期望值）
+- **ADR / 上游 Contract**：ADR-0002（Kronos 上游 clone + pin）；ADR-0005（不新增口径载体）
+- **硬前置**：F010「Kronos GPU 推理基座」——显存真实下降的取证依赖它；控制面本身不依赖
 - **实现约束**：
-  - mock 镜像不得引入 torch（F004 NFR-001 否证测试为硬门）→ 所有 torch / GPU 相关导入惰性化；
-  - `KronosRealSignal._lock` 的既有不变式（模型加载至多一次 + 推理互斥）不得被破坏；
-  - 超时与探测方式走配置，不写死常数（迁移 `qiaozhi-lab` 只改配置）；
-  - 超时判定用 `time.monotonic()` 截止时刻，**不用固定步长累加**——F004 Q003 已经踩过一次（固定步长会把等待拉到 2× 窗口）。
+  - mock 镜像不得引入 torch（F004 NFR-001 否证测试为硬门）→ torch / GPU 相关导入一律惰性化，**控制面路由只在 real 实例注册**；
+  - `KronosRealSignal._lock` 的既有不变式（模型加载至多一次 + 推理互斥）不得破坏；
+  - 超时用 `time.monotonic()` 截止时刻，不用固定步长累加（F004 Q003 的原样教训）；
+  - `/predict*` 的**对外响应契约不变**，只增加停机期间的准入分支。
 
 ## 1. 技术概要与影响面
 
-在 Kronos 推理薄壳内新增一个**生命周期控制面模块**，持有「模型是否加载」这一派生状态的读写动作，并以三个 FastAPI 路由暴露。状态不单独存储——`state` 由 `KronosRealSignal` 是否持有 predictor 派生（spec §5 不变量）。显存读数单独成一个探测函数，按 `torch.cuda.mem_get_info` → `nvidia-smi` → 不可得三级回退。在飞推理由一个计数器承载，`/predict*` 进出时增减，`stop` 读到非零即 `E_BUSY`。
+控制面的核心不是三个路由，而是**一份被显式存储的期望态**加上**一个单飞的动作执行器**。`desired` 由 `stop` / `restore` 置位；`state` 由 `(desired, model_loaded)` 派生；推理路径读 `desired` 决定是否允许加载模型——这三件事合起来才让 `stopped` 稳定。动作执行器保证同一时刻至多一个动作在跑，并把"进行中"提升为一等可观测状态（`operation`），使超时不再产生无法解释的迟到副作用。
 
 - 前端：不适用（无 UI，ADR-0005）。
-- 后端 / API：`src/alphamill/kronos_service/lifecycle.py`（新增：状态机、错误码、在飞计数、超时执行器）、`src/alphamill/kronos_service/vram.py`（新增：设备侧显存探测与回退）、`server.py`（新增三路由 + 版本协商依赖 + `/predict*` 的在飞计数包装）、`kronos_real.py`（**最小改动**：新增 `unload()`，`status()` 复用既有 `ModelStatus`）。
+- 后端 / API：`kronos_service/lifecycle.py`（新增：期望态持有者、单飞执行器、operation 台账、错误码）、`kronos_service/vram.py`（新增：设备侧探测与三级回退）、`kronos_service/lifecycle_config.py`（新增：环境变量契约与启动期校验）、`server.py`（新增三路由 + 版本协商依赖 + real 实例条件注册）、`kronos_real.py`（新增 `unload()` 与 `allow_load` 准入判定；`generate_signal` 在 `desired=stopped` 时走兜底不加载）。
 - 存储 / Migration：不适用（无持久化实体）。
-- Runtime / Agent Adapter：`deployment/docker-compose.yml` 的 `kronos-signal-real` 服务——控制面端口只在容器网络与回环可达，不发布到 `0.0.0.0`；新增超时与探测方式的环境变量（`.env.example` 同步）。
-- Event / Evidence：结构化日志行（TR-001），落容器日志，不入库、不建新表（ADR-0005 不新增口径载体）。
-- 文档 / 配置：`BACKLOG.md`（本行从「规划中」转入活跃表）、`CLAUDE.md` 当前活跃 Feature、`docs/README.md` 活跃索引三处同步（`check_doc_consistency` 的 `active_feature_indexes_aligned` 会双向校验）；`docs/alphamill-integration.md` 补控制面运维段。
+- Runtime / Agent Adapter：`deployment/docker-compose.yml` 的 `kronos-signal-real`——控制面端口绑回环；新增生命周期环境变量（`.env.example` 同步）。
+- Event / Evidence：结构化日志行（TR-001/002），落容器日志，不入库、不建面板。
+- 文档 / 配置：BACKLOG「规划中」新增 F010 行；`docs/alphamill-integration.md` 补控制面运维段。
+- **跨 Feature**：F003 的 `kronos_offload` 客户端改分动作超时（FR-009）；`tests/integration/test_f003_kronos_lifecycle.py` 转正并补用例。
 
 ## 2. 架构与模块边界
 
 ```text
-                      ┌──────────────────────────────┐
-  F003 gpu_slot  ───►  │ server.py  /lifecycle/*      │
-  （夜槽编排，唯一     │  - require_contract_version  │  依赖方向：
-    程序调用方）       │  - 三路由，统一错误信封       │  server → lifecycle → kronos_real
-                      └──────────┬───────────────────┘              └→ vram
-                                 │
-                      ┌──────────▼───────────────────┐
-                      │ lifecycle.py                 │
-                      │  - LifecycleController       │  状态由 kronos_real 派生，
-                      │  - 在飞计数 / E_BUSY          │  本模块不存第二份 state
-                      │  - 超时执行（monotonic 截止） │
-                      └──────┬───────────────┬───────┘
-                             │               │
-                 ┌───────────▼──┐      ┌─────▼────────┐
-                 │ kronos_real  │      │ vram.py      │
-                 │  load/unload │      │ 设备侧已用字节 │
-                 └──────────────┘      └──────────────┘
+  F003 gpu_slot ──► server.py  /lifecycle/*            仅 real 实例注册路由
+ （夜槽编排，唯一     - require_contract_version        （mock 不注册 → 404）
+   程序调用方）       - 三路由，单键错误信封
+                            │
+                    ┌───────▼─────────────────────┐
+                    │ lifecycle.py                │
+                    │  LifecycleController        │   desired 是唯一被存储的意图；
+                    │   - desired（存储）          │   state 由 (desired, loaded) 派生
+                    │   - single-flight + operation│
+                    │   - monotonic 截止执行器      │
+                    └───┬──────────────┬───────────┘
+                        │              │
+          ┌─────────────▼──┐     ┌─────▼────────┐     ┌──────────────────┐
+          │ kronos_real    │     │ vram.py      │     │ lifecycle_config │
+          │  unload/load   │     │ 设备侧已用字节 │     │ 环境变量 + 校验   │
+          │  allow_load ◄──┘     └──────────────┘     └──────────────────┘
+          │  （推理准入读 desired）
+          └────────────────┘
 ```
 
 职责划分：
 
-- **`server.py`** 只做 wire 层：解析 `X-Contract-Version`、调用控制器、把结果或错误码序列化成契约信封。不含状态判断逻辑。
-- **`lifecycle.py`** 是控制面唯一真相源的**读写入口**，但它不存 `state`——每次都从 `KronosRealSignal.status().loaded` 派生（derive, don't store）。它持有的自有状态只有一个：在飞推理计数器。
-- **`kronos_real.py`** 只增 `unload()`，与既有 `eager_load()` 对称，共用同一把 `_lock`，既有推理路径零改动。
-- **`vram.py`** 是纯探测，无状态、可单测，三条回退分支各自可独立触发。
-- 依赖方向单向：`server → lifecycle → {kronos_real, vram}`，下层不回调上层。
+- **`server.py`** 只做 wire 层：版本协商、请求体校验、调用控制器、序列化成契约信封。不含状态判断。
+- **`lifecycle.py`** 是控制面的唯一写入口：持有 `desired` 与 `operation`，保证单飞。它**不存 `state`**——每次从 `(desired, real_signal.status().loaded)` 计算。
+- **`kronos_real.py`** 增 `unload()`（与 `eager_load()` 对称）与 `allow_load` 准入：`generate_signal()` 在不允许加载时直接走既有兜底路径，不碰 `_load_predictor()`。
+- **`vram.py`** / **`lifecycle_config.py`** 是无状态的探测与配置解析，各自可单测。
+- 依赖方向单向：`server → lifecycle → {kronos_real, vram, lifecycle_config}`。
 
 ## 3. 数据模型与 Migration
 
-不适用：本 feature 不新增或修改任何持久化实体、表或 artifact。控制面状态是进程内存态，进程重启后由 F004 既有的启动预检 + eager load 决定初始态（real 模式下为 `running`）。
+不适用：不新增或修改持久化实体。`desired` 与 `operation` 是进程内存态；进程重启后由 F004 既有的启动预检 + eager load 决定初始态（real 模式为 `desired=running`）。停机意图**有意不持久化**——夜槽每轮都会重新 `stop`，持久化会让人工重启后白天拿不到信号。
 
 ## 4. 接口、Contract 与 Event
 
 ### API / CLI / Adapter Contract
 
-| 方法 | 路径 | 请求 | 成功响应 | 默认超时（可配） | 错误码 |
-|---|---|---|---|---|---|
-| GET | `/lifecycle/status` | `X-Contract-Version: 1` | `{state, contract_version, model_loaded, vram_bytes, device}` | 5s (`KRONOS_LIFECYCLE_STATUS_TIMEOUT_S`) | `E_UNAVAILABLE` / `E_UNSUPPORTED_VERSION` |
-| POST | `/lifecycle/stop` | 同上，空体 | `{state: "stopped", vram_bytes}` | 60s (`KRONOS_LIFECYCLE_STOP_TIMEOUT_S`) | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
-| POST | `/lifecycle/restore` | 同上，空体 | `{state: "running"}` | 120s (`KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S`) | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` / `E_UNAVAILABLE` |
+| 方法 | 路径 | 成功响应字段 | 默认超时（环境变量） | 错误码 |
+|---|---|---|---|---|
+| GET | `/lifecycle/status` | `state, desired, contract_version, model_loaded, vram_bytes, vram_readable, device, operation` | 5s (`KRONOS_LIFECYCLE_STATUS_TIMEOUT_S`) | `E_UNSUPPORTED_VERSION` |
+| POST | `/lifecycle/stop` | `state, vram_bytes` | 60s (`KRONOS_LIFECYCLE_STOP_TIMEOUT_S`) | `E_BUSY` / `E_TIMEOUT` / `E_UNSUPPORTED_VERSION` |
+| POST | `/lifecycle/restore` | `state` | 120s (`KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S`) | `E_BUSY` / `E_TIMEOUT` / `E_UNAVAILABLE` / `E_UNSUPPORTED_VERSION` |
 
-- **错误信封**：一律 `{"error": "E_*"}`，**响应体即判据**。契约测试明确「只认错误码信封，不认 HTTP 状态码」——因为把 404 当合法拒绝会让"端点未实现"假性通过。实现上错误响应用 HTTP 200 + 错误信封，避免任何中间件把非 2xx 改写成自己的错误页而丢掉 `error` 字段。
-- **版本协商**：FastAPI 依赖 `require_contract_version`——读 `X-Contract-Version`，缺失或 != `SUPPORTED_CONTRACT_VERSION`（`"1"`）即返回 `E_UNSUPPORTED_VERSION`。**缺失不按默认版本放行**（spec FR-004 场景二）。
-- **请求体**：`stop` / `restore` 不接受任何参数，防止在契约外偷加开关（如 `force=true` 强停）。
-- **`vram_bytes` 语义**：设备侧整卡已用字节（int），无 CUDA 时为 `0`，读数不可得时为 `null` 且该次 `status` 以 `E_UNAVAILABLE` 表达不确定。
+- **错误信封**：恰为 `{"error": "E_*"}` 单键对象，HTTP 200。成功与错误互斥：成功响应不含 `error`，错误响应不含任何其他字段。用 200 而非 4xx/5xx 是因为契约测试只认信封——非 2xx 可能被中间件改写成错误页而丢掉 `error` 字段。
+- **版本协商**：依赖 `require_contract_version` 读 `X-Contract-Version`；缺失或 ≠ `"1"` 即 `E_UNSUPPORTED_VERSION`，**缺失不按默认版本放行**。
+- **请求体**：`stop` / `restore` 接受空体或 `{}`；任何其他键一律 `E_UNSUPPORTED_VERSION`（属于"不认识的请求形态"），防止在契约外偷加 `force` 之类开关。
+- **`operation`**：`null` 或 `{id, action, started_at}`；`id` 为 uuid4 十六进制前 8 位，进入日志行做关联键。
+- **`vram_bytes` 语义**：设备侧整卡已用字节。读数不可得时 `vram_readable=false` + `vram_bytes=null`，**仍是成功响应**；无 CUDA 时 `vram_bytes=0` + `vram_readable=true` + `device=cpu`。
+- **mock**：路由在 `KRONOS_USE_REAL_MODEL=false` 时不注册，`/lifecycle/*` 自然 404。
 
 ### Event / Trace Contract
 
-结构化日志行（TR-001），单行 `logfmt` 风格，便于 `docker logs | grep 'action='`：
+单行 `logfmt`，便于 `docker logs | grep 'action='`：
 
 ```text
-action=stop result=ok state_before=running state_after=stopped vram_bytes_before=3221225472 vram_bytes_after=142606336 contract_version=1 elapsed_ms=412
-action=stop result=E_BUSY state_before=running state_after=running vram_bytes_before=3221225472 vram_bytes_after=3221225472 contract_version=1 elapsed_ms=1
+action=stop operation_id=9f3a1c02 result=ok state_before=running state_after=stopped desired=stopped vram_bytes_before=3221225472 vram_bytes_after=142606336 vram_readable=true contract_version=1 elapsed_ms=412
+action=stop operation_id=9f3a1c02 result=late_complete state_before=running state_after=stopped desired=stopped ... elapsed_ms=71204
 ```
 
-- 幂等键：无（动作本身幂等，日志按时间序追加即可）；
-- 查询方式：容器日志按 `action=` 前缀检索（TR-002）；
-- 禁止字段：主机路径（模型路径之外）、凭据、数据库连接串（TR-003）——日志行的字段集是白名单，不是黑名单过滤。
+- 超时返回后动作最终完成时补写一条同 `operation_id` 的 `result=late_complete` 收尾行（TR-002），使迟到落点可追；
+- 字段集是白名单，不含主机路径（模型路径除外）、凭据或连接串（TR-003）。
 
 ## 5. Runtime、Workflow 与并发
 
-**状态派生**：`state = "running" if kronos_real.real_signal.status().loaded else "stopped"`。不设独立状态变量，因此不存在"状态与事实不一致"的类别（spec §5 不变量）。
+**期望态与派生态**：`desired` 是控制器里唯一被存储的意图；`state = running if desired == "running" and loaded else stopped if desired == "stopped" and not loaded else transitional`。过渡态对外通过 `operation` 非空表达——这样"状态变量与事实不一致"这一类缺陷仍被排除（不存第二份 `state`），同时"停机意图"这项**事实不足以从内存推断**的信息被显式持有。
 
-**在飞计数**：`lifecycle.inflight` 是一个带锁的整数。`/predict` 与 `/predict_batch` 用上下文管理器 `inflight.track()` 包裹推理调用，进入 +1、退出（含异常）-1。`stop` 读到 `> 0` 立即返回 `E_BUSY`——**不等待、不强停**（spec FR-005）。这是个读-判-改的竞态窗口：判定与卸载之间可能进来新请求，因此卸载动作本身仍在 `KronosRealSignal._lock` 内执行，与推理互斥；最坏情况是新请求阻塞到卸载完成后拿到"模型未加载"的兜底路径，而不是拿到半卸载的模型。
+**推理准入（`stopped` 稳定性的机制保证）**：`generate_signal()` 进入时先问 `allow_load`（由控制器的 `desired` 决定）：
 
-**卸载路径**（`kronos_real.unload()`，与 `eager_load()` 对称）：
+```text
+desired=running  → 既有路径（必要时 _load_predictor()）
+desired=stopped  → 直接走 F004 既有兜底信号路径，不触碰 _load_predictor()，
+                   来源如实标注非 kronos（F004 C002 同一纪律）
+```
 
-1. 持 `self._lock`；
-2. `self._predictor = None`（丢弃 KronosPredictor 及其持有的 model/tokenizer 引用）；
-3. 若 `self._torch is not None`：`self._torch.cuda.empty_cache()`——把 caching allocator 的块还给驱动，否则设备侧读数不会下降；
-4. 保留 `self._device` 与 `self._torch` 引用（`restore` 时不必重新探测设备），清空 `self._load_error`。
+没有这一条，`stop` 之后任一 `/predict` 都会重新加载模型、把显存吃回去——这是原设计最严重的机制缺口（检视 R1-002）。
 
-**恢复路径**：复用既有 `_load_predictor()`（已含"已加载即直接返回"的幂等分支），因此 `restore` 的幂等性天然成立，不需要额外判断。
+**单飞执行器**：控制器持一把 `threading.Lock` 保护 `(desired, operation)` 元数据，另以"是否已有 operation"实现动作互斥：
 
-**超时执行**：`stop` / `restore` 的实际工作（卸载 / 加载）放进一个单线程执行器，主协程以 `time.monotonic() + timeout` 为**截止时刻**等待；超时返回 `E_TIMEOUT`，后台工作不取消（强行中断加载会留下半加载态，违反 NFR-004）——下一次 `status` 会如实反映最终落点。截止时刻必须用 monotonic，不得用固定步长累加（F004 Q003 的原样教训）。
-
-**并发与幂等汇总**：
-
-| 动作 | 并发保护 | 幂等实现 |
+| 到达动作 | `operation is None` | `operation` 非空 |
 |---|---|---|
-| `status` | 无锁只读 | 天然幂等 |
-| `stop` | 在飞计数判定 + `_lock` 内卸载 | `_predictor is None` 时直接返回 `stopped` |
-| `restore` | `_lock` 内加载 | `_load_predictor()` 既有早返回分支 |
+| `stop` / `restore` | 置 `desired`、开 operation、提交后台执行 | 立即 `E_BUSY`（不排队、不叠加） |
+| `status` | 正常返回 | 正常返回，`operation` 非空 |
 
-**不可回滚副作用边界**：`stop` 会中断白天的实时信号能力（dry-run 退回读 `signal_cache` 存量信号，架构 §7.1 时段表已如此设计），这是预期的、可由 `restore` 复原的副作用；除此之外本 feature 不产生任何不可逆副作用。
+**超时与迟到落点**：后台工作提交到单线程执行器；主协程以 `time.monotonic() + timeout` 为**截止时刻**等待。超时返回 `E_TIMEOUT` 且**不取消**后台工作（强行中断会留下半加载态，违反 NFR-004）。后台工作完成时由 finally 清 `operation`、补写 `late_complete` 日志。客户端据此 fail-closed，并以 `operation=null` 作为最终落点判据。
+
+**卸载路径**（`kronos_real.unload()`，与 `eager_load()` 对称）：持 `_lock` → `_predictor = None` → 若 `_torch` 非空则 `empty_cache()`（否则设备侧读数不会下降）→ 保留 `_device` / `_torch` 引用、清 `_load_error`。
+
+**恢复路径**：复用 `_load_predictor()` 既有的"已加载即返回"分支，幂等天然成立。加载抛错 → 清理已分配显存 → `desired` 保持 `running` 还是回落 `stopped`？**回落 `stopped`**：否则实例会停在"期望 running 但加载不上"的过渡态里，`state` 无法落回稳定态，违反 §5 不变量；同时返回 `E_UNAVAILABLE` 让调用方知道恢复没成。
+
+**不可回滚副作用边界**：`stop` 会中断白天的实时信号能力（dry-run 退回读 `signal_cache` 存量信号，架构 §7.1 时段表即如此设计），可由 `restore` 复原；除此之外无不可逆副作用。
 
 ## 6. UI 与可观测性
 
-- 页面：不适用（无 UI；按 ADR-0005，运营状态不进研究控制台，门禁裁决不页面化）。
-- 日志：TR-001 的结构化行是唯一新增观测面，落容器日志，不新增指标口径载体、不建 Grafana 面板（ADR-0005：不新增口径载体）。
-- `/health` 保持 F004 原样不动——它报的是模型与数据库健康，`state` 的权威读法是 `/lifecycle/status`。两者字段有重叠（`model_loaded`、`device`）但语义一致，不构成第二真相源：两者都从 `real_signal.status()` 派生。
-- 运维可见性：夜槽事后复盘用 `docker logs kronos-signal-real | grep 'action='` 即可还原当晚是否真的卸载、显存降了多少、失败在哪一步。
+- 页面：不适用（ADR-0005：运营状态不进研究控制台）。
+- 日志：TR-001/002 的结构化行是唯一新增观测面，落容器日志，不新增指标口径载体、不建面板。
+- `/health` 保持 F004 原样不动——它报模型与数据库健康，`state`/`desired` 的权威读法是 `/lifecycle/status`。两者字段有重叠但都从 `real_signal.status()` 派生，不构成第二真相源。
+- 运维可见性：`docker logs kronos-signal-real | grep 'action='` 可还原当晚是否真的卸载、显存降了多少、有没有迟到完成。
 
 ## 7. 失败、恢复、安全与兼容
 
@@ -137,49 +143,54 @@ action=stop result=E_BUSY state_before=running state_after=running vram_bytes_be
 
   | 条件 | 返回 |
   |---|---|
-  | 缺 `X-Contract-Version` 或值不匹配 | `E_UNSUPPORTED_VERSION` |
-  | 在飞推理计数 > 0（仅 `stop`） | `E_BUSY` |
-  | 动作未在可配超时内完成 | `E_TIMEOUT` |
+  | 缺 `X-Contract-Version`、值不匹配、或请求体含额外键 | `E_UNSUPPORTED_VERSION` |
+  | 已有动作进行中 | `E_BUSY` |
+  | 动作未在可配超时内完成（后台继续） | `E_TIMEOUT` |
   | 模型资产缺失 / 加载抛错（`restore`） | `E_UNAVAILABLE` |
-  | 显存读数两级探测皆不可得（`status`） | `vram_bytes: null` + `E_UNAVAILABLE` |
+  | 显存读数两级探测皆不可得（`status`） | **成功响应** + `vram_readable=false` + `vram_bytes=null` |
 
-- **重启与恢复**：进程重启后由 F004 既有 lifespan（`real_mode_startup()` 预检 + eager load）决定初始态；本 feature 不持久化 `stopped`，即**重启即回到 `running`**。这是有意的：夜槽编排每次训练窗口开始时都会重新调 `stop`，把"停机意图"持久化反而会让人工重启后白天拿不到信号。
-- **权限 / escalation / 凭据边界**：控制面能改变生产状态，按 NFR-003 只在容器网络与本机回环可达（compose 端口映射绑 `127.0.0.1`，不发布 `0.0.0.0`）；不引入鉴权。按 CLAUDE.md 的 AI 权限红线，Agent 不得调用这些端点——合法调用方是 F003 编排与人工运维。
-- **Windows / POSIX / 版本兼容**：显存探测在 WSL2 下**不得依赖 GPU 进程列表**（`nvidia-smi` 在 WSL2 不列出 GPU 进程，架构 §7.1 已记录）；`nvidia-smi` 回退路径用 `--query-gpu=memory.used --format=csv,noheader,nounits` 解析整数 MiB 并换算字节。无 `nvidia-smi` 可执行文件时视为读数不可得，不抛栈到响应里。
-- **mock 边界**：`vram.py` 与卸载路径中的 torch 导入一律函数内惰性化；mock 实例走 `device=cpu` 分支，全程不 import torch，F004 NFR-001 的否证测试（默认镜像 `import torch` 判红）保持有效。
+- **重启与恢复**：进程重启由 F004 既有 lifespan（预检 + eager load）决定初始态，`desired` 初始为 `running`。停机意图不持久化（见 §3）。
+- **启动失败 vs 运行期失败**（检视 R1-010）：**两件事，处置不同**。启动期预检失败 → 进程非零退出（F004 既有行为，不改）；运行期 `restore` 失败 → 进程存活、`state=stopped`、返回 `E_UNAVAILABLE`。控制面的"任何状态下可达"只承诺进程活着以后。
+- **权限 / escalation / 凭据边界**：控制面只在容器网络与本机回环可达（compose 端口绑 `127.0.0.1`）；不引入鉴权。Agent 不得调用（CLAUDE.md AI 权限红线）；合法调用方是 F003 编排与人工运维。
+- **Windows / POSIX / 版本兼容**：显存探测不依赖 GPU 进程列表（WSL2 下 `nvidia-smi` 不列出进程）；`nvidia-smi` 回退用 `--query-gpu=memory.used --format=csv,noheader,nounits` 解析 MiB 换算字节；不可执行即视为读数不可得。
+- **mock 边界**：控制面路由条件注册 + torch 惰性导入，F004 NFR-001 的否证测试保持有效。
 
 ## 8. 测试策略与验收映射
 
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
-| `AC-001` | unit | `tests/unit/test_f009_lifecycle_contract.py`：TestClient + fake predictor | status 五字段齐备；卸载后端点仍可达且 `state=stopped`/`model_loaded=false` |
-| `AC-002` | unit | 同上：stop 往返与幂等 | 卸载后 `_predictor is None`、`empty_cache` 被调用；重复 stop 返回 `stopped` 不报错；stop 后 status/restore 仍可达（进程未退出） |
-| `AC-003` | unit | 同上：restore 往返、加载失败分支 | 重复 restore 不重复加载（加载函数只被调一次）；加载抛错时返回 `E_UNAVAILABLE` 且 status 仍报 `stopped` |
-| `AC-004` | unit | 同上：版本协商 | `X-Contract-Version: 999` 与**头缺失**两种输入都返回 `{"error": "E_UNSUPPORTED_VERSION"}`；成功响应不含 `error` 键 |
-| `AC-005` | unit | `tests/unit/test_f009_lifecycle_errors.py` | 在飞计数 > 0 时 stop 返回 `E_BUSY` 且 predictor 仍在；超时分支返回 `E_TIMEOUT`（注入慢加载 + 短超时）；显存不可得时 `vram_bytes is None` + `E_UNAVAILABLE`，**断言不是 0** |
-| `AC-006` | unit | `tests/unit/test_f009_vram_probe.py` | 三条回退分支逐条命中：`mem_get_info` 可用 / 抛错后走 `nvidia-smi` / 两者皆不可得返回 `None`；断言探测命令不含进程列表查询（不出现 `--query-compute-apps`） |
-| `AC-007` | integration | `tests/integration/test_f009_lifecycle_mock.py`（容器，`ALPHAMILL_INTEGRATION=1`） | mock 实例三端点照常响应且 `device=cpu`/`vram_bytes=0`；stop/restore 为 no-op；默认镜像 `import torch` 判红（沿用 F004 `test_f004_real_profile.py` 的否证式断言） |
-| `AC-008` | unit | `tests/unit/test_f009_lifecycle_logging.py`（caplog） | stop/restore 各写一行，字段集与 TR-001 逐项一致；变异证明：删掉 `vram_bytes_after` 字段即判红；断言行内不含主机路径与凭据模式 |
-| `AC-009` | integration | `tests/integration/test_f009_lifecycle_mock.py` | 三个超时均可由环境变量覆盖（改环境变量后生效值随之变，反向断言默认值不是硬编码）；`docker compose config` 断言控制面端口绑 `127.0.0.1` 而非 `0.0.0.0` |
-| `AC-010` | 真实环境（执行机） | `tests/integration/test_f003_kronos_lifecycle.py` + 人工取证 | 执行机上 `--runxfail` 0 xfailed；stop 前后设备侧显存读数对照（真实下降）；证据记录 hostname / GPU 型号 / 前后读数 |
+| `AC-001` | unit | `tests/unit/test_f009_lifecycle_contract.py`：TestClient + fake predictor | status 八字段齐备；动作进行中与加载失败后仍可达；读数不可得为成功响应且无 `error` 键 |
+| `AC-002` | unit | 同上：stop 往返与幂等 | `desired` 置位、`_predictor is None`、`empty_cache` 被调用；重复 stop 不报错；stop 后 status/restore 可达（进程未退出） |
+| `AC-003` | unit | `tests/unit/test_f009_stopped_admission.py` | stop 后连打 `/predict`、`/predict_batch`：`_load_predictor` **零次调用**（以 spy 断言）、来源不为 `kronos`、`model_loaded` 恒 false。**变异证明**：去掉准入分支即判红 |
+| `AC-004` | unit | `tests/unit/test_f009_lifecycle_contract.py` | restore 幂等（加载函数只调一次）；加载抛错 → `E_UNAVAILABLE` + `state=stopped` + 进程未退出（断言未抛 SystemExit） |
+| `AC-005` | unit | `tests/unit/test_f009_lifecycle_errors.py` | 版本 999 / 头缺失 / 体含 `{"force": true}` 三种输入均返回**恰为单键**的信封（断言 `set(payload) == {"error"}`）；成功响应不含 `error`；空体与 `{}` 放行 |
+| `AC-006` | unit | 同上：单飞与超时 | 慢动作进行中并发 restore → `E_BUSY` 且原动作不受影响；短超时 → `E_TIMEOUT` 且 `operation` 仍非空；后台完成后 `operation` 转 `null` 且 `state` 与 `desired` 一致；加载中途抛错后显存清理、落回 `stopped` |
+| `AC-007` | unit | `tests/unit/test_f009_vram_probe.py` | 三条回退分支逐条命中；探测命令不含 `--query-compute-apps`；三个超时变量的非法值（0 / 负数 / 非数值）启动期判红，不回退默认 |
+| `AC-008` | unit | `tests/unit/test_f009_lifecycle_logging.py`（caplog） | stop/restore 各一行且含 `operation_id`；超时后的迟到完成补写同 id 的 `result=late_complete`；字段集与 TR-001 逐项一致；不含主机路径与凭据。**变异证明**：删任一必填字段即判红 |
+| `AC-009` | integration | `tests/integration/test_f009_lifecycle_deployment.py`（`ALPHAMILL_INTEGRATION=1`） | mock 实例 `/lifecycle/status` 返回 **404**；默认镜像 `import torch` 判红（沿用 F004 否证式断言）；`docker compose config` 断言控制面端口绑 `127.0.0.1` |
+| `AC-010` | unit | `tests/unit/test_f003_gpu_slot.py` | 客户端对 status/stop/restore 分别使用 5/60/120s（断言传给请求层的 timeout 值逐个不同）；三条退出路径均调用 restore |
+| `AC-011` | 真实环境（执行机） | `tests/integration/test_f003_kronos_lifecycle.py` | 控制面语义用例 `--runxfail` 下 0 xfailed；模块级 xfail 已移除；补齐 `E_BUSY`/`E_TIMEOUT`/额外参数用例 |
+| `AC-012` | 真实环境（**依赖 F010**） | 同上，显存用例以 `xfail(strict=True)` 标注 | 断言 `after < before` **且** `after` 低于训练预算阈值；F010 落地前保持先红态，落地后 XPASS 即红、须显式解除 |
 
 补充纪律：
 
-- 每条新断言须有**变异判红**证明（改坏实现后测试必须红），F004 检视循环 12 的既定做法；
-- 开发机（`qiaozhi-gp`，无 NVIDIA）上 GPU 相关用例跳过属预期，不算证据也不算失败（SOP §3）；AC-010 一律在执行机取。
+- 每条新断言须有**变异判红**证明（F004 循环 12、F003 循环 14 既定做法）；
+- 开发机上 GPU 相关用例跳过属预期，不算证据也不算失败（SOP §3）；
+- AC-012 在 F010 落地前**不得**以 CPU 实例上的通过充当证据（spec NFR-006）。
 
 ## 9. 已确认决策与残余风险
 
 | 决策 / 风险 | 结论或缓解 | 理由 | 替代方案 / 后续 |
 |---|---|---|---|
-| 状态存哪 | **不存**，每次从 `real_signal.status().loaded` 派生 | derive, don't store；避免"状态变量说 running、模型实际没了"这类第二真相源缺陷 | — |
-| 错误响应的 HTTP 状态码 | 错误也走 **HTTP 200 + `{"error": "E_*"}`** 信封 | 契约测试只认信封；非 2xx 可能被中间件/代理改写成自己的错误页而丢掉 `error` 字段，届时客户端会把它误判成"端点不存在" | 若将来接入网关需要状态码语义，改契约（架构 §7.1）而非改实现 |
-| 超时后是否取消后台工作 | **不取消**，只返回 `E_TIMEOUT` | 强行中断加载/卸载会留下半加载态，违反 NFR-004 的"必须收敛到两个状态之一" | 下一次 `status` 如实反映最终落点；客户端按决策表第四行 fail-closed |
-| `stop` 后重启进程回到 running | **有意为之**，不持久化停机意图 | 夜槽每轮都会重新 `stop`；持久化会让人工重启后白天拿不到信号，故障面更差 | — |
-| 在飞判定与卸载之间的竞态 | 卸载仍在 `_lock` 内执行，与推理互斥 | 最坏情况是新请求阻塞后走兜底路径，而不是拿到半卸载的模型 | 若实测竞态可观测，再引入 draining 态（须先改架构 §7.1） |
-| 设备侧读数含其他租户 | **接受**：这正是夜槽要的判断 | F003 要判的是"整张卡还剩多少能开训"，而不是"Kronos 自己占了多少" | 日志同时记前后两个读数，便于事后区分是谁没让出来 |
-| `nvidia-smi` 回退在 WSL2 的可靠性 | 只用 `--query-gpu=memory.used`，**绝不查进程列表** | WSL2 下 `nvidia-smi` 不列出 GPU 进程（架构 §7.1 已记录），查进程会得到空结果并被误读成"卡是空的" | 单测断言探测命令里不出现 `--query-compute-apps` |
-| 控制面无鉴权 | 网络边界替代鉴权：绑回环 + 容器网络 | 单机自用、调用方同宿主；引入凭据管理成本不抵收益 | 执行机分离或跨机调用前必须先补鉴权 |
+| `desired` 要不要存 | **存**；`state` 仍只派生 | "模型在不在内存里"这项事实不足以表达停机意图（检视 R1-002）。把该存的存、该派生的派生，才既排除第二真相源又让 `stopped` 稳定 | — |
+| 停机期间的推理请求怎么答 | 走 F004 既有兜底路径，来源不标 `kronos` | 不改 `/predict*` 对外契约；复用已验收的兜底语义与其测试 | 若将来需要显式 503，须先改架构契约 |
+| 超时后是否取消后台工作 | **不取消**，把"进行中"升为一等状态（`operation`） | 强行中断会留下半加载态；无法安全中断就不要假装可以。可观测优于可中断 | 客户端 fail-closed，下一轮重试 |
+| 冲突动作排队还是拒绝 | **拒绝**（`E_BUSY`），不排队 | 排队会让相反动作迟到生效，客户端看到的响应与最终状态失去稳定关系（检视 R1-003） | 若重试率高，再提 draining 态到架构 §7.1 |
+| `restore` 加载失败后的 `desired` | 回落 `stopped` | 否则停在"期望 running 但加载不上"的过渡态，`state` 落不回稳定态，违反不变量 | `E_UNAVAILABLE` 让调用方知道恢复没成 |
+| mock 是否实现控制面 | **不注册路由**（推翻早先决策） | 架构明确 mock 不在契约范围；mock 永远 `model_loaded=false`，与 `running ⇒ model_loaded=true` 不相容（检视 R1-005） | 客户端 404 处置由决策表第三行覆盖 |
+| GPU 基座不存在 | 归 F010，本 feature 声明硬前置；显存结论挂先红态 | 控制面语义可在 CPU 上完整交付与验收；把"显存释放"当成已验证才是真风险 | F010 落地后回本 spec 取 AC-012 证据 |
+| 设备侧读数含其他租户 | 接受：这正是夜槽要的判断 | F003 要判的是"整张卡还剩多少能开训"，不是"Kronos 自己占了多少" | 日志同时记前后读数，便于事后区分 |
+| 控制面无鉴权 | 网络边界替代鉴权 | 单机自用、调用方同宿主 | 跨机调用前必须先补鉴权 |
 
 ## 10. 待确认设计问题
 
