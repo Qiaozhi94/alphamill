@@ -129,10 +129,11 @@ def offload_kronos(
     )
     if not stopped_ok:
         return _outcome("fail_closed", "vram_not_released", (before, after))
-    # 架构 §7.1 显存确认条：下降还不够，必须降到能腾出训练预算——否则 Kronos 让出来了
-    # 但卡上还有别的租户，取锁照样 OOM。
+    # 架构 §7.1 显存确认条：下降还不够，卸载后整卡可用显存必须达到训练预算（与取锁判定
+    # 同一谓词）——否则 Kronos 让出来了但卡上还有别的租户，取锁照样 OOM。reason 说的是
+    # 「训练预算未能确认」，不是「已用读数低于预算」，两者在 8GB 卡上并不等价。
     if not vram_is_sufficient(vram_reader(), limit_gb=vram_budget_gb):
-        return _outcome("fail_closed", "vram_below_budget_unconfirmed", (before, after))
+        return _outcome("fail_closed", "training_budget_unconfirmed", (before, after))
     return _outcome("stopped", "vram_released", (before, after))
 
 

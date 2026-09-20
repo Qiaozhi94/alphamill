@@ -281,11 +281,12 @@ def test_configured_window_changes_slot_behavior(
     opened.release("opened", now=now)
 
 
-def test_release_requires_falling_below_the_training_budget() -> None:
-    """F009-R2-002 判红点：下降还不够，必须降到能腾出训练预算。
+def test_release_requires_freeing_the_training_budget() -> None:
+    """F009-R2-002 判红点：下降还不够，卸载后必须真能腾出训练预算。
 
-    架构 §7.1 本轮把"已释放"的判据从"vram_bytes 是合法整数"收紧为"读数真实下降**且**
-    降到训练预算之下"。只判 after < before 的话，Kronos 让出来了但卡上还有别的租户，
+    架构 §7.1 把"已释放"的判据从"vram_bytes 是合法整数"收紧为"读数真实下降**且**卸载后
+    整卡可用显存达到训练预算"——判据落**可用侧**：8GB 卡上"已用 5GB"同时满足"低于 6GB
+    预算"与"取不到 6GB"。只判 after < before 的话，Kronos 让出来了但卡上还有别的租户，
     取锁照样 OOM——而编排会把这次卸载记成成功。
     """
     client = _FakeClient(
@@ -301,7 +302,7 @@ def test_release_requires_falling_below_the_training_budget() -> None:
         vram_reader=lambda: VramReading(total_gb=8, free_gb=1),
     )
     assert starved.action == "fail_closed"
-    assert starved.reason == "vram_below_budget_unconfirmed"
+    assert starved.reason == "training_budget_unconfirmed"
 
     roomy = offload_kronos(
         control_url="http://kronos",
