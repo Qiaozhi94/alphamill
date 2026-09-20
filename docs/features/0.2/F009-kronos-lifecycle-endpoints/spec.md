@@ -48,7 +48,7 @@ updated: 2026-09-20
 - **期望态可被外部置位且稳定**：`stop` 之后推理端点不隐式重载模型，`stopped` 能一直维持到显式 `restore`；
 - **动作可仲裁**：同一时刻至多一个生命周期动作在执行，冲突动作立即 `E_BUSY`；`E_TIMEOUT` 表达"仍在进行"，最终落点经 `status.operation` 可观测；
 - 契约版本协商与错误信封成立：`X-Contract-Version` 不匹配或缺失一律以恰为单键的 `{"error": "E_UNSUPPORTED_VERSION"}` 拒绝；
-- `tests/integration/test_f003_kronos_lifecycle.py` 转正——移除 `xfail(strict=True)`、补错误路径与显存判据用例，在执行机以 0 xfailed 通过；
+- `tests/integration/test_f003_kronos_lifecycle.py` 转正——移除模块级 `xfail(strict=True)`、补错误路径用例，在执行机以 0 xfailed 通过；显存判据另落独立载体 `test_f009_vram_release.py`，不占用该文件的 0-xfailed 门禁；
 - F003 客户端的分动作超时与 `restore` 所有权在本 feature 内一并钉死（跨 Feature 交付边显式化）。
 
 ### 非目标
@@ -114,7 +114,7 @@ updated: 2026-09-20
 - 推理端点在停机期间的准入：走 F004 既有兜底路径且不标 `source=kronos`（F004 C002 同一纪律）；
 - 设备侧显存探测与其**可配置契约**（变量名、值域、默认值、非法值策略）；读数不可得以 `vram_readable=false` + `vram_bytes=null` 表达；
 - 超时与阈值的可配化（不写死常数，迁移执行机只改配置）；
-- `tests/integration/test_f003_kronos_lifecycle.py` 的转正：移除 `xfail(strict=True)`、补错误路径与显存判据用例；
+- `tests/integration/test_f003_kronos_lifecycle.py` 的转正：移除模块级 `xfail(strict=True)`、补错误路径用例；显存判据落独立载体 `tests/integration/test_f009_vram_release.py`；
 - **跨 Feature 交付边**：F003 客户端的分动作超时（5s/60s/120s）与 `restore` 所有权（三条退出路径均须恢复）在本 feature 内钉死并验收；
 - 在 CPU 实例上可完成的部署与契约取证。
 

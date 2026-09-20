@@ -35,7 +35,7 @@ updated: 2026-09-20
 - Runtime / Agent Adapter：`deployment/docker-compose.yml` 的 `kronos-signal-real`——控制面端口绑回环；新增生命周期环境变量（`.env.example` 同步）。
 - Event / Evidence：结构化日志行（TR-001/002），落容器日志，不入库、不建面板。
 - 文档 / 配置：BACKLOG「规划中」新增 F010 行；`docs/alphamill-integration.md` 补控制面运维段。
-- **跨 Feature**：F003 的 `kronos_offload` 客户端改分动作超时（FR-009）；`tests/integration/test_f003_kronos_lifecycle.py` 转正并补用例。
+- **跨 Feature**：F003 的 `kronos_offload` 客户端改分动作超时（FR-009）；`tests/integration/test_f003_kronos_lifecycle.py` 转正并补用例；显存判据落独立载体 `tests/integration/test_f009_vram_release.py`（避免与 F003 T033 的 0-xfailed 门禁互相拆台）。
 
 ## 2. 架构与模块边界
 
