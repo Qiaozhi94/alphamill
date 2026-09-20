@@ -79,8 +79,23 @@ def test_reject_conclusion_fields_accepts_clean_payload() -> None:
     reject_conclusion_fields({"factor_id": "manual_example"}, context="backend result")
 
 
-def test_reject_conclusion_fields_does_not_descend_into_params() -> None:
-    reject_conclusion_fields({"params": {"ic": 1}}, context="factor definition")
+def test_reject_conclusion_fields_descends_into_params_and_meta() -> None:
+    """R004 判红点：顶层筛查形同虚设，结论只可能藏在 params/meta 里。
+
+    GenerationResult 与 FactorDef 都是字段固定的 frozen dataclass，后端无从在顶层
+    塞一个 ic——FR-001 场景「后端在结果中写入 IC 字段」的唯一可实现形态就是这两个
+    自由字典。
+    """
+    with pytest.raises(ConclusionFieldError, match="ic"):
+        reject_conclusion_fields({"params": {"ic": 1}}, context="factor definition")
+    with pytest.raises(ConclusionFieldError, match="verdict"):
+        reject_conclusion_fields(
+            {"meta": {"notes": [{"verdict": "promote"}]}}, context="factor definition"
+        )
+    reject_conclusion_fields(
+        {"params": {"window": 24}, "meta": {"expression": ["feature:close"]}},
+        context="factor definition",
+    )
 
 
 def test_window_preset_expands_to_end_exclusive_730_day_range() -> None:

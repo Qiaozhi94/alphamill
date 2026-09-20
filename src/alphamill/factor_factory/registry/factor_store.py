@@ -16,6 +16,7 @@ from alphamill.factor_factory.errors import (
     SchemaValidationError,
 )
 from alphamill.factor_factory.factor import FactorCompute, FactorDef, FactorResolver, FactorScope
+from alphamill.factor_factory.generators.base import reject_conclusion_fields
 from alphamill.factor_factory.generators.expression_compiler import referenced_features
 from alphamill.factor_factory.hypotheses.catalog import DEFAULT_CATALOG, HypothesisCatalog
 from alphamill.factor_factory.hypotheses.schema import HypothesisDef
@@ -76,6 +77,7 @@ def build_factor(
     tokens = tuple(expression)
     if any(not isinstance(token, str) for token in tokens):
         raise FactorCompilationError("expression tokens must be strings")
+    reject_conclusion_fields({"params": dict(params)}, context=f"build_factor({name})")
     features = dict(feature_map)
     columns = referenced_features(tokens)
     if missing := tuple(column for column in columns if column not in features):

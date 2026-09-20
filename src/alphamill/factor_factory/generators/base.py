@@ -149,8 +149,28 @@ class Generator(Protocol):
 
 
 def reject_conclusion_fields(payload: Mapping[str, object], *, context: str) -> None:
-    """Reject evaluation conclusions found among a payload's top-level keys."""
-    offending = sorted(CONCLUSION_FIELDS.intersection(payload))
+    """Reject evaluation conclusions anywhere inside a payload, at any depth.
+
+    Top-level-only screening cannot fire on a real backend result: both
+    ``GenerationResult`` and ``FactorDef`` are frozen dataclasses whose field
+    names are fixed, so no backend can add an ``ic`` attribute to them. The only
+    surfaces that can carry a conclusion are the free-form ``params`` and
+    ``meta`` mappings — which is exactly what this walk covers (FR-001, AC-001;
+    evaluation authority is F007 alone, ADR-0003).
+    """
+    offending = sorted(_conclusion_keys(payload))
     if offending:
         fields = ", ".join(offending)
         raise ConclusionFieldError(f"{context}: conclusion fields are forbidden: {fields}")
+
+
+def _conclusion_keys(value: object) -> set[str]:
+    """Collect forbidden keys from nested JSON-shaped mappings and sequences."""
+    if isinstance(value, Mapping):
+        found = set(CONCLUSION_FIELDS.intersection(value))
+        for item in value.values():
+            found |= _conclusion_keys(item)
+        return found
+    if isinstance(value, (list, tuple)):
+        return set().union(*(_conclusion_keys(item) for item in value)) if value else set()
+    return set()
