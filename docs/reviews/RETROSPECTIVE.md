@@ -878,3 +878,59 @@
 **教训**：多会话并行改同一仓库时，未提交的工作树改动没有任何保护。重放后立即 `git add` 进 index
 （能挡 `git checkout -- .`，挡不住 `git reset --hard`），并尽快落到独立 worktree 的分支上。
 本次最终把 F008 文档收进 `feat/F008-universe-expansion` worktree，与 F003 的代码分支物理隔离。
+
+## 循环 14：F003 AlphaGen vendor 与可插拔生成器平面 实现代码检视
+
+- report_type: code-review
+- 周期：2026-09-20（2 轮；第 1 轮全量扫描，第 2 轮 diff-only 复核）
+- 状态：闭环（stop_condition_met: true）
+- 基线：`feat/F003-alphagen-vendor` @ `b78f3a9` → 修复终态 `0f13d9c`
+- 被检对象：分支相对 `origin/main` 的 90 文件 / +13813-95，重点 `src/alphamill/factor_factory/` 下
+  `generators/`（22 模块）、`registry/`、`hypotheses/`、`cli.py` 与配套 tests；vendor 冻结子集只检胶水层与卫生门
+- 背景：该 PR 至今零代码检视；同日刚修掉两个 CI 假绿缺陷（收集期 torch 中断、`.gitignore` 裸 `models/` 吞掉 vendor blob）
+
+### 循环 14 完整 issue 表
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首现轮 | 修复轮 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F003-R001 | 训练窗口按 UTC 判定，默认时段表却是本地时间 | high | correctness | root-cause | original-coding | fixed | 配置显式声明时区后换算再比较 | GpuSlotConfig 增 window_tz（默认 Asia/Shanghai），比较前 astimezone；未知时区与 naive 瞬间判红；架构 §7.1 补注语义 | tests/unit/test_f003_gpu_slot.py::test_training_window_reads_local_clock_not_utc_clock | 1 | 1 | timezone-semantics-undeclared |
+| F003-R002 | 显存读数不可得时取锁（fail-open） | high | correctness | root-cause | original-coding | fixed | 区分「无 GPU」与「读数不可得」，后者留队列 | 读数缺失与读数不足走同一路径：释放 OS 锁、以 vram_free_gb=null 重新入队 | tests/unit/test_f003_gpu_slot.py::test_unreadable_vram_never_acquires_the_slot | 1 | 1 | guard-fails-open |
+| F003-R003 | offload_kronos 生产路径未接线 | high | correctness | root-cause | original-coding | fixed | mine 取锁前调用并把结果写进 run.json | cli mine 取锁前调用，控制面地址走配置；fail_closed 即拒绝不取锁；GenerationRun 增 kronos_offload 字段 | tests/unit/test_f003_cli_contract.py::test_mine_fail_closed_offload_rejects_before_taking_the_slot | 1 | 1 | marked-done-not-implemented |
+| F003-R004 | 结论字段护栏不可能触发 | high | correctness | root-cause | original-coding | fixed | 递归筛查 params/meta，反向断言翻红 | reject_conclusion_fields 改递归；build_factor 在 params 入口同样筛查；原「不下钻」测试翻成反向断言 | tests/unit/test_f003_generator_contract.py::test_reject_conclusion_fields_descends_into_params_and_meta | 1 | 1 | scope-promise-mechanism-gap |
+| F003-R005 | CLI 替换 os.fdopen 绕开写路径护栏 | high | correctness | symptom-patch | original-coding | fixed | 护栏按 fd 真实路径放行，不由调用方打补丁 | 护栏自持 ApprovedDescriptors，只放行自己在 root 内开过的 fd 并经 /proc/self/fd 复核；CLI 删除 os.fdopen 替换 | tests/integration/test_f003_boundaries.py::test_write_guard_allows_own_descriptors_and_still_denies_foreign_ones | 1 | 1 | guard-bypassed-by-production-code |
+| F003-R006 | allow-offhours 伪造 now，污染队列时间戳 | high | correctness | symptom-patch | original-coding | fixed | 增显式 ignore_window 参数，ts 用真实时钟 | acquire 增 ignore_window：只旁路时段判定，不旁路显存探测与盖戳时钟 | tests/unit/test_f003_gpu_slot.py::test_allow_offhours_bypasses_window_without_faking_the_clock | 1 | 1 | test-shaped-hack-in-production |
+| F003-R007 | control_url 缺省被判成「确未部署」 | medium | correctness | root-cause | original-coding | fixed | 要求显式部署清单证据才记 not_needed | 部署清单事实由 service_deployed 显式给出（默认 True）；漏配即 fail_closed；顺带把 gpu_slot 拆成仲裁/vram/kronos_offload 三块 | tests/unit/test_f003_gpu_slot.py::test_missing_control_url_fails_closed_unless_service_is_known_absent | 1 | 1 | guard-fails-open |
+| F003-R008 | 崩溃遗留 queued 记录永久占队首 | medium | correctness | root-cause | original-coding | open | 队首判定加租约超时 | — | — | 1 | — | — |
+| F003-R009 | config/factor JSON 非原子写 | medium | correctness | root-cause | original-coding | open | 复用 run_store._atomic_write | — | — | 1 | — | — |
+| F003-R010 | acquire 忙轮询 + 每轮全量重读队列 | low | quality | root-cause | original-coding | open | 轮询间隔可配，只读尾部 | — | — | 1 | — | — |
+| F003-R011 | run_dir 以 parents[4] 猜仓库根 | low | quality | root-cause | original-coding | open | reports_root 显式配置，取不到判红 | — | — | 1 | — | — |
+| F003-R012 | 停了 Kronos 却从不恢复 | high | correctness | root-cause | fix-regression | fixed | 三条退出路径都要恢复常驻 | kronos_offload 增 restore_kronos；cli finally 释放槽后恢复；恢复失败 stderr 告警不静默 | tests/unit/test_f003_cli_contract.py::test_mine_restores_kronos_after_stopping_it | 2 | 2 | stop-without-restore |
+| F003-R013 | 显存预检排在卸载之前，卸载救不了主场景 | high | correctness | root-cause | original-coding | fixed | 顺序改为能力→窗口→卸载→量显存→取锁 | 调整 cli mine 顺序；device 只在确认显存后才写 cuda，被拒运行不自称跑在 GPU 上 | tests/unit/test_f003_cli_contract.py::test_mine_offloads_kronos_before_measuring_vram | 2 | 2 | precondition-ordered-after-remedy |
+
+### 裁决记录
+
+（本循环无被拒 / 部分接纳条目；11 条首轮发现全部接纳，2 条为第 2 轮新增。）
+
+### 模式教训
+
+- **`guard-*` 三连是本循环的主旋律**：13 条里有 6 条（R002/R003/R004/R005/R007 + R013）属于同一个元模式——
+  **门禁存在、测试也绿，但在真实路径上不可能起作用**。形态各异：不可能触发（R004 的顶层筛查对上
+  字段固定的 frozen dataclass）、被生产代码自己打洞（R005 替换 stdlib）、根本没接线（R003 只有单测在用）、
+  读数缺失时放行（R002/R007）、顺序错位使补救永远来不及（R013）。这与同日两个 CI 假绿缺陷
+  （收集期中断让整轮用例一条没跑、裸 `models/` 让 vendor 卫生门没有可检对象）是同族。
+  **教训**：写完一个护栏要追问的不是"测试过了吗"，而是"它在生产路径上有没有一条能触发的输入"。
+  变异判红之所以是硬要求，正因为它是唯一能证伪"绿得没有意义"的手段。
+- **`origin` 分布**：original-coding 12 条、fix-regression 1 条（R012）。首轮 11 条全部是首次实现就带的，
+  没有一条来自此前的修改——这与"该 PR 零代码检视"的事实一致：缺陷不是被改坏的，是从没被看过。
+- **第 2 轮的价值被再次证实**：R012 是 R003 修复亲手引入的（接线之前不存在这条路径），
+  R013 则是 R003 接线之后才**显形**的既有顺序错误——两条在第 1 轮物理上都抓不到。
+  若按"1 轮闭环"收工，交付的会是一个每晚停掉 Kronos 再也不恢复的夜槽。
+- **存活轮数**：全部 fixed 条目均为首现即修（存活 0 轮）。这是角色合并路径（检视方直接下场修复）
+  的典型形态，代价是缺少对抗式复核，故每条修复都以**变异判红**作为独立证据。
+- **裁决分布**：accepted 13 / partial 0 / rejected 0。全接纳通常是"检视在凑数"的信号，但本循环
+  4 条 Medium/Low 明确留 open 不阻塞（协议第 7 条），且 6 条 High 各自有可判红的回归测试，
+  不属于凑数。**建议命中率**：13 条中 11 条 `fix_summary` 与 `suggested_fix` 实质一致；
+  R007 与 R013 的实际修复都比建议更进一步（前者顺带拆了模块边界，后者连带修正了 manifest 的 device 字段）。
+- **未闭合项去向**：R008/R009（Medium）与 R010/R011（Low）四条不阻塞本次闭环，完整留在上表。
+  R008（队首饿死）与 R009（非原子写）建议在 F003 收口前或 T033 执行机取证时一并处理——
+  队首饿死在单机单跑场景下概率低，但夜槽是无人值守的。
