@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import io
 import json
-import os
 import platform
 import socket
 import sys
@@ -122,10 +120,6 @@ def _reject(state: _SeedState, termination: str, reason: str) -> int:
     return _finish_error(state, ("rejected", termination, reason))
 
 
-def _event_stream(descriptor: int, mode: str, buffering: int = -1) -> io.FileIO:
-    return io.FileIO(descriptor, mode=mode, closefd=True)
-
-
 def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Path | None) -> int:
     mining = args.command == "mine"
     run_id = run_store.new_run_id("manual")
@@ -221,14 +215,7 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
             for factor in result.factors:
                 factor_store.write(state.run_dir, factor)
             state = replace(state, config_digest=run_store.write_config(state.run_dir, config))
-            original_fdopen = os.fdopen
-            os.fdopen = _event_stream
-            try:
-                run_store.finalize_run(
-                    state.run_dir, _manifest(state, ("completed", "normal", None))
-                )
-            finally:
-                os.fdopen = original_fdopen
+            run_store.finalize_run(state.run_dir, _manifest(state, ("completed", "normal", None)))
         return EXIT_OK
     except (errors.FactorFactoryError, OSError, RuntimeError, TypeError, ValueError) as exc:
         match exc:

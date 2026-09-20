@@ -55,9 +55,50 @@ def _deny_descriptor() -> NoReturn:
     raise WriteDeniedError("descriptor-relative writes are not permitted")
 
 
-def _assert_path_allowed(path: str | bytes | os.PathLike[str] | int, root: Path) -> Path:
+class ApprovedDescriptors:
+    """Descriptors this guard itself opened inside the permitted root.
+
+    ``os.fdopen`` funnels into ``io.open(fd, ...)``, so a blanket descriptor
+    denial makes legitimate in-root append-with-flock impossible — which is why
+    the CLI used to swap out ``os.fdopen`` to get around the guard. Owning the
+    approved set here removes that reason: the guard blesses only descriptors it
+    validated on the way in, and re-confirms them through ``/proc/self/fd`` where
+    available so a recycled descriptor number cannot inherit the blessing.
+    """
+
+    __slots__ = ("_descriptors",)
+
+    def __init__(self) -> None:
+        self._descriptors: set[int] = set()
+
+    def add(self, descriptor: int) -> None:
+        self._descriptors.add(descriptor)
+
+    def allows(self, descriptor: int, root: Path) -> bool:
+        if descriptor not in self._descriptors:
+            return False
+        try:
+            target = os.readlink(f"/proc/self/fd/{descriptor}")
+        except OSError:
+            return True  # /proc unavailable: fall back to the recorded approval
+        try:
+            assert_write_allowed(target, root=root)
+        except WriteDeniedError:
+            self._descriptors.discard(descriptor)
+            return False
+        return True
+
+
+def _assert_path_allowed(
+    path: str | bytes | os.PathLike[str] | int,
+    root: Path,
+    approved: ApprovedDescriptors | None = None,
+) -> Path:
+    """Validate a write target; ``approved`` is None wherever descriptors are meaningless."""
     if isinstance(path, int):
-        _deny_descriptor()
+        if approved is None or not approved.allows(path, root):
+            _deny_descriptor()
+        return root
     return assert_write_allowed(_path_text(path), root=root)
 
 
@@ -151,24 +192,34 @@ def _validate_run_dir(run_dir: Path, reports_root: Path) -> Path:
     return resolved_run
 
 
-def _guard_open(original: _GuardFunction, root: Path) -> _GuardFunction:
+def _guard_open(
+    original: _GuardFunction, root: Path, approved: ApprovedDescriptors
+) -> _GuardFunction:
     def guarded(file, mode="r", *args, **kwargs):
         if _write_mode(mode):
-            _assert_path_allowed(file, root)
+            _assert_path_allowed(file, root, approved)
         return original(file, mode, *args, **kwargs)
 
     return guarded
 
 
-def _guard_os_open(original: _GuardFunction, root: Path) -> _GuardFunction:
+def _guard_os_open(
+    original: _GuardFunction, root: Path, approved: ApprovedDescriptors
+) -> _GuardFunction:
     def guarded(path, flags, mode=0o777, *, dir_fd=None):
-        if _write_flags(flags):
+        write = _write_flags(flags)
+        if write:
             if dir_fd is not None:
                 _deny_descriptor()
-            _assert_path_allowed(path, root)
-        if dir_fd is None:
-            return original(path, flags, mode)
-        return original(path, flags, mode, dir_fd=dir_fd)
+            _assert_path_allowed(path, root, approved)
+        descriptor = (
+            original(path, flags, mode)
+            if dir_fd is None
+            else original(path, flags, mode, dir_fd=dir_fd)
+        )
+        if write:
+            approved.add(descriptor)
+        return descriptor
 
     return guarded
 
@@ -258,15 +309,16 @@ def install_write_path_guard(
         (os, "link"),
     )
     originals = {(owner, name): getattr(owner, name) for owner, name in target_names}
+    approved = ApprovedDescriptors()
     targets = (
         (
             builtins,
             "open",
             originals[builtins, "open"],
-            _guard_open(originals[builtins, "open"], root),
+            _guard_open(originals[builtins, "open"], root, approved),
         ),
-        (io, "open", originals[io, "open"], _guard_open(originals[io, "open"], root)),
-        (os, "open", originals[os, "open"], _guard_os_open(originals[os, "open"], root)),
+        (io, "open", originals[io, "open"], _guard_open(originals[io, "open"], root, approved)),
+        (os, "open", originals[os, "open"], _guard_os_open(originals[os, "open"], root, approved)),
         (os, "mkdir", originals[os, "mkdir"], _guard_path_operation(originals[os, "mkdir"], root)),
         (
             os,

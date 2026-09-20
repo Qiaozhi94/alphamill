@@ -23,6 +23,9 @@ from alphamill.factor_factory.generators.write_guard import install_write_path_g
 pytestmark = pytest.mark.integration
 
 
+_STDLIB_FDOPEN = os.fdopen
+
+
 def _make_run_dir(tmp_path: Path) -> tuple[Path, Path]:
     reports_root = tmp_path / "reports"
     run_dir = reports_root / "generation" / "run-001"
@@ -135,6 +138,36 @@ def test_write_guard_confines_writes_and_restores_open(tmp_path: Path) -> None:
     assert not guard.active
     assert builtins.open is original_open
     (tmp_path / "elsewhere.txt").write_text("restored", encoding="utf-8")
+
+
+def test_write_guard_allows_own_descriptors_and_still_denies_foreign_ones(
+    tmp_path: Path,
+) -> None:
+    """R005 判红点：护栏自己批准过的 fd 可经 os.fdopen 写，外来 fd 仍拒。
+
+    run_store 的 append-only 事件流需要 os.open + flock + os.fdopen；护栏若一概拒绝
+    描述符写，调用方就只能像旧 CLI 那样把 stdlib 的 os.fdopen 换掉绕过去——等于生产
+    代码在运行中途给护栏开洞。护栏自持批准集合之后，这个绕行理由消失。
+    """
+    reports_root, run_dir = _make_run_dir(tmp_path)
+    foreign_path = tmp_path / "foreign.txt"
+    foreign_descriptor = os.open(foreign_path, os.O_CREAT | os.O_WRONLY, 0o644)
+
+    try:
+        with install_write_path_guard(run_dir, reports_root=reports_root):
+            assert os.fdopen is _STDLIB_FDOPEN, "护栏不得替换 stdlib 的 os.fdopen"
+
+            inside = os.open(run_dir / "events.jsonl", os.O_CREAT | os.O_APPEND | os.O_RDWR, 0o644)
+            with os.fdopen(inside, "rb+", buffering=0) as stream:
+                stream.write(b"{}\n")
+
+            with pytest.raises(WriteDeniedError):
+                os.fdopen(foreign_descriptor, "wb")
+    finally:
+        os.close(foreign_descriptor)
+
+    assert (run_dir / "events.jsonl").read_bytes() == b"{}\n"
+    assert foreign_path.read_bytes() == b""
 
 
 def test_write_guard_rejects_escaping_symlinks_and_new_links(tmp_path: Path) -> None:
