@@ -12,7 +12,7 @@ from typing import Literal, TypeAlias
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from alphamill.factor_factory.generators.vram import VramReading, query_vram
+from alphamill.factor_factory.generators.vram import VramReading, query_vram, vram_is_sufficient
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,6 +60,7 @@ def offload_kronos(
     *,
     control_url: str | None,
     contract_version: str,
+    vram_budget_gb: float,
     service_deployed: bool = True,
     client=None,
     vram_reader: Callable[[], VramReading | None] = query_vram,
@@ -67,6 +68,10 @@ def offload_kronos(
     stop_timeout_s: float = STOP_TIMEOUT_S,
 ) -> KronosOffloadOutcome:
     """Stop a GPU Kronos tenant or fail closed according to architecture §7.1.
+
+    ``vram_budget_gb`` has no default on purpose: architecture §7.1 defines "released"
+    as *the reading actually fell **and** fell below the training budget*. A budget you
+    never stated cannot be confirmed, so it must be passed in rather than guessed.
 
     A missing ``control_url`` is not evidence of absence. The decision table's
     "确未部署" row requires the deployment manifest to say so, which only the
@@ -111,15 +116,24 @@ def offload_kronos(
     except OSError:
         return _outcome("fail_closed", "control_plane_unreachable", (before, None))
     after = _status_vram_gb(confirmed)
-    released = (
+    if confirmed.get("vram_readable") is False:
+        # 读数缺失与"确实没释放"在处置上同为 fail-closed，但事后归因完全不同，
+        # 故分开记 reason（架构 §7.1：读数不可得仍是成功响应，不是控制面故障）。
+        return _outcome("fail_closed", "vram_unreadable", (before, None))
+    stopped_ok = (
         confirm_code < 400
         and confirmed.get("state") == "stopped"
         and before is not None
         and after is not None
         and after < before
     )
-    action = "stopped" if released else "fail_closed"
-    return _outcome(action, "vram_released" if released else "vram_not_released", (before, after))
+    if not stopped_ok:
+        return _outcome("fail_closed", "vram_not_released", (before, after))
+    # 架构 §7.1 显存确认条：下降还不够，必须降到能腾出训练预算——否则 Kronos 让出来了
+    # 但卡上还有别的租户，取锁照样 OOM。
+    if not vram_is_sufficient(vram_reader(), limit_gb=vram_budget_gb):
+        return _outcome("fail_closed", "vram_below_budget_unconfirmed", (before, after))
+    return _outcome("stopped", "vram_released", (before, after))
 
 
 def _fallback_probe(

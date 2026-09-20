@@ -281,6 +281,68 @@ def test_configured_window_changes_slot_behavior(
     opened.release("opened", now=now)
 
 
+def test_release_requires_falling_below_the_training_budget() -> None:
+    """F009-R2-002 判红点：下降还不够，必须降到能腾出训练预算。
+
+    架构 §7.1 本轮把"已释放"的判据从"vram_bytes 是合法整数"收紧为"读数真实下降**且**
+    降到训练预算之下"。只判 after < before 的话，Kronos 让出来了但卡上还有别的租户，
+    取锁照样 OOM——而编排会把这次卸载记成成功。
+    """
+    client = _FakeClient(
+        statuses=(_status(), _status(state="stopped", vram_bytes=2_000_000_000)),
+        stop=(200, {"state": "stopped", "vram_bytes": 2_000_000_000}),
+    )
+    # 读数确实下降了（3GB → 2GB），但卡上只剩 1GB 空闲，腾不出 6GB 预算。
+    starved = offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=6.0,
+        client=client,
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=1),
+    )
+    assert starved.action == "fail_closed"
+    assert starved.reason == "vram_below_budget_unconfirmed"
+
+    roomy = offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=6.0,
+        client=_FakeClient(
+            statuses=(_status(), _status(state="stopped", vram_bytes=250_000_000)),
+            stop=(200, {"state": "stopped", "vram_bytes": 250_000_000}),
+        ),
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=7.5),
+    )
+    assert roomy.action == "stopped" and roomy.reason == "vram_released"
+
+
+def test_unreadable_vram_is_distinguished_from_not_released() -> None:
+    """F009-R2-002 的另一半：vram_readable=false 与"没释放"处置相同、归因不同。"""
+    status_unreadable = (
+        200,
+        {
+            "state": "stopped",
+            "contract_version": "1",
+            "model_loaded": False,
+            "vram_bytes": None,
+            "vram_readable": False,
+            "device": "cuda",
+        },
+    )
+    outcome = offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=6.0,
+        client=_FakeClient(
+            statuses=(_status(), status_unreadable),
+            stop=(200, {"state": "stopped", "vram_bytes": 250_000_000}),
+        ),
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=7.5),
+    )
+    assert outcome.action == "fail_closed"
+    assert outcome.reason == "vram_unreadable", "读数缺失不得与「没释放」混为一谈"
+
+
 def test_each_lifecycle_action_uses_its_own_contract_timeout() -> None:
     """F009-R1-006 判红点：三个动作必须用各自的超时，不得共用单一值。
 
@@ -301,7 +363,13 @@ def test_each_lifecycle_action_uses_its_own_contract_timeout() -> None:
                 return _status(state=state, vram_bytes=vram)
             return 200, {"state": "stopped", "vram_bytes": 250_000_000}
 
-    offload_kronos(control_url="http://kronos", contract_version="1", client=_RecordingClient())
+    offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=1.0,
+        client=_RecordingClient(),
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=8),
+    )
 
     timeouts = dict(seen)
     assert timeouts["status"] == gpu_slot.STATUS_TIMEOUT_S == 5.0
@@ -327,11 +395,13 @@ def test_missing_control_url_fails_closed_unless_service_is_known_absent() -> No
     架构 §7.1 决策表第一行要求"部署清单中无该服务"这项证据才判 not_needed；
     只看到一个 None 就继续夜槽，等于在执行机漏配时直接去抢 Kronos 占着的卡。
     """
-    forgotten = offload_kronos(control_url=None, contract_version="1")
+    forgotten = offload_kronos(control_url=None, contract_version="1", vram_budget_gb=1.0)
     assert forgotten.action == "fail_closed"
     assert forgotten.reason == "control_url_not_configured"
 
-    absent = offload_kronos(control_url=None, contract_version="1", service_deployed=False)
+    absent = offload_kronos(
+        control_url=None, contract_version="1", vram_budget_gb=1.0, service_deployed=False
+    )
     assert absent.action == "not_needed"
     assert absent.reason == "service_not_deployed"
 
@@ -354,7 +424,13 @@ def test_missing_control_url_fails_closed_unless_service_is_known_absent() -> No
 def test_control_plane_presence_decision(url: str | None, client, action: str) -> None:
     # Given: a configured control URL and deployment-presence observation.
     # When: status is requested or absence is established.
-    outcome = offload_kronos(control_url=url, contract_version="1", client=client)
+    outcome = offload_kronos(
+        control_url=url,
+        contract_version="1",
+        vram_budget_gb=1.0,
+        client=client,
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=8),
+    )
     # Then: only an absent manifest entry may continue after refusal.
     assert outcome.action == action
 
@@ -396,6 +472,7 @@ def test_endpoint_absence_fallback_decision(
     outcome = offload_kronos(
         control_url="http://kronos",
         contract_version="1",
+        vram_budget_gb=1.0,
         client=client,
         vram_reader=lambda: reading,
     )
@@ -414,6 +491,7 @@ def test_empty_process_list_never_overrides_memory_at_threshold() -> None:
     outcome = offload_kronos(
         control_url="http://kronos",
         contract_version="1",
+        vram_budget_gb=1.0,
         client=client,
         vram_reader=lambda: VramReading(total_gb=8, free_gb=7),
     )
@@ -434,7 +512,13 @@ def test_empty_process_list_never_overrides_memory_at_threshold() -> None:
 def test_status_and_stop_decision(client: _FakeClient, action: str, before: float) -> None:
     # Given: status or stop yields one explicit lifecycle decision row.
     # When: offload is attempted.
-    outcome = offload_kronos(control_url="http://kronos", contract_version="1", client=client)
+    outcome = offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=1.0,
+        client=client,
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=8),
+    )
     # Then: CPU is not needed and either stop error fails closed with its reading.
     assert outcome.action == action
     assert outcome.vram_before_gb == before
@@ -447,7 +531,13 @@ def test_success_confirms_vram_release_via_status() -> None:
         stop=(200, {"state": "stopped", "vram_bytes": 250_000_000}),
     )
     # When: offload completes.
-    outcome = offload_kronos(control_url="http://kronos", contract_version="1", client=client)
+    outcome = offload_kronos(
+        control_url="http://kronos",
+        contract_version="1",
+        vram_budget_gb=1.0,
+        client=client,
+        vram_reader=lambda: VramReading(total_gb=8, free_gb=8),
+    )
     # Then: success is reported only after the confirming status reading fell.
     assert outcome == KronosOffloadOutcome(
         action="stopped", reason="vram_released", vram_before_gb=3, vram_after_gb=0.25

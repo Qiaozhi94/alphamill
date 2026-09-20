@@ -51,10 +51,15 @@ def _optional_text(value: canonical.JSONValue) -> str | None:
 def resolve_kronos_offload(
     config: Mapping[str, canonical.JSONValue],
 ) -> gpu_slot.KronosOffloadOutcome:
-    """按配置执行夜槽卸载决策（架构 §7.1 观测→处置决策表）。"""
+    """按配置执行夜槽卸载决策（架构 §7.1 观测→处置决策表）。
+
+    训练预算与单槽仲裁同源（`vram_limit_gb`），不新增第二份配置——"释放"的判据是
+    降到能腾出这份预算，而不是随便降一点。
+    """
     return gpu_slot.offload_kronos(
         control_url=_optional_text(config.get("kronos_control_url")),
         contract_version=str(config["kronos_contract_version"]),
+        vram_budget_gb=float(config["vram_limit_gb"]),
         service_deployed=bool(config["kronos_deployed"]),
     )
 
