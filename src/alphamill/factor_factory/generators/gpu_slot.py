@@ -107,7 +107,14 @@ class GpuSlot:
         self._held: dict[str, int] = {}
 
     def acquire(self, run_id: str, *, now: datetime | None = None) -> QueueRecord:
-        """Wait FIFO; low VRAM rejoins the tail, while no GPU returns ``None`` VRAM."""
+        """Wait FIFO; insufficient **or unreadable** VRAM rejoins the tail.
+
+        An unreadable probe is not evidence of a free card: on the execution host a
+        failed ``nvidia-smi`` says nothing about who holds the 8GB. Architecture §7.1
+        is explicit that the queue wins rather than gambling on OOM, so this path is
+        fail-closed. CPU-only runs never reach here — the CLI takes no slot under
+        ``--allow-cpu``.
+        """
         self._append(run_id, "queued", None, now)
         started = time.monotonic()
         while True:
@@ -126,19 +133,17 @@ class GpuSlot:
                     os.close(descriptor)
                 else:
                     reading = query_vram()
-                    if reading is None or vram_is_sufficient(
-                        reading, limit_gb=self._config.vram_limit_gb
-                    ):
-                        free = None if reading is None else reading.free_gb
+                    free = None if reading is None else reading.free_gb
+                    if vram_is_sufficient(reading, limit_gb=self._config.vram_limit_gb):
                         record = self._append(run_id, "acquired", free, now)
                         self._held[run_id] = descriptor
                         return record
                     try:
-                        self._append(run_id, "released", reading.free_gb, now)
+                        self._append(run_id, "released", free, now)
                     finally:
                         fcntl.flock(descriptor, fcntl.LOCK_UN)
                         os.close(descriptor)
-                    self._append(run_id, "queued", reading.free_gb, now)
+                    self._append(run_id, "queued", free, now)
             elapsed = time.monotonic() - started
             if elapsed >= self._config.queue_timeout_s:
                 record = self._append(run_id, "timeout", None, now)

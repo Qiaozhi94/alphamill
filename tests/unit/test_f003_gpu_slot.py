@@ -216,6 +216,25 @@ def test_low_vram_releases_and_requeues_without_acquired(
     relaxed.release("relaxed", now=NIGHT)
 
 
+def test_unreadable_vram_never_acquires_the_slot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R002 判红点：nvidia-smi 读不出来不等于卡是空的，必须留在队列。
+
+    架构 §7.1「队列赢，绝不并行赌 OOM」；读数缺失时取锁正是拿整张卡赌博。
+    """
+    monkeypatch.setattr(gpu_slot, "query_vram", lambda: None)
+    slot = GpuSlot(locks_dir=tmp_path, config=_config(timeout=0))
+
+    with pytest.raises(GpuQueueTimeoutError):
+        slot.acquire("blind", now=NIGHT)
+
+    events = [record.event for record in slot.queue_records() if record.run_id == "blind"]
+    assert "acquired" not in events, "读数不可得时不得取锁"
+    assert events[-1] == "timeout"
+    assert all(record.vram_free_gb is None for record in slot.queue_records())
+
+
 def test_configured_window_changes_slot_behavior(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
