@@ -22,7 +22,10 @@ from alphamill.factor_factory.generators import base, binding
 RUN_SCHEMA_VERSION = 1
 RunStatus: TypeAlias = Literal["completed", "rejected", "failed", "partial"]
 TierLevel: TypeAlias = Literal["L0", "L1", "L2", "manual"]
-_R = frozenset(("created_at", "started_at", "finished_at", "hostname", "device", "vram_limit_gb"))
+_R = frozenset(
+    ("created_at", "started_at", "finished_at", "hostname", "device", "vram_limit_gb")
+    + ("kronos_offload",)
+)
 _C = frozenset(
     ("run_id", "generator", "engine", "binding", "seed")
     + ("device", "tier_level", "counts", "pool")
@@ -66,6 +69,7 @@ class GenerationRun:
     device: str
     hostname: str
     vram_limit_gb: float | None
+    kronos_offload: dict[str, JSONValue] | None
     universe: UniverseSummary | None
     tier_level: TierLevel
     window: base.Window | None

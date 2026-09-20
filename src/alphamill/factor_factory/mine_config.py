@@ -20,6 +20,10 @@ DEFAULT_MINE_CONFIG: Final[Mapping[str, canonical.JSONValue]] = MappingProxyType
         "training_window_start": "22:00",
         "training_window_end": "06:30",
         "training_window_tz": gpu_slot.DEFAULT_WINDOW_TZ,
+        # 夜槽卸载 Kronos 的控制面（架构 §7.1）。缺省 null = 本机未部署该服务；
+        # 执行机必须显式配置，否则按观测→处置决策表 fail-closed，不抢卡。
+        "kronos_control_url": None,
+        "kronos_contract_version": "1",
     }
 )
 

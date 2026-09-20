@@ -585,6 +585,97 @@ def test_mine_defaults_are_expanded_in_canonical_config(
     assert config["window"]["resample"] == "1h"
 
 
+def _patch_offload(monkeypatch: pytest.MonkeyPatch, action: str, reason: str) -> list[str | None]:
+    from alphamill.factor_factory import cli as cli_module
+    from alphamill.factor_factory.generators.gpu_slot import KronosOffloadOutcome
+
+    seen: list[str | None] = []
+
+    def offload(*, control_url: str | None, contract_version: str) -> KronosOffloadOutcome:
+        seen.append(control_url)
+        return KronosOffloadOutcome(
+            action=action, reason=reason, vram_before_gb=3.0, vram_after_gb=0.2
+        )
+
+    monkeypatch.setattr(cli_module.gpu_slot, "offload_kronos", offload)
+    return seen
+
+
+def test_mine_fail_closed_offload_rejects_before_taking_the_slot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R003 判红点：夜槽卸载判 fail_closed 时必须拒绝，且不得取锁。"""
+    from alphamill.factor_factory import cli as cli_module
+
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch, vram=_AvailableVram())
+    _patch_offload(monkeypatch, "fail_closed", "vram_not_released")
+    acquired: list[str] = []
+    monkeypatch.setattr(
+        cli_module.gpu_slot.GpuSlot,
+        "acquire",
+        lambda _self, run_id, **_kwargs: acquired.append(run_id),
+    )
+
+    exit_code = main(
+        ["mine", "--generator", "manual", "--binding", str(binding_path), "--seed", "17"],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    run = _assert_mine_rejected(reports_root, exit_code, termination="kronos_offload_failed")
+    assert acquired == [], "卸载失败仍取锁 = 与 Kronos 抢同一张卡"
+    assert run["kronos_offload"]["action"] == "fail_closed"
+
+
+def test_mine_records_kronos_offload_outcome_in_run_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-010：运行记录须持久化 kronos_offload（含前后显存读数）。"""
+    from alphamill.factor_factory import cli as cli_module
+
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    _prepare_mine_runtime(monkeypatch, vram=_AvailableVram())
+    seen = _patch_offload(monkeypatch, "stopped", "vram_released")
+    monkeypatch.setattr(
+        cli_module.gpu_slot.GpuSlot, "acquire", lambda _self, run_id, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        cli_module.gpu_slot.GpuSlot, "release", lambda _self, run_id, **_kwargs: None
+    )
+    config_path = tmp_path / "mine.json"
+    config_path.write_text(
+        json.dumps({"tier_level": "manual", "kronos_control_url": "http://127.0.0.1:8002"}),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "mine",
+            "--generator",
+            "manual",
+            "--binding",
+            str(binding_path),
+            "--seed",
+            "17",
+            "--config",
+            str(config_path),
+        ],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    _, run, _ = _read_mine_run(reports_root)
+    assert exit_code == EXIT_OK
+    assert seen == ["http://127.0.0.1:8002"], "控制面地址必须来自配置，不得写死"
+    assert run["kronos_offload"] == {
+        "action": "stopped",
+        "reason": "vram_released",
+        "vram_before_gb": 3.0,
+        "vram_after_gb": 0.2,
+    }
+
+
 def test_mine_queue_timeout_writes_rejected_terminal_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

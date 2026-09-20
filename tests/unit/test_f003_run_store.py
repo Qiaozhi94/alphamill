@@ -57,6 +57,7 @@ def _completed_run() -> GenerationRun:
         device="cpu",
         hostname="unit-host",
         vram_limit_gb=None,
+        kronos_offload=None,
         universe=UniverseSummary(
             pair_count=6,
             symbol_map_digest="sha256:" + "c" * 64,

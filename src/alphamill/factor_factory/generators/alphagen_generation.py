@@ -174,6 +174,7 @@ def write_generation_manifest(
         device=outcome.device,
         hostname=outcome.hostname,
         vram_limit_gb=None,
+        kronos_offload=None,
         universe=run_store.UniverseSummary(
             pair_count=pair_count,
             symbol_map_digest=symbol_map_digest,

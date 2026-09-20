@@ -6,7 +6,7 @@ import platform
 import socket
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Literal, TypeAlias
@@ -45,6 +45,7 @@ class _SeedState:
     counts: base.GenerationCounts = base.GenerationCounts(0, base.RejectionCounts(), 0)
     device: Literal["cpu", "cuda"] = "cpu"
     vram_limit_gb: float | None = None
+    kronos_offload: dict[str, canonical.JSONValue] | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -71,6 +72,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _optional_text(value: canonical.JSONValue) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
 def _manifest(state: _SeedState, outcome: _Outcome) -> run_store.GenerationRun:
     status, termination, reason = outcome
     return run_store.GenerationRun(
@@ -88,6 +93,7 @@ def _manifest(state: _SeedState, outcome: _Outcome) -> run_store.GenerationRun:
         device=state.device,
         hostname=socket.gethostname(),
         vram_limit_gb=state.vram_limit_gb,
+        kronos_offload=state.kronos_offload,
         universe=state.universe,
         tier_level="manual",
         window=state.window,
@@ -193,6 +199,14 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
                         state, "cuda_unavailable", "CUDA VRAM is unavailable or insufficient"
                     )
                 state = replace(state, device="cuda", vram_limit_gb=slot_config.vram_limit_gb)
+                # 夜槽先卸载 Kronos 常驻推理并确认显存释放，失败即不取锁（架构 §7.1）。
+                offload = gpu_slot.offload_kronos(
+                    control_url=_optional_text(config.get("kronos_control_url")),
+                    contract_version=str(config["kronos_contract_version"]),
+                )
+                state = replace(state, kronos_offload=asdict(offload))
+                if offload.action == "fail_closed":
+                    return _reject(state, "kronos_offload_failed", offload.reason)
                 candidate_slot = gpu_slot.GpuSlot(
                     locks_dir=reports_root / ".locks", config=slot_config
                 )
