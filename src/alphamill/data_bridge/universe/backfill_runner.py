@@ -26,6 +26,7 @@ from alphamill.data_bridge.universe.batching import (
     PairPlan,
     plan_batch,
     run_window_check,
+    split_already_complete,
 )
 from alphamill.data_bridge.universe.canonical import utc_iso
 from alphamill.data_bridge.universe.definition import UniverseDef, require_frozen
@@ -158,14 +159,17 @@ def run_backfill_batch(
     backfill.ensure_progress_table(conn)
     pending = set(state["run"].pending())
     candidates = [plan for plan in state["run"].plans() if plan.db_symbol in pending]
-    already, remaining = _split_already_complete(conn, exchange_id, candidates, start, end)
-    for plan, cursor, rows in already:
+    already, remaining = split_already_complete(conn, exchange_id, candidates, start, end)
+    for plan, cursor, rows, ledger_rows in already:
         payload = {
             "db_symbol": plan.db_symbol,
             "lake_pair": plan.lake_pair,
             "rank": plan.rank,
             "status": backfill.STATUS_COMPLETED,
+            # rows 取**库内实测**行数：进度账本的 rows_upserted 是历史写入计数，
+            # 生产库里存在 complete 但 rows_upserted=0 的旧行（BNB 实测），照抄会误导
             "rows": rows,
+            "ledger_rows": ledger_rows,
             "last_cursor": None if cursor is None else utc_iso(cursor),
             "error": None,
             "error_class": None,
@@ -198,22 +202,6 @@ def run_backfill_batch(
     finished = state["run"].finished()
     _write_run(finished, reports_dir)
     return finished
-
-
-def _split_already_complete(
-    conn, exchange_id: str, plans: list[PairPlan], start: datetime, end: datetime
-):
-    """库侧进度已 `complete` 的 pair 直接记为完成：数据已在库里（进度账本是断点续跑的
-    存储契约），重拉 2 年窗口等于白跑几小时；真实覆盖仍由质量门逐项复核。"""
-    done: list[tuple[PairPlan, Any, int]] = []
-    todo: list[PairPlan] = []
-    for plan in plans:
-        cursor, status, rows = current_cursor(conn, exchange_id, plan.db_symbol, start, end)
-        if status == "complete":
-            done.append((plan, cursor, rows))
-        else:
-            todo.append(plan)
-    return done, todo
 
 
 def _emit(event_sink: EventSink | None, run: BackfillRun, payload: dict[str, Any]) -> None:

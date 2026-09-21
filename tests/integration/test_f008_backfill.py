@@ -203,6 +203,12 @@ def test_already_complete_pair_is_skipped_without_fetching(f008_conn, tmp_path) 
     universe_id = _frozen_universe(tmp_path, pairs=("BTC",))
     definition = load_definition(universe_id, tmp_path)
     with f008_conn.cursor() as cur:
+        for minute in range(5):
+            cur.execute(
+                "INSERT INTO ohlcv_1m (time, exchange, symbol, open, high, low, close, volume)"
+                " VALUES (%s, 'binance', 'BTC/USDT', 100, 101, 99, 100, 1)",
+                (WINDOW_START + timedelta(minutes=minute),),
+            )
         cur.execute(
             "INSERT INTO backfill_progress (exchange, symbol, timeframe, target_start,"
             " target_end, next_since, status, rows_upserted)"
@@ -228,7 +234,9 @@ def test_already_complete_pair_is_skipped_without_fetching(f008_conn, tmp_path) 
     entry = run.pairs[0]
     assert entry["status"] == "completed"
     assert entry["note"] == "already_complete"
-    assert entry["rows"] == 900719
+    # rows 取库内实测（5 行），ledger_rows 才是账本里的历史计数 —— 两者不一致时以实测为准
+    assert entry["rows"] == 5
+    assert entry["ledger_rows"] == 900719
 
 
 def test_unfrozen_universe_is_refused(f008_conn, tmp_path) -> None:

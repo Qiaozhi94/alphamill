@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from alphamill.data_bridge.collector.backfill_progress import current_cursor
 from alphamill.data_bridge.universe.definition import UniverseDef
 from alphamill.data_bridge.universe.errors import WindowError
 
@@ -75,3 +76,30 @@ def _plan(item) -> PairPlan:
         rank=item.rank,
         listed_at=item.listed_at,
     )
+
+
+def split_already_complete(
+    conn, exchange_id: str, plans: list[PairPlan], start: datetime, end: datetime
+):
+    """库侧进度已 `complete` 的 pair 直接记为完成：数据已在库里（进度账本是断点续跑的
+    存储契约），重拉 2 年窗口等于白跑几小时；真实覆盖仍由质量门逐项复核。"""
+    done: list[tuple[PairPlan, Any, int, int]] = []
+    todo: list[PairPlan] = []
+    for plan in plans:
+        cursor, status, ledger_rows = current_cursor(conn, exchange_id, plan.db_symbol, start, end)
+        if status == "complete":
+            rows = _count_window_rows(conn, exchange_id, plan.db_symbol, start, end)
+            done.append((plan, cursor, rows, ledger_rows))
+        else:
+            todo.append(plan)
+    return done, todo
+
+
+def _count_window_rows(conn, exchange_id: str, symbol: str, start: datetime, end: datetime) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM ohlcv_1m"
+            " WHERE exchange = %s AND symbol = %s AND time >= %s AND time < %s",
+            (exchange_id, symbol, start, end),
+        )
+        return int(cur.fetchone()[0])
