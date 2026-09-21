@@ -111,6 +111,13 @@ def test_v4_status_words_enforced(tmp_path: pathlib.Path) -> None:
         assert any("向后边" in msg for _, msg in dag.run_checks(tmp_path)), word
 
 
+def test_doc_reviewing_feature_enforced(tmp_path: pathlib.Path) -> None:
+    """doc-reviewing 也在作用域内：检视整改改动 tasks §4 时就要能判红，而不是等流转后
+    才暴露（F009-R3-001、F010-R3-001 两次复现的 gate-scope-blind-spot）。"""
+    write_feature(tmp_path, "doc-reviewing", BACKWARD)
+    assert any("向后边" in msg for _, msg in dag.run_checks(tmp_path))
+
+
 def test_multi_source_multi_target_edge_expansion(tmp_path: pathlib.Path) -> None:
     text = tasks("- `T001/T002 -> T003`：多源边展开。")
     write_feature(tmp_path, "review", text)
