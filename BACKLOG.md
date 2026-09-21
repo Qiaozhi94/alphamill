@@ -19,6 +19,11 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 > 实例上，按契约 mock 不是合法取证目标（无显存可释放），结论成立但基线须在 F009
 > 落地时以 `kronos-signal-real` 重取（F009 tasks T022）。
 
+> **F010 → F003 同步项**（F010 文档检视 R1-002，2026-09-21）：`pyproject.toml` `mining` extra
+> 注释中的 `--index-url .../cu128` 示例对 torch ≥2.12 已无对应 wheel（cu128 止于 2.11.0）；
+> Kronos GPU 镜像定为 `torch==2.14.0` + `whl/cu130`。F003 在 `feat/F003-alphagen-vendor`
+> 分支把该示例同步为 `cu130`，并在执行机按同一驱动下限核验。
+
 > 规则：feature 状态变更（spec frontmatter）时必须同步本表；`done` 的 Feature 移出本表，
 > 交付记录进入 `docs/features/releases/<version>.md`。
 > 示例行（复制后替换，链接必须指向真实 spec.md）：
