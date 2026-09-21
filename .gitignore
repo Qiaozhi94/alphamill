@@ -26,6 +26,9 @@ build/
 # 本机 OpenCode 运行状态（含会话转录，严禁入库——密钥扫描门禁的原因之一）
 .omo/
 
+# 本机 ZCode CLI 运行状态（会话计划等，不入库）
+.zcode/
+
 # 仿真/实验产生的数据与输出
 data/raw/
 data/processed/
@@ -39,6 +42,9 @@ docs/research/
 docs/reviews/*
 # ...例外：curated 摘要入库
 !docs/reviews/RETROSPECTIVE.md
+# ...例外：owner 明确要求入库的过程稿归档（原文照搬，仅存档用）
+!docs/reviews/archive/
+!docs/reviews/archive/**
 
 # 本地运行时密钥（模板为 deployment/.env.example，真实凭据人工搬运不进 git）
 deployment/.env

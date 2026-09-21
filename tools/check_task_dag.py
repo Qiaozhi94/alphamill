@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """任务依赖 DAG 校验（doc review F003-D012 回归门）。
 
-对进入开发流转的 Feature（spec status ∈ {ready-for-development, developing,
-code-reviewing}；旧词 in-progress / review 为等价别名）校验
+对进入检视或开发流转的 Feature（spec status ∈ {doc-reviewing, ready-for-development,
+developing, code-reviewing}；旧词 in-progress / review 为等价别名）校验
 `docs/features/<version>/Fxxx-*/tasks.md`：
 
   - §4「依赖与并行关系」里所有边端点都是已定义的任务 ID；
@@ -16,7 +16,9 @@ code-reviewing}；旧词 in-progress / review 为等价别名）校验
     文件视为该任务自产（如 real-env/属性/并发等自建证据轨），不受此限。
 
 **作用域说明**：不收 `done`（F001/F004 等历史 Feature 已收口，纳入会立刻破坏
-既有文档）与 `draft`（尚未进入流转）。这与 `validate_spec_lifecycle.py` 的
+既有文档）与 `draft`（尚未进入流转）。收 `doc-reviewing`：检视整改常改写 tasks
+§4，若等流转到 ready-for-development 才执法，整改引入的缺边会在检视闭环后才暴露
+（F009-R3-001、F010-R3-001 两次复现）。这与 `validate_spec_lifecycle.py` 的
 status 作用域模式一致。
 
 用法：python tools/check_task_dag.py
@@ -31,6 +33,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENFORCED_STATUSES = {
+    "doc-reviewing",
     "ready-for-development",
     "developing",
     "code-reviewing",

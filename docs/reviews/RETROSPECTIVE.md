@@ -831,3 +831,97 @@
 **教训**：多会话并行改同一仓库时，未提交的工作树改动没有任何保护。重放后立即 `git add` 进 index
 （能挡 `git checkout -- .`，挡不住 `git reset --hard`），并尽快落到独立 worktree 的分支上。
 本次最终把 F008 文档收进 `feat/F008-universe-expansion` worktree，与 F003 的代码分支物理隔离。
+
+## 循环 15：F009 Kronos 服务生命周期控制面端点 规格文档检视
+
+- report_type: doc-review
+- 周期：2026-09-20（3 轮 + 1 条跨会话补正；Round 1 全量扫描由独立会话完成，Round 2 full-scan 升级复核，Round 3 封顶 diff 复核）
+- 状态：闭环（stop_condition_met: true，readiness: PASS）
+- 基线：`main@8e85171` → 修复终态 `main@1d985d1`；契约修订 `57c9edb`；消费端 `feat/F003-alphagen-vendor@0ccf69e..ffdd805`
+- 被检对象：`docs/features/0.2/F009-kronos-lifecycle-endpoints/{spec,design,tasks}.md` 及相邻契约（架构 §7.1、F003 客户端与契约测试、F004 基座与回归门、BACKLOG）
+- 角色：Round 1 检视方为独立会话；Round 2/3 由修复方显式切换视角承接（每条修复以变异判红或门禁判红作为独立证据）
+
+### 循环 15 完整 issue 表
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首现轮 | 修复轮 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F009-R1-001 | 核心验收依赖的 GPU Kronos 基座并不存在 | high | correctness | root-cause | spec-drift | fixed | 纳入 GPU runtime 或建硬前置 Feature | owner 裁决立独立 F010；F009 声明硬前置，SC-005/AC-012 改先红态，新增 NFR-006 禁止以 CPU 通过充当证据 | 文档侧：BACKLOG F010 行 + 架构 §7.1 前置条 | 1 | 2 | cross-feature-contract-drift |
+| F009-R1-002 | stop 不能形成稳定 stopped，下一次 predict 隐式重载 | high | correctness | root-cause | spec-drift | fixed | 重写期望态、准入与线性化设计 | 引入存储的 desired，state 改为 (desired, model_loaded) 的函数；FR-003 停机准入禁止隐式加载，走 F004 兜底且不标 kronos | 实现期载体 tests/unit/test_f009_stopped_admission.py（AC-003，要求 _load_predictor 调用次数为 0 + 变异判红） | 1 | 2 | state-derived-from-insufficient-fact |
+| F009-R1-003 | E_TIMEOUT 后后台继续，状态机约束不了迟到副作用 | high | correctness | root-cause | original-coding | fixed | 定义进行中语义、动作仲裁和最终落点 | 架构 §7.1 + FR-006：单飞 + operation 台账；冲突立即 E_BUSY 不排队；E_TIMEOUT 明确为"仍在进行"，落点以 operation 转 null 为判据 | 实现期载体 tests/unit/test_f009_lifecycle_errors.py（AC-006） | 1 | 2 | timeout-late-side-effect |
+| F009-R1-004 | 错误码与错误响应形态越过架构契约 | high | correctness | root-cause | spec-drift | fixed | 先在架构唯一化再同步三方 | 信封恰为单键、成功与错误互斥；读数不可得改由 vram_readable=false + vram_bytes=null 表达；restore 补 E_UNAVAILABLE | 文档侧：架构 §7.1 动作表 + IR-004 + design §4 | 1 | 2 | cross-feature-contract-drift |
+| F009-R1-005 | mock 纳入契约后与权威范围及自身不变量冲突 | high | correctness | root-cause | spec-drift | fixed | 移出契约或单独定义 CPU 状态机 | 推翻早先 Q-002，改为 mock 不注册 /lifecycle/*（404）；裁决写入 §7 决策表与 §8 | 实现期载体 tests/integration/test_f009_lifecycle_deployment.py（AC-009） | 1 | 2 | cross-feature-contract-drift |
+| F009-R1-006 | 下游 F003 无 restore 且用单一 10 秒超时 | high | correctness | root-cause | spec-drift | fixed | 补明确的跨 Feature 客户端交付边 | FR-009/AC-010 把客户端纳入验收；超时改分动作 5/60/120s（0ccf69e），restore 由循环 14 R012 落地 | tests/unit/test_f003_gpu_slot.py::test_each_lifecycle_action_uses_its_own_contract_timeout；test_f003_cli_contract.py::test_mine_restores_kronos_after_stopping_it | 1 | 2 | cross-feature-contract-drift |
+| F009-R1-007 | 现有契约测试不能证明显存真实释放 | high | test-coverage | root-cause | process-gap | fixed | 强化真实下降/阈值断言并变异判红 | 判据改为「下降且卸载后整卡可用显存达到训练预算」，写进架构 §7.1、AC-012 与 design §8（首次落笔误写成已用侧，见 R2-005） | 实现期载体 tests/integration/test_f009_vram_release.py（见 R2-001 对落点的修正） | 1 | 2 | gate-weaker-than-claim |
+| F009-R1-008 | status 的超时机制没有设计落点 | medium | correctness | root-cause | original-coding | fixed | 裁决 deadline owner 并补探测超时 | 三个超时一并纳入 FR-007 环境变量契约，design §4 接口表逐格列出 | 实现期载体 tests/unit/test_f009_vram_probe.py（AC-007） | 1 | 2 | mechanism-weaker-than-claim |
+| F009-R1-009 | 显存探测可配置的契约不可实现也不可验收 | medium | correctness | root-cause | original-coding | fixed | 定义变量、值域、默认和非法值策略 | FR-007 明确变量名/值域/默认值/非法值启动期判红不回退；AC-007 覆盖 | 同上 | 1 | 2 | underspecified-config-contract |
+| F009-R1-010 | status 始终可达与既有启动失败即退出冲突 | medium | correctness | root-cause | spec-drift | fixed | 区分启动失败与运行期 restore 失败 | design §7 显式区分：启动期预检失败进程退出（F004 不改）；运行期 restore 失败进程存活 + E_UNAVAILABLE | 实现期载体 tests/unit/test_f009_lifecycle_contract.py（AC-004） | 1 | 2 | cross-feature-contract-drift |
+| F009-R1-011 | 空请求体和额外参数拒绝规则没有验收覆盖 | medium | test-coverage | root-cause | process-gap | partial | 补三类请求与错误信封断言 | FR-005/AC-005 覆盖空体、{}、含额外键三类；所用错误码的冲突另立 R2-003 | 实现期载体 tests/unit/test_f009_lifecycle_errors.py | 1 | 2 | acceptance-mapping-gap |
+| F009-R1-012 | T022 指示人工改状态与派生账本 | medium | quality | root-cause | process-gap | fixed | 改用 sdd_status dry-run/advance | T025 明确经 sdd_status.py 流转，tasks §0 增"状态写入口唯一"纪律条 | 文档侧：tasks §0 与 T025 | 1 | 2 | manual-state-write |
+| F009-R2-001 | AC-012 先红态放进 F003 的 0-xfailed 门禁文件，互相拆台 | high | correctness | root-cause | fix-regression | fixed | 显存断言移到独立载体 | 改落 tests/integration/test_f009_vram_release.py，spec/tasks 写明不得放进那个文件及原因；F003 侧一行未动 | 文档侧：AC-012 / T016 载体路径 + DAG 校验 | 2 | 2 | cross-feature-contract-drift |
+| F009-R2-002 | 契约收紧了显存判据，唯一消费端没跟上 | high | correctness | root-cause | fix-regression | fixed | 客户端补预算阈值并读 vram_readable | vram_budget_gb 成无默认必填参数（由 vram_limit_gb 透传）；released 加预算条件；vram_readable=false 单列 vram_unreadable | tests/unit/test_f003_gpu_slot.py::test_release_requires_falling_below_the_training_budget / ::test_unreadable_vram_is_distinguished_from_not_released（双向变异判红） | 2 | 2 | cross-feature-contract-drift |
+| F009-R2-003 | 额外请求参数复用 E_UNSUPPORTED_VERSION，与端点缺失判定混淆 | medium | correctness | root-cause | fix-regression | fixed | 契约补 E_BAD_REQUEST 并同步三方 | 架构 §7.1 补 E_BAD_REQUEST 与"错误码各司其职"条；F009 IR-004/FR-005/AC-005 与 design §4/§7 同步；check_doc_consistency 新增两条钉点 | tools/check_doc_consistency.py::kronos_lifecycle_contract_defined（变异判红：删分工条即红） | 2 | 2 | error-code-overloaded |
+| F009-R2-004 | §5 状态机把"动作进行中被拒"画成 running→running | low | quality | root-cause | fix-regression | fixed | 改写状态机文本或加过渡态自环 | 拆为 running 自环（幂等/请求被拒）与过渡态自环（E_BUSY） | 文档侧：spec §5 | 2 | 2 | — |
+| F009-R3-001 | 载体拆分打断 DAG：T022 的 verify 文件无生产者前置 | medium | correctness | root-cause | fix-regression | fixed | 补 T015 -> T022 边 | 拆开原 T015->T016->T022 三元链，显式补 T015->T022；F009 处于 doc-reviewing 不在 check_task_dag 强制作用域，verify.py 是绿的，只有手动跑 check_tasks 才看得到 | tools/check_task_dag.py::check_tasks 手动校验 | 3 | 3 | gate-scope-blind-spot |
+| F009-R2-005 | 显存判据写成已用侧「降到训练预算之下」，与夜槽真正要判的方向相反 | high | correctness | root-cause | fix-regression | fixed | 判据改挂可用侧 | 架构 §7.1 与 F009 三件套统一为「读数真实下降，且卸载后整卡可用显存达到训练预算」（与取锁同阈值 vram_limit_gb）；实现本就是可用侧（vram_is_sufficient 判 free_gb >= limit），本条修的是契约措辞与实现之间的口径漂移 | tests/unit/test_f003_gpu_slot.py::test_release_requires_falling_below_the_training_budget | 2 | 2 | spec-impl-wording-drift |
+| F009-R3-002 | spec §1/§3 残留"在旧文件补显存判据用例"的引用 | low | quality | root-cause | fix-regression | fixed | 与 AC-012/T016 的新载体口径对齐 | 两处改写并在 design §1 影响面同步注明拆分原因 | 文档侧 | 3 | 3 | — |
+
+### 裁决记录
+
+#1 · F009-R1-011 · partial · 覆盖面（空体 / `{}` / 含额外键）已由 FR-005 与 AC-005 补齐，接纳；但所用错误码与契约的端点缺失判定冲突，拒绝以当时形态关闭。剩余部分载体 = `F009-R2-003`（已于 Round 2 fixed）。· 裁决轮次 2
+
+### 模式教训
+
+- **`cross-feature-contract-drift` 占 18 条中的 6 条，且跨越了全部三轮**。Round 1 的 R1-001/004/005/006 是原始漂移；Round 2 的 R2-001/002 是**修复动作自己造出来的新漂移**——收紧了契约却没同步消费端、拆了载体却没同步另一个 feature 的门禁。结论：这个 feature 位于 F003/F004/架构三方接缝上，任何一侧的单边修改都会立刻产生漂移。**教训**：改契约的提交必须在同一轮内把三侧（契约正文 / 本 feature 文档 / 消费端实现）一起过一遍，不能"先改契约，消费端下轮再说"。
+- **`fix-regression` 有 6 条（R2-001..004、R3-001..002），占总数三分之一**。这远高于循环 14 的 1/13。直接原因是本轮是 `rewrite` 而非打补丁——重写的自伤面天然更大。**因此 rewrite 裁决必须配套"升级 full-scan 的复核轮"**，diff-only 在重写场景下覆盖不住。Round 2 显式升级 full-scan 是正确的，Round 3 封顶轮仍抓到 R3-001 则说明封顶轮不是形式主义。
+- **R3-001 暴露了一个门禁作用域盲区**（`gate-scope-blind-spot`）：`check_task_dag` 只对进入开发流转的状态生效，`doc-reviewing` 的 feature 不在作用域内。于是 `verify.py` 全绿，而 tasks 的 DAG 实际是断的。这不是门禁写错了——作用域设计有其理由（draft/doc-reviewing 期间 tasks 尚在变动）——但**文档检视轮必须手动对 tasks 跑一次 `check_tasks`**，不能以 verify.py 绿作为 DAG 无误的证据。建议写进 SOP 的文档检视清单。
+- **R2-005 是一条「文档比实现更弱」的漂移**：8GB 卡上「已用 5GB」同时满足「低于 6GB 预算」和「取不到 6GB」——收紧 R1-007 的判据时把它写在了已用侧，而夜槽要判的是可用侧。实现（`vram_is_sufficient` 判 `free_gb >= limit_gb`）一直是对的，错的只有契约措辞，由并行会话在本循环收尾时发现并补正。**教训**：给判据加强度时必须同时问「这个量从哪一侧度量」，否则加的是一条看起来更严、实际判错方向的门。
+- **`origin` 分布**：spec-drift 6、original-coding 3、process-gap 3、fix-regression 7。与循环 14（12 original-coding / 1 fix-regression）正好相反：代码检视面对的是"从没被看过的实现"，文档检视面对的是"反复被改的契约"，两者的主风险完全不同。
+- **存活轮数**：R1 的 12 条均为 1→2（存活 1 轮），R2 的 4 条为 2→2，R3 的 2 条为 3→3。没有跨多轮悬而未决的条目，未触发不收敛升级协议。
+- **裁决分布**：accepted 17 / partial 1 / rejected 0。**建议命中率**：18 条中 15 条 `fix_summary` 与 `suggested_fix` 实质一致；三条偏离都是往更彻底的方向走——R1-001 从"纳入或等待"具体化为立 F010 并配先红态纪律；R1-007 的判据同时写进了契约正文而不只是 AC；R2-003 的修复顺带给 `check_doc_consistency` 加了会判红的钉点。
+- **跨循环联动**：R1-006 与循环 14 的 R012 是同一条缺陷的两半（restore 所有权 / 分动作超时），由两个独立视角分别发现——代码检视从实现侧撞上"停了不恢复"，文档检视从契约侧看出"客户端没有 restore 且超时口径错"。这条互证说明两类检视不是重复劳动。
+
+## 循环 18：F010 Kronos GPU 推理基座 规格文档检视
+
+- report_type: doc-review
+- 周期：2026-09-21（3 轮：Round 1 全量扫描；Round 2 因 design 整体重写升级 full-scan 复核；Round 3 封顶 diff 复核 + 流转后门禁补抓 1 条）
+- 状态：闭环（stop_condition_met: true，readiness: PASS）
+- 基线：`docs/F010-kronos-gpu-runtime@f4a1321`（自 `origin/main` 开出的 worktree）→ 修复终态 `fa2fda0`；流转提交 `1a993fc`
+- 被检对象：`docs/features/0.2/F010-kronos-gpu-runtime/{spec,design,tasks}.md` 及相邻契约（`deployment/` Dockerfile 与 compose、`kronos_real.py`、F004 契约测试、F009 tasks T013 与 restore 失败落点、F003 `mining` extra 与 `vram_limit_gb`、架构 §7.1）
+- 角色：同一会话先后担任检视方与修复方，每轮显式切换视角；关键修复以实物取证核对（`docker compose config` 合并语义、download.pytorch.org 索引实查、`check_task_dag` 红→绿）
+
+### 循环 18 完整 issue 表
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首现轮 | 修复轮 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F010-R1-001 | compose 变量插值做不到"`KRONOS_GPU_COUNT=0` 不渲染预留"；默认路径渲染出无 count 的 nvidia 预留，开发机/CI 起 `kronos-real` 即失败 | high | correctness | root-cause | original-coding | fixed | GPU 面整体移入 `deployment/docker-compose.gpu.yml` override（`-f` 叠加：设备预留 + `KRONOS_DEVICE=cuda` + healthcheck 判据 + GPU build args），默认 compose 文件字节不动；同步改 design §2/§4/§5、spec FR-002/AC-002、tasks T004 | GPU 面四项移入 `deployment/docker-compose.gpu.yml`，默认文件不改；compose 合并语义 R2 实测成立 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | mechanism-cannot-deliver-promise |
+| F010-R1-002 | 默认 pin `torch==2.14.0` 没有 cu128 wheel（cu128 止于 2.11.0）；"≥2.7 + cu128 与 F003 同源"决策按现状构建失败，design §4 的 `2.7.*+` 也不是合法 pin | high | correctness | root-cause | original-coding | fixed | 重做 spec §7/design §4 的版本决策：GPU 取 `2.14.0 + cu130`（与 CPU 同版本）并写明宿主驱动下限，或显式接受 CPU/GPU 版本分叉；T002 的核验项加"驱动版本满足所选 CUDA wheel"；F003 `mining` 注释同步 | torch 维持 2.14.0，GPU 用 cu130；写明 R580+ 驱动下限与 arch 核验；BACKLOG 登记 F003 同步项 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | unverified-external-fact |
+| F010-R1-003 | AC-004/T015 在开发机执行时，守护进程先拒绝 nvidia 设备请求，容器从未启动，T006 预检不被执行也能"通过"；且开发机按机器边界不跑集成 | high | test-coverage | root-cause | original-coding | fixed | AC-004 拆两层：① 单元层——`KRONOS_DEVICE=cuda` + mock `torch.cuda.is_available()=False` → `real_mode_startup()` 抛 `SystemExit`，变异（删预检）必须判红；② 执行机集成层——不挂设备预留但 `KRONOS_DEVICE=cuda` 起容器，断言非零退出且日志含预检失败文案（区分"守护进程拒绝"与"预检拒绝"） | AC-004 拆单元层 `test_f010_device_strict.py` + 执行机层（不挂预留 + 显式 cuda），明令守护进程拒绝不算证据 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | gate-weaker-than-claim |
+| F010-R1-004 | 声称"三处同源"，实际是 `KRONOS_DEVICE` / `KRONOS_GPU_COUNT` / `KRONOS_HEALTH_DEVICE_PREFIX` + build arg 四个独立旋钮；`GPU_COUNT=1, DEVICE=cpu, PREFIX=cpu` 会得到占着 GPU 预留的健康 CPU 实例；CPU wheel 镜像 + `DEVICE=cuda` 只能靠 `is_available()` 间接拦 | medium | correctness | root-cause | original-coding | fixed | healthcheck 判据直接读容器内 `KRONOS_DEVICE`（去掉独立前缀变量）；预检加一条"要求 cuda 而 `torch.version.cuda is None` → 失败并点名镜像是 CPU wheel"；配合 R1-001 由 override 文件一处给齐 | 取消独立 GPU_COUNT/HEALTH_PREFIX 变量，四项集中 override；加 `torch.version.cuda is None` 判据 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | single-source-claimed-not-enforced |
+| F010-R1-005 | 静默回落只在启动预检堵；F009 `restore` 的重载路径复用 `_load_predictor()`，可绕过预检回落 cpu，违背 spec §5"能回答 /health 蕴含按配置设备加载" | medium | correctness | root-cause | spec-drift | fixed | 把"要求 cuda 必须真拿到 cuda"放进启动与 restore 共用的加载入口（如 `eager_load()` 的严格分支），或在 F009 restore 契约中显式复用该校验；AC 增一条 restore 路径用例 | 严格分支进 `_load_predictor()` 调用的 `_resolve_device()`，覆盖启动、restore、惰性加载；restore 失败落 F009 `E_UNAVAILABLE` | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | cross-feature-contract-drift |
+| F010-R1-006 | T010 / design §9 把 Kronos 常驻预算（≤3GB）超标与 F003 `vram_limit_gb`（训练预算 6.0）绑定重标，二者不是同一量 | medium | correctness | root-cause | original-coding | fixed | 常驻超标只重标 §7.1 白天行；`vram_limit_gb` 仅在 AC-009 实测"卸载后可用显存 < 训练预算"时才进入重标，并改写 T010 与 design §9 对应行 | 常驻超标只重标 §7.1 白天行；`vram_limit_gb` 仅在卸载后可用 <6GB 时随夜槽行重标 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | — |
+| F010-R1-007 | 与 F009 T013 撞车：同一 compose 块（端口）、同一 `test_f004_compose_profile_contract.py`、同一 `.env.example`，F010 Phase 1 与 F009 T013 无先后边 | medium | correctness | root-cause | spec-drift | fixed | tasks §4 加边"F009 T013 合入 → F010 T004/T005"（或写明以 F009 合入后的 main 为基线）；采纳 R1-001 后 F010 基本不再改默认 compose，冲突面缩到测试文件 | tasks §4 加 F009 T013 ⇄ T005 同文件非阻塞边与基线规则；spec §7 依赖段同步 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | cross-feature-contract-drift |
+| F010-R1-008 | AC-002 写"`docker compose config` 渲染"，而 F004 契约测试是纯文本断言；未说明单元测试是否调 docker、CI 无 docker 时怎么办 | low | test-coverage | root-cause | original-coding | fixed | 明确单元层用文本断言（沿用 F004 纯函数 + 变异）；`docker compose config` 渲染比对作为执行机/有 docker 环境的补充证据 | AC-002 明确纯文本断言、不调 docker；`compose config` 作执行机补充证据 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | — |
+| F010-R1-009 | spec §0/§7 称 F003 `mining` extra "已确立"，该 extra 只存在于未合入的 `feat/F003-alphagen-vendor` | low | quality | symptom-patch | spec-drift | fixed | 改为"F003 分支上的约定（未合入 main）"，并注明以合入后版本为准 | spec §0 / design §0 标注 mining extra 在未合入分支 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | — |
+| F010-R1-010 | design §1"后端不改代码/唯一改动是日志行"与 §5、T006 在 `real_mode_startup()` 加预检矛盾 | low | quality | symptom-patch | original-coding | fixed | §1 与 §2"服务代码零改动"改为"两处小改：预检一条 + 日志一行" | design §1/§2 改为「两处小改」 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | — |
+| F010-R1-011 | NFR-001/SC-002 要求"构建产物逐字一致"不可证伪（引入 ARG 后层缓存键/镜像 digest 必变） | low | quality | root-cause | original-coding | fixed | 改为"默认参数下 Dockerfile 解析出的安装命令与落地前等价 + 默认 compose 文件/渲染结果不变" | NFR-001/SC-002 改为安装命令等价 + 本 feature 不改默认文件，注明不承诺 digest | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | unfalsifiable-claim |
+| F010-R1-012 | 8GB 笔记本卡在 WSL2 下 Windows 桌面也占显存，AC-009"卸载后整卡可用 ≥6GB"可能物理达不到，风险表未列 | low | correctness | root-cause | original-coding | fixed | spec §7 风险表加一行：T002 顺带记录空载可用显存；若 <6GB，走 §7.1 重标而非判 AC-009 失败 | spec §7 风险行 + T002 ④ 记录空载可用显存 + T011 重标分支 | `tools/verify.py` 文档门禁（规格生命周期/链接/DAG/一致性） | 1 | 2 | — |
+| F010-R2-001 | override 未给 GPU 构建独立 `image:`，默认与 GPU 构建共用 `<project>-kronos-signal-real` 标签，执行机上互相覆盖：GPU 构建后不带 `--build` 的默认启动会跑 CUDA wheel 镜像（反之由严格分支拦下） | medium | correctness | root-cause | fix-regression | fixed | override 增 `image: alphamill/kronos-signal-real:gpu`（默认文件不变），AC-002 断言该标签存在且不等于默认名 | override 增 `image: alphamill/kronos-signal-real:gpu`，AC-002/design §8 断言并加删除变异；开发机 compose config 实测生效 | `tools/verify.py` 文档门禁 | 2 | 3 | shared-artifact-name |
+| F010-R2-002 | T002 ③ 只核验 `sm_89`，tasks §5 却称 T002 已核验 `sm_120`；design §4 要求两者 | low | quality | symptom-patch | fix-regression | fixed | T002 ③ 改为 `get_arch_list()` 同时含 `sm_89` 与 `sm_120` | T002 ③ 改为 arch list 同时含 sm_89 与 sm_120 | `tools/verify.py` 文档门禁 | 2 | 3 | — |
+| F010-R2-003 | T015 执行机层"不叠加设备预留但显式 cuda 启动 CUDA 镜像"没给出做法；两条严格分支（CPU wheel / 无设备）各需一个触发方式 | low | test-coverage | root-cause | fix-regression | fixed | 写明：GPU 标签镜像 `docker run` 不加 `--gpus` + `-e KRONOS_DEVICE=cuda` → 无设备分支；默认 CPU 镜像 + `-e KRONOS_DEVICE=cuda` → CPU wheel 分支 | AC-004/T015/design §8 写明执行机两例（GPU 镜像不加 --gpus；CPU 镜像显式 cuda） | `tools/verify.py` 文档门禁 | 2 | 3 | — |
+| F010-R2-004 | AC-002 的 override 禁止项列 ports/volumes/restart/privileged，漏了 design §4 同样禁止的 `depends_on` | low | quality | symptom-patch | fix-regression | fixed | AC-002 与 design §8 补 `depends_on` | AC-002 与 design §8 禁止项补 depends_on | `tools/verify.py` 文档门禁 | 2 | 3 | — |
+| F010-R3-001 | R2-003 让 T015 共用 `test_f010_gpu_runtime.py` 并依赖 GPU 镜像，但 tasks §4 未接生产者前置边；流转后 `check_task_dag` 判红 | low | quality | root-cause | fix-regression | fixed | 补 `T008 -> T015` 边 | tasks §4 补 `T008 -> T015`（GPU 镜像 + 共用载体） | `tools/check_task_dag.py`（红→绿） | 3 | 3 | gate-caught-fix-regression |
+
+### 裁决记录
+
+无（17 条全部接纳）。
+
+### 模式教训
+
+- **三条 High 都是"写在纸上的机制没有对照实物"**（`mechanism-cannot-deliver-promise` / `unverified-external-fact` / `gate-weaker-than-claim`）：compose 插值删不掉设备预留块、`2.14.0` 没有 cu128 包、开发机上守护进程先于预检拒绝——三条都是一条命令就能证伪的事实。**教训：涉及外部工具语义（compose 合并/插值）与外部制品（wheel 索引）的设计断言，文档检视必须当场实测，不能只做文本一致性核对。**
+- **`gate-scope-blind-spot` 第二次出现**（循环 15 的 F009-R3-001 是第一次）：`check_task_dag` 只对进入开发流转的状态生效，R2-003 引入的缺边在 `doc-reviewing` 下门禁全绿，流转到 `ready-for-development` 后才判红（R3-001）。同一摩擦 ≥2 次，按元规则应修 harness：让 `check_task_dag` 覆盖 `doc-reviewing`。
+- **`fix-regression` 5 条（R2-001..004、R3-001；另有 R1 修复首版的"字节不动"自伤在同轮 `94c2d27` 修正，未单列）**：集中在 override 方案带出的新面（镜像标签共享、执行机取证做法、DAG 边）。与循环 15 相同：方案级重写的自伤面天然大于补丁，第 2 轮 diff 复核不可省。
+- **`origin` 分布**：original-coding 9、spec-drift 3、fix-regression 5。**存活轮数**：R1 的 12 条 1→2，R2 的 4 条 2→3，R3-001 当轮关闭；未触发不收敛升级协议。
+- **裁决分布**：accepted 17 / partial 0 / rejected 0。**建议命中率**：17 条中 15 条实质一致；两条偏离——R1-004 建议"healthcheck 读容器内 `KRONOS_DEVICE`"，实际改为"判据与 `KRONOS_DEVICE` 同处 override 文件"（override 方案下更简单）；R1-005 建议"放进 `eager_load()`"，实际下沉到 `_load_predictor()` 调用的 `_resolve_device()`，同时覆盖 `/predict` 惰性加载。
+- **跨 Feature 联动**：R1-005（restore 绕过预检）与 R1-007（F009 T013 同改 F004 测试文件）说明 F009/F010 的交付边不止 AC-012 一条；F010 → F003 的 cu130 同步项已登记在 BACKLOG。
+- **合入前 rebase 抓到的漂移**（未编号，收口时修复）：检视期间 `origin/main` 落入 `9e12512`（F003 T033 只依赖 F009、不依赖 F010），F010 spec/tasks 里七处"解除 F003 T033 前置"随即失真；rebase 后同一收口提交改写。教训：并行会话下，闭环前的 `fetch + rebase` 不是机械步骤，要重新扫一遍被检文档对上游的引用。
+- **事实更正（2026-09-21，收口后）**：R1-001 的 compose 实测与 R2 的合并语义实测都在**执行机 `qiaozhi-lt`** 上完成，检视档与 spec/design 曾误写为"开发机"——检视方从未核对 `hostname`，而是按 CLAUDE.md 的机器分工默认自己在开发机。同一次核对还发现：执行机 docker 未装 nvidia 容器运行时（Runtimes 仅 `runc`），这才是 `could not select device driver "nvidia"` 在执行机出现的原因，也是 F010 T002 ① 的真实阻塞点。教训：取证记录的机器名必须来自 `hostname` 输出，不能来自对环境的假设（SOP §3 本就要求记录取证机器）。

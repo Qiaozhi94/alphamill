@@ -117,7 +117,7 @@ def test_active_feature_indexes_go_red_on_readme_drift(tmp_path: pathlib.Path) -
     readme = tmp_path / "docs" / "README.md"
     readme.write_text(
         readme.read_text(encoding="utf-8").replace(
-            "活跃 feature 索引（当前 F003/F008）",
+            "活跃 feature 索引（当前 F003/F008/F009/F010）",
             "活跃 feature 索引（当前 F003）",
         ),
         encoding="utf-8",
