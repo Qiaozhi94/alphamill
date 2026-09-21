@@ -247,10 +247,52 @@ def test_apply_listing_starts_only_lists_pairs_listed_after_window_start(lake) -
     )
     write_definition(definition, lake)
     loaded = load_definition(definition.universe_id, lake)
-    cli._apply_listing_starts(loaded, runner.plan_batch(loaded), datetime(2026, 1, 1, tzinfo=UTC))
+    cli.apply_listing_starts(loaded, runner.plan_batch(loaded), datetime(2026, 1, 1, tzinfo=UTC))
     entries = dict(item.split("=") for item in backfill_mod.LISTING_STARTS.split(",") if item)
     assert set(entries) == {"NEW/USDT"}  # OLD 早于窗口起点 → 不需要覆盖
     assert entries["NEW/USDT"].startswith("2026-03")  # 2026-09-19 往前 200 天
+
+
+def test_gate_refreshes_aggregates_before_checking(lake, monkeypatch, capsys) -> None:
+    """门禁前必须刷新连续聚合（否则新回填数据会以视图滞后被判 aggregate_mismatch）。"""
+    from alphamill.data_bridge.collector import historical_backfill as backfill_mod
+
+    universe_id = _definition(lake)
+    cli.main(["freeze", "--def", universe_id, "--confirm", "--lake-root", str(lake)])
+    capsys.readouterr()
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        backfill_mod, "refresh_aggregates", lambda conn, start, end: calls.append((start, end))
+    )
+    monkeypatch.setattr(cli, "db_connect", lambda: _FakeConn())
+    monkeypatch.setattr(cli, "gate_and_admit", lambda *a, **k: [])
+    code = cli.main(
+        [
+            "gate",
+            "--universe",
+            universe_id,
+            "--start",
+            WINDOW[0],
+            "--end",
+            WINDOW[1],
+            "--lake-root",
+            str(lake),
+        ]
+    )
+    assert code == 0
+    assert calls == [
+        (
+            datetime.fromisoformat(WINDOW[0].replace("Z", "+00:00")),
+            datetime.fromisoformat(WINDOW[1].replace("Z", "+00:00")),
+        )
+    ]
+    assert "refreshing continuous aggregates" in capsys.readouterr().err
+
+
+class _FakeConn:
+    def close(self):
+        return None
 
 
 def test_show_prints_definition_and_exclusions(lake, capsys) -> None:

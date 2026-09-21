@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
 from alphamill.data_bridge.collector.db_writer import db_connect
@@ -35,6 +34,15 @@ from alphamill.data_bridge.universe import artifact as artifact_mod
 from alphamill.data_bridge.universe import backfill_runner as runner
 from alphamill.data_bridge.universe.admission import gate_and_admit
 from alphamill.data_bridge.universe.capacity import estimate_rows, require_headroom, required_bytes
+from alphamill.data_bridge.universe.cli_support import (
+    apply_listing_starts,
+    default_frozen_by,
+    lake_root_for,
+    parse_moment,
+    refresh_aggregates,
+    split_pairs,
+    window_from_args,
+)
 from alphamill.data_bridge.universe.criteria import load_criteria
 from alphamill.data_bridge.universe.definition import (
     build_definition,
@@ -128,10 +136,10 @@ def main(argv: list[str] | None = None) -> int:
 
 def _discover(args) -> int:
     criteria = load_criteria(args.criteria)
-    now = _parse_moment(args.now) if args.now else None
+    now = parse_moment(args.now) if args.now else None
     snapshot = fetch_snapshot(criteria, now=now)
     definition = build_definition(criteria, evaluate(snapshot, criteria))
-    path = write_definition(definition, _lake_root(args))
+    path = write_definition(definition, lake_root_for(args))
     summary = {
         "universe_id": definition.universe_id,
         "snapshot_at": definition.snapshot_at,
@@ -148,12 +156,12 @@ def _discover(args) -> int:
 def _freeze(args) -> int:
     if not args.confirm:
         raise ConfirmRequiredError("freeze 需要 --confirm：冻结是人工确认动作，不接受默认同意")
-    lake_root = _lake_root(args)
+    lake_root = lake_root_for(args)
     definition = load_definition(args.definition, lake_root)
     if not definition.selected:
         raise EmptyDefinitionError(f"universe {args.definition} 的候选清单为空，拒绝冻结")
     record = freeze_definition(
-        args.definition, frozen_by=args.frozen_by or _default_frozen_by(), lake_root=lake_root
+        args.definition, frozen_by=args.frozen_by or default_frozen_by(), lake_root=lake_root
     )
     print(
         json.dumps(
@@ -171,14 +179,14 @@ def _freeze(args) -> int:
 
 
 def _backfill(args) -> int:
-    lake_root = _lake_root(args)
+    lake_root = lake_root_for(args)
     definition = require_frozen(args.universe, lake_root)
-    start, end = _window_from_args(args)
+    start, end = window_from_args(args)
     runner.run_window_check(start, end)
-    plans = runner.plan_batch(definition, batch=args.batch, pairs=_split(args.pairs))
+    plans = runner.plan_batch(definition, batch=args.batch, pairs=split_pairs(args.pairs))
     rows = estimate_rows(pairs=len(plans), window_days=(end - start).total_seconds() / 86400)
-    require_headroom(_lake_root(args), required_bytes(rows))
-    _apply_listing_starts(definition, plans, start)
+    require_headroom(lake_root_for(args), required_bytes(rows))
+    apply_listing_starts(definition, plans, start)
     limiter = RateLimiter(
         RateLimitPolicy(min_interval_seconds=args.min_interval, max_retries=args.max_retries)
     )
@@ -202,18 +210,19 @@ def _backfill(args) -> int:
 
 
 def _gate(args) -> int:
-    lake_root = _lake_root(args)
+    lake_root = lake_root_for(args)
     definition = require_frozen(args.universe, lake_root)
-    start, end = _window_from_args(args)
+    start, end = window_from_args(args)
     runner.run_window_check(start, end)
     conn = db_connect()
     try:
+        refresh_aggregates(conn, start, end)
         outcomes = gate_and_admit(
             conn,
             definition=definition,
             window_start=start,
             window_end=end,
-            pairs=_split(args.pairs),
+            pairs=split_pairs(args.pairs),
             lake_root=lake_root,
         )
     finally:
@@ -244,12 +253,12 @@ def _gate(args) -> int:
 
 
 def _show(args) -> int:
-    lake_root = _lake_root(args)
+    lake_root = lake_root_for(args)
     if args.at:
         if not args.digest:
             raise WindowError("show --at 需要同时给出 --digest（台账按显式 digest 引用）")
         ledger = artifact_mod.load_artifact(args.digest, lake_root)
-        members = sorted(ledger.universe_at(_parse_moment(args.at)))
+        members = sorted(ledger.universe_at(parse_moment(args.at)))
         print(
             json.dumps(
                 {"digest": args.digest, "at": args.at, "members": members},
@@ -283,67 +292,6 @@ def _show(args) -> int:
 
 
 # ---------------------------------------------------------------- 工具
-
-
-def _apply_listing_starts(definition, plans, window_start: datetime) -> None:
-    """把定义里的真实上市时间交给回填层：新 pair 晚上线时，不说清「什么时候才有 K 线」，
-    交易所会在窗口起点返回空批次并被 F001 的边界检查判成 stalled（是窗口起点问题，不是缺失）。"""
-    from alphamill.data_bridge.collector import historical_backfill as backfill_mod
-
-    listed = {item.db_symbol: item.listed_at for item in definition.selected}
-    entries = []
-    for plan in plans:
-        value = listed.get(plan.db_symbol) or plan.listed_at
-        if not value:
-            continue
-        moment = _parse_moment(value)
-        if moment > window_start:
-            entries.append(f"{plan.db_symbol}={moment.isoformat()}")
-    backfill_mod.LISTING_STARTS = ",".join(entries)
-
-
-def _lake_root(args) -> Path:
-    value = getattr(args, "lake_root", None)
-    if value:
-        return Path(value)
-    from alphamill.data_bridge import paths
-
-    return paths.lake_root()
-
-
-def _split(value: str | None) -> list[str] | None:
-    if not value:
-        return None
-    return [item.strip() for item in value.split(",") if item.strip()]
-
-
-def _parse_moment(text: str) -> datetime:
-    normalized = text.strip().replace("Z", "+00:00")
-    parsed = datetime.fromisoformat(normalized)
-    if parsed.tzinfo is None:
-        raise WindowError(f"时间必须带时区（UTC ISO8601）: {text!r}")
-    return parsed.astimezone(UTC)
-
-
-def _window_from_args(args) -> tuple[datetime, datetime]:
-    import os
-
-    start_text = args.start or os.getenv("BACKFILL_WINDOW_START") or os.getenv("BACKFILL_START")
-    end_text = args.end or os.getenv("BACKFILL_WINDOW_END") or os.getenv("BACKFILL_END")
-    if not start_text or not end_text:
-        raise WindowError(
-            "回填/门禁窗口未给出：用 --start/--end 指定，或设 BACKFILL_WINDOW_START/END"
-        )
-    return _parse_moment(start_text), _parse_moment(end_text)
-
-
-def _default_frozen_by() -> str:
-    import getpass
-
-    try:
-        return getpass.getuser()
-    except Exception:  # noqa: BLE001 - 取不到用户时给出可追溯的占位
-        return "unknown"
 
 
 if __name__ == "__main__":  # pragma: no cover - 由 __main__.py 覆盖
