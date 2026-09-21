@@ -61,3 +61,4 @@ freqtrade/user_data/tradesv3.sqlite*
 
 # F002 Parquet 湖（分区数据 + manifest + symbol-map artifact，NAS 备份，不进 git）
 lake/
+reports/backfill/*.log

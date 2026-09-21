@@ -1,0 +1,31 @@
+{
+  "batch": null,
+  "finished_at": "2026-09-21T14:37:15.632734Z",
+  "hostname": "qiaozhi-lt",
+  "pairs": [
+    {
+      "db_symbol": "PAXG/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "PAXG-USDT",
+      "last_cursor": "2026-09-09T00:00:00Z",
+      "rank": 30,
+      "rows": 1440,
+      "status": "completed"
+    }
+  ],
+  "rate_limit": {
+    "base_backoff_seconds": 1.0,
+    "max_backoff_seconds": 60.0,
+    "max_retries": 5,
+    "min_interval_seconds": 0.5
+  },
+  "run_id": "b40651e2a101-b0-20260921T143701Z",
+  "schema_version": 1,
+  "started_at": "2026-09-21T14:37:01.124692Z",
+  "universe_id": "sha256:b40651e2a101c6ba3253d01e2e811d1e0d6db1008505637c6dbabc2f53de9804",
+  "window": {
+    "end": "2026-09-09T00:00:00Z",
+    "start": "2026-09-08T00:00:00Z"
+  }
+}
