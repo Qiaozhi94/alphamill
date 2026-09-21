@@ -82,6 +82,7 @@ docker-compose.yml                     docker-compose.yml + docker-compose.gpu.y
 
 | 项 | 取值 | 说明 |
 |---|---|---|
+| `image` | `alphamill/kronos-signal-real:gpu` | GPU 构建的独立标签；默认文件不设 `image`（沿用 compose 生成的 `<project>-kronos-signal-real`），两类构建互不覆盖（R2-001） |
 | `build.args.TORCH_INDEX_URL` | `https://download.pytorch.org/whl/cu130` | 与上表同源 |
 | `environment.KRONOS_DEVICE` | `cuda` | 显式设置 → 触发严格分支 |
 | `deploy.resources.reservations.devices` | `driver: nvidia`、`count: 1`、`capabilities: [gpu]` | 不用 `privileged: true` |
@@ -151,9 +152,9 @@ F009 restore → 重载 → 同一 _load_predictor() → 同一 _resolve_device(
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
 | `AC-001` | unit | `tests/unit/test_f010_build_args_contract.py` | Dockerfile `real` 段有 `ARG TORCH_INDEX_URL` / `ARG TORCH_VERSION`，缺省值等于落地前字面量，`pip install` 行引用这两个参数；**变异证明**：改任一缺省值即判红 |
-| `AC-002` | unit | `tests/unit/test_f010_compose_gpu_contract.py` | 默认文件 `kronos-signal-real` 块含 `KRONOS_DEVICE: cpu`、无 `devices:`、无 GPU 变量插值；override 含 `driver: nvidia`、`count: 1`、`KRONOS_DEVICE: cuda`、`whl/cu130`，且不含 `ports`/`volumes`/`restart`/`privileged`；**变异证明**：往默认文件加 `devices:` 块、删 override 的 `count` 即判红。纯文本断言，不调 docker |
+| `AC-002` | unit | `tests/unit/test_f010_compose_gpu_contract.py` | 默认文件 `kronos-signal-real` 块含 `KRONOS_DEVICE: cpu`、无 `devices:`、无 GPU 变量插值；override 含 `image: alphamill/kronos-signal-real:gpu`、`driver: nvidia`、`count: 1`、`KRONOS_DEVICE: cuda`、`whl/cu130`，且不含 `ports`/`volumes`/`restart`/`depends_on`/`privileged`；默认文件不含 `image:`；**变异证明**：往默认文件加 `devices:` 块、删 override 的 `count` 或 `image` 即判红。纯文本断言，不调 docker |
 | `AC-003` | unit | 同上 | override healthcheck 含 `model_loaded') is True` 且 `startswith('cuda')`；**变异证明**：判据写回 `== 'cpu'`、删 `model_loaded` 条件即判红 |
-| `AC-004` | unit + integration（执行机） | `tests/unit/test_f010_device_strict.py`；`tests/integration/test_f010_gpu_runtime.py` | 单元：monkeypatch 假 torch，显式 `KRONOS_DEVICE=cuda` × {`version.cuda=None`, `is_available()=False`} 两例 `_load_predictor` 抛错、`real_mode_startup` 抛 `SystemExit`；未设置 `KRONOS_DEVICE` 时仍回落 cpu；**变异证明**：删严格分支即判红。集成（执行机）：不叠加设备预留但 `KRONOS_DEVICE=cuda` 起容器 → 非零退出、日志含严格分支文案、`/health` 不可达 |
+| `AC-004` | unit + integration（执行机） | `tests/unit/test_f010_device_strict.py`；`tests/integration/test_f010_gpu_runtime.py` | 单元：monkeypatch 假 torch，显式 `KRONOS_DEVICE=cuda` × {`version.cuda=None`, `is_available()=False`} 两例 `_load_predictor` 抛错、`real_mode_startup` 抛 `SystemExit`；未设置 `KRONOS_DEVICE` 时仍回落 cpu；**变异证明**：删严格分支即判红。集成（执行机）：① GPU 标签镜像 `alphamill/kronos-signal-real:gpu` 以 `docker run` 不加 `--gpus`、`-e KRONOS_DEVICE=cuda` 启动 → 无设备分支；② 默认 CPU 镜像以 `-e KRONOS_DEVICE=cuda` 启动 → CPU wheel 分支；两例均非零退出、日志含对应文案、`/health` 不可达 |
 | `AC-005` | unit | `tests/unit/test_f004_compose_profile_contract.py` + `tests/unit/test_f010_compose_gpu_contract.py` | F004 全部既有变异迁移后仍判红；默认镜像 `import torch` 仍判红 |
 | `AC-006` | integration（执行机） | `tests/integration/test_f010_gpu_runtime.py` | 容器内 `torch.cuda.is_available()` 为真；`/health` 报 `device` 以 `cuda` 开头、`model_loaded=true`；启动日志含设备与 CUDA 版本 |
 | `AC-007` | integration（执行机） | 同上 | `/predict` 返回 `source=kronos`；`nvidia-smi` 已用显存相对基线上升 |
