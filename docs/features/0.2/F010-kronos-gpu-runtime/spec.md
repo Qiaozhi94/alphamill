@@ -2,7 +2,7 @@
 kind: feature
 id: F010
 version: "0.2"
-status: doc-reviewing
+status: ready-for-development
 gate_version: 1
 related_features: [F003, F004, F009]
 topics: [kronos, gpu, runtime, cuda, m2]
