@@ -19,7 +19,7 @@ updated: 2026-09-21
 - **PRD / Architecture / System Design**：架构 §7.1（显存预算 ≤3GB 常驻 / ≤6GB 夜槽、GPU 基座前置条）
 - **ADR / 上游 Contract**：ADR-0002；F003 分支上 `mining` extra 的 CUDA 构建约定（torch ≥2.7、覆盖 Blackwell sm_120；未合入 main，其 `cu128` 示例与本设计的 pin 不兼容，见 §9）
 - **实现约束**：
-  - **默认面不可动**：`deployment/docker-compose.yml` 与 `.env.example` 字节不动；不带构建参数时 torch 安装命令（版本 + 索引）与落地前等价；
+  - **默认面不可动**：本 feature 不改动 `deployment/docker-compose.yml` 与 `.env.example`（F009 T013 的端口改动归 F009）；不带构建参数时 torch 安装命令（版本 + 索引）与落地前等价；
   - `FROM mock AS real` 的派生关系不得破坏（F004 变异门之一）；
   - 模型目录 `:ro`、DB 依赖、端口暴露面不得放宽；
   - 开发机无 NVIDIA、CI 无 GPU——两者只跑单元层；集成与 GPU 断言一律执行机取证（机器边界）。
@@ -172,7 +172,7 @@ F009 restore → 重载 → 同一 _load_predictor() → 同一 _resolve_device(
 | 决策 / 风险 | 结论或缓解 | 理由 | 替代方案 / 后续 |
 |---|---|---|---|
 | 升级现有实例 vs 新建 GPU 实例 | 升级 `kronos-signal-real`，默认文件 + GPU override 区分 | 实例名是架构 §7.1 契约的一部分，改名等于改契约并波及 F009/F003 客户端 | 需要 CPU/GPU 并存时再谈第三个 profile |
-| GPU 面用变量开关还是 override 文件 | **override 文件** | 插值删不掉设备预留块（R1-001 实测）；四项配置同处一文件（R1-004）；默认文件字节不动，F004 compose 段断言无需迁移 | — |
+| GPU 面用变量开关还是 override 文件 | **override 文件** | 插值删不掉设备预留块（R1-001 实测）；四项配置同处一文件（R1-004）；本 feature 不改动默认文件，F004 compose 段断言无需迁移 | — |
 | torch 版本与 CUDA 索引 | `2.14.0` 不变，GPU 用 `cu130` | `2.14.0` 无 `cu128` 包（R1-002）；同版本避免 CPU/GPU 分叉 | F003 `mining` 注释的 `cu128` 示例由 F003 在其分支同步 |
 | 静默回落怎么堵 | 严格分支放进 `_load_predictor()` 调用的 `_resolve_device()`，只对**显式**设置的 `KRONOS_DEVICE` 生效 | 启动与 F009 restore 共用一个入口，任何重载都绕不开（R1-005）；未设置时的宽松回落对开发机仍合理 | — |
 | GPU 默认开/关 | 默认关 | 开发机 AMD iGPU、CI 无 GPU，默认开会推翻本仓绝大多数门禁的运行前提 | 执行机以 `-f` 叠加 override |

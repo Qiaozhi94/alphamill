@@ -25,7 +25,7 @@ updated: 2026-09-21
 - **功能类型**：runtime / infra
 - **规格模式**：full
 - **变更类型**：MODIFIED
-- **一句话意图**：把 `kronos-signal-real` 从 CPU 实例升级为可在执行机 GPU 上真实推理的实例——torch 的 wheel 索引改由构建参数驱动、GPU 面（设备预留 + `KRONOS_DEVICE=cuda` + GPU 版 healthcheck + CUDA 构建参数）整体放进独立的 compose override 文件显式叠加，默认 compose 文件字节不动；F004 锁死 CPU wheel 的 Dockerfile 断言迁移为"构建参数缺省值是 CPU"，从而解除 F009 AC-012 与 F003 T033 的硬前置。
+- **一句话意图**：把 `kronos-signal-real` 从 CPU 实例升级为可在执行机 GPU 上真实推理的实例——torch 的 wheel 索引改由构建参数驱动、GPU 面（设备预留 + `KRONOS_DEVICE=cuda` + GPU 版 healthcheck + CUDA 构建参数）整体放进独立的 compose override 文件显式叠加，本 feature 不改动默认 compose 文件；F004 锁死 CPU wheel 的 Dockerfile 断言迁移为"构建参数缺省值是 CPU"，从而解除 F009 AC-012 与 F003 T033 的硬前置。
 
 ## 1. 问题、目标与非目标
 
@@ -44,7 +44,7 @@ F004 把 GPU 直通显式划在范围外是合理的——它要交付的是编�
 
 - `kronos-signal-real` 能在执行机以 CUDA 设备加载 Kronos 并产出推理信号，`/health` 如实报 `device=cuda*`、`model_loaded=true`；
 - torch 的 wheel index 与版本由**构建参数**驱动，缺省仍是 CPU（不破坏开发机与 CI 的既有行为）；
-- GPU 面集中在 `deployment/docker-compose.gpu.yml` 一个 override 文件里，只有显式 `-f` 叠加时才生效；**默认 `deployment/docker-compose.yml` 字节不动**，无 GPU 的机器上默认路径不受影响；
+- GPU 面集中在 `deployment/docker-compose.gpu.yml` 一个 override 文件里，只有显式 `-f` 叠加时才生效；**本 feature 不改动默认 `deployment/docker-compose.yml`**，无 GPU 的机器上默认路径不受影响；
 - F004 锁死 CPU wheel 的 Dockerfile 断言与变异门**迁移**为"构建参数缺省值是 CPU wheel"；F004 的 compose 断言（`KRONOS_DEVICE: cpu`、healthcheck `device == 'cpu'`）因默认文件不动而**原样保留**；F004 的既有意图（默认镜像不含 torch、real 不退回 mock）一条不丢；
 - 配置显式要求 cuda 而实际拿不到 cuda 时，**任何加载路径**（启动与 F009 `restore` 的重载）都失败可见，不静默回落 cpu；
 - 在执行机实测常驻显存占用并与架构 §7.1 的 ≤3GB 预算对照，超出即如实记录并触发预算重标；
@@ -108,7 +108,7 @@ F004 把 GPU 直通显式划在范围外是合理的——它要交付的是编�
 
 - `deployment/kronos-service.Dockerfile`：`real` 目标的 torch wheel index 与版本改由构建参数驱动（缺省 = 当前 CPU 字面量），并保留 `FROM mock AS real` 的派生关系；
 - `deployment/docker-compose.gpu.yml`（新增）：只覆盖 `kronos-signal-real`——CUDA 构建参数、`KRONOS_DEVICE: cuda`、nvidia 设备预留、以 `device` 以 `cuda` 开头为判据的 healthcheck；GPU 面的**唯一**配置处；
-- `deployment/docker-compose.yml` 与 `deployment/.env.example`：**不改**（默认面）；
+- `deployment/docker-compose.yml` 与 `deployment/.env.example`：本 feature **不改**（默认面；F009 T013 的端口改动归 F009）；
 - `src/alphamill/kronos_service/kronos_real.py`：设备解析的严格分支（显式要求 cuda 而拿不到即抛错）与启动日志一行（TR-001）；
 - F004 契约测试的**迁移**：只迁移 Dockerfile 段（CPU wheel 字面量 → 构建参数缺省值）；compose 段断言原样保留；GPU 面的断言与变异门落在本 feature 的测试文件；F004 既有意图（默认镜像不含 torch、real 不退回 mock、`:ro` 挂载、DB 依赖）一条不丢；
 - 执行机上的 GPU 直通落地（NVIDIA 容器运行时可用性核验）与真实推理取证；
@@ -237,7 +237,7 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 
 ### 非功能需求
 
-- **NFR-001**：默认面不变——`deployment/docker-compose.yml` 与 `.env.example` 字节不动；不提供构建参数时 Dockerfile 解析出的 torch 安装命令（版本 + 索引）与落地前等价；CI 行为不变；默认（mock 目标）镜像 `import torch` 仍判红。（不承诺镜像 digest 逐字一致：引入 `ARG` 后层缓存键必变，该承诺不可证伪。）
+- **NFR-001**：默认面不变——本 feature 不改动 `deployment/docker-compose.yml` 与 `.env.example`（F009 T013 的端口改动归 F009，不在此列）；不提供构建参数时 Dockerfile 解析出的 torch 安装命令（版本 + 索引）与落地前等价；CI 行为不变；默认（mock 目标）镜像 `import torch` 仍判红。（不承诺镜像 digest 逐字一致：引入 `ARG` 后层缓存键必变，该承诺不可证伪。）
 - **NFR-002**：可配置 / 迁移友好——wheel index、torch 版本、设备、GPU 预留全部走参数，迁移 `qiaozhi-lab` 时只改参数与重跑验收；wheel 选择须能覆盖当前卡 sm_89 与迁移目标 Blackwell sm_120（以 `torch.cuda.get_arch_list()` 核验）。
 - **NFR-003**：安全 / 边界——GPU 直通不放宽既有挂载与网络边界：模型目录仍 `:ro`，不新增对外暴露端口。
 - **NFR-004**：可靠性——GPU 不可用时失败可见（FR-004），不静默降级；启动预检失败仍非零退出。
@@ -256,7 +256,7 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 
 不变量：
 
-- **默认即 CPU**：任何未叠加 GPU override 的路径，默认 compose 文件字节不动、行为与本 feature 落地前一致。
+- **默认即 CPU**：任何未叠加 GPU override 的路径，本 feature 不改动默认 compose 文件、行为与本 feature 落地前一致。
 - `/health` 的 `device` 永远是**实际**加载设备，不是配置的期望值——两者不一致时以实际为准并使启动失败可见。
 - 配置要求 GPU 而设备不可见时，实例不得进入可服务状态；"能回答 `/health`"必须蕴含"模型已按配置的设备加载完成"。
 - GPU 的启用不放宽任何既有边界（`:ro` 挂载、端口暴露、DB 依赖）。
@@ -267,7 +267,7 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 ### 成功标准
 
 - **SC-001**：GPU 常驻成立——执行机上 `kronos-signal-real` 以 CUDA 加载并产出真实信号；
-- **SC-002**：默认面无回归——默认 compose 文件字节不动、默认构建参数下 torch 安装命令等价、CI 行为不变；
+- **SC-002**：默认面无回归——本 feature 不改动默认 compose 文件、默认构建参数下 torch 安装命令等价、CI 行为不变；
 - **SC-003**：契约迁移无损——F004 的全部既有变异迁移后仍全部判红；
 - **SC-004**：预算已标定——常驻显存实测并与 §7.1 的 ≤3GB 对照，超出即触发重标；
 - **SC-005**：下游解锁——F009 AC-012 的先红态解除，F003 T033 的 GPU 前置不再成立。
@@ -310,7 +310,7 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 | GPU 默认开还是默认关 | **默认关**，显式启用 | 开发机是 AMD iGPU、CI 无 GPU；默认开会把这两处推下悬崖，而它们承载着本仓绝大多数门禁 | 执行机在 `.env` 显式开启 |
 | 设备不可见时回落 CPU | **不回落，失败可见** | 回落会让 `/health` 报 cpu 而编排以为拿到了 GPU 实例——夜槽据此卸载"并不占显存的东西"，比直接失败更难排查 | 沿用 F004 `restart: "no"` 的失败态可见纪律 |
 | torch CUDA 版本选择 | **CPU/GPU 同版本 `2.14.0`，GPU 索引 `cu130`**；宿主驱动须满足 CUDA 13.0 的最低驱动要求（R580 系列及以上，以 NVIDIA 兼容表为准，T002 核验） | 2026-09-21 实查：`cu128` 索引的 cp311 最高只到 `2.11.0`，`2.14.0` 只有 `cu130`/`cu132`（R1-002）；保持同版本避免 CPU/GPU 两个镜像行为分叉 | F003 `mining` 注释里的 `cu128` 示例对 2.12+ 已不成立，由 F003 在其分支同步（tasks §5）；`get_arch_list()` 须含 sm_89 与 sm_120 |
-| GPU 面怎么启用 | **独立 override 文件 `docker-compose.gpu.yml`**，不用变量开关 | compose 变量插值删不掉设备预留块，`count: 0` 渲染后变成"全部 GPU"并在无 NVIDIA 机器上启动失败（R1-001 实测）；override 让默认文件字节不动，GPU 面四项配置集中一处（R1-004） | 执行机以 `-f ... -f docker-compose.gpu.yml` 启动，命令写进 `docs/alphamill-integration.md` |
+| GPU 面怎么启用 | **独立 override 文件 `docker-compose.gpu.yml`**，不用变量开关 | compose 变量插值删不掉设备预留块，`count: 0` 渲染后变成"全部 GPU"并在无 NVIDIA 机器上启动失败（R1-001 实测）；override 让本 feature 不必改默认文件，GPU 面四项配置集中一处（R1-004） | 执行机以 `-f ... -f docker-compose.gpu.yml` 启动，命令写进 `docs/alphamill-integration.md` |
 | 常驻显存可能超 ≤3GB 预算 | 实测对照，超出即在架构 §7.1 白天行显式重标，不沿用旧数字 | §7.1 自己写明"预算值与时段表随执行机走，迁移后按上文重标"；本 feature 是该预算第一次被真实标定的机会 | 常驻预算与训练预算（F003 `vram_limit_gb`，缺省 6.0）不是同一量：夜槽已卸载 Kronos，常驻超标不改训练预算（R1-006） |
 | 卸载后可用显存可能达不到训练预算 | T002 顺带记录空载整卡可用显存；若 <6GB，走 §7.1 夜槽行重标并同步 F003 `vram_limit_gb`，而不是判 AC-009 失败了事 | 8GB 笔记本卡在 WSL2 下 Windows 桌面合成器也占显存，6GB 未必物理可得（R1-012） | 重标须在同一提交内同步 F003 侧缺省 |
 | WSL2 下的 GPU 直通可靠性 | 作为风险如实记录：先核验容器运行时可用性再改配置（T002） | WSL2 + docker-ce（非 Docker Desktop）的 GPU 直通与原生 Linux 有差异，属本 feature 的主要未知数 | 若核验不通过，本 feature 的阻塞点上升为"执行机平台"，需回到 §8 重新裁决 |
