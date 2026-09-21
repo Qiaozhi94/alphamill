@@ -107,7 +107,7 @@ F004 把 GPU 直通显式划在范围外是合理的——它要交付的是编�
 ### 范围内
 
 - `deployment/kronos-service.Dockerfile`：`real` 目标的 torch wheel index 与版本改由构建参数驱动（缺省 = 当前 CPU 字面量），并保留 `FROM mock AS real` 的派生关系；
-- `deployment/docker-compose.gpu.yml`（新增）：只覆盖 `kronos-signal-real`——CUDA 构建参数、`KRONOS_DEVICE: cuda`、nvidia 设备预留、以 `device` 以 `cuda` 开头为判据的 healthcheck；GPU 面的**唯一**配置处；
+- `deployment/docker-compose.gpu.yml`（新增）：只覆盖 `kronos-signal-real`——独立镜像标签（与默认 CPU 构建互不覆盖）、CUDA 构建参数、`KRONOS_DEVICE: cuda`、nvidia 设备预留、以 `device` 以 `cuda` 开头为判据的 healthcheck；GPU 面的**唯一**配置处；
 - `deployment/docker-compose.yml` 与 `deployment/.env.example`：本 feature **不改**（默认面；F009 T013 的端口改动归 F009）；
 - `src/alphamill/kronos_service/kronos_real.py`：设备解析的严格分支（显式要求 cuda 而拿不到即抛错）与启动日志一行（TR-001）；
 - F004 契约测试的**迁移**：只迁移 Dockerfile 段（CPU wheel 字面量 → 构建参数缺省值）；compose 段断言原样保留；GPU 面的断言与变异门落在本 feature 的测试文件；F004 既有意图（默认镜像不含 torch、real 不退回 mock、`:ro` 挂载、DB 依赖）一条不丢；
@@ -275,9 +275,9 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 ### 验收清单
 
 - [ ] **AC-001** (`FR-001`, `NFR-001`): 不提供 GPU 构建参数时 torch 仍来自 CPU wheel index 且版本不变；提供 CUDA 参数时镜像内 `torch.version.cuda` 非空 — tests: `tests/unit/test_f010_build_args_contract.py`
-- [ ] **AC-002** (`FR-002`, `NFR-001`): 默认 compose 的 `kronos-signal-real` 块含 `KRONOS_DEVICE: cpu`、无 `devices:` 预留、无 GPU 变量插值；override 文件为该服务声明 nvidia 设备预留（`count: 1`）、`KRONOS_DEVICE: cuda` 与 CUDA 构建参数（纯文本断言 + 变异，沿用 F004 做法，不依赖 docker 二进制） — tests: `tests/unit/test_f010_compose_gpu_contract.py`
+- [ ] **AC-002** (`FR-002`, `NFR-001`): 默认 compose 的 `kronos-signal-real` 块含 `KRONOS_DEVICE: cpu`、无 `devices:` 预留、无 GPU 变量插值；override 文件为该服务声明独立镜像标签 `alphamill/kronos-signal-real:gpu`、nvidia 设备预留（`count: 1`）、`KRONOS_DEVICE: cuda` 与 CUDA 构建参数，且不覆盖端口/卷/`restart`/`depends_on`（纯文本断言 + 变异，沿用 F004 做法，不依赖 docker 二进制） — tests: `tests/unit/test_f010_compose_gpu_contract.py`
 - [ ] **AC-003** (`FR-003`): override 的 healthcheck 以 `model_loaded=true` 且 `device` 以 `cuda` 开头为通过条件；把判据写回 `'cpu'` 或删掉 `model_loaded` 条件即判红 — tests: `tests/unit/test_f010_compose_gpu_contract.py`
-- [ ] **AC-004** (`FR-004`, `NFR-004`): 单元层——显式 `KRONOS_DEVICE=cuda` 且 CUDA 不可用（或 `torch.version.cuda` 为空）时加载入口抛错、启动以非零退出，删去该判断即判红；执行机层——容器无设备预留但 `KRONOS_DEVICE=cuda` 时非零退出且不重启、日志含该失败文案、`/health` 不可达（**不得**报 `device=cpu` 的成功） — tests: `tests/unit/test_f010_device_strict.py`、`tests/integration/test_f010_gpu_runtime.py`
+- [ ] **AC-004** (`FR-004`, `NFR-004`): 单元层——显式 `KRONOS_DEVICE=cuda` 且 CUDA 不可用（或 `torch.version.cuda` 为空）时加载入口抛错、启动以非零退出，删去该判断即判红；执行机层——GPU 镜像不挂设备（无设备分支）与 CPU 镜像（CPU wheel 分支）各以 `KRONOS_DEVICE=cuda` 启动，均非零退出且不重启、日志含对应失败文案、`/health` 不可达（**不得**报 `device=cpu` 的成功） — tests: `tests/unit/test_f010_device_strict.py`、`tests/integration/test_f010_gpu_runtime.py`
 - [ ] **AC-005** (`FR-005`, `SC-003`): F004 的全部既有变异（改 target、删/改 pin 与 wheel 索引缺省、放开 `:ro`、删 DB 依赖、注释掉构建目标）在迁移后的测试集上仍全部判红；默认镜像 `import torch` 仍判红 — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/unit/test_f010_compose_gpu_contract.py`
 - [ ] **AC-006** (`FR-002`, `TR-001`): 执行机上容器内 `torch.cuda.is_available()` 为真，`/health` 报 `device=cuda:<n>`、`model_loaded=true`，启动日志含实际设备与 torch CUDA 版本 — tests: `tests/integration/test_f010_gpu_runtime.py`
 - [ ] **AC-007** (`US-001`): 执行机上 `/predict` 返回 `source=kronos` 的真实信号（非兜底），且设备侧已用显存相对基线上升 — tests: `tests/integration/test_f010_gpu_runtime.py`
