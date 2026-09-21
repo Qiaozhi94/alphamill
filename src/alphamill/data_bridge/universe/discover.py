@@ -331,8 +331,9 @@ def _record_for(client: Any, market: dict[str, Any], criteria: Criteria) -> Mark
 def _daily_turnover(client: Any, market: dict[str, Any], lookback_days: int) -> tuple[float, ...]:
     """USDT 成交额口径：Binance USDM klines 的 quote asset volume（索引 7）。"""
     try:
+        # limit 必须是 int：ccxt 在隐式 API 里对 str 会抛 TypeError（真实链路实测）
         rows = client.fapiPublicGetKlines(
-            {"symbol": market["id"], "interval": "1d", "limit": str(lookback_days)}
+            {"symbol": market["id"], "interval": "1d", "limit": int(lookback_days)}
         )
     except Exception as exc:  # noqa: BLE001 - 单市场失败即启动期拒绝，不静默补零
         raise ExchangeUnreachableError(

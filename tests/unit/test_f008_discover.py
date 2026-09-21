@@ -209,6 +209,9 @@ class _FakeExchange:
         return self._markets
 
     def fapiPublicGetKlines(self, params):
+        # 假交易所不得比真 ccxt 宽松：limit 传 str 时 ccxt 抛 TypeError（真实链路实测），
+        # 这里显式锁死类型，避免「fixture 通过、真跑炸」的假绿。
+        assert isinstance(params["limit"], int), f"limit 必须是 int，得到 {params['limit']!r}"
         self.calls.append(params)
         return self._klines[params["symbol"]]
 
