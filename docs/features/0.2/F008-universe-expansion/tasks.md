@@ -27,7 +27,7 @@ updated: 2026-09-19
 ## 1. 前置条件
 
 - [x] T001 (`FR-001`, `DR-001`): 把 Q-001 的裁决值落成可复核的口径文件（`turnover_lookback_days=90`、`turnover_rank_top_n=40`、`min_listed_days=180`、排除规则），作为 `discover` 的输入 — verify: `tests/unit/test_f008_discover.py`
-- [ ] T002 (`NFR-005`): 估算并确认执行机磁盘余量能装下 40 对约 4200 万行及其 Parquet 快照（外推：约 29,300 个 ohlcv 分区、NAS 约 58,800 文件），不足则先扩容 — verify: 执行机 `df -h` 记录 + 与 F002 的 631 万行实测占用外推
+- [x] T002 (`NFR-005`): 估算并确认执行机磁盘余量能装下 40 对约 4200 万行及其 Parquet 快照（外推：约 29,300 个 ohlcv 分区、NAS 约 58,800 文件），不足则先扩容 — verify: 执行机 `df -h` 记录 + 与 F002 的 631 万行实测占用外推
 - [x] T003 [P] (`FR-001`): 确认 Binance USDⓈ-M 永续的行情接口与限流策略（可用字段、成交额口径、速率上限） — verify: `tests/unit/test_f008_discover.py`（接口响应 fixture）
 
 ## 2. 实现任务
@@ -55,8 +55,8 @@ updated: 2026-09-19
 
 ### Phase 3：真实扩容执行
 
-- [ ] T019 (`FR-001`, `FR-002`): 用 T001 的口径跑一次真实发现，人工复核 40 个候选（逐候选核对成交额排名、上线天数与排除原因均按 `DR-001` 入档）后冻结目标宇宙 — verify: `python -m alphamill.data_bridge.universe show --universe <id>` 输出 + 冻结记录
-- [ ] T020 (`FR-003`, `NFR-001`): 在执行机回填**批 1**（成交额前 30，含现有 6 对）——owner 主导，失败 pair 单独重跑 — verify: 批 1 的 `BackfillRun` 逐 pair `status=completed`
+- [x] T019 (`FR-001`, `FR-002`): 用 T001 的口径跑一次真实发现，人工复核 40 个候选（逐候选核对成交额排名、上线天数与排除原因均按 `DR-001` 入档）后冻结目标宇宙 — verify: `python -m alphamill.data_bridge.universe show --universe <id>` 输出 + 冻结记录
+- [ ] T020 (`FR-003`, `NFR-001`): 在执行机回填**批 1**（成交额前 30，含现有 6 对）——owner 主导，失败 pair 单独重跑 — verify: 批 1 的 `BackfillRun` 逐 pair `status=completed`（进行中：run `b40651e2a101-b1-20260921T152932Z`，证据见 `reports/f008/执行机取证-T002-T019.md` 与 `reports/backfill/<run_id>/run.json`）
 - [ ] T021 (`FR-003`, `NFR-001`): 回填**批 2**（第 31–40），复用同一套编排；批 1 已过门的 pair 不受影响 — verify: 批 2 的 `BackfillRun` 逐 pair `status=completed`
 - [ ] T022 (`FR-004`): 每批回填完成后立即对该批 pair 跑质量门，通过者准入、失败者隔离并记录原因；**批 1 过门即可供 `F003` 使用，不必等批 2** — verify: `pytest -q tests/integration/test_f008_quality_gate.py` + 逐 pair 判定记录
 - [ ] T023 (`FR-006`, `NFR-005`, `AC-011`): 两批都过门后跑一次全量导出与 NAS 备份，实测磁盘占用、导出耗时与备份时长并与 6 对基线及外推值对照 — verify: `tests/integration/test_f008_capacity_report.py`
