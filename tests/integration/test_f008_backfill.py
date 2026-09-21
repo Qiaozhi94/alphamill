@@ -198,6 +198,39 @@ def test_run_record_and_events_carry_hostname_and_pair(f008_conn, tmp_path) -> N
     assert events[-1][1]["rows"] == 150
 
 
+def test_already_complete_pair_is_skipped_without_fetching(f008_conn, tmp_path) -> None:
+    """账本说 complete 的 pair 不再触网（数据已在库），但仍记为 completed 并留痕。"""
+    universe_id = _frozen_universe(tmp_path, pairs=("BTC",))
+    definition = load_definition(universe_id, tmp_path)
+    with f008_conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO backfill_progress (exchange, symbol, timeframe, target_start,"
+            " target_end, next_since, status, rows_upserted)"
+            " VALUES ('binance', 'BTC/USDT', '1m', %s, %s, %s, 'complete', 900719)",
+            (WINDOW_START, WINDOW_END, WINDOW_END),
+        )
+    f008_conn.commit()
+
+    exchange = FakeExchange()
+    exchange.fetch_ohlcv = lambda *a, **k: pytest.fail("已完成的 pair 不应再触网")  # type: ignore[method-assign]
+    run = runner.run_backfill_batch(
+        universe_id=universe_id,
+        plans=runner.plan_batch(definition),
+        start=WINDOW_START,
+        end=WINDOW_END,
+        conn=f008_conn,
+        lake_root=tmp_path,
+        reports_dir=tmp_path / "reports",
+        exchange=exchange,
+        limiter=_limiter(),
+    )
+    assert run.failed_pairs() == ()
+    entry = run.pairs[0]
+    assert entry["status"] == "completed"
+    assert entry["note"] == "already_complete"
+    assert entry["rows"] == 900719
+
+
 def test_unfrozen_universe_is_refused(f008_conn, tmp_path) -> None:
     universe_id = _frozen_universe(tmp_path, freeze=False)
     with pytest.raises(UniverseNotFrozenError):

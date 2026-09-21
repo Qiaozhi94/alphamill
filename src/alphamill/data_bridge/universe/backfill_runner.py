@@ -158,8 +158,25 @@ def run_backfill_batch(
     }
     _write_run(state["run"], reports_dir)
 
+    backfill.ensure_progress_table(conn)
     pending = set(state["run"].pending())
-    remaining = [plan for plan in state["run"].plans() if plan.db_symbol in pending]
+    candidates = [plan for plan in state["run"].plans() if plan.db_symbol in pending]
+    already, remaining = _split_already_complete(conn, exchange_id, candidates, start, end)
+    for plan, cursor, rows in already:
+        payload = {
+            "db_symbol": plan.db_symbol,
+            "lake_pair": plan.lake_pair,
+            "rank": plan.rank,
+            "status": backfill.STATUS_COMPLETED,
+            "rows": rows,
+            "last_cursor": None if cursor is None else utc_iso(cursor),
+            "error": None,
+            "error_class": None,
+            "note": "already_complete",
+        }
+        state["run"] = state["run"].with_outcome(payload)
+        _write_run(state["run"], reports_dir)
+        _emit(event_sink, state["run"], payload)
     if not remaining:
         finished = state["run"].finished()
         _write_run(finished, reports_dir)
@@ -184,6 +201,25 @@ def run_backfill_batch(
     finished = state["run"].finished()
     _write_run(finished, reports_dir)
     return finished
+
+
+def _split_already_complete(
+    conn, exchange_id: str, plans: list[PairPlan], start: datetime, end: datetime
+):
+    """库侧进度已 `complete` 的 pair 直接记为完成。
+
+    数据已经在库里（进度账本是断点续跑的存储契约），重拉 2 年窗口等于白跑几小时；
+    真实覆盖仍由质量门逐项复核——账本说 complete 而实际有缺口时会被门禁拦住。
+    """
+    done: list[tuple[PairPlan, Any, int]] = []
+    todo: list[PairPlan] = []
+    for plan in plans:
+        cursor, status, rows = current_cursor(conn, exchange_id, plan.db_symbol, start, end)
+        if status == "complete":
+            done.append((plan, cursor, rows))
+        else:
+            todo.append(plan)
+    return done, todo
 
 
 def _emit(event_sink: EventSink | None, run: BackfillRun, payload: dict[str, Any]) -> None:
