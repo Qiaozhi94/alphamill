@@ -41,9 +41,11 @@ dev = [
 mining = [
   # PyTorch 2.7 是已验证下限：官方 2.7 发布说明称其首次支持 Blackwell，
   # 并提供 CUDA 12.8 wheel（https://pytorch.org/blog/pytorch-2-7/）。安装时
-  # 必须使用 CUDA 12.8+ wheel 索引，例如
-  # --index-url https://download.pytorch.org/whl/cu128；本机 torch 2.14.0+cpu
-  # 不含 CUDA，不能用于 mining。
+  # 必须使用 CUDA 12.8+ wheel 索引。cu128 索引只到 torch 2.11.0（执行机
+  # qiaozhi-lt 现用 2.10.0+cu128，见 F003 tasks T029 取证）；若要与 Kronos GPU
+  # 镜像同版本（F010：torch 2.14.0），须改用
+  # --index-url https://download.pytorch.org/whl/cu130，宿主驱动 R580+（F010 T002 核验）。
+  # 本机 torch 2.14.0+cpu 不含 CUDA，不能用于 mining。
   "torch>=2.7,<3",
   "numpy>=2,<3",
   "stable-baselines3>=2.7,<3",
