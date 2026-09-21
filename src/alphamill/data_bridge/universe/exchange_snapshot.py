@@ -22,6 +22,13 @@ from alphamill.data_bridge.universe.discover import (
 )
 from alphamill.data_bridge.universe.errors import ExchangeUnreachableError
 
+#: 逐市场请求的最小间隔（秒）。发现要为每个候选取 90 根日线，市场数几百个：
+#: 按 ccxt 的 `rateLimit`（50ms）打会形成 ~15 请求/秒的突发，权重 ~3000/分钟——
+#: 2026-09-21 执行机实测就是这个节奏撞上 Binance `-1003`（418，出口 IP 封禁 1 小时）。
+#: 默认 1 秒/市场 ⇒ 权重 ≤120/分钟，几百个市场约 5–8 分钟，与长跑回填叠加也安全。
+DEFAULT_MARKET_INTERVAL_SECONDS = 1.0
+INTERVAL_ENV = "ALPHAMILL_DISCOVER_INTERVAL_SECONDS"
+
 
 def build_exchange(exchange_id: str):
     """构造 ccxt 交易所实例（只读公开行情）。"""
@@ -70,7 +77,7 @@ def fetch_snapshot(
             if market.get("spot") and market.get("active") is not False
         }
         records = []
-        interval = (getattr(client, "rateLimit", None) or 200) / 1000
+        interval = _market_interval(client)
         for index, market in enumerate(targets):
             if index:
                 _sleep(interval)
@@ -87,6 +94,17 @@ def fetch_snapshot(
         snapshot_at=utc_iso(moment.astimezone(UTC)),
         markets=tuple(records),
     )
+
+
+def _market_interval(client: Any) -> float:
+    """逐市场间隔：不取 ccxt 的 `rateLimit`（太激进，见常量注释），可用环境变量覆盖。"""
+    override = os.getenv(INTERVAL_ENV, "").strip()
+    if override:
+        try:
+            return max(0.05, float(override))
+        except ValueError as exc:
+            raise ExchangeUnreachableError(f"{INTERVAL_ENV} 不是数字: {override!r}") from exc
+    return DEFAULT_MARKET_INTERVAL_SECONDS
 
 
 def _sleep(seconds: float) -> None:

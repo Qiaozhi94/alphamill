@@ -340,6 +340,16 @@ def _klines(quote_volume: float, days: int) -> list[list[Any]]:
     ]
 
 
+def test_market_interval_is_conservative_and_overridable(monkeypatch) -> None:
+    """节奏必须比 ccxt 的 rateLimit 保守：15 请求/秒的突发会撞上 Binance -1003 封禁。"""
+    from alphamill.data_bridge.universe import exchange_snapshot
+
+    monkeypatch.delenv(exchange_snapshot.INTERVAL_ENV, raising=False)
+    assert exchange_snapshot._market_interval(None) >= 1.0
+    monkeypatch.setenv(exchange_snapshot.INTERVAL_ENV, "0.25")
+    assert exchange_snapshot._market_interval(None) == 0.25
+
+
 def test_fetch_snapshot_parses_klines_and_derives_pairs(monkeypatch) -> None:
     monkeypatch.setattr(exchange_snapshot, "_sleep", lambda _seconds: None)
     created_ms = int(datetime(2025, 1, 1, tzinfo=UTC).timestamp() * 1000)
