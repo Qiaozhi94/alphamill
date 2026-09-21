@@ -28,7 +28,7 @@ updated: 2026-09-21
 
 GPU 面是**一个叠加层**，不是散在默认文件里的一组开关：CUDA 构建参数、`KRONOS_DEVICE: cuda`、nvidia 设备预留、GPU 版 healthcheck 四项全部写在 `deployment/docker-compose.gpu.yml`，执行机以 `-f docker-compose.yml -f docker-compose.gpu.yml` 叠加启用。四项同处一个文件，就不会出现"装了 CUDA wheel 但没申请设备"或"申请了设备但 healthcheck 还在比 cpu"这类半吊子组合。
 
-为什么不用变量开关：compose 插值删不掉 `deploy.resources.reservations.devices` 块——`count: ${KRONOS_GPU_COUNT:-0}` 渲染后 `count` 字段消失（语义变为"全部 GPU"），无 NVIDIA 的机器起容器即报 `could not select device driver "nvidia" with capabilities: [[gpu]]`（2026-09-21 开发机 Docker Compose v5.5.1 实测，文档检视 R1-001）。
+为什么不用变量开关：compose 插值删不掉 `deploy.resources.reservations.devices` 块——`count: ${KRONOS_GPU_COUNT:-0}` 渲染后 `count` 字段消失（语义变为"全部 GPU"），无 NVIDIA 的机器起容器即报 `could not select device driver "nvidia" with capabilities: [[gpu]]`（2026-09-21 于执行机 `qiaozhi-lt`、Docker Compose v5.5.1 实测，当时该机 docker 未装 nvidia 容器运行时；文档检视 R1-001。原记录误写为"开发机"，已更正）。
 
 - 前端：不适用。
 - 后端 / API：**两处小改**，都在 `kronos_real.py`：① 设备解析的严格分支（§5）；② 启动日志一行（TR-001）。`/health` 字段与语义不变。

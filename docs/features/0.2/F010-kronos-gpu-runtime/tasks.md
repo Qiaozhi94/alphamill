@@ -28,7 +28,7 @@ updated: 2026-09-21
 ## 1. 前置条件
 
 - [ ] T001 (`FR-001`, `FR-002`): 确认 spec §8 与 design §10 无开放项，且 GPU 面四项（CUDA 构建参数、`KRONOS_DEVICE: cuda`、设备预留、healthcheck 判据）只在 override 契约表一处定义（design §4 两张表逐格核对） — verify: `spec.md` §8、`design.md` §4/§10
-- [ ] T002 (`NFR-005`, `NFR-002`): **先核验再改配置**——在执行机核验：① NVIDIA 容器运行时可用（`docker run --rm --gpus all <cuda-image> nvidia-smi` 可出卡）；② 驱动版本满足 CUDA 13.0 最低要求（R580 系列及以上，以 NVIDIA 兼容表为准）；③ 在该容器内装 `torch==2.14.0` 自 `whl/cu130`，`torch.cuda.is_available()` 为真且 `get_arch_list()` 同时含 `sm_89`（当前卡）与 `sm_120`（迁移目标）；④ 记录空载整卡可用显存（`nvidia-smi --query-gpu=memory.free`），<6GB 则按 spec §7 风险行进入重标。任一不通过即停下回 spec §8 重新裁决，不得先改配置再试 — verify: 执行机命令输出归档（hostname / 驱动 / CUDA 版本 / arch list / 空载可用显存）
+- [ ] T002 (`NFR-005`, `NFR-002`): **先核验再改配置**——在执行机核验：① NVIDIA 容器运行时可用（`docker run --rm --gpus all <cuda-image> nvidia-smi` 可出卡）；② 驱动版本满足 CUDA 13.0 最低要求（R580 系列及以上，以 NVIDIA 兼容表为准）；③ 在该容器内装 `torch==2.14.0` 自 `whl/cu130`，`torch.cuda.is_available()` 为真且 `get_arch_list()` 同时含 `sm_89`（当前卡）与 `sm_120`（迁移目标）；④ 记录空载整卡可用显存（`nvidia-smi --query-gpu=memory.free`），<6GB 则按 spec §7 风险行进入重标。① 不通过时先装 nvidia-container-toolkit 并执行 `nvidia-ctk runtime configure --runtime=docker`、重启 docker（运维动作，记录版本）后重测；其余项或装后仍不通过即停下回 spec §8 重新裁决，不得先改配置再试。**预探（2026-09-21，`qiaozhi-lt`）**：① 不通过（Runtimes 仅 `runc`）；② 驱动 616.64；④ 空载 free 7956 MiB — verify: 执行机命令输出归档（hostname / 驱动 / CUDA 版本 / arch list / 空载可用显存）
 
 ## 2. 实现任务
 

@@ -157,7 +157,7 @@ F004 把 GPU 直通显式划在范围外是合理的——它要交付的是编�
 
 GPU 面（CUDA 构建参数、`KRONOS_DEVICE: cuda`、nvidia 设备预留、GPU 版 healthcheck）应当**只**出现在 `deployment/docker-compose.gpu.yml`，以 `docker compose -f docker-compose.yml -f docker-compose.gpu.yml` 显式叠加启用；**默认 compose 文件不得出现任何 GPU 设备预留或 GPU 变量插值**。
 
-> 为什么不用变量开关：compose 的变量插值无法删除 `deploy.resources.reservations.devices` 块——`count: ${KRONOS_GPU_COUNT:-0}` 渲染后 `count` 字段消失（语义变为"全部 GPU"），无 NVIDIA 的机器起容器即报 `could not select device driver "nvidia"`（2026-09-21 开发机实测，F010 文档检视 R1-001）。
+> 为什么不用变量开关：compose 的变量插值无法删除 `deploy.resources.reservations.devices` 块——`count: ${KRONOS_GPU_COUNT:-0}` 渲染后 `count` 字段消失（语义变为"全部 GPU"），无 NVIDIA 的机器起容器即报 `could not select device driver "nvidia"`（2026-09-21 于执行机 `qiaozhi-lt` 实测，当时该机 docker 未装 nvidia 容器运行时；F010 文档检视 R1-001。原记录误写为"开发机"，已更正）。
 
 #### Scenario: 默认 compose 不含 GPU
 
@@ -312,8 +312,8 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 | torch CUDA 版本选择 | **CPU/GPU 同版本 `2.14.0`，GPU 索引 `cu130`**；宿主驱动须满足 CUDA 13.0 的最低驱动要求（R580 系列及以上，以 NVIDIA 兼容表为准，T002 核验） | 2026-09-21 实查：`cu128` 索引的 cp311 最高只到 `2.11.0`，`2.14.0` 只有 `cu130`/`cu132`（R1-002）；保持同版本避免 CPU/GPU 两个镜像行为分叉 | F003 `mining` 注释里的 `cu128` 示例对 2.12+ 已不成立，由 F003 在其分支同步（tasks §5）；`get_arch_list()` 须含 sm_89 与 sm_120 |
 | GPU 面怎么启用 | **独立 override 文件 `docker-compose.gpu.yml`**，不用变量开关 | compose 变量插值删不掉设备预留块，`count: 0` 渲染后变成"全部 GPU"并在无 NVIDIA 机器上启动失败（R1-001 实测）；override 让本 feature 不必改默认文件，GPU 面四项配置集中一处（R1-004） | 执行机以 `-f ... -f docker-compose.gpu.yml` 启动，命令写进 `docs/alphamill-integration.md` |
 | 常驻显存可能超 ≤3GB 预算 | 实测对照，超出即在架构 §7.1 白天行显式重标，不沿用旧数字 | §7.1 自己写明"预算值与时段表随执行机走，迁移后按上文重标"；本 feature 是该预算第一次被真实标定的机会 | 常驻预算与训练预算（F003 `vram_limit_gb`，缺省 6.0）不是同一量：夜槽已卸载 Kronos，常驻超标不改训练预算（R1-006） |
-| 卸载后可用显存可能达不到训练预算 | T002 顺带记录空载整卡可用显存；若 <6GB，走 §7.1 夜槽行重标并同步 F003 `vram_limit_gb`，而不是判 AC-009 失败了事 | 8GB 笔记本卡在 WSL2 下 Windows 桌面合成器也占显存，6GB 未必物理可得（R1-012） | 重标须在同一提交内同步 F003 侧缺省 |
-| WSL2 下的 GPU 直通可靠性 | 作为风险如实记录：先核验容器运行时可用性再改配置（T002） | WSL2 + docker-ce（非 Docker Desktop）的 GPU 直通与原生 Linux 有差异，属本 feature 的主要未知数 | 若核验不通过，本 feature 的阻塞点上升为"执行机平台"，需回到 §8 重新裁决 |
+| 卸载后可用显存可能达不到训练预算 | T002 顺带记录空载整卡可用显存（2026-09-21 预探：空载 free 7956 MiB，高于 6GB；单次读数，以 T002 正式记录为准）；若 <6GB，走 §7.1 夜槽行重标并同步 F003 `vram_limit_gb`，而不是判 AC-009 失败了事 | 8GB 笔记本卡在 WSL2 下 Windows 桌面合成器也占显存，6GB 未必物理可得（R1-012） | 重标须在同一提交内同步 F003 侧缺省 |
+| WSL2 下的 GPU 直通可靠性 | 作为风险如实记录：先核验容器运行时可用性再改配置（T002）。**2026-09-21 预探（`qiaozhi-lt`）**：驱动 616.64、RTX 4060 Laptop 8188 MiB 可见，但 `docker info` 的 Runtimes 只有 `runc`——nvidia-container-toolkit 未安装，T002 ① 当前不通过 | WSL2 + docker-ce（非 Docker Desktop）的 GPU 直通与原生 Linux 有差异，属本 feature 的主要未知数 | 若核验不通过，本 feature 的阻塞点上升为"执行机平台"，需回到 §8 重新裁决 |
 
 ## 8. 待确认问题
 
