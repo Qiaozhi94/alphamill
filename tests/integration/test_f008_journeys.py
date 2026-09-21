@@ -53,7 +53,7 @@ class _FakeExchange:
 
     def load_markets(self):
         created = int(datetime(2025, 1, 1, tzinfo=UTC).timestamp() * 1000)
-        return {
+        markets = {
             f"{base}/USDT:USDT": {
                 "symbol": f"{base}/USDT:USDT",
                 "id": f"{base}USDT",
@@ -64,10 +64,25 @@ class _FakeExchange:
                 "contract": True,
                 "active": True,
                 "created": created,
-                "info": {"onboardDate": created},
+                "info": {"onboardDate": created, "underlyingType": "COIN"},
             }
             for base in self.bases
         }
+        # 数据侧（现货）：可回填的标的才进候选
+        markets.update(
+            {
+                f"{base}/USDT": {
+                    "symbol": f"{base}/USDT",
+                    "id": f"{base}USDT",
+                    "base": base,
+                    "quote": "USDT",
+                    "spot": True,
+                    "active": True,
+                }
+                for base in self.bases
+            }
+        )
+        return markets
 
     def fapiPublicGetKlines(self, params):
         # 第 2 次会话把成交额整体放大 10 倍：排名法下候选与 universe_id 必须不变
@@ -157,7 +172,7 @@ def test_us001_definition_journey(lake, tmp_path, monkeypatch, capsys) -> None:
 
 
 def _snapshot_from_exchange(criteria, *, exchange=None, now=None):
-    from alphamill.data_bridge.universe.discover import fetch_snapshot
+    from alphamill.data_bridge.universe.exchange_snapshot import fetch_snapshot
 
     return fetch_snapshot(criteria, exchange=exchange or _FakeExchange(), now=now)
 

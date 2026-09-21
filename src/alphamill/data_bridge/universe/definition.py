@@ -44,6 +44,7 @@ _FREEZE_KEYS = frozenset({"schema_version", "universe_id", "frozen_at", "frozen_
 _CANDIDATE_KEYS = frozenset(
     {
         "db_symbol",
+        "rank_symbol",
         "lake_pair",
         "base",
         "quote",
@@ -252,6 +253,7 @@ def _candidate_from_payload(value: Any, index: int) -> Candidate:
         )
     return Candidate(
         db_symbol=str(item["db_symbol"]),
+        rank_symbol=str(item.get("rank_symbol") or item["db_symbol"]),
         lake_pair=str(item["lake_pair"]),
         base=str(item["base"]),
         quote=str(item["quote"]),

@@ -20,7 +20,12 @@ from alphamill.data_bridge.universe.errors import CriteriaError
 
 SCHEMA_VERSION = 1
 DEFAULT_CRITERIA_PATH = Path(__file__).with_name("criteria.json")
-EXCLUDE_RULE_IDS = ("stablecoin_pair", "leveraged_token", "index_basket")
+EXCLUDE_RULE_IDS = (
+    "stablecoin_pair",
+    "leveraged_token",
+    "index_basket",
+    "tokenized_tradfi",
+)
 
 _REQUIRED_KEYS = frozenset(
     {

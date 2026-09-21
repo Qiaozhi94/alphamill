@@ -16,10 +16,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
-from alphamill.data_bridge import symbol_map
 from alphamill.data_bridge.universe.canonical import parse_utc, utc_iso
 from alphamill.data_bridge.universe.criteria import Criteria
 from alphamill.data_bridge.universe.errors import ExchangeUnreachableError
@@ -52,22 +50,41 @@ LAKE_MARKET_TYPES = ("spot", "perp")
 REASON_STABLECOIN = "stablecoin_pair"
 REASON_LEVERAGED = "leveraged_token"
 REASON_INDEX = "index_basket"
+REASON_TRADFI = "tokenized_tradfi"
 REASON_LISTED_DAYS = "listed_days_not_enough"
+REASON_NO_SPOT = "no_spot_market"
+REASON_DUPLICATE_DATA = "duplicate_data_pair"
 REASON_RANK = "rank_below_top_n"
+
+#: 加密资产的判别：Binance USDM 的 `underlyingType` 为 `COIN` 才是加密永续；
+#: `EQUITY` / `COMMODITY`（配 `contractType=TRADIFI_PERPETUAL`）是代币化股票与商品。
+CRYPTO_UNDERLYING = "COIN"
+
+#: 1000× 命名约定：永续 `1000PEPE` 对应现货 `PEPE`（单位缩放，同一标的）。
+#: 仅在「去前缀后确实存在现货市场」时才做映射，且不跨标的猜测（HYPE ≠ HYPER）。
+THOUSAND_PREFIX = "1000"
 _TURNOVER_DECIMALS = 6
 
 
 @dataclass(frozen=True, kw_only=True)
 class MarketRecord:
-    """单个市场的规范化快照：`daily_turnover_usdt` 为按日 USDT 成交额（旧→新）。"""
+    """单个市场快照：`daily_turnover_usdt` 为按日 USDT 成交额（旧→新）。
+
+    `rank_symbol` 是**排名侧**（USDⓈ-M 永续）的 db symbol；`db_symbol`/`lake_pair` 是
+    **数据侧**（研究数据集 `ohlcv_1m` 的现货命名空间，含 1000× 命名映射）。
+    `data_available=False` 表示数据路线取不到这个标的（只有永续、无现货）。
+    """
 
     symbol: str
+    rank_symbol: str
     db_symbol: str
     lake_pair: str
     base: str
     quote: str
+    underlying_type: str
     listed_at: str
     daily_turnover_usdt: tuple[float, ...]
+    data_available: bool
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -87,12 +104,15 @@ class MarketSnapshot:
             "markets": [
                 {
                     "symbol": record.symbol,
+                    "rank_symbol": record.rank_symbol,
                     "db_symbol": record.db_symbol,
                     "lake_pair": record.lake_pair,
                     "base": record.base,
                     "quote": record.quote,
+                    "underlying_type": record.underlying_type,
                     "listed_at": record.listed_at,
                     "daily_turnover_usdt": list(record.daily_turnover_usdt),
+                    "data_available": record.data_available,
                 }
                 for record in self.markets
             ],
@@ -104,6 +124,7 @@ class Candidate:
     """逐候选筛选指标（含被排除者与原因），`DR-001` 要求全部入档。"""
 
     db_symbol: str
+    rank_symbol: str
     lake_pair: str
     base: str
     quote: str
@@ -117,6 +138,7 @@ class Candidate:
     def payload(self) -> dict[str, Any]:
         return {
             "db_symbol": self.db_symbol,
+            "rank_symbol": self.rank_symbol,
             "lake_pair": self.lake_pair,
             "base": self.base,
             "quote": self.quote,
@@ -161,19 +183,22 @@ def evaluate(snapshot: MarketSnapshot, criteria: Criteria) -> Evaluation:
     for market in snapshot.markets:
         if market.quote.upper() != criteria.quote_currency:
             continue
-        listed_at = parse_utc(market.listed_at, field=f"{market.db_symbol}.listed_at")
+        listed_at = parse_utc(market.listed_at, field=f"{market.rank_symbol}.listed_at")
         listed_days = int((snapshot_at - listed_at).total_seconds() // 86400)
         window = market.daily_turnover_usdt[-criteria.turnover_lookback_days :]
-        turnover = round(
-            sum(window) / len(window) if window else 0.0,
-            _TURNOVER_DECIMALS,
+        turnover = round(sum(window) / len(window) if window else 0.0, _TURNOVER_DECIMALS)
+        reason = _structural_exclusion(
+            market.base, market.quote, criteria.exclude_rules, market.underlying_type
         )
-        reason = _structural_exclusion(market.base, market.quote, criteria.exclude_rules)
         if reason is None and listed_days <= criteria.min_listed_days:
             reason = REASON_LISTED_DAYS
+        if reason is None and not market.data_available:
+            # 数据可达性前置：只有永续、现货取不到数的标的进不了研究宇宙
+            reason = REASON_NO_SPOT
         rows.append(
             Candidate(
                 db_symbol=market.db_symbol,
+                rank_symbol=market.rank_symbol,
                 lake_pair=market.lake_pair,
                 base=market.base,
                 quote=market.quote,
@@ -186,6 +211,7 @@ def evaluate(snapshot: MarketSnapshot, criteria: Criteria) -> Evaluation:
             )
         )
 
+    rows = _dedupe_data_pairs(rows)
     eligible = [row for row in rows if row.excluded_reason is None]
     eligible.sort(key=lambda row: (-row.turnover_usdt, row.db_symbol))
     ranked: list[Candidate] = []
@@ -194,6 +220,7 @@ def evaluate(snapshot: MarketSnapshot, criteria: Criteria) -> Evaluation:
         ranked.append(
             Candidate(
                 db_symbol=row.db_symbol,
+                rank_symbol=row.rank_symbol,
                 lake_pair=row.lake_pair,
                 base=row.base,
                 quote=row.quote,
@@ -211,12 +238,52 @@ def evaluate(snapshot: MarketSnapshot, criteria: Criteria) -> Evaluation:
     return Evaluation(snapshot_at=utc_iso(snapshot_at), candidates=tuple(ranked) + tuple(dropped))
 
 
-def _structural_exclusion(base: str, quote: str, rules: tuple[str, ...]) -> str | None:
+def _dedupe_data_pairs(rows: list[Candidate]) -> list[Candidate]:
+    """多个永续映射到同一数据侧 pair 时（如 1000× 与基础符号并存）只保留流动性最高者。"""
+    best: dict[str, Candidate] = {}
+    for row in rows:
+        if row.excluded_reason is not None:
+            continue
+        current = best.get(row.lake_pair)
+        if current is None or row.turnover_usdt > current.turnover_usdt:
+            best[row.lake_pair] = row
+    out: list[Candidate] = []
+    for row in rows:
+        winner = best.get(row.lake_pair)
+        if row.excluded_reason is None and winner is not None and winner is not row:
+            out.append(_with_reason(row, REASON_DUPLICATE_DATA))
+            continue
+        out.append(row)
+    return out
+
+
+def _with_reason(row: Candidate, reason: str) -> Candidate:
+    return Candidate(
+        db_symbol=row.db_symbol,
+        rank_symbol=row.rank_symbol,
+        lake_pair=row.lake_pair,
+        base=row.base,
+        quote=row.quote,
+        listed_at=row.listed_at,
+        listed_days=row.listed_days,
+        turnover_usdt=row.turnover_usdt,
+        turnover_points=row.turnover_points,
+        rank=None,
+        excluded_reason=reason,
+    )
+
+
+def _structural_exclusion(
+    base: str, quote: str, rules: tuple[str, ...], underlying_type: str = CRYPTO_UNDERLYING
+) -> str | None:
     """结构性重复标的的排除判定。
 
     稳定币规则只看 **base**：全线以 `USDT` 计价是常态，把 quote 也算进去会把整个
-    宇宙排空（`BTCDOM/USDT`、`BTC/USDT` 都会被误判）。
+    宇宙排空（`BTCDOM/USDT`、`BTC/USDT` 都会被误判）。代币化 TradFi（`underlyingType`
+    为 `EQUITY`/`COMMODITY`）不是加密资产，按规则名 `tokenized_tradfi` 排除。
     """
+    if REASON_TRADFI in rules and underlying_type.upper() != CRYPTO_UNDERLYING:
+        return REASON_TRADFI
     upper_base = base.upper()
     if REASON_STABLECOIN in rules and upper_base in STABLECOIN_BASES:
         return REASON_STABLECOIN
@@ -228,124 +295,3 @@ def _structural_exclusion(base: str, quote: str, rules: tuple[str, ...]) -> str 
     if REASON_INDEX in rules and upper_base in INDEX_BASKET_BASES:
         return REASON_INDEX
     return None
-
-
-def build_exchange(exchange_id: str):
-    """构造 ccxt 交易所实例（只读公开行情）。"""
-    import ccxt
-
-    exchange_class = getattr(ccxt, exchange_id, None)
-    if exchange_class is None:
-        raise ExchangeUnreachableError(f"ccxt 不认识交易所 {exchange_id!r}")
-    config: dict[str, Any] = {"enableRateLimit": True, "timeout": 30_000}
-    import os
-
-    proxy = os.getenv(f"{exchange_id.upper()}_HTTPS_PROXY", "").strip()
-    if proxy:
-        config["httpsProxy"] = proxy
-    return exchange_class(config)
-
-
-def fetch_snapshot(
-    criteria: Criteria,
-    *,
-    exchange: Any | None = None,
-    now: datetime | None = None,
-) -> MarketSnapshot:
-    """唯一网络路径：拉取目标市场日线成交额，产出规范化快照。"""
-    if criteria.market_type != "perp":
-        raise ExchangeUnreachableError(
-            f"发现仅实现 USDⓈ-M 永续路线（market_type=perp），得到 {criteria.market_type!r}"
-        )
-    owned = exchange is None
-    client = exchange if exchange is not None else build_exchange(criteria.exchange)
-    try:
-        try:
-            loaded = client.load_markets()
-        except Exception as exc:  # noqa: BLE001 - 交易所不可达一律启动期拒绝
-            raise ExchangeUnreachableError(f"加载 {criteria.exchange} 市场失败: {exc}") from exc
-        targets = sorted(
-            (market for market in loaded.values() if _is_target_market(market, criteria)),
-            key=lambda market: market["symbol"],
-        )
-        if not targets:
-            raise ExchangeUnreachableError(
-                f"{criteria.exchange} 没有 {criteria.quote_currency} 线性永续市场可选"
-            )
-        records = []
-        interval = (getattr(client, "rateLimit", None) or 200) / 1000
-        for index, market in enumerate(targets):
-            if index:
-                _sleep(interval)
-            records.append(_record_for(client, market, criteria))
-    finally:
-        if owned:
-            close = getattr(client, "close", None)
-            if callable(close):
-                close()
-    moment = now or datetime.now(UTC)
-    return MarketSnapshot(
-        exchange=criteria.exchange,
-        market_type=criteria.market_type,
-        snapshot_at=utc_iso(moment.astimezone(UTC)),
-        markets=tuple(records),
-    )
-
-
-def _sleep(seconds: float) -> None:
-    import time
-
-    time.sleep(seconds)  # 测试注入点
-
-
-def _is_target_market(market: dict[str, Any], criteria: Criteria) -> bool:
-    return bool(
-        market.get("swap")
-        and market.get("linear")
-        and market.get("contract")
-        and market.get("active") is not False
-        and str(market.get("quote", "")).upper() == criteria.quote_currency
-    )
-
-
-def _record_for(client: Any, market: dict[str, Any], criteria: Criteria) -> MarketRecord:
-    base = str(market["base"])
-    quote = str(market["quote"])
-    db_symbol = f"{base}/{quote}"
-    lake_pair, _ = symbol_map.derive_pairs(db_symbol, DATA_MARKET_TYPE)
-    created = market.get("created") or (market.get("info") or {}).get("onboardDate")
-    if not created:
-        raise ExchangeUnreachableError(f"{market.get('symbol')} 缺少 onboardDate，无法判定上线天数")
-    listed_at = datetime.fromtimestamp(int(created) / 1000, tz=UTC)
-    return MarketRecord(
-        symbol=str(market["symbol"]),
-        db_symbol=db_symbol,
-        lake_pair=lake_pair,
-        base=base,
-        quote=quote,
-        listed_at=utc_iso(listed_at),
-        daily_turnover_usdt=_daily_turnover(client, market, criteria.turnover_lookback_days),
-    )
-
-
-def _daily_turnover(client: Any, market: dict[str, Any], lookback_days: int) -> tuple[float, ...]:
-    """USDT 成交额口径：Binance USDM klines 的 quote asset volume（索引 7）。"""
-    try:
-        # limit 必须是 int：ccxt 在隐式 API 里对 str 会抛 TypeError（真实链路实测）
-        rows = client.fapiPublicGetKlines(
-            {"symbol": market["id"], "interval": "1d", "limit": int(lookback_days)}
-        )
-    except Exception as exc:  # noqa: BLE001 - 单市场失败即启动期拒绝，不静默补零
-        raise ExchangeUnreachableError(
-            f"拉取 {market.get('symbol')} 日线成交额失败: {exc}"
-        ) from exc
-    if not isinstance(rows, list) or not rows:
-        raise ExchangeUnreachableError(f"{market.get('symbol')} 日线返回为空，无法计算成交额")
-    values: list[float] = []
-    for row in rows:
-        if not isinstance(row, (list, tuple)) or len(row) < 8:
-            raise ExchangeUnreachableError(
-                f"{market.get('symbol')} 日线字段不足（需要 quote asset volume）: {row!r}"
-            )
-        values.append(float(row[7]))
-    return tuple(values)

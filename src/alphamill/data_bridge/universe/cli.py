@@ -44,13 +44,14 @@ from alphamill.data_bridge.universe.definition import (
     require_frozen,
     write_definition,
 )
-from alphamill.data_bridge.universe.discover import evaluate, fetch_snapshot
+from alphamill.data_bridge.universe.discover import evaluate
 from alphamill.data_bridge.universe.errors import (
     ConfirmRequiredError,
     EmptyDefinitionError,
     UniverseError,
     WindowError,
 )
+from alphamill.data_bridge.universe.exchange_snapshot import fetch_snapshot
 from alphamill.data_bridge.universe.rate_limit import RateLimiter, RateLimitPolicy
 from alphamill.data_bridge.universe.verdicts import VERDICT_ACTIVE
 

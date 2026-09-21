@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from alphamill.data_bridge.universe import criteria as criteria_mod
-from alphamill.data_bridge.universe import discover
+from alphamill.data_bridge.universe import discover, exchange_snapshot
 from alphamill.data_bridge.universe.criteria import load_criteria
 from alphamill.data_bridge.universe.definition import build_definition
 from alphamill.data_bridge.universe.discover import (
@@ -43,7 +43,12 @@ def test_default_criteria_is_the_q001_ruling() -> None:
     assert loaded.turnover_lookback_days == 90
     assert loaded.turnover_rank_top_n == 40
     assert loaded.min_listed_days == 180
-    assert loaded.exclude_rules == ("stablecoin_pair", "leveraged_token", "index_basket")
+    assert loaded.exclude_rules == (
+        "stablecoin_pair",
+        "leveraged_token",
+        "index_basket",
+        "tokenized_tradfi",
+    )
 
 
 def test_criteria_rejects_unknown_and_missing_keys(tmp_path) -> None:
@@ -158,6 +163,65 @@ def test_structural_exclusions_each_record_their_own_reason() -> None:
     assert reasons["JUP/USDT"] is None
 
 
+def test_tokenized_tradfi_is_excluded_by_rule() -> None:
+    """代币化 TradFi（EQUITY/COMMODITY）不是加密资产：按规则名排除并记原因。"""
+    evaluation = discover.evaluate(
+        _snapshot(
+            _market("BTC", turnover=9_000.0),
+            _market("XAU", turnover=8_000.0, underlying_type="COMMODITY"),
+            _market("MSTR", turnover=7_000.0, underlying_type="EQUITY"),
+        ),
+        _criteria(turnover_rank_top_n=5),
+    )
+    reasons = {item.rank_symbol: item.excluded_reason for item in evaluation.candidates}
+    assert reasons["XAU/USDT"] == discover.REASON_TRADFI
+    assert reasons["MSTR/USDT"] == discover.REASON_TRADFI
+    assert evaluation.selected_pairs() == ("BTC/USDT",)
+
+
+def test_market_without_spot_route_is_excluded() -> None:
+    """数据可达性前置：只有永续、现货取不到数的标的进不了研究宇宙。"""
+    evaluation = discover.evaluate(
+        _snapshot(
+            _market("BTC", turnover=9_000.0),
+            _market("HYPE", turnover=8_000.0, data_available=False),
+        ),
+        _criteria(turnover_rank_top_n=5),
+    )
+    reasons = {item.rank_symbol: item.excluded_reason for item in evaluation.candidates}
+    assert reasons["HYPE/USDT"] == discover.REASON_NO_SPOT
+    assert evaluation.selected_pairs() == ("BTC/USDT",)
+
+
+def test_thousand_scaled_perp_maps_to_spot_symbol() -> None:
+    """1000× 缩放合约（永续 1000PEPE）映射到现货 PEPE，两者都入档。"""
+    evaluation = discover.evaluate(
+        _snapshot(_market("1000PEPE", turnover=5_000.0, data_base="PEPE")),
+        _criteria(turnover_rank_top_n=5),
+    )
+    selected = evaluation.selected[0]
+    assert selected.db_symbol == "PEPE/USDT"
+    assert selected.rank_symbol == "1000PEPE/USDT"
+    assert selected.lake_pair == "PEPE-USDT"
+
+
+def test_two_perps_mapping_to_same_data_pair_keep_the_liquid_one() -> None:
+    """同一数据侧 pair 的重复映射只保留流动性最高者，另一个记 duplicate_data_pair。"""
+    evaluation = discover.evaluate(
+        _snapshot(
+            _market("PEPE", turnover=3_000.0, data_base="PEPE"),
+            _market("1000PEPE", turnover=9_000.0, data_base="PEPE"),
+        ),
+        _criteria(turnover_rank_top_n=5),
+    )
+    assert evaluation.selected_pairs() == ("PEPE/USDT",)
+    assert evaluation.selected[0].rank_symbol == "1000PEPE/USDT"
+    dropped = [item for item in evaluation.candidates if item.excluded_reason]
+    assert [(item.rank_symbol, item.excluded_reason) for item in dropped] == [
+        ("PEPE/USDT", discover.REASON_DUPLICATE_DATA)
+    ]
+
+
 def test_repeat_evaluation_yields_identical_candidates_and_universe_id() -> None:
     """AC-001：同一口径 + 同一快照，两次发现得到同一候选清单与同一 universe_id。"""
     snapshot = _snapshot(
@@ -219,7 +283,13 @@ class _FakeExchange:
         self.closed = True
 
 
-def _binance_market(base: str, *, created_ms: int, symbol_id: str | None = None) -> dict[str, Any]:
+def _binance_market(
+    base: str,
+    *,
+    created_ms: int,
+    symbol_id: str | None = None,
+    underlying_type: str = "COIN",
+) -> dict[str, Any]:
     return {
         "symbol": f"{base}/USDT:USDT",
         "id": symbol_id or f"{base}USDT",
@@ -230,7 +300,19 @@ def _binance_market(base: str, *, created_ms: int, symbol_id: str | None = None)
         "contract": True,
         "active": True,
         "created": created_ms,
-        "info": {"onboardDate": created_ms},
+        "info": {"onboardDate": created_ms, "underlyingType": underlying_type},
+    }
+
+
+def _spot_market(base: str) -> dict[str, Any]:
+    """数据侧（现货）市场：决定候选能不能被回填。"""
+    return {
+        "symbol": f"{base}/USDT",
+        "id": f"{base}USDT",
+        "base": base,
+        "quote": "USDT",
+        "spot": True,
+        "active": True,
     }
 
 
@@ -242,21 +324,24 @@ def _klines(quote_volume: float, days: int) -> list[list[Any]]:
 
 
 def test_fetch_snapshot_parses_klines_and_derives_pairs(monkeypatch) -> None:
-    monkeypatch.setattr(discover, "_sleep", lambda _seconds: None)
+    monkeypatch.setattr(exchange_snapshot, "_sleep", lambda _seconds: None)
     created_ms = int(datetime(2025, 1, 1, tzinfo=UTC).timestamp() * 1000)
     markets = {
         "BTC/USDT:USDT": _binance_market("BTC", created_ms=created_ms),
         "ETH/USDT:USDT": _binance_market("ETH", created_ms=created_ms),
         # 非 USDT 计价与现货合约都必须被跳过
         "BTC/USDC:USDC": {**_binance_market("BTC", created_ms=created_ms), "quote": "USDC"},
-        "SPOT/USDT": {"symbol": "SPOT/USDT", "base": "SPOT", "quote": "USDT", "swap": False},
+        "SPOT/USDT": {**_spot_market("SPOT"), "swap": False},
+        # 数据侧（现货）市场
+        "BTC/USDT": _spot_market("BTC"),
+        "ETH/USDT": _spot_market("ETH"),
     }
     klines = {
         "BTCUSDT": _klines(1_000.0, 3),
         "ETHUSDT": _klines(500.0, 3),
     }
     exchange = _FakeExchange(markets, klines)
-    snapshot = discover.fetch_snapshot(
+    snapshot = exchange_snapshot.fetch_snapshot(
         _criteria(turnover_lookback_days=3),
         exchange=exchange,
         now=datetime(2026, 9, 19, tzinfo=UTC),
@@ -276,13 +361,16 @@ def test_fetch_snapshot_parses_klines_and_derives_pairs(monkeypatch) -> None:
 
 
 def test_fetch_snapshot_lookback_window_truncates_series(monkeypatch) -> None:
-    monkeypatch.setattr(discover, "_sleep", lambda _seconds: None)
+    monkeypatch.setattr(exchange_snapshot, "_sleep", lambda _seconds: None)
     created_ms = int(datetime(2025, 1, 1, tzinfo=UTC).timestamp() * 1000)
     exchange = _FakeExchange(
-        {"BTC/USDT:USDT": _binance_market("BTC", created_ms=created_ms)},
+        {
+            "BTC/USDT:USDT": _binance_market("BTC", created_ms=created_ms),
+            "BTC/USDT": _spot_market("BTC"),
+        },
         {"BTCUSDT": _klines(2_000.0, 5) + _klines(1_000.0, 3)},
     )
-    snapshot = discover.fetch_snapshot(
+    snapshot = exchange_snapshot.fetch_snapshot(
         _criteria(turnover_lookback_days=3),
         exchange=exchange,
         now=datetime(2026, 9, 19, tzinfo=UTC),
@@ -294,26 +382,31 @@ def test_fetch_snapshot_lookback_window_truncates_series(monkeypatch) -> None:
 
 
 def test_fetch_snapshot_rejects_missing_onboard_date(monkeypatch) -> None:
-    monkeypatch.setattr(discover, "_sleep", lambda _seconds: None)
+    monkeypatch.setattr(exchange_snapshot, "_sleep", lambda _seconds: None)
     market = _binance_market("BTC", created_ms=0)
     market["created"] = None
     market["info"] = {}
-    exchange = _FakeExchange({"BTC/USDT:USDT": market}, {"BTCUSDT": _klines(1.0, 1)})
+    exchange = _FakeExchange(
+        {"BTC/USDT:USDT": market, "BTC/USDT": _spot_market("BTC")}, {"BTCUSDT": _klines(1.0, 1)}
+    )
     with pytest.raises(ExchangeUnreachableError, match="onboardDate"):
-        discover.fetch_snapshot(
+        exchange_snapshot.fetch_snapshot(
             _criteria(), exchange=exchange, now=datetime(2026, 9, 19, tzinfo=UTC)
         )
 
 
 def test_fetch_snapshot_rejects_short_kline_rows(monkeypatch) -> None:
-    monkeypatch.setattr(discover, "_sleep", lambda _seconds: None)
+    monkeypatch.setattr(exchange_snapshot, "_sleep", lambda _seconds: None)
     created_ms = int(datetime(2025, 1, 1, tzinfo=UTC).timestamp() * 1000)
     exchange = _FakeExchange(
-        {"BTC/USDT:USDT": _binance_market("BTC", created_ms=created_ms)},
+        {
+            "BTC/USDT:USDT": _binance_market("BTC", created_ms=created_ms),
+            "BTC/USDT": _spot_market("BTC"),
+        },
         {"BTCUSDT": [[1, 1, 1, 1, 1, 1]]},
     )
     with pytest.raises(ExchangeUnreachableError, match="字段不足"):
-        discover.fetch_snapshot(
+        exchange_snapshot.fetch_snapshot(
             _criteria(), exchange=exchange, now=datetime(2026, 9, 19, tzinfo=UTC)
         )
 
@@ -326,7 +419,7 @@ def test_fetch_snapshot_rejects_unreachable_exchange() -> None:
             raise RuntimeError("connection refused")
 
     with pytest.raises(ExchangeUnreachableError, match="加载"):
-        discover.fetch_snapshot(_criteria(), exchange=_Boom())
+        exchange_snapshot.fetch_snapshot(_criteria(), exchange=_Boom())
 
 
 def test_evaluate_rejects_market_type_mismatch() -> None:
@@ -345,6 +438,7 @@ def test_criteria_module_exposes_default_path() -> None:
 def test_candidate_payload_round_trips_through_definition() -> None:
     candidate = Candidate(
         db_symbol="BTC/USDT",
+        rank_symbol="BTC/USDT",
         lake_pair="BTC-USDT-PERP",
         base="BTC",
         quote="USDT",

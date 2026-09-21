@@ -94,7 +94,7 @@ def test_discover_rejects_missing_criteria_fields(tmp_path, lake, capsys) -> Non
 
 def test_discover_rejects_unreachable_exchange(lake, monkeypatch, capsys) -> None:
     def boom(criteria, now=None):
-        from alphamill.data_bridge.universe.discover import fetch_snapshot as real
+        from alphamill.data_bridge.universe.exchange_snapshot import fetch_snapshot as real
 
         return real(criteria, exchange=_FakeExchange(boom=True))
 
