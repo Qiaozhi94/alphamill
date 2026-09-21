@@ -236,6 +236,44 @@ def test_failure_does_not_speed_up_following_requests() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# 5b. 瞬时网络异常同样可重试（T020 批 1 真跑实测：代理链路连接重置）
+
+
+def test_transient_network_errors_are_retryable() -> None:
+    import ccxt
+
+    from alphamill.data_bridge.universe.rate_limit import is_retryable_error
+
+    assert is_retryable_error(ccxt.NetworkError("binance GET https://api.binance.com"))
+    assert is_retryable_error(ConnectionResetError(104, "Connection reset by peer"))
+    assert is_retryable_error(RuntimeError("Connection aborted."))
+    assert is_retryable_error(TimeoutError("timed out"))
+    assert is_retryable_error(RuntimeError("HTTP 429"))
+    assert not is_retryable_error(ValueError("bad parameter"))
+    # 类型错误不是瞬时故障：重试只会重复失败
+    assert not is_retryable_error(TypeError("'<=' not supported between str and int"))
+
+
+def test_network_error_is_retried_then_succeeds() -> None:
+    waits: list[float] = []
+    limiter = RateLimiter(
+        RateLimitPolicy(min_interval_seconds=0.0, max_retries=4, base_backoff_seconds=1.0),
+        clock=lambda: 0.0,
+        sleep=waits.append,
+    )
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise ConnectionResetError(104, "Connection reset by peer")
+        return "ok"
+
+    assert limiter.call(flaky) == "ok"
+    assert calls["n"] == 3
+    assert waits == [1.0, 2.0]
+
+
 # 5. is_rate_limit_error 正反例
 # --------------------------------------------------------------------------- #
 

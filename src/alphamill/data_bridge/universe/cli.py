@@ -95,7 +95,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     backfill.add_argument("--lake-root", default=None)
     backfill.add_argument("--reports-dir", default=None)
     backfill.add_argument("--min-interval", type=float, default=0.5)
-    backfill.add_argument("--max-retries", type=int, default=5)
+    backfill.add_argument("--max-retries", type=int, default=8)
 
     gate = sub.add_parser("gate", help="跑质量门并登记准入")
     gate.add_argument("--universe", required=True)

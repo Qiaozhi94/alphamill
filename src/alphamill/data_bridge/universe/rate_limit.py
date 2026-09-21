@@ -46,6 +46,41 @@ RATE_LIMIT_ERROR_CLASS_NAMES = frozenset({"RateLimitExceeded", "DDoSProtection",
 #: 消息特征（比较前统一小写）：交易所常把配额信息写在文本里，而异常类型是泛化的。
 RATE_LIMIT_MESSAGE_MARKERS = ("429", "rate limit", "too many request", "banned")
 
+#: 瞬时网络类异常：长跑（数天、无人值守）里连接重置/超时是常态，判死一个 pair 要重跑
+#: 数小时，因此与限流同样按退避重试；同样只按类名与消息特征判别，不 import ccxt。
+RETRYABLE_ERROR_CLASS_NAMES = frozenset(
+    {
+        "NetworkError",
+        "RequestTimeout",
+        "ExchangeNotAvailable",
+        "Timeout",
+        "ReadTimeout",
+        "ConnectTimeout",
+        "ConnectionError",
+        "ConnectionResetError",
+        "ConnectionAbortedError",
+        "ProtocolError",
+        "SSLError",
+        "ChunkedEncodingError",
+        "RemoteDisconnected",
+    }
+)
+RETRYABLE_MESSAGE_MARKERS = (
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "timed out",
+    "timeout",
+    "temporarily unavailable",
+    "remote end closed",
+    "eof occurred",
+    "bad gateway",
+    "service unavailable",
+    "502",
+    "503",
+    "504",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class RateLimitPolicy:
@@ -55,8 +90,9 @@ class RateLimitPolicy:
     #: 2400/min（≈40 请求/秒）；OHLCV 分页单请求权重 1–10，0.5s ⇒ ≤120 请求/分钟，
     #: 给 pair 内并发与权重抖动留出余量。
     min_interval_seconds: float = 0.5
-    #: 总尝试次数上限（含首次尝试）：1 = 只试一次、不重试。
-    max_retries: int = 5
+    #: 总尝试次数上限（含首次尝试）：1 = 只试一次、不重试。默认 8 次（≈2 分钟退避）
+    #: 以覆盖长跑里常见的瞬时网络抖动。
+    max_retries: int = 8
     #: 首次失败后的退避时长，此后逐次翻倍。
     base_backoff_seconds: float = 1.0
     #: 单次退避上限：429/418 的惩罚窗口以分钟计，但封顶 60s 避免单个 pair 静默等过久。
@@ -116,10 +152,10 @@ class RateLimiter:
         return wait
 
     def call(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-        """acquire 后执行 `func`；限流异常按指数退避重试，超上限抛异常。
+        """acquire 后执行 `func`；限流与瞬时网络异常按指数退避重试，超上限抛异常。
 
-        非限流异常不重试，原样抛出；退避重试用尽后抛 `RateLimitExhaustedError`，
-        最后一次限流异常挂在 `__cause__` 上（`from exc` 保留因果链）。
+        其余异常不重试、原样抛出；退避用尽后抛 `RateLimitExhaustedError`，最后一次
+        异常挂在 `__cause__` 上（`from exc` 保留因果链）。
         """
         attempts = self._policy.max_retries
         last_exc: Exception | None = None
@@ -128,13 +164,13 @@ class RateLimiter:
             try:
                 return func(*args, **kwargs)
             except Exception as exc:
-                if not is_rate_limit_error(exc):
+                if not is_retryable_error(exc):
                     raise
                 last_exc = exc
                 if attempt < attempts:
                     self._wait(self._policy.backoff_seconds(attempt))
         raise RateLimitExhaustedError(
-            f"限流退避重试超上限（max_retries={attempts}，最后一次："
+            f"退避重试超上限（max_retries={attempts}，最后一次："
             f"{type(last_exc).__name__}: {last_exc}）"
         ) from last_exc
 
@@ -142,6 +178,21 @@ class RateLimiter:
         """唯一等待出口：sleep 由外部注入，等待时长计入累计观测值。"""
         self._sleep(seconds)
         self.total_wait_seconds += seconds
+
+
+def is_retryable_error(exc: BaseException) -> bool:
+    """`call()` 的重试判据：限流/风控 **或** 瞬时网络故障。
+
+    长跑实测（T020 批 1）：代理链路偶发 `Connection reset by peer`，若只对限流重试，
+    一次抖动就让该 pair 记 failed 并要人工重跑数小时。两类都按同一退避策略重试，
+    且**不提高速率**（`acquire()` 在每次尝试前都会走）。
+    """
+    if is_rate_limit_error(exc):
+        return True
+    if any(cls.__name__ in RETRYABLE_ERROR_CLASS_NAMES for cls in type(exc).__mro__):
+        return True
+    message = str(exc).lower()
+    return any(marker in message for marker in RETRYABLE_MESSAGE_MARKERS)
 
 
 def is_rate_limit_error(exc: BaseException) -> bool:
