@@ -28,14 +28,14 @@ updated: 2026-09-21
 ## 1. 前置条件
 
 - [ ] T001 (`FR-001`, `FR-002`): 确认 spec §8 与 design §10 无开放项，且 GPU 面四项（CUDA 构建参数、`KRONOS_DEVICE: cuda`、设备预留、healthcheck 判据）只在 override 契约表一处定义（design §4 两张表逐格核对） — verify: `spec.md` §8、`design.md` §4/§10
-- [ ] T002 (`NFR-005`, `NFR-002`): **先核验再改配置**——在执行机核验：① NVIDIA 容器运行时可用（`docker run --rm --gpus all <cuda-image> nvidia-smi` 可出卡）；② 驱动版本满足 CUDA 13.0 最低要求（R580 系列及以上，以 NVIDIA 兼容表为准）；③ 在该容器内装 `torch==2.14.0` 自 `whl/cu130`，`torch.cuda.is_available()` 为真且 `get_arch_list()` 含 `sm_89`；④ 记录空载整卡可用显存（`nvidia-smi --query-gpu=memory.free`），<6GB 则按 spec §7 风险行进入重标。任一不通过即停下回 spec §8 重新裁决，不得先改配置再试 — verify: 执行机命令输出归档（hostname / 驱动 / CUDA 版本 / arch list / 空载可用显存）
+- [ ] T002 (`NFR-005`, `NFR-002`): **先核验再改配置**——在执行机核验：① NVIDIA 容器运行时可用（`docker run --rm --gpus all <cuda-image> nvidia-smi` 可出卡）；② 驱动版本满足 CUDA 13.0 最低要求（R580 系列及以上，以 NVIDIA 兼容表为准）；③ 在该容器内装 `torch==2.14.0` 自 `whl/cu130`，`torch.cuda.is_available()` 为真且 `get_arch_list()` 同时含 `sm_89`（当前卡）与 `sm_120`（迁移目标）；④ 记录空载整卡可用显存（`nvidia-smi --query-gpu=memory.free`），<6GB 则按 spec §7 风险行进入重标。任一不通过即停下回 spec §8 重新裁决，不得先改配置再试 — verify: 执行机命令输出归档（hostname / 驱动 / CUDA 版本 / arch list / 空载可用显存）
 
 ## 2. 实现任务
 
 ### Phase 1：参数化与 GPU override（默认面不动）
 
 - [ ] T003 (`FR-001`, `AC-001`): Dockerfile `real` 目标把 torch 的 wheel index 与版本改为 `ARG`，缺省值等于当前字面量；保留 `FROM mock AS real` 派生关系 — verify: `tests/unit/test_f010_build_args_contract.py`
-- [ ] T004 (`FR-002`, `FR-003`, `AC-002`, `AC-003`): 新增 `deployment/docker-compose.gpu.yml`，只覆盖 `kronos-signal-real` 的四项（`build.args.TORCH_INDEX_URL=…/cu130`、`KRONOS_DEVICE: cuda`、nvidia × 1 设备预留、`startswith('cuda')` healthcheck），不碰端口/卷/`restart`/`depends_on`；**默认 compose 与 `.env.example` 不改**；执行机启动命令写入 `docs/alphamill-integration.md` — verify: `tests/unit/test_f010_compose_gpu_contract.py`
+- [ ] T004 (`FR-002`, `FR-003`, `AC-002`, `AC-003`): 新增 `deployment/docker-compose.gpu.yml`，只覆盖 `kronos-signal-real` 的四项加独立镜像标签（`image: alphamill/kronos-signal-real:gpu`，与默认 CPU 构建互不覆盖；`build.args.TORCH_INDEX_URL=…/cu130`、`KRONOS_DEVICE: cuda`、nvidia × 1 设备预留、`startswith('cuda')` healthcheck），不碰端口/卷/`restart`/`depends_on`；**默认 compose 与 `.env.example` 不改**；执行机启动命令写入 `docs/alphamill-integration.md` — verify: `tests/unit/test_f010_compose_gpu_contract.py`
 - [ ] T005 (`FR-005`, `AC-005`): 迁移 F004 契约测试的 **Dockerfile 段**——`torch==2.14.0` 与 CPU wheel 索引两条字面量断言收窄为"`ARG` 缺省值等于该字面量且 `pip install` 引用该参数"，对应变异条目改写为"改 `ARG` 缺省值"；compose 段断言（`KRONOS_DEVICE: cpu`、healthcheck `== 'cpu'`）原样保留；F004 全部既有变异一条不删。**同文件并行**：F009 T013 改同一文件的端口段——本任务不碰端口段，先合入者为基线，后合入者 rebase — verify: `tests/unit/test_f004_compose_profile_contract.py`
 
 ### Phase 2：失败可见与可观测
@@ -58,7 +58,7 @@ updated: 2026-09-21
 
 - [ ] T013 (`AC-001`, `AC-002`, `AC-003`): 运行参数化单元套件并逐条给出变异判红证明（改缺省值 / 把判据写死回 cpu 即红） — verify: `tests/unit/test_f010_build_args_contract.py`、`tests/unit/test_f010_compose_gpu_contract.py`
 - [ ] T014 (`AC-005`): 运行迁移后的 F004 契约套件，全部既有变异必须仍判红，默认镜像 `import torch` 仍判红 — verify: `tests/unit/test_f004_compose_profile_contract.py`
-- [ ] T015 (`AC-004`): 两层证伪——单元层（开发机/CI）跑 `tests/unit/test_f010_device_strict.py` 并做删严格分支的变异判红；执行机层以**不叠加设备预留**但 `KRONOS_DEVICE=cuda` 启动 CUDA 镜像，断言非零退出、不重启、日志含严格分支文案、`/health` 不可达。**不得**以"开发机叠加 override 被守护进程拒绝"充当证据——那条路径容器从未启动，严格分支没被执行（文档检视 R1-003） — verify: `tests/unit/test_f010_device_strict.py` + 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f010_gpu_runtime.py`
+- [ ] T015 (`AC-004`): 两层证伪——单元层（开发机/CI）跑 `tests/unit/test_f010_device_strict.py` 并做删严格分支的变异判红；执行机层两例：① `docker run` GPU 镜像 `alphamill/kronos-signal-real:gpu`、**不加 `--gpus`**、`-e KRONOS_DEVICE=cuda` → 无设备分支；② 默认 CPU 镜像 + `-e KRONOS_DEVICE=cuda` → CPU wheel 分支；均断言非零退出、日志含对应文案、`/health` 不可达。**不得**以"开发机叠加 override 被守护进程拒绝"充当证据——那条路径容器从未启动，严格分支没被执行（文档检视 R1-003） — verify: `tests/unit/test_f010_device_strict.py` + 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f010_gpu_runtime.py`
 - [ ] T016 (`AC-006`, `AC-007`, `AC-008`): 在执行机取 GPU 证据（CUDA 可用、真实信号、显存上升与峰值对照），记录 hostname 与 GPU 型号 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f010_gpu_runtime.py`
 - [ ] T017 (`AC-001`, `AC-002`, `AC-004`, `AC-005`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 
