@@ -201,6 +201,52 @@ def test_backfill_rejects_invalid_and_missing_window(lake, monkeypatch, capsys) 
     assert "E_UNIVERSE_WINDOW" in capsys.readouterr().err
 
 
+def test_backfill_fetch_limit_overrides_module_default(lake, monkeypatch, capsys) -> None:
+    """`--fetch-limit` 覆盖单次请求根数（Binance 现货上限 1000，默认 100 会让请求数多 10 倍）。"""
+    from alphamill.data_bridge.collector import historical_backfill as backfill_mod
+    from alphamill.data_bridge.universe import backfill_runner as runner
+
+    universe_id = _definition(lake)
+    cli.main(["freeze", "--def", universe_id, "--confirm", "--lake-root", str(lake)])
+    capsys.readouterr()
+
+    original = backfill_mod.FETCH_LIMIT
+    monkeypatch.setattr(cli, "db_connect", lambda: _FakeConn())
+    monkeypatch.setattr(runner, "run_backfill_batch", lambda **kwargs: _FakeRun())
+    seen: list[int] = []
+    try:
+        code = cli.main(
+            [
+                "backfill",
+                "--universe",
+                universe_id,
+                "--batch",
+                "1",
+                "--start",
+                WINDOW[0],
+                "--end",
+                WINDOW[1],
+                "--fetch-limit",
+                "1000",
+                "--lake-root",
+                str(lake),
+            ]
+        )
+        seen.append(backfill_mod.FETCH_LIMIT)
+    finally:
+        backfill_mod.FETCH_LIMIT = original
+    assert code == 0
+    assert seen == [1000]
+
+
+class _FakeRun:
+    def document(self):
+        return {"run_id": "test", "pairs": []}
+
+    def failed_pairs(self):
+        return ()
+
+
 def test_backfill_rejects_insufficient_disk(lake, monkeypatch, capsys) -> None:
     universe_id = _definition(lake)
     cli.main(["freeze", "--def", universe_id, "--confirm", "--lake-root", str(lake)])

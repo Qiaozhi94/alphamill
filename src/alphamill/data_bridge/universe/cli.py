@@ -95,6 +95,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     backfill.add_argument("--lake-root", default=None)
     backfill.add_argument("--reports-dir", default=None)
     backfill.add_argument("--min-interval", type=float, default=0.5)
+    backfill.add_argument(
+        "--fetch-limit",
+        type=int,
+        default=None,
+        help="单次 klines 请求的 K 线根数（Binance 现货上限 1000；缺省沿用 F001 的 100）",
+    )
     backfill.add_argument("--max-retries", type=int, default=8)
 
     gate = sub.add_parser("gate", help="跑质量门并登记准入")
@@ -187,6 +193,10 @@ def _backfill(args) -> int:
     rows = estimate_rows(pairs=len(plans), window_days=(end - start).total_seconds() / 86400)
     require_headroom(lake_root_for(args), required_bytes(rows))
     apply_listing_starts(definition, plans, start)
+    if args.fetch_limit is not None:
+        from alphamill.data_bridge.collector import historical_backfill as backfill_mod
+
+        backfill_mod.FETCH_LIMIT = max(1, int(args.fetch_limit))
     limiter = RateLimiter(
         RateLimitPolicy(min_interval_seconds=args.min_interval, max_retries=args.max_retries)
     )

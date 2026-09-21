@@ -33,8 +33,11 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG="$REPO_F008/reports/backfill/batch${BATCH}-${STAMP}.log"
 mkdir -p "$(dirname "$LOG")"
 
+# FETCH_LIMIT：Binance 现货 klines 单请求上限 1000 根（F001 默认 100 会让请求数多 10 倍）
+FETCH="${FETCH_LIMIT:-1000}"
 ARGS=(--universe "$UNIVERSE" --batch "$BATCH" --start "$START" --end "$END"
-      --lake-root "$LAKE" --reports-dir "$REPO_F008/reports/backfill")
+      --lake-root "$LAKE" --reports-dir "$REPO_F008/reports/backfill"
+      --fetch-limit "$FETCH")
 echo "start batch=$BATCH at $STAMP -> $LOG"
 PYTHONPATH=src nohup .venv/bin/python -m alphamill.data_bridge.universe backfill "${ARGS[@]}" \
   >"$LOG" 2>&1 &
