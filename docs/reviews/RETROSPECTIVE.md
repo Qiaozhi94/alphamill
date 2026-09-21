@@ -923,3 +923,4 @@
 - **`origin` 分布**：original-coding 9、spec-drift 3、fix-regression 5。**存活轮数**：R1 的 12 条 1→2，R2 的 4 条 2→3，R3-001 当轮关闭；未触发不收敛升级协议。
 - **裁决分布**：accepted 17 / partial 0 / rejected 0。**建议命中率**：17 条中 15 条实质一致；两条偏离——R1-004 建议"healthcheck 读容器内 `KRONOS_DEVICE`"，实际改为"判据与 `KRONOS_DEVICE` 同处 override 文件"（override 方案下更简单）；R1-005 建议"放进 `eager_load()`"，实际下沉到 `_load_predictor()` 调用的 `_resolve_device()`，同时覆盖 `/predict` 惰性加载。
 - **跨 Feature 联动**：R1-005（restore 绕过预检）与 R1-007（F009 T013 同改 F004 测试文件）说明 F009/F010 的交付边不止 AC-012 一条；F010 → F003 的 cu130 同步项已登记在 BACKLOG。
+- **合入前 rebase 抓到的漂移**（未编号，收口时修复）：检视期间 `origin/main` 落入 `9e12512`（F003 T033 只依赖 F009、不依赖 F010），F010 spec/tasks 里七处"解除 F003 T033 前置"随即失真；rebase 后同一收口提交改写。教训：并行会话下，闭环前的 `fetch + rebase` 不是机械步骤，要重新扫一遍被检文档对上游的引用。

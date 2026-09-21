@@ -52,7 +52,7 @@ updated: 2026-09-21
 ### Phase 4：解除下游先红态
 
 - [ ] T011 (`FR-006`, `AC-009`): 移除 `tests/integration/test_f009_vram_release.py` 的 `xfail(strict=True)`，在执行机真实通过（显存下降且卸载后整卡可用显存达到训练预算）。若 T002 记录的空载可用显存已 <6GB，先按 spec §7 风险行重标 §7.1 夜槽行并在同一提交同步 F003 `vram_limit_gb` 缺省，再以重标后的预算判定。**前置**：F009 已合入主干（载体与控制面由它交付并保持先红态）；F009 不反向等待本任务（F009 检视 R4-003） — verify: `tests/integration/test_f009_vram_release.py`
-- [ ] T012 (`FR-006`): 架构 §7.1 的"GPU 基座前置"条改写为已落地，并把 F009 spec 的 NFR-006 / SC-005 与 F003 T033 的前置线同步为已解除 — verify: `docs/alphamill-architecture.md` §7.1 + `python3 tools/verify.py`
+- [ ] T012 (`FR-006`): 架构 §7.1 的"GPU 基座前置"条改写为已落地，并把 F009 spec 的 NFR-006 / SC-005 的显存结论前置同步为已解除（F003 T033 只依赖 F009，不在本任务改写范围） — verify: `docs/alphamill-architecture.md` §7.1 + `python3 tools/verify.py`
 
 ## 3. 验证与验收任务
 

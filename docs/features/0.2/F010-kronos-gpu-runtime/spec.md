@@ -25,7 +25,7 @@ updated: 2026-09-21
 - **功能类型**：runtime / infra
 - **规格模式**：full
 - **变更类型**：MODIFIED
-- **一句话意图**：把 `kronos-signal-real` 从 CPU 实例升级为可在执行机 GPU 上真实推理的实例——torch 的 wheel 索引改由构建参数驱动、GPU 面（设备预留 + `KRONOS_DEVICE=cuda` + GPU 版 healthcheck + CUDA 构建参数）整体放进独立的 compose override 文件显式叠加，本 feature 不改动默认 compose 文件；F004 锁死 CPU wheel 的 Dockerfile 断言迁移为"构建参数缺省值是 CPU"，从而解除 F009 AC-012 与 F003 T033 的硬前置。
+- **一句话意图**：把 `kronos-signal-real` 从 CPU 实例升级为可在执行机 GPU 上真实推理的实例——torch 的 wheel 索引改由构建参数驱动、GPU 面（设备预留 + `KRONOS_DEVICE=cuda` + GPU 版 healthcheck + CUDA 构建参数）整体放进独立的 compose override 文件显式叠加，本 feature 不改动默认 compose 文件；F004 锁死 CPU wheel 的 Dockerfile 断言迁移为"构建参数缺省值是 CPU"，从而解除 F009 AC-012 的先红态、为夜槽链路提供第一份真实显存证据（F003 T033 只依赖 F009，不依赖本 feature，见 `9e12512`）。
 
 ## 1. 问题、目标与非目标
 
@@ -38,7 +38,7 @@ updated: 2026-09-21
 - healthcheck 以 `/health` 的 `device == 'cpu'` 为通过条件；
 - 以上三点被 `tests/unit/test_f004_compose_profile_contract.py` 锁成硬断言，并配了变异门（删 CPU wheel index 必须判红）。
 
-F004 把 GPU 直通显式划在范围外是合理的——它要交付的是编排与契约，CPU 推理即可验证。但下游已经攒了两笔账：**F009** 的 SC-005/AC-012（显存真实下降）只能挂先红态；**F003** 的 T033/AC-010（真实卸载取证）因此无法完成，而 F003 是 M2 的主线。换句话说，整条"夜槽腾显存给挖掘训练"的链路至今**没有任何一环在真实显存上验证过**。
+F004 把 GPU 直通显式划在范围外是合理的——它要交付的是编排与契约，CPU 推理即可验证。但下游已经攒了账：**F009** 的 SC-005/AC-012（显存真实下降）只能挂先红态；**F003** 的 T033 虽然只依赖 F009 的控制面（CPU 实例即可取控制面语义证据），但"卸载后腾出训练预算"这条显存结论同样无从验证，而 F003 是 M2 的主线。换句话说，整条"夜槽腾显存给挖掘训练"的链路至今**没有任何一环在真实显存上验证过**。
 
 ### 目标
 
@@ -48,7 +48,7 @@ F004 把 GPU 直通显式划在范围外是合理的——它要交付的是编�
 - F004 锁死 CPU wheel 的 Dockerfile 断言与变异门**迁移**为"构建参数缺省值是 CPU wheel"；F004 的 compose 断言（`KRONOS_DEVICE: cpu`、healthcheck `device == 'cpu'`）因默认文件不动而**原样保留**；F004 的既有意图（默认镜像不含 torch、real 不退回 mock）一条不丢；
 - 配置显式要求 cuda 而实际拿不到 cuda 时，**任何加载路径**（启动与 F009 `restore` 的重载）都失败可见，不静默回落 cpu；
 - 在执行机实测常驻显存占用并与架构 §7.1 的 ≤3GB 预算对照，超出即如实记录并触发预算重标；
-- 解除 F009 AC-012 与 F003 T033 的硬前置。
+- 解除 F009 AC-012 的先红态，让夜槽"卸载腾显存"第一次有真实显存证据（F003 T033 不依赖本 feature）。
 
 ### 非目标
 
@@ -65,7 +65,7 @@ F004 把 GPU 直通显式划在范围外是合理的——它要交付的是编�
 
 作为夜槽编排的运维者，我希望执行机上的 `kronos-signal-real` 以 CUDA 加载模型并占用可观测的显存，以便"卸载腾显存"这件事有真实对象。
 
-**为什么是这个优先级**：这是本 feature 的全部理由。没有它，F009 的控制面在语义上完整但显存面空转，F003 的 T033 永远取不到证据。
+**为什么是这个优先级**：这是本 feature 的全部理由。没有它，F009 的控制面在语义上完整但显存面空转，夜槽"卸载后腾出训练预算"这条结论永远只能停在控制面语义层。
 
 **独立测试**：在执行机叠加 `docker-compose.gpu.yml` 启动实例，断言 `/health` 的 `device` 以 `cuda` 开头、`model_loaded=true`，且 `nvidia-smi --query-gpu=memory.used` 相对启动前有可观测增长。
 
@@ -209,7 +209,7 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 
 ### Requirement: 解除下游先红态（`FR-006`）
 
-本 feature 落地后，F009 的 AC-012 载体 `tests/integration/test_f009_vram_release.py` 应当移除 `xfail(strict=True)` 并在执行机真实通过；F003 的 T033 前置随之解除。该载体由 F009 交付并保持先红态，**解除 xfail 的所有权唯一地归本 feature**——F009 不因此项未完成而阻塞收口。
+本 feature 落地后，F009 的 AC-012 载体 `tests/integration/test_f009_vram_release.py` 应当移除 `xfail(strict=True)` 并在执行机真实通过。F003 T033 只依赖 F009（其载体 `test_f003_kronos_lifecycle.py` 不含显存断言），不以本条为前置。该载体由 F009 交付并保持先红态，**解除 xfail 的所有权唯一地归本 feature**——F009 不因此项未完成而阻塞收口。
 
 #### Scenario: 先红态转正
 
@@ -270,7 +270,7 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 - **SC-002**：默认面无回归——本 feature 不改动默认 compose 文件、默认构建参数下 torch 安装命令等价、CI 行为不变；
 - **SC-003**：契约迁移无损——F004 的全部既有变异迁移后仍全部判红；
 - **SC-004**：预算已标定——常驻显存实测并与 §7.1 的 ≤3GB 对照，超出即触发重标；
-- **SC-005**：下游解锁——F009 AC-012 的先红态解除，F003 T033 的 GPU 前置不再成立。
+- **SC-005**：下游解锁——F009 AC-012 的先红态解除，夜槽显存结论有真实证据。
 
 ### 验收清单
 
@@ -298,7 +298,7 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 
 - 上游 Feature / Contract：F004（Dockerfile 两级目标、compose 两个服务、启动预检、契约与变异门）；架构 §7.1（显存预算与 GPU 基座前置条）；F003 `mining` extra 的 CUDA 构建约定（F003 分支，未合入）。
 - **同文件并行改动**：F009 T013 也改 `tests/unit/test_f004_compose_profile_contract.py`（端口断言段）。本 feature 只改该文件的 Dockerfile 段、不碰默认 compose 文件；两边先合入者为基线，后合入者 rebase 时以对方的段为准（tasks §4）。
-- 下游消费者：**F009**（AC-012 载体的先红态由本 feature 解除）、**F003**（T033 的 GPU 前置由本 feature 解除）。方向：F009 的**完成**不依赖本 feature（其 AC-012 止于载体与先红态）；本 feature 的**取证任务**（AC-009/T011/T018）依赖 F009 已合入主干。两边都不把对方的完成写进自己的完成条件（F009 检视 R4-003）。
+- 下游消费者：**F009**（AC-012 载体的先红态由本 feature 解除）、**F003**（消费本 feature 标定的显存预算；T033 只依赖 F009，不依赖本 feature）。方向：F009 的**完成**不依赖本 feature（其 AC-012 止于载体与先红态）；本 feature 的**取证任务**（AC-009/T011/T018）依赖 F009 已合入主干。两边都不把对方的完成写进自己的完成条件（F009 检视 R4-003）。
 - 外部 / 环境依赖：执行机 `qiaozhi-lt`（Win11 + WSL2 + docker-ce，RTX 4060 Laptop 8GB）的 NVIDIA 驱动与容器 GPU 直通；PyTorch CUDA wheel 源。
 
 ### 决策与风险
