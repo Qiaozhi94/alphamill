@@ -22,7 +22,7 @@ updated: 2026-09-20
 - **系统设计 / Research / Contract 来源**：`docs/alphamill-integration.md`（Kronos 集成操作细节）；契约测试 `tests/integration/test_f003_kronos_lifecycle.py`（客户端可见行为的锁定物）
 - **上游决策**：ADR-0002（Kronos 上游 clone + pin，推理薄壳归本仓）、ADR-0005（呈现与观测架构：不新增口径载体）
 - **基座来源**：F004（`src/alphamill/kronos_service/` 推理薄壳、`kronos-signal` / `kronos-signal-real` 两个 compose 服务、启动预检与 eager load；**均为 CPU 实例**）；F003（客户端 `gpu_slot` 与观测→处置决策表的消费方）
-- **硬前置**：GPU 推理基座（CUDA 镜像、compose 设备预留、`device`/healthcheck 断言改写、F004 回归契约迁移）归独立 Feature（BACKLOG「Kronos GPU 推理基座」，编号 F010 预留）。**仓内当前没有任何 GPU Kronos 实例**，故本 feature 的"真实显存下降"类结论在 F010 落地前一律不成立
+- **显存结论前置（不阻塞本 feature 完成）**：GPU 推理基座（CUDA 镜像、compose 设备预留、`device`/healthcheck 断言改写、F004 回归契约迁移）归独立 Feature（BACKLOG「Kronos GPU 推理基座」，F010，已立项）。**仓内当前没有任何 GPU Kronos 实例**，故本 feature 的"真实显存下降"类结论在 F010 落地前一律不成立；控制面语义交付与收口不等待 F010（完成 DAG 方向为 F009 → F010 取证，见 §3 范围与边界）
 - **功能类型**：backend / runtime
 - **规格模式**：full
 - **变更类型**：ADDED
