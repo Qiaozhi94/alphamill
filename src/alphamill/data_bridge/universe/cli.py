@@ -286,11 +286,8 @@ def _show(args) -> int:
 
 
 def _apply_listing_starts(definition, plans, window_start: datetime) -> None:
-    """把定义里的真实上市时间交给回填层。
-
-    新 pair 大多晚上线：不告诉回填层「这个 pair 什么时候才有 K 线」，交易所会在窗口起点
-    返回空批次，被 F001 的边界检查判成 `stalled` 直接失败（不是数据缺失，是窗口起点问题）。
-    """
+    """把定义里的真实上市时间交给回填层：新 pair 晚上线时，不说清「什么时候才有 K 线」，
+    交易所会在窗口起点返回空批次并被 F001 的边界检查判成 stalled（是窗口起点问题，不是缺失）。"""
     from alphamill.data_bridge.collector import historical_backfill as backfill_mod
 
     listed = {item.db_symbol: item.listed_at for item in definition.selected}

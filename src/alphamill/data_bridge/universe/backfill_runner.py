@@ -2,12 +2,9 @@
 
 （`FR-003` / `DR-003` / `NFR-002` / `AC-003` / `AC-010` / T013 / T014）
 
-三条结构性保证：
-
-1. **未冻结不得驱动**：编排入口先 `require_frozen()`（`FR-002`：未冻结即非零拒绝）；
-2. **断点续跑**：每写完一个 pair 就把 `BackfillRun` 落盘；重跑同一 run 跳过已完成
-   （completed/unavailable）的 pair，未完成的由 `backfill_progress.next_since` 继续；
-3. **失败隔离**：单 pair 失败只记该 pair 的 `status=failed`、断点与错误分类，其他 pair 继续。
+三条结构性保证：**未冻结不得驱动**（入口先 `require_frozen()`）；**断点续跑**（每写完一个
+pair 就落盘 `BackfillRun`，重跑跳过已完成 pair，未完成的由 `backfill_progress.next_since`
+继续）；**失败隔离**（单 pair 失败只记自己的断点与错误分类，其他 pair 继续）。
 """
 
 from __future__ import annotations
@@ -206,11 +203,8 @@ def run_backfill_batch(
 def _split_already_complete(
     conn, exchange_id: str, plans: list[PairPlan], start: datetime, end: datetime
 ):
-    """库侧进度已 `complete` 的 pair 直接记为完成。
-
-    数据已经在库里（进度账本是断点续跑的存储契约），重拉 2 年窗口等于白跑几小时；
-    真实覆盖仍由质量门逐项复核——账本说 complete 而实际有缺口时会被门禁拦住。
-    """
+    """库侧进度已 `complete` 的 pair 直接记为完成：数据已在库里（进度账本是断点续跑的
+    存储契约），重拉 2 年窗口等于白跑几小时；真实覆盖仍由质量门逐项复核。"""
     done: list[tuple[PairPlan, Any, int]] = []
     todo: list[PairPlan] = []
     for plan in plans:
