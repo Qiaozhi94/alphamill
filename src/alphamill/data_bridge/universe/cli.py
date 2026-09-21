@@ -178,6 +178,7 @@ def _backfill(args) -> int:
     plans = runner.plan_batch(definition, batch=args.batch, pairs=_split(args.pairs))
     rows = estimate_rows(pairs=len(plans), window_days=(end - start).total_seconds() / 86400)
     require_headroom(_lake_root(args), required_bytes(rows))
+    _apply_listing_starts(definition, plans, start)
     limiter = RateLimiter(
         RateLimitPolicy(min_interval_seconds=args.min_interval, max_retries=args.max_retries)
     )
@@ -282,6 +283,26 @@ def _show(args) -> int:
 
 
 # ---------------------------------------------------------------- 工具
+
+
+def _apply_listing_starts(definition, plans, window_start: datetime) -> None:
+    """把定义里的真实上市时间交给回填层。
+
+    新 pair 大多晚上线：不告诉回填层「这个 pair 什么时候才有 K 线」，交易所会在窗口起点
+    返回空批次，被 F001 的边界检查判成 `stalled` 直接失败（不是数据缺失，是窗口起点问题）。
+    """
+    from alphamill.data_bridge.collector import historical_backfill as backfill_mod
+
+    listed = {item.db_symbol: item.listed_at for item in definition.selected}
+    entries = []
+    for plan in plans:
+        value = listed.get(plan.db_symbol) or plan.listed_at
+        if not value:
+            continue
+        moment = _parse_moment(value)
+        if moment > window_start:
+            entries.append(f"{plan.db_symbol}={moment.isoformat()}")
+    backfill_mod.LISTING_STARTS = ",".join(entries)
 
 
 def _lake_root(args) -> Path:

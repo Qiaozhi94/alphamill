@@ -232,6 +232,27 @@ def _raise_disk(*_args, **_kwargs):
 # ---------- show ----------
 
 
+def test_apply_listing_starts_only_lists_pairs_listed_after_window_start(lake) -> None:
+    """晚上线的 pair 必须把真实上市时间交给回填层，否则交易所空批次会被判 stalled。"""
+    from alphamill.data_bridge.collector import historical_backfill as backfill_mod
+    from alphamill.data_bridge.universe import backfill_runner as runner
+    from alphamill.data_bridge.universe.definition import load_definition
+
+    criteria = criteria_for(turnover_rank_top_n=10)
+    definition = build_definition(
+        criteria,
+        evaluate(
+            snapshot(market("OLD", listed_days=700), market("NEW", listed_days=200)), criteria
+        ),
+    )
+    write_definition(definition, lake)
+    loaded = load_definition(definition.universe_id, lake)
+    cli._apply_listing_starts(loaded, runner.plan_batch(loaded), datetime(2026, 1, 1, tzinfo=UTC))
+    entries = dict(item.split("=") for item in backfill_mod.LISTING_STARTS.split(",") if item)
+    assert set(entries) == {"NEW/USDT"}  # OLD 早于窗口起点 → 不需要覆盖
+    assert entries["NEW/USDT"].startswith("2026-03")  # 2026-09-19 往前 200 天
+
+
 def test_show_prints_definition_and_exclusions(lake, capsys) -> None:
     criteria = criteria_for(turnover_rank_top_n=1)
     definition = build_definition(
