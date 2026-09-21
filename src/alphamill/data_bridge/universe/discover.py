@@ -38,6 +38,10 @@ STABLECOIN_BASES = frozenset(
     }
 )
 INDEX_BASKET_BASES = frozenset({"BTCDOM", "DEFI"})
+#: 贵金属背书代币（Binance 的 `underlyingType` 记作 `COIN`，没有可判别的元数据字段，
+#: 只能按标的名单排除）：`PAXG`/`XAUT` 是金本位代币——横截面上与加密资产驱动因素不同。
+#: 维护：Binance 新上同类标的时在此追加，并在口径变更里留痕（改口径即新 universe_id）。
+TOKENIZED_COMMODITY_BASES = frozenset({"PAXG", "XAUT"})
 LEVERAGED_SUFFIXES = ("BULL", "BEAR", "DOWN", "UP")
 MIN_LEVERAGED_UNDERLYING = 3
 
@@ -51,6 +55,7 @@ REASON_STABLECOIN = "stablecoin_pair"
 REASON_LEVERAGED = "leveraged_token"
 REASON_INDEX = "index_basket"
 REASON_TRADFI = "tokenized_tradfi"
+REASON_COMMODITY = "tokenized_commodity"
 REASON_LISTED_DAYS = "listed_days_not_enough"
 REASON_NO_SPOT = "no_spot_market"
 REASON_DUPLICATE_DATA = "duplicate_data_pair"
@@ -285,6 +290,8 @@ def _structural_exclusion(
     if REASON_TRADFI in rules and underlying_type.upper() != CRYPTO_UNDERLYING:
         return REASON_TRADFI
     upper_base = base.upper()
+    if REASON_COMMODITY in rules and upper_base in TOKENIZED_COMMODITY_BASES:
+        return REASON_COMMODITY
     if REASON_STABLECOIN in rules and upper_base in STABLECOIN_BASES:
         return REASON_STABLECOIN
     if REASON_LEVERAGED in rules:

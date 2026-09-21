@@ -10,6 +10,7 @@
     "stablecoin_pair",
     "leveraged_token",
     "index_basket",
-    "tokenized_tradfi"
+    "tokenized_tradfi",
+    "tokenized_commodity"
   ]
 }

@@ -48,6 +48,7 @@ def test_default_criteria_is_the_q001_ruling() -> None:
         "leveraged_token",
         "index_basket",
         "tokenized_tradfi",
+        "tokenized_commodity",
     )
 
 
@@ -176,6 +177,22 @@ def test_tokenized_tradfi_is_excluded_by_rule() -> None:
     reasons = {item.rank_symbol: item.excluded_reason for item in evaluation.candidates}
     assert reasons["XAU/USDT"] == discover.REASON_TRADFI
     assert reasons["MSTR/USDT"] == discover.REASON_TRADFI
+    assert evaluation.selected_pairs() == ("BTC/USDT",)
+
+
+def test_tokenized_commodity_is_excluded_by_rule() -> None:
+    """金本位代币（PAXG/XAUT）单独成规则：它们 underlyingType=COIN，只能按标的名单排除。"""
+    evaluation = discover.evaluate(
+        _snapshot(
+            _market("BTC", turnover=9_000.0),
+            _market("PAXG", turnover=8_000.0),
+            _market("XAUT", turnover=7_000.0),
+        ),
+        _criteria(turnover_rank_top_n=5),
+    )
+    reasons = {item.rank_symbol: item.excluded_reason for item in evaluation.candidates}
+    assert reasons["PAXG/USDT"] == discover.REASON_COMMODITY
+    assert reasons["XAUT/USDT"] == discover.REASON_COMMODITY
     assert evaluation.selected_pairs() == ("BTC/USDT",)
 
 

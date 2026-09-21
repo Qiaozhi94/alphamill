@@ -25,6 +25,7 @@ EXCLUDE_RULE_IDS = (
     "leveraged_token",
     "index_basket",
     "tokenized_tradfi",
+    "tokenized_commodity",
 )
 
 _REQUIRED_KEYS = frozenset(
