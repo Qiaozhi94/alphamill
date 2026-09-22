@@ -12,6 +12,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import socket
+import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -131,8 +132,14 @@ def run_backfill_batch(
     hostname: str | None = None,
     batch: int | None = None,
     resume_run_id: str | None = None,
+    max_runtime_seconds: float | None = None,
 ) -> BackfillRun:
-    """执行一批 pair；未冻结的宇宙、非法窗口与空批次都在启动期拒绝。"""
+    """执行一批 pair；未冻结的宇宙、非法窗口与空批次都在启动期拒绝。
+
+    `max_runtime_seconds` 为**时间片**：到点后当前 pair 保存断点并以 `deferred` 收尾，
+    其余 pair 保持 pending——调用方（`scripts/f008-backfill-chunks.sh`）循环调用即可把
+    数天的长跑切成一片片执行，单片被打断只损失一片。
+    """
     run_window_check(start, end)
     definition = require_frozen(universe_id, lake_root)
     selected = tuple(plans)
@@ -189,6 +196,7 @@ def run_backfill_batch(
         _write_run(state["run"], reports_dir)
         _emit(event_sink, state["run"], payload)
 
+    deadline = None if max_runtime_seconds is None else time.monotonic() + max_runtime_seconds
     backfill.run_backfill(
         exchange_id=exchange_id,
         symbols=[plan.db_symbol for plan in remaining],
@@ -197,6 +205,7 @@ def run_backfill_batch(
         conn=conn,
         exchange=exchange,
         limiter=limiter,
+        should_stop=None if deadline is None else (lambda: time.monotonic() >= deadline),
         on_outcome=on_outcome,
     )
     finished = state["run"].finished()

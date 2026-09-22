@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import UTC, datetime
 from typing import Any
@@ -32,6 +33,10 @@ INTERVAL_ENV = "ALPHAMILL_DISCOVER_INTERVAL_SECONDS"
 
 #: 单市场日线的重试次数（瞬时故障退避重试；用尽才判红）
 KLINES_ATTEMPTS = 4
+
+#: 进度日志间隔（市场数）：几百个市场 × 1s + 代理延迟 = 数十分钟，没有进度等于黑箱
+PROGRESS_EVERY = 50
+logger = logging.getLogger("universe-discover")
 
 
 def build_exchange(exchange_id: str):
@@ -82,10 +87,13 @@ def fetch_snapshot(
         }
         records = []
         interval = _market_interval(client)
+        total = len(targets)
         for index, market in enumerate(targets):
             if index:
                 _sleep(interval)
             records.append(_record_for(client, market, criteria, spot_symbols))
+            if (index + 1) % PROGRESS_EVERY == 0 or index + 1 == total:
+                logger.info("snapshot progress %d/%d markets", index + 1, total)
     finally:
         if owned:
             close = getattr(client, "close", None)

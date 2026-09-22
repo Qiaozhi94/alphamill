@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -96,6 +97,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     backfill.add_argument("--reports-dir", default=None)
     backfill.add_argument("--min-interval", type=float, default=0.5)
     backfill.add_argument(
+        "--max-runtime-minutes",
+        type=float,
+        default=None,
+        help="时间片长度（分钟）：到点保存断点并停下，便于把长跑切成一片片执行",
+    )
+    backfill.add_argument(
+        "--resume-run-id", default=None, help="续跑指定 run（沿用同一份 BackfillRun 记录）"
+    )
+    backfill.add_argument(
         "--fetch-limit",
         type=int,
         default=None,
@@ -120,6 +130,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     handlers = {
         "discover": _discover,
         "freeze": _freeze,
@@ -212,6 +224,10 @@ def _backfill(args) -> int:
             reports_dir=Path(args.reports_dir) if args.reports_dir else None,
             limiter=limiter,
             batch=args.batch,
+            resume_run_id=args.resume_run_id,
+            max_runtime_seconds=(
+                None if args.max_runtime_minutes is None else args.max_runtime_minutes * 60
+            ),
         )
     finally:
         conn.close()

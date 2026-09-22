@@ -239,6 +239,47 @@ def test_already_complete_pair_is_skipped_without_fetching(f008_conn, tmp_path) 
     assert entry["ledger_rows"] == 900719
 
 
+def test_time_boxed_chunks_defer_and_resume(f008_conn, tmp_path) -> None:
+    """时间片到点：当前 pair 记 deferred 并保留断点，下一片续完且不重复（长跑分片执行）。"""
+    universe_id = _frozen_universe(tmp_path, pairs=("BTC", "ETH"))
+    definition = load_definition(universe_id, tmp_path)
+    plans = runner.plan_batch(definition)
+
+    first = runner.run_backfill_batch(
+        universe_id=universe_id,
+        plans=plans,
+        start=WINDOW_START,
+        end=WINDOW_END,
+        conn=f008_conn,
+        lake_root=tmp_path,
+        reports_dir=tmp_path / "reports",
+        exchange=FakeExchange(),
+        limiter=_limiter(),
+        max_runtime_seconds=0.0,  # 立刻到点：第一个 pair 还没抓就 deferred
+    )
+    statuses = {item["db_symbol"]: item["status"] for item in first.pairs}
+    assert "deferred" in statuses.values()
+    assert first.failed_pairs() == ()  # 时间片到点不是失败
+    assert set(first.pending()) == {"BTC/USDT", "ETH/USDT"}
+
+    second = runner.run_backfill_batch(
+        universe_id=universe_id,
+        plans=plans,
+        start=WINDOW_START,
+        end=WINDOW_END,
+        conn=f008_conn,
+        lake_root=tmp_path,
+        reports_dir=tmp_path / "reports",
+        exchange=FakeExchange(),
+        limiter=_limiter(),
+        resume_run_id=first.run_id,
+    )
+    assert second.pending() == ()
+    for symbol in ("BTC/USDT", "ETH/USDT"):
+        total, distinct = _count_rows(f008_conn, symbol)
+        assert total == distinct == 150, symbol
+
+
 def test_unfrozen_universe_is_refused(f008_conn, tmp_path) -> None:
     universe_id = _frozen_universe(tmp_path, freeze=False)
     with pytest.raises(UniverseNotFrozenError):

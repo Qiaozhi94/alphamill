@@ -61,6 +61,11 @@ logger = logging.getLogger("historical-backfill")
 STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
 STATUS_UNAVAILABLE = "unavailable"
+STATUS_DEFERRED = "deferred"
+
+
+class BackfillDeadlineReached(Exception):
+    """分段时间片到点：保存断点后停下，**不算失败**（下一片从 next_since 继续）。"""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -84,8 +89,13 @@ def fetch_symbol(
     end: datetime,
     *,
     limiter=None,
+    should_stop=None,
 ) -> int:
-    """抓取单个 pair 的窗口；返回本次累计 upsert 行数（幂等，可续跑）。"""
+    """抓取单个 pair 的窗口；返回本次累计 upsert 行数（幂等，可续跑）。
+
+    `should_stop` 为时间片判据：到点即把当前断点写成 `running` 并抛
+    `BackfillDeadlineReached`，让长跑可以按 ~30 分钟一片循环执行（单片失败只损失一片）。
+    """
     if symbol in UNAVAILABLE_SYMBOLS:
         save_progress(
             conn,
@@ -125,6 +135,20 @@ def fetch_symbol(
     attempts = 1 if limiter is not None else FETCH_RETRIES
 
     while since_ms < end_ms:
+        if should_stop is not None and should_stop():
+            cursor = datetime.fromtimestamp(since_ms / 1000, tz=UTC)
+            save_progress(
+                conn,
+                exchange_id,
+                symbol,
+                start,
+                end,
+                cursor,
+                "running",
+                total,
+                "deferred to next chunk",
+            )
+            raise BackfillDeadlineReached(f"{symbol} 时间片到点，断点 {cursor.isoformat()}")
         rows = None
         for attempt in range(1, attempts + 1):
             try:
@@ -240,6 +264,7 @@ def run_backfill(
     conn,
     exchange=None,
     limiter=None,
+    should_stop: Callable[[], bool] | None = None,
     on_outcome: Callable[[SymbolOutcome], None] | None = None,
 ) -> list[SymbolOutcome]:
     """编排入口：逐 pair 执行、失败隔离、逐 pair 回调（进度事件与 `BackfillRun` 用）。"""
@@ -257,6 +282,7 @@ def run_backfill(
                 start=start,
                 end=end,
                 limiter=limiter,
+                should_stop=should_stop,
             )
             outcomes.append(outcome)
             if on_outcome is not None:
@@ -270,10 +296,32 @@ def run_backfill(
 
 
 def _run_one(
-    *, exchange_id: str, exchange, conn, symbol: str, start: datetime, end: datetime, limiter
+    *,
+    exchange_id: str,
+    exchange,
+    conn,
+    symbol: str,
+    start: datetime,
+    end: datetime,
+    limiter,
+    should_stop: Callable[[], bool] | None = None,
 ) -> SymbolOutcome:
     try:
-        rows = fetch_symbol(exchange_id, exchange, conn, symbol, start, end, limiter=limiter)
+        rows = fetch_symbol(
+            exchange_id,
+            exchange,
+            conn,
+            symbol,
+            start,
+            end,
+            limiter=limiter,
+            should_stop=should_stop,
+        )
+    except BackfillDeadlineReached as exc:
+        cursor, _, done = current_cursor(conn, exchange_id, symbol, start, end)
+        return SymbolOutcome(
+            db_symbol=symbol, status=STATUS_DEFERRED, rows=done, last_cursor=cursor, error=str(exc)
+        )
     except Exception as exc:  # noqa: BLE001 - 单 pair 失败必须隔离，其他 pair 继续
         logger.exception("symbol failed exchange=%s symbol=%s", exchange_id, symbol)
         conn.rollback()
