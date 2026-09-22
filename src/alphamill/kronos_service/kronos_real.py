@@ -18,6 +18,11 @@ WEIGHT_FILE_NAMES = ("model.safetensors", "pytorch_model.bin")
 # 数据不足的兜底信号 reason：未进模型，消费端据此不得标 source=kronos（F004-C002）。
 NOT_ENOUGH_DATA_REASON = "not_enough_data"
 
+# 显式 KRONOS_DEVICE 拿不到对应设备时的失败文案（F010 FR-004）：docker logs 可检索。
+ERR_CPU_WHEEL = "torch is a CPU wheel (torch.version.cuda is empty)"
+ERR_NO_CUDA_DEVICE = "no CUDA device visible in container (torch.cuda.is_available() is False)"
+ERR_UNKNOWN_DEVICE = "unsupported KRONOS_DEVICE value"
+
 
 @dataclass
 class ModelStatus:
@@ -44,6 +49,8 @@ class KronosRealSignal:
         self.max_context = int(os.getenv("KRONOS_MAX_CONTEXT", "512"))
         self.pred_len = int(os.getenv("KRONOS_PRED_LEN", "12"))
         self.device_request = os.getenv("KRONOS_DEVICE", "cuda")
+        # 显式设置（编排给的）才走严格分支；未设置时保留开发机的宽松回落（F010 design §5）。
+        self.device_explicit = "KRONOS_DEVICE" in os.environ
         self._predictor = None
         self._torch = None
         self._device = "cpu"
@@ -172,21 +179,39 @@ class KronosRealSignal:
             from model import Kronos, KronosPredictor, KronosTokenizer
 
             self._torch = torch
-            self._device = (
-                "cuda:0"
-                if self.device_request.startswith("cuda") and torch.cuda.is_available()
-                else "cpu"
-            )
+            self._device = self._resolve_device(torch)
             tokenizer = KronosTokenizer.from_pretrained(self.tokenizer_path)
             model = Kronos.from_pretrained(self.model_path)
             self._predictor = KronosPredictor(
                 model, tokenizer, device=self._device, max_context=self.max_context
             )
             self._load_error = None
+            # TR-001：实际设备 + torch CUDA 版本，"以为在 GPU、实际在 CPU"一眼可见。
+            torch_cuda = getattr(getattr(torch, "version", None), "cuda", None)
+            print(f"[kronos-real] model loaded: device={self._device} torch_cuda={torch_cuda}")
             return self._predictor
         except Exception as exc:
             self._load_error = str(exc)
             raise
+
+    def _resolve_device(self, torch) -> str:
+        """解析实际加载设备（F010 FR-004）；启动、restore 重载、惰性加载共用此闸。
+
+        显式 `KRONOS_DEVICE=cuda*` 而拿不到 CUDA 时抛错，绝不静默回落 cpu——回落会让
+        /health 报 cpu 而编排以为拿到了 GPU 实例。未设置时保留既有宽松语义。
+        """
+        request = self.device_request
+        if not self.device_explicit:
+            return "cuda:0" if request.startswith("cuda") and torch.cuda.is_available() else "cpu"
+        if request == "cpu":
+            return "cpu"
+        if not request.startswith("cuda"):
+            raise RuntimeError(f"{ERR_UNKNOWN_DEVICE}: KRONOS_DEVICE={request!r} (cpu|cuda)")
+        if not getattr(getattr(torch, "version", None), "cuda", None):
+            raise RuntimeError(f"KRONOS_DEVICE={request} but {ERR_CPU_WHEEL}")
+        if not torch.cuda.is_available():
+            raise RuntimeError(f"KRONOS_DEVICE={request} but {ERR_NO_CUDA_DEVICE}")
+        return "cuda:0"
 
     @staticmethod
     def _rows_to_df(rows: list[dict]) -> pd.DataFrame:

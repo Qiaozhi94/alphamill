@@ -6,7 +6,7 @@ related_features: [F003, F004, F009]
 topics: [kronos, gpu, runtime, cuda, m2]
 doc_kind: design
 created: 2026-09-20
-updated: 2026-09-21
+updated: 2026-09-22
 ---
 
 # F010：Kronos GPU 推理基座 - 设计
@@ -107,6 +107,7 @@ compose up（叠加 GPU override）
       → _resolve_device(torch):
           KRONOS_DEVICE 未设置        → 既有宽松语义：可用则 cuda:0，否则 cpu（开发机）
           显式 cpu                    → cpu
+          显式其他值（非 cpu / cuda*）→ 抛错「不支持的 KRONOS_DEVICE」（开发期补，见下）
           显式 cuda* ∧ torch.version.cuda 为空 → 抛错「镜像是 CPU wheel」
           显式 cuda* ∧ not is_available()      → 抛错「容器内无可用 CUDA 设备」
           显式 cuda* ∧ 可用                    → cuda:0
@@ -120,6 +121,8 @@ F009 restore → 重载 → 同一 _load_predictor() → 同一 _resolve_device(
 - **"显式"的判据**：`os.environ` 中存在 `KRONOS_DEVICE`（区别于代码缺省值 `"cuda"`）。默认 compose 显式给 `cpu`，override 显式给 `cuda`，开发机直接跑服务时通常不设——保留了开发机上的宽松回落，又让编排出来的实例严格；
 - **不另设判据变量**：healthcheck 判据写在各自 compose 文件里、与同文件的 `KRONOS_DEVICE` 相邻，不再有独立的 `KRONOS_HEALTH_DEVICE_PREFIX` 可以和设备配置不一致（R1-004）；
 - healthcheck 的前缀比对是第二道网：即使加载闸被绕过，报 `cpu` 的实例也不会被判就绪。
+- **开发期变更记录（2026-09-22，T006）**：spec 只定义了 `cpu` / `cuda*` 两类显式值；显式给出其他值（如 `mps`、拼写错误）时原逻辑会悄悄按 cpu 跑，与"失败可见优先"相悖，故一并拒绝。未设置时的宽松语义不受影响；失败文案常量 `ERR_CPU_WHEEL` / `ERR_NO_CUDA_DEVICE` / `ERR_UNKNOWN_DEVICE` 定义在 `kronos_real.py`，单元与执行机用例共用。
+- **TR-001 落点**：日志行 `[kronos-real] model loaded: device=<实际> torch_cuda=<版本|None>` 打在 `_load_predictor()` 成功之后，启动与 restore 重载都会留痕（原文"启动日志"的超集）。
 
 ## 6. UI 与可观测性
 
