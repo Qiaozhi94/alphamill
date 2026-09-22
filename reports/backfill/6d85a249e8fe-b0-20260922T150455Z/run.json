@@ -1,0 +1,87 @@
+{
+  "batch": null,
+  "finished_at": null,
+  "hostname": "qiaozhi-lt",
+  "pairs": [
+    {
+      "db_symbol": "BTC/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "BTC-USDT",
+      "last_cursor": null,
+      "listed_at": "2019-09-08T17:55:00Z",
+      "rank": 1,
+      "rows": 0,
+      "status": "pending"
+    },
+    {
+      "db_symbol": "ETH/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "ETH-USDT",
+      "last_cursor": null,
+      "listed_at": "2019-11-27T07:45:00Z",
+      "rank": 2,
+      "rows": 0,
+      "status": "pending"
+    },
+    {
+      "db_symbol": "SOL/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "SOL-USDT",
+      "last_cursor": null,
+      "listed_at": "2020-09-14T07:00:00Z",
+      "rank": 3,
+      "rows": 0,
+      "status": "pending"
+    },
+    {
+      "db_symbol": "XRP/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "XRP-USDT",
+      "last_cursor": null,
+      "listed_at": "2020-01-06T08:20:00Z",
+      "rank": 5,
+      "rows": 0,
+      "status": "pending"
+    },
+    {
+      "db_symbol": "DOGE/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "DOGE-USDT",
+      "last_cursor": null,
+      "listed_at": "2020-07-10T09:00:00Z",
+      "rank": 6,
+      "rows": 0,
+      "status": "pending"
+    },
+    {
+      "db_symbol": "BNB/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "BNB-USDT",
+      "last_cursor": null,
+      "listed_at": "2020-02-10T08:00:00Z",
+      "rank": 7,
+      "rows": 0,
+      "status": "pending"
+    }
+  ],
+  "rate_limit": {
+    "base_backoff_seconds": 1.0,
+    "max_backoff_seconds": 60.0,
+    "max_retries": 8,
+    "min_interval_seconds": 0.5
+  },
+  "run_id": "6d85a249e8fe-b0-20260922T150455Z",
+  "schema_version": 1,
+  "started_at": "2026-09-22T15:04:55.182314Z",
+  "universe_id": "sha256:6d85a249e8fe509518443afb3407d0ed6ea736260c570c8f860676e0c466a709",
+  "window": {
+    "end": "2026-09-22T15:00:00Z",
+    "start": "2026-09-21T16:00:00Z"
+  }
+}
