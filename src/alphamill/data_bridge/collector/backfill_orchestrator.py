@@ -66,6 +66,21 @@ def run_backfill(
     outcomes: list[SymbolOutcome] = []
     try:
         for symbol in symbols:
+            if should_stop is not None and should_stop():
+                # 时间片已到：剩余 pair 不再逐个进去（否则每个都要读一次进度、写一次 running），
+                # 直接标 deferred 交给下一片
+                cursor, _, done = current_cursor(conn, exchange_id, symbol, start, end)
+                outcome = SymbolOutcome(
+                    db_symbol=symbol,
+                    status=STATUS_DEFERRED,
+                    rows=done,
+                    last_cursor=cursor,
+                    error="deadline reached before start",
+                )
+                outcomes.append(outcome)
+                if on_outcome is not None:
+                    on_outcome(outcome)
+                continue
             outcome = _run_one(
                 exchange_id=exchange_id,
                 exchange=client,
