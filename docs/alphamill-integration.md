@@ -225,3 +225,37 @@ quant-crypto 的门禁脚本参数化迁移到 `src/alphamill/validation/`：
 | 生成器产出垃圾海啸 | 评测台分诊阈值（RankIC + 查重）先行过滤；注册表只收存活者 |
 | Freqtrade 策略读取了坏缓存 | 冒烟回测前置 + 审计器校验时间戳对齐；坏缓存直接拒绝挂载 |
 | 夜间批处理超时 | 生成器/评测台分任务队列，单代失败不回滚已入库结果 |
+
+---
+
+## 七、Kronos 推理实例：CPU 默认与 GPU 叠加（F010）
+
+`kronos-signal-real` 只有一个实例名（架构 §7.1 生命周期契约的目标），CPU/GPU 由是否叠加
+`deployment/docker-compose.gpu.yml` 区分。默认文件对 GPU 一无所知，开发机与 CI 不受影响。
+
+| 项 | 默认（CPU） | 叠加 GPU override（仅执行机） |
+|---|---|---|
+| 镜像 | compose 生成的 `<project>-kronos-signal-real` | `alphamill/kronos-signal-real:gpu` |
+| torch | `2.14.0` + `whl/cpu`（`ARG` 缺省） | `2.14.0` + `whl/cu130`（只覆盖索引） |
+| `KRONOS_DEVICE` | `cpu` | `cuda`（显式 → 拿不到 CUDA 即启动失败，不回落 cpu） |
+| 设备预留 | 无 | `nvidia × 1` |
+| healthcheck | `device == 'cpu'` | `device` 以 `cuda` 开头 |
+
+**前置**（执行机，一次性）：宿主驱动满足 CUDA 13.0 最低要求（R580+）；docker 装有
+nvidia-container-toolkit 并 `nvidia-ctk runtime configure --runtime=docker` 后重启 docker——
+`docker info` 的 Runtimes 须含 `nvidia`，否则守护进程直接拒绝设备请求（容器不启动，这**不是**
+严格分支的失败，见 F010 design §7）。
+
+```bash
+# 启用 GPU 实例（执行机）
+docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.gpu.yml \
+  --profile kronos-real up -d --build kronos-signal-real
+docker logs quant-kronos-signal-real | grep '\[kronos-real\] model loaded'   # 实际设备 + torch CUDA 版本
+
+# 切回 CPU 实例：不叠加 override 重新 up（两类镜像标签互不覆盖，无需重建 GPU 镜像）
+docker compose -f deployment/docker-compose.yml --profile kronos-real up -d --build kronos-signal-real
+```
+
+注意：F004 的 `tests/integration/test_f004_real_profile.py` 断言的是**默认（CPU）配置**
+（`KRONOS_DEVICE=cpu`、容器 torch 可导入），在 GPU 实例常驻时跑它会判红——这不是回归；
+GPU 配置的集成断言在 `tests/integration/test_f010_gpu_runtime.py`。
