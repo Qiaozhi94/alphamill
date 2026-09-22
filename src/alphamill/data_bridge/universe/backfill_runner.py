@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from alphamill.data_bridge import paths
-from alphamill.data_bridge.collector import historical_backfill as backfill
+from alphamill.data_bridge.collector import backfill_orchestrator as backfill
 from alphamill.data_bridge.collector.backfill_progress import current_cursor
 from alphamill.data_bridge.universe.batching import (
     DEFAULT_BATCH_SPLIT,

@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from alphamill.data_bridge.collector import historical_backfill as backfill
+from alphamill.data_bridge.collector.backfill_progress import ensure_progress_table
 
 
 class _Exchange:
@@ -129,6 +130,6 @@ def test_delisting_boundary_stops_before_exchange_empty_batch(monkeypatch) -> No
 
 def test_progress_schema_is_required_from_init_sql() -> None:
     with pytest.raises(RuntimeError, match="backfill_progress is missing"):
-        backfill.ensure_progress_table(_SchemaConnection(None))
+        ensure_progress_table(_SchemaConnection(None))
 
-    backfill.ensure_progress_table(_SchemaConnection("backfill_progress"))
+    ensure_progress_table(_SchemaConnection("backfill_progress"))
