@@ -2,7 +2,8 @@
 kind: feature
 id: F010
 version: "0.2"
-status: ready-for-development
+status: developing
+branch: feat/F010-kronos-gpu-runtime
 gate_version: 1
 related_features: [F003, F004, F009]
 topics: [kronos, gpu, runtime, cuda, m2]
