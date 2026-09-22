@@ -21,6 +21,7 @@ from alphamill.data_bridge.universe.discover import (
     MarketSnapshot,
 )
 from alphamill.data_bridge.universe.errors import ExchangeUnreachableError
+from alphamill.data_bridge.universe.rate_limit import is_retryable_error
 
 #: 逐市场请求的最小间隔（秒）。发现要为每个候选取 90 根日线，市场数几百个：
 #: 按 ccxt 的 `rateLimit`（50ms）打会形成 ~15 请求/秒的突发，权重 ~3000/分钟——
@@ -28,6 +29,9 @@ from alphamill.data_bridge.universe.errors import ExchangeUnreachableError
 #: 默认 1 秒/市场 ⇒ 权重 ≤120/分钟，几百个市场约 5–8 分钟，与长跑回填叠加也安全。
 DEFAULT_MARKET_INTERVAL_SECONDS = 1.0
 INTERVAL_ENV = "ALPHAMILL_DISCOVER_INTERVAL_SECONDS"
+
+#: 单市场日线的重试次数（瞬时故障退避重试；用尽才判红）
+KLINES_ATTEMPTS = 4
 
 
 def build_exchange(exchange_id: str):
@@ -150,6 +154,24 @@ def _record_for(
     )
 
 
+def _klines_with_retry(client: Any, market: dict[str, Any], lookback_days: int) -> Any:
+    last: Exception | None = None
+    for attempt in range(1, KLINES_ATTEMPTS + 1):
+        try:
+            # limit 必须是 int：ccxt 在隐式 API 里对 str 会抛 TypeError（真实链路实测）
+            return client.fapiPublicGetKlines(
+                {"symbol": market["id"], "interval": "1d", "limit": int(lookback_days)}
+            )
+        except Exception as exc:  # noqa: BLE001 - 判据交给 is_retryable_error
+            last = exc
+            if not is_retryable_error(exc) or attempt >= KLINES_ATTEMPTS:
+                break
+            _sleep(min(2**attempt, 30))
+    raise ExchangeUnreachableError(
+        f"拉取 {market.get('symbol')} 日线成交额失败（重试 {KLINES_ATTEMPTS} 次）: {last}"
+    ) from last
+
+
 def _data_symbol_for(rank_symbol: str, spot_symbols: set[str]) -> str | None:
     """排名侧符号 → 数据侧符号：同名优先；`1000X` 命名的缩放合约映射到现货 `X`。
 
@@ -166,18 +188,15 @@ def _data_symbol_for(rank_symbol: str, spot_symbols: set[str]) -> str | None:
 
 
 def _daily_turnover(client: Any, market: dict[str, Any], lookback_days: int) -> tuple[float, ...]:
-    """USDT 成交额口径：Binance USDM klines 的 quote asset volume（索引 7）。"""
-    try:
-        # limit 必须是 int：ccxt 在隐式 API 里对 str 会抛 TypeError（真实链路实测）
-        rows = client.fapiPublicGetKlines(
-            {"symbol": market["id"], "interval": "1d", "limit": int(lookback_days)}
-        )
-    except Exception as exc:  # noqa: BLE001 - 单市场失败即启动期拒绝，不静默补零
-        raise ExchangeUnreachableError(
-            f"拉取 {market.get('symbol')} 日线成交额失败: {exc}"
-        ) from exc
+    """USDT 成交额口径：Binance USDM klines 的 quote asset volume（索引 7）。
+
+    瞬时故障按退避重试（实测教训 2026-09-21：解禁后首个请求偶发失败，fail-closed 让
+    整轮 6 分钟的发现全废）；重试用尽才判红。**空返回不算错误**——新上线市场本来就可能
+    没有日线，记 0 根，由上线天数/排名自然排除（`turnover_points=0` 可审计）。
+    """
+    rows = _klines_with_retry(client, market, lookback_days)
     if not isinstance(rows, list) or not rows:
-        raise ExchangeUnreachableError(f"{market.get('symbol')} 日线返回为空，无法计算成交额")
+        return ()
     values: list[float] = []
     for row in rows:
         if not isinstance(row, (list, tuple)) or len(row) < 8:

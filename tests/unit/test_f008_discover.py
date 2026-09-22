@@ -422,6 +422,57 @@ def test_fetch_snapshot_rejects_missing_onboard_date(monkeypatch) -> None:
         )
 
 
+def test_empty_daily_series_is_zero_points_not_error(monkeypatch) -> None:
+    """新上线市场可能没有日线：记 0 根由上线天数排除，而不是让整轮发现失败。"""
+    monkeypatch.setattr(exchange_snapshot, "_sleep", lambda _seconds: None)
+    created_ms = int(datetime(2026, 9, 20, tzinfo=UTC).timestamp() * 1000)
+    exchange = _FakeExchange(
+        {
+            "NEW/USDT:USDT": _binance_market("NEW", created_ms=created_ms),
+            "NEW/USDT": _spot_market("NEW"),
+        },
+        {"NEWUSDT": []},
+    )
+    snapshot = exchange_snapshot.fetch_snapshot(
+        _criteria(turnover_lookback_days=3),
+        exchange=exchange,
+        now=datetime(2026, 9, 21, tzinfo=UTC),
+    )
+    assert snapshot.markets[0].daily_turnover_usdt == ()
+    evaluation = discover.evaluate(snapshot, _criteria(turnover_lookback_days=3))
+    assert evaluation.candidates[0].excluded_reason == discover.REASON_LISTED_DAYS
+
+
+def test_transient_klines_failure_is_retried(monkeypatch) -> None:
+    """解禁后首个请求偶发失败：退避重试而不是让整轮发现全废。"""
+    monkeypatch.setattr(exchange_snapshot, "_sleep", lambda _seconds: None)
+    created_ms = int(datetime(2025, 1, 1, tzinfo=UTC).timestamp() * 1000)
+
+    class _Flaky(_FakeExchange):
+        def __init__(self):
+            super().__init__(
+                {
+                    "BTC/USDT:USDT": _binance_market("BTC", created_ms=created_ms),
+                    "BTC/USDT": _spot_market("BTC"),
+                },
+                {},
+            )
+            self.failures = 2
+
+        def fapiPublicGetKlines(self, params):
+            if self.failures:
+                self.failures -= 1
+                raise ConnectionResetError(104, "Connection reset by peer")
+            return _klines(1_000.0, 3)
+
+    snapshot = exchange_snapshot.fetch_snapshot(
+        _criteria(turnover_lookback_days=3),
+        exchange=_Flaky(),
+        now=datetime(2026, 9, 19, tzinfo=UTC),
+    )
+    assert snapshot.markets[0].daily_turnover_usdt == (1_000.0, 1_000.0, 1_000.0)
+
+
 def test_fetch_snapshot_rejects_short_kline_rows(monkeypatch) -> None:
     monkeypatch.setattr(exchange_snapshot, "_sleep", lambda _seconds: None)
     created_ms = int(datetime(2025, 1, 1, tzinfo=UTC).timestamp() * 1000)
