@@ -8,6 +8,8 @@
 # 用法：
 #   bash scripts/f008-backfill-chunks.sh 1                 # 批 1，默认 30 分钟/片
 #   CHUNK_MINUTES=15 MAX_CHUNKS=200 bash scripts/f008-backfill-chunks.sh 2
+#   MAX_CHUNKS=1 bash scripts/f008-backfill-chunks.sh 1    # 只跑一片（人工逐片放行）
+#   RUN_ID=<run_id> MAX_CHUNKS=1 bash scripts/f008-backfill-chunks.sh 1   # 续跑同一份记录
 #
 # 退出条件：本批全部 pair completed/unavailable，或达到 MAX_CHUNKS，或连续 3 片无进展。
 set -uo pipefail
@@ -31,7 +33,8 @@ set -a
 set +a
 cd "$REPO_F008"
 
-RUN_ID=""
+# RUN_ID 可由环境传入以续跑同一份 BackfillRun（人工逐片放行时用）
+RUN_ID="${RUN_ID:-}"
 stall=0
 prev_done=-1
 
