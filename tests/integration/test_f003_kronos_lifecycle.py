@@ -25,6 +25,7 @@ F009 T015 移除，改为**真红真绿**：失败即失败。显存真实下降
 from __future__ import annotations
 
 import os
+import socket
 import threading
 import time
 
@@ -66,6 +67,37 @@ def _status() -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def _wait_idle(timeout: float = 60.0) -> dict:
+    """等实例回到稳定态（operation 为 null）。
+
+    动作是异步的：`E_TIMEOUT` 返回后后台仍在跑。用例之间不等待就会互相污染——
+    下一条用例会拿到上一条留下的 `E_BUSY`（F009 T022 实测）。
+    """
+    deadline = time.monotonic() + timeout
+    status = _status()
+    while status["operation"] is not None and time.monotonic() < deadline:
+        time.sleep(0.2)
+        status = _status()
+    assert status["operation"] is None, f"{timeout}s 内 operation 未清空: {status}"
+    return status
+
+
+@pytest.fixture(autouse=True)
+def idle_instance():
+    """每条用例前后都把实例带回 running 且无在飞动作，避免用例间互相污染。"""
+    if not INTEGRATION_REQUIRED or not CONTROL_URL:
+        yield
+        return
+    _wait_idle()
+    yield
+    _wait_idle()
+    if _status()["state"] != "running":
+        SESSION.post(
+            f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
+        )
+        _wait_idle()
 
 
 def test_stop_restore_contract() -> None:
@@ -148,38 +180,35 @@ def test_extra_parameters_rejected_as_bad_request() -> None:
 def test_busy_rejects_conflicting_action() -> None:
     """动作进行中 → 冲突动作立即 `E_BUSY`，不排队不叠加（架构 §7.1 单飞）。
 
-    用真实 stop 制造窗口：stop 在飞时并发 restore。若实例卸载极快而没能观测到
-    `E_BUSY`，用例按"未能制造窗口"跳过而不是假绿——但 operation 字段必须成立。
+    用 **restore** 制造窗口而不是 stop：卸载在 CPU 实例上是瞬时的，而重新加载模型
+    要秒级，窗口稳定可观测（F009 T022 实测——用 stop 制造窗口会大概率抓不到）。
     """
     _require_ready()
+    SESSION.post(f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
+    _wait_idle()
     outcome: dict = {}
 
-    def _stop() -> None:
-        outcome["stop"] = SESSION.post(
-            f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP
+    def _restore() -> None:
+        outcome["restore"] = SESSION.post(
+            f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
         ).json()
 
-    worker = threading.Thread(target=_stop)
+    worker = threading.Thread(target=_restore)
     worker.start()
     busy_seen = None
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + TIMEOUT_RESTORE
     while time.monotonic() < deadline and worker.is_alive():
         resp = SESSION.post(
-            f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
+            f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP
         ).json()
         if resp.get("error"):
             busy_seen = resp
             break
-    worker.join(timeout=TIMEOUT_STOP)
+        time.sleep(0.05)
+    worker.join(timeout=TIMEOUT_RESTORE)
 
-    try:
-        if busy_seen is None:
-            pytest.skip("卸载过快，未能制造动作窗口（不构成契约通过，也不算失败）")
-        assert busy_seen == {"error": "E_BUSY"}, busy_seen
-    finally:
-        SESSION.post(
-            f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
-        )
+    assert busy_seen == {"error": "E_BUSY"}, f"冲突动作未被立即拒绝: {busy_seen}"
+    assert outcome.get("restore") == {"state": "running"}, "原动作不得受冲突请求影响"
 
 
 def test_timeout_envelope_is_not_a_terminal_failure() -> None:
@@ -201,5 +230,51 @@ def test_timeout_envelope_is_not_a_terminal_failure() -> None:
     ).json()
 
     assert resp == {"error": "E_TIMEOUT"}, resp
-    assert _status()["operation"] is not None, "E_TIMEOUT 不是终态：动作仍在进行"
+
+    # "不中断"的可判定证据：动作最终落地在与 desired 一致的稳定态，而不是被砍掉。
+    # （窗口本身未必抓得到——CPU 实例上卸载是瞬时的，超时返回时可能已经完成。）
+    final = _wait_idle()
+    assert final["state"] == "stopped", f"超时不得中断后台动作: {final}"
+    assert final["desired"] == "stopped"
     SESSION.post(f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE)
+
+
+def test_night_slot_journey() -> None:
+    """层 2 旅程（F009 T024）：running → stop → 连打 /predict 不唤醒 → restore → 恢复。
+
+    这条是本 feature 的核心价值：`stopped` 必须**待得住**。若推理路径会隐式重载模型，
+    夜槽卸载等于没卸——显存被下一个请求吃回去（检视 R1-002）。
+    """
+    _require_ready()
+    symbol = os.getenv("KRONOS_JOURNEY_SYMBOL", "BTC/USDT")
+    base = CONTROL_URL
+
+    assert _status()["state"] == "running"
+    warm = SESSION.get(f"{base}/predict/{symbol}", timeout=TIMEOUT_RESTORE)
+    if warm.status_code != 200:
+        pytest.skip(f"{symbol} 无可用行情，旅程无法取证: {warm.status_code}")
+    assert warm.json()["source"] == "kronos", warm.json()
+
+    stopped = SESSION.post(f"{base}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
+    assert stopped.json()["state"] == "stopped"
+    _wait_idle()
+
+    for _ in range(5):
+        payload = SESSION.get(f"{base}/predict/{symbol}", timeout=TIMEOUT_STATUS).json()
+        assert payload["source"] != "kronos", f"停机期间竟标了 kronos: {payload}"
+        assert payload["model"] == "placeholder", payload
+        status = _status()
+        assert status["state"] == "stopped" and status["model_loaded"] is False, status
+
+    restored = SESSION.post(
+        f"{base}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
+    )
+    assert restored.json()["state"] == "running"
+    _wait_idle()
+    after = SESSION.get(f"{base}/predict/{symbol}", timeout=TIMEOUT_RESTORE).json()
+    assert after["source"] == "kronos", after
+    print(
+        f"\n[evidence] hostname={socket.gethostname()} journey: running -> stop -> "
+        f"5x predict(source={payload['source']}, model_loaded=False) -> restore -> "
+        f"predict(source={after['source']})"
+    )

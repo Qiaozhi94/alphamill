@@ -5,6 +5,12 @@
 
 错误一律 **HTTP 200 + 恰为单键** `{"error": "E_*"}`：契约测试只认信封，非 2xx 可能被
 中间件或代理改写成错误页而丢掉 `error` 字段，届时客户端会把它误判成"端点不存在"。
+
+控制器调用一律经 `run_in_threadpool`：控制器是同步阻塞实现（动作等待自己的 deadline、
+status 可能跑 nvidia-smi 子进程），直接在事件循环里调用会把整个服务串行化——届时
+单飞的 `E_BUSY` 永远观测不到（冲突请求根本没被处理），`status` 也不再是"动作进行中
+可达"（F009 T022 执行机实测：1.2s 的 restore 期间并发 stop 被受理、status 报
+operation=null）。
 """
 
 from __future__ import annotations
@@ -13,6 +19,7 @@ import json
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from .lifecycle import (
     CONTRACT_VERSION,
@@ -52,7 +59,7 @@ def build_lifecycle_router(controller: LifecycleController) -> APIRouter:
     async def status(request: Request):
         if not _version_ok(request):
             return _envelope(E_UNSUPPORTED_VERSION)
-        return controller.status()
+        return await run_in_threadpool(controller.status)
 
     async def _action(request: Request, run) -> JSONResponse | dict:
         # 顺序固定：版本协商 → 请求体形态 → 动作。E_UNSUPPORTED_VERSION 是客户端判定
@@ -62,7 +69,7 @@ def build_lifecycle_router(controller: LifecycleController) -> APIRouter:
         if not await _body_ok(request):
             return _envelope(E_BAD_REQUEST)
         try:
-            return run()
+            return await run_in_threadpool(run)
         except LifecycleError as exc:
             return _envelope(exc.code)
 
