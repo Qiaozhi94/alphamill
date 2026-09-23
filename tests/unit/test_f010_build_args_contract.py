@@ -25,10 +25,15 @@ GPU_OVERRIDE_PATH = ROOT / "deployment/docker-compose.gpu.yml"
 LEGACY_TORCH_VERSION = "2.14.0"
 LEGACY_TORCH_INDEX_URL = "https://download.pytorch.org/whl/cpu"
 GPU_TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu130"
+# NVIDIA 依赖（cudnn/nccl…）不走 pypi.nvidia.com——执行机经代理下载该域名大文件连续失败
+# （design §4 开发期变更）。缺省空串 → 默认构建的安装命令与落地前等价（NFR-001）。
+GPU_EXTRA_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
-ARG_RE = re.compile(r"^ARG ([A-Z_]+)(?:=(\S+))?$", re.M)
+ARG_RE = re.compile(r"^ARG ([A-Z_]+)(?:=(\S*))?$", re.M)
 TORCH_INSTALL_RE = re.compile(
-    r"pip install --no-cache-dir torch==(\S+) \\\n\s*--index-url (\S+)", re.M
+    r"pip install --no-cache-dir torch==(\S+) \\\n\s*--index-url (\S+)"
+    r"(?: \\\n\s*(\$\{TORCH_EXTRA_INDEX_URL[^\n]*))?",
+    re.M,
 )
 REF_RE = re.compile(r"\$\{([A-Z_]+)\}|\$([A-Z_]+)")
 
@@ -73,6 +78,12 @@ def assert_build_args_contract(dockerfile: str) -> None:
     assert match, "real 段缺少 torch 安装命令"
     assert match.group(1) == "${TORCH_VERSION}", "torch 版本必须引用 TORCH_VERSION 参数"
     assert match.group(2) == "${TORCH_INDEX_URL}", "wheel 索引必须引用 TORCH_INDEX_URL 参数"
+    assert declared.get("TORCH_EXTRA_INDEX_URL") == "", (
+        "ARG TORCH_EXTRA_INDEX_URL 缺省值必须是空串（默认构建不额外加索引）"
+    )
+    assert match.group(3) and "TORCH_EXTRA_INDEX_URL" in match.group(3), (
+        "安装命令必须以 ${TORCH_EXTRA_INDEX_URL:+…} 条件展开引用额外索引参数"
+    )
     assert resolve_torch_install(dockerfile) == (LEGACY_TORCH_VERSION, LEGACY_TORCH_INDEX_URL), (
         "不带构建参数时 torch 安装命令必须与落地前等价（NFR-001）"
     )
@@ -89,10 +100,11 @@ def test_gpu_build_args_resolve_to_cu130_same_version() -> None:
     assert resolved == (LEGACY_TORCH_VERSION, GPU_TORCH_INDEX_URL)
 
 
-def test_gpu_override_passes_only_the_index_arg() -> None:
-    """override 给出的构建参数与设计表同源：给 cu130 索引，不覆盖 TORCH_VERSION。"""
+def test_gpu_override_passes_only_the_index_args() -> None:
+    """override 给出的构建参数与设计表同源：cu130 索引 + NVIDIA 依赖镜像，不覆盖 TORCH_VERSION。"""
     override = re.sub(r"(?m)^[ \t]*#.*$", "", GPU_OVERRIDE_PATH.read_text(encoding="utf-8"))
     assert f"TORCH_INDEX_URL: {GPU_TORCH_INDEX_URL}" in override
+    assert f"TORCH_EXTRA_INDEX_URL: {GPU_EXTRA_INDEX_URL}" in override
     assert "TORCH_VERSION" not in override, "GPU 构建不得覆盖 torch 版本（CPU/GPU 同版本）"
 
 
@@ -117,6 +129,13 @@ def _mutate(text: str, old: str, new: str) -> str:
         ("--index-url ${TORCH_INDEX_URL}", "--index-url https://download.pytorch.org/whl/cpu"),
         # 注释掉 ARG 声明
         ("ARG TORCH_VERSION=2.14.0", "# ARG TORCH_VERSION=2.14.0"),
+        # 额外索引参数改为无条件展开（缺省空串时 pip 会拿到空的 --extra-index-url）
+        (
+            "${TORCH_EXTRA_INDEX_URL:+--extra-index-url ${TORCH_EXTRA_INDEX_URL}}",
+            "--extra-index-url ${TORCH_EXTRA_INDEX_URL}",
+        ),
+        # 额外索引缺省值不再为空（默认构建被拽到第二索引）
+        ("ARG TORCH_EXTRA_INDEX_URL=\n", "ARG TORCH_EXTRA_INDEX_URL=https://pypi.org/simple\n"),
     ],
 )
 def test_build_args_mutations_fail_the_gate(old: str, new: str) -> None:

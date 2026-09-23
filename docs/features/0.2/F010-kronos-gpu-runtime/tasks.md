@@ -28,7 +28,7 @@ updated: 2026-09-21
 ## 1. 前置条件
 
 - [x] T001 (`FR-001`, `FR-002`): 确认 spec §8 与 design §10 无开放项，且 GPU 面四项（CUDA 构建参数、`KRONOS_DEVICE: cuda`、设备预留、healthcheck 判据）只在 override 契约表一处定义（design §4 两张表逐格核对） — verify: `spec.md` §8、`design.md` §4/§10 — 证据（2026-09-22）：design §4 构建参数表「GPU 取值」列与 override 契约表逐格一致（cu130 / 同版本 2.14.0），spec §8、design §10 无开放项
-- [ ] T002 (`NFR-005`, `NFR-002`): **先核验再改配置**——在执行机核验：① NVIDIA 容器运行时可用（`docker run --rm --gpus all <cuda-image> nvidia-smi` 可出卡）；② 驱动版本满足 CUDA 13.0 最低要求（R580 系列及以上，以 NVIDIA 兼容表为准）；③ 在该容器内装 `torch==2.14.0` 自 `whl/cu130`，`torch.cuda.is_available()` 为真且 `get_arch_list()` 同时含 `sm_89`（当前卡）与 `sm_120`（迁移目标）；④ 记录空载整卡可用显存（`nvidia-smi --query-gpu=memory.free`），<6GB 则按 spec §7 风险行进入重标。① 不通过时先装 nvidia-container-toolkit 并执行 `nvidia-ctk runtime configure --runtime=docker`、重启 docker（运维动作，记录版本）后重测；其余项或装后仍不通过即停下回 spec §8 重新裁决，不得先改配置再试。**预探（2026-09-21，`qiaozhi-lt`）**：① 不通过（Runtimes 仅 `runc`）；② 驱动 616.64；④ 空载 free 7956 MiB — verify: 执行机命令输出归档（hostname / 驱动 / CUDA 版本 / arch list / 空载可用显存）
+- [x] T002 (`NFR-005`, `NFR-002`): **先核验再改配置**——在执行机核验：① NVIDIA 容器运行时可用（`docker run --rm --gpus all <cuda-image> nvidia-smi` 可出卡）；② 驱动版本满足 CUDA 13.0 最低要求（R580 系列及以上，以 NVIDIA 兼容表为准）；③ 在该容器内装 `torch==2.14.0` 自 `whl/cu130`，`torch.cuda.is_available()` 为真、`get_arch_list()` 含 `sm_120`（迁移目标），当前卡以实跑一次 GPU 张量运算且与 CPU 结果一致为准（sm_89 不在 cu130 arch list 内，见 design §4 开发期变更）；④ 记录空载整卡可用显存（`nvidia-smi --query-gpu=memory.free`），<6GB 则按 spec §7 风险行进入重标。① 不通过时先装 nvidia-container-toolkit 并执行 `nvidia-ctk runtime configure --runtime=docker`、重启 docker（运维动作，记录版本）后重测；其余项或装后仍不通过即停下回 spec §8 重新裁决，不得先改配置再试。**预探（2026-09-21，`qiaozhi-lt`）**：① 不通过（Runtimes 仅 `runc`）；② 驱动 616.64；④ 空载 free 7956 MiB — verify: 执行机命令输出归档（hostname / 驱动 / CUDA 版本 / arch list / 空载可用显存） — 证据（2026-09-23，`qiaozhi-lt`）：① 装 nvidia-container-toolkit 1.20.0-1 + `nvidia-ctk runtime configure --runtime=docker` + 重启 docker → `docker info` Runtimes 含 `nvidia`；`docker run --gpus all nvidia/cuda:13.0.1-base-ubuntu24.04 nvidia-smi` 出卡（RTX 4060 Laptop）；② 驱动 616.64（≥ R580）；③ 离线装 `torch==2.14.0+cu130`：`cuda=13.0`、`is_available=true`、`get_arch_list()=[sm_75,80,86,90,100,120]`（**含 sm_120，不含 sm_89**）、`capability=(8,9)`，GPU 矩阵乘与 CPU 结果一致（-2041.476）、显存分配 10.1 MiB——判据据此变更（见本行下方记录）；④ 空载 free 7956 MiB（≥ 6GB 训练预算）。**取包路径**：cu130 索引把 NVIDIA 依赖指向 `pypi.nvidia.com`，经本机代理下载其大文件连续 4 次失败（断开/截断致 sha256 不符/读超时）；改用清华 PyPI 镜像一次成功（29 wheel / 2.9GB，pip 逐个校验）→ Dockerfile 增 `ARG TORCH_EXTRA_INDEX_URL`（缺省空串），GPU override 传镜像地址
 
 ## 2. 实现任务
 
@@ -90,7 +90,7 @@ updated: 2026-09-21
 
 ## 5. 明确后移
 
-- 执行机平台迁移（`qiaozhi-lab`、原生 Ubuntu、Blackwell sm_120）→ 独立迁移 Feature：本 feature 选定的 `cu130` 已覆盖 sm_120（T002 以 `get_arch_list()` 核验），不做迁移本身。
+- 执行机平台迁移（`qiaozhi-lab`、原生 Ubuntu、Blackwell sm_120）→ 独立迁移 Feature：本 feature 选定的 `cu130` 已覆盖 sm_120（T002 以 `get_arch_list()` 核验；当前卡 sm_89 走二进制兼容），不做迁移本身。
 - F003 `mining` extra 注释中的 `cu128` 索引示例（对 torch ≥2.12 已无对应 wheel）→ 由 F003 在 `feat/F003-alphagen-vendor` 分支同步为 `cu130`，本 feature 不跨分支修改；同步项已登记在 BACKLOG 活跃表下方的「F010 → F003 同步项」。
 - 生命周期控制面端点 → `F009`：本 feature 为其提供可取证的显存基座，不实现端点。
 - 挖掘侧编排与夜槽取锁 → `F003`（T025 / T033）。

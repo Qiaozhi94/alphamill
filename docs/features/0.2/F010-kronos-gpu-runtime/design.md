@@ -76,7 +76,9 @@ docker-compose.yml                     docker-compose.yml + docker-compose.gpu.y
 | `TORCH_INDEX_URL` | `https://download.pytorch.org/whl/cpu` | `https://download.pytorch.org/whl/cu130` | torch wheel 来源 |
 | `TORCH_VERSION` | `2.14.0` | `2.14.0`（不覆盖，CPU/GPU 同版本） | torch 版本 |
 
-版本依据（2026-09-21 实查 download.pytorch.org，R1-002）：`cu128` 索引的 cp311 最高为 `2.11.0`；`2.14.0` 仅有 `+cu130` / `+cu132`。选 `cu130`：宿主驱动要求较 `cu132` 低，且同版本避免 CPU/GPU 镜像行为分叉。宿主驱动须满足 CUDA 13.0 最低要求（R580 系列及以上，以 NVIDIA 兼容表为准），由 T002 在执行机核验；`torch.cuda.get_arch_list()` 须含 `sm_89`（当前 RTX 4060）与 `sm_120`（迁移目标）。
+版本依据（2026-09-21 实查 download.pytorch.org，R1-002）：`cu128` 索引的 cp311 最高为 `2.11.0`；`2.14.0` 仅有 `+cu130` / `+cu132`。选 `cu130`：宿主驱动要求较 `cu132` 低，且同版本避免 CPU/GPU 镜像行为分叉。宿主驱动须满足 CUDA 13.0 最低要求（R580 系列及以上，以 NVIDIA 兼容表为准），由 T002 在执行机核验；`torch.cuda.get_arch_list()` 须含 `sm_120`（迁移目标）。**开发期变更（2026-09-22，T002 实测）**：cu130 wheel 的 arch list 为 `sm_75/80/86/90/100/120`，**不含 sm_89**；RTX 4060（capability 8.9）靠 CUDA 次版本二进制兼容跑 sm_86 cubin，实测 GPU 矩阵乘与 CPU 结果一致、显存正常分配，故当前卡判据由 arch list 改为实跑运算。
+
+**pip 取包路径（开发期变更，2026-09-22 T002）**：torch 本体在 `download.pytorch.org/whl/cu130`，但其 NVIDIA 依赖（cudnn 553MB、nccl 等）由该索引指向 `pypi.nvidia.com`——在执行机 `qiaozhi-lt` 经本机代理下载该域名的大文件连续 4 次失败（连接断开 / 截断致 sha256 不符 / 读超时）。改由国内 PyPI 镜像取 NVIDIA 依赖后一次成功（29 个 wheel、2.9GB，pip 逐个校验哈希）。故 Dockerfile 增 `ARG TORCH_EXTRA_INDEX_URL`（缺省空串 → 展开为空，默认构建命令与落地前等价），GPU override 传镜像地址。
 
 **override 文件契约**（`deployment/docker-compose.gpu.yml`，只覆盖 `kronos-signal-real`）：
 

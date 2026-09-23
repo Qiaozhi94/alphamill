@@ -16,11 +16,16 @@ FROM mock AS real
 # deployment/docker-compose.gpu.yml 只覆盖索引为 cu130（CPU/GPU 同版本）。ARG 须声明在
 # 本 stage 内（stage 作用域）。其余从 PyPI 安装上游直接 import 的最小集
 # （model/kronos.py → torch/huggingface_hub/tqdm，model/module.py → einops）。
+# TORCH_EXTRA_INDEX_URL 缺省空串 → 条件展开为空，默认构建的安装命令与落地前等价；
+# GPU 构建用它把 torch 的 NVIDIA 依赖（cudnn/nccl…）指向可达镜像，绕开 pypi.nvidia.com
+# （执行机经代理下载该域名大文件连续失败，见 design §4 开发期变更）。
 ARG TORCH_VERSION=2.14.0
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+ARG TORCH_EXTRA_INDEX_URL=
 
 RUN pip install --no-cache-dir torch==${TORCH_VERSION} \
     --index-url ${TORCH_INDEX_URL} \
+    ${TORCH_EXTRA_INDEX_URL:+--extra-index-url ${TORCH_EXTRA_INDEX_URL}} \
  && pip install --no-cache-dir \
     einops==0.8.2 \
     safetensors==0.8.0 \

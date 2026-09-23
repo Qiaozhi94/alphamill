@@ -239,7 +239,7 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 ### 非功能需求
 
 - **NFR-001**：默认面不变——本 feature 不改动 `deployment/docker-compose.yml` 与 `.env.example`（F009 T013 的端口改动归 F009，不在此列）；不提供构建参数时 Dockerfile 解析出的 torch 安装命令（版本 + 索引）与落地前等价；CI 行为不变；默认（mock 目标）镜像 `import torch` 仍判红。（不承诺镜像 digest 逐字一致：引入 `ARG` 后层缓存键必变，该承诺不可证伪。）
-- **NFR-002**：可配置 / 迁移友好——wheel index、torch 版本、设备、GPU 预留全部走参数，迁移 `qiaozhi-lab` 时只改参数与重跑验收；wheel 选择须能覆盖当前卡 sm_89 与迁移目标 Blackwell sm_120（以 `torch.cuda.get_arch_list()` 核验）。
+- **NFR-002**：可配置 / 迁移友好——wheel index、torch 版本、设备、GPU 预留全部走参数，迁移 `qiaozhi-lab` 时只改参数与重跑验收；wheel 选择须能覆盖当前卡与迁移目标 Blackwell sm_120：`torch.cuda.get_arch_list()` 须含 `sm_120`；当前卡 sm_89 **不在** cu130 wheel 的 arch list 内（实测只有 sm_75/80/86/90/100/120），由 CUDA 次版本二进制兼容（sm_86 cubin 运行于 sm_89）覆盖，故当前卡的判据改为**实跑一次 GPU 张量运算并与 CPU 结果一致**（2026-09-22 T002 实测变更）。
 - **NFR-003**：安全 / 边界——GPU 直通不放宽既有挂载与网络边界：模型目录仍 `:ro`，不新增对外暴露端口。
 - **NFR-004**：可靠性——GPU 不可用时失败可见（FR-004），不静默降级；启动预检失败仍非零退出。
 - **NFR-005**：平台兼容——目标平台为执行机 WSL2 + docker-ce（非 Docker Desktop）；显存读数不依赖 GPU 进程列表（WSL2 下 `nvidia-smi` 不列出进程）。
@@ -310,7 +310,7 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 | F004 的 CPU 硬断言怎么处理 | **只迁移 Dockerfile 段**为"构建参数缺省值是 CPU wheel"；compose 段断言因默认文件不动而原样保留；GPU 面断言归本 feature | 直接删掉会丢失 F004 花整轮检视收干净的默认面保护；override 方案让 compose 段无需迁移，迁移面缩到最小 | AC-005 以"全部既有变异仍判红"作为迁移无损的机器判据 |
 | GPU 默认开还是默认关 | **默认关**，显式启用 | 开发机是 AMD iGPU、CI 无 GPU；默认开会把这两处推下悬崖，而它们承载着本仓绝大多数门禁 | 执行机在 `.env` 显式开启 |
 | 设备不可见时回落 CPU | **不回落，失败可见** | 回落会让 `/health` 报 cpu 而编排以为拿到了 GPU 实例——夜槽据此卸载"并不占显存的东西"，比直接失败更难排查 | 沿用 F004 `restart: "no"` 的失败态可见纪律 |
-| torch CUDA 版本选择 | **CPU/GPU 同版本 `2.14.0`，GPU 索引 `cu130`**；宿主驱动须满足 CUDA 13.0 的最低驱动要求（R580 系列及以上，以 NVIDIA 兼容表为准，T002 核验） | 2026-09-21 实查：`cu128` 索引的 cp311 最高只到 `2.11.0`，`2.14.0` 只有 `cu130`/`cu132`（R1-002）；保持同版本避免 CPU/GPU 两个镜像行为分叉 | F003 `mining` 注释里的 `cu128` 示例对 2.12+ 已不成立，由 F003 在其分支同步（tasks §5）；`get_arch_list()` 须含 sm_89 与 sm_120 |
+| torch CUDA 版本选择 | **CPU/GPU 同版本 `2.14.0`，GPU 索引 `cu130`**；宿主驱动须满足 CUDA 13.0 的最低驱动要求（R580 系列及以上，以 NVIDIA 兼容表为准，T002 核验） | 2026-09-21 实查：`cu128` 索引的 cp311 最高只到 `2.11.0`，`2.14.0` 只有 `cu130`/`cu132`（R1-002）；保持同版本避免 CPU/GPU 两个镜像行为分叉 | F003 `mining` 注释里的 `cu128` 示例对 2.12+ 已不成立，由 F003 在其分支同步（tasks §5）；`get_arch_list()` 须含 sm_120；当前卡 sm_89 不在表内，以实跑 GPU 运算证明（T002 实测变更） |
 | GPU 面怎么启用 | **独立 override 文件 `docker-compose.gpu.yml`**，不用变量开关 | compose 变量插值删不掉设备预留块，`count: 0` 渲染后变成"全部 GPU"并在无 NVIDIA 机器上启动失败（R1-001 实测）；override 让本 feature 不必改默认文件，GPU 面四项配置集中一处（R1-004） | 执行机以 `-f ... -f docker-compose.gpu.yml` 启动，命令写进 `docs/alphamill-integration.md` |
 | 常驻显存可能超 ≤3GB 预算 | 实测对照，超出即在架构 §7.1 白天行显式重标，不沿用旧数字 | §7.1 自己写明"预算值与时段表随执行机走，迁移后按上文重标"；本 feature 是该预算第一次被真实标定的机会 | 常驻预算与训练预算（F003 `vram_limit_gb`，缺省 6.0）不是同一量：夜槽已卸载 Kronos，常驻超标不改训练预算（R1-006） |
 | 卸载后可用显存可能达不到训练预算 | T002 顺带记录空载整卡可用显存（2026-09-21 预探：空载 free 7956 MiB，高于 6GB；单次读数，以 T002 正式记录为准）；若 <6GB，走 §7.1 夜槽行重标并同步 F003 `vram_limit_gb`，而不是判 AC-009 失败了事 | 8GB 笔记本卡在 WSL2 下 Windows 桌面合成器也占显存，6GB 未必物理可得（R1-012） | 重标须在同一提交内同步 F003 侧缺省 |

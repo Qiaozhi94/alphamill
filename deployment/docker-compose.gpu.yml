@@ -15,6 +15,9 @@ services:
       args:
         # 只换索引，不覆盖 TORCH_VERSION：CPU/GPU 同为 2.14.0（2.14.0 无 cu128 包）
         TORCH_INDEX_URL: https://download.pytorch.org/whl/cu130
+        # NVIDIA 依赖（cudnn/nccl…）改从国内 PyPI 镜像取：cu130 索引把它们指向
+        # pypi.nvidia.com，执行机经代理下载其大文件连续失败（design §4 开发期变更）
+        TORCH_EXTRA_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
     environment:
       # 显式设置 → 加载入口走严格分支：拿不到 CUDA 即启动失败，绝不回落 cpu（FR-004）
       KRONOS_DEVICE: cuda

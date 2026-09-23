@@ -1,7 +1,8 @@
 """F010 GPU 运行时集成：`kronos-signal-real` 叠加 GPU override 在执行机真实推理（执行机取证）。
 
 对应 spec AC-004 执行机层 / AC-006 / AC-007 / AC-008 与 T018 旅程轨、design §8：
-- AC-006：容器内 `torch.cuda.is_available()` 为真、arch list 覆盖 sm_89 与 sm_120（NFR-002），
+- AC-006：容器内 `torch.cuda.is_available()` 为真、arch list 含 sm_120（NFR-002），当前卡
+  （sm_89，不在 cu130 arch list 内，靠 CUDA 次版本二进制兼容）以实跑 GPU 运算为准，
   `/health` 报 `device=cuda:<n>`、`model_loaded=true`，启动日志含实际设备与 torch CUDA 版本；
 - AC-007：`/predict` 返回 `source=kronos`，设备侧已用显存相对基线上升；
 - AC-008：常驻显存峰值与架构 §7.1 白天行预算对照，证据记录 hostname / GPU 型号 / 读数；
@@ -52,7 +53,9 @@ CONTROL_URL = os.getenv("KRONOS_CONTROL_URL", BASE_URL)
 RESIDENT_VRAM_BUDGET_MIB = 3 * 1024
 # 架构 §7.1 夜槽行 / F003 `vram_limit_gb` 缺省 6.0：卸载后整卡可用显存须达到的训练预算。
 TRAINING_VRAM_BUDGET_MIB = 6 * 1024
-REQUIRED_ARCHES = ("sm_89", "sm_120")  # 当前 RTX 4060 Laptop / 迁移目标 Blackwell
+# cu130 wheel 的 arch list 实测为 sm_75/80/86/90/100/120：迁移目标 sm_120 在内，当前卡
+# sm_89 不在内（跑 sm_86 cubin，CUDA 次版本二进制兼容）。当前卡的判据是实跑运算，不是列表。
+REQUIRED_ARCHES = ("sm_120",)
 
 pytestmark = pytest.mark.integration
 INTEGRATION_REQUIRED = os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "true", "yes"}
@@ -154,9 +157,14 @@ def test_gpu_instance_loads_on_cuda(gpu_instance) -> None:
             REAL_CONTAINER,
             "python",
             "-c",
-            "import json,torch; print(json.dumps({'available': torch.cuda.is_available(),"
+            "import json,torch;"
+            " a=torch.randn(512,512,device='cuda'); b=torch.randn(512,512,device='cuda');"
+            " gpu=(a@b).sum().item(); cpu=(a.cpu()@b.cpu()).sum().item();"
+            " print(json.dumps({'available': torch.cuda.is_available(),"
             " 'cuda': torch.version.cuda, 'torch': torch.__version__,"
-            " 'arch': torch.cuda.get_arch_list()}))",
+            " 'arch': torch.cuda.get_arch_list(),"
+            " 'capability': list(torch.cuda.get_device_capability(0)),"
+            " 'matmul_ok': abs(gpu-cpu) < 1.0}))",
         ],
         timeout=120,
     )
@@ -166,6 +174,8 @@ def test_gpu_instance_loads_on_cuda(gpu_instance) -> None:
     assert torch_info["cuda"], torch_info
     for arch in REQUIRED_ARCHES:
         assert arch in torch_info["arch"], f"arch list 缺 {arch}（NFR-002）: {torch_info['arch']}"
+    # 当前卡（capability 8.9）不在 arch list 内，靠二进制兼容跑 sm_86 cubin：实算一次才算数
+    assert torch_info["matmul_ok"] is True, f"GPU 运算结果与 CPU 不一致: {torch_info}"
 
     health = gpu_instance["health"]
     assert health["model_loaded"] is True
@@ -179,7 +189,8 @@ def test_gpu_instance_loads_on_cuda(gpu_instance) -> None:
     print(
         f"\n[evidence] hostname={socket.gethostname()} gpu={_nvidia_query('name')}"
         f" driver={_nvidia_query('driver_version')} torch={torch_info['torch']}"
-        f" cuda={torch_info['cuda']} arch={','.join(torch_info['arch'])}"
+        f" cuda={torch_info['cuda']} capability={torch_info['capability']}"
+        f" arch={','.join(torch_info['arch'])} matmul_ok={torch_info['matmul_ok']}"
     )
 
 
