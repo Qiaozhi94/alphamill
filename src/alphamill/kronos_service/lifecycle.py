@@ -141,8 +141,8 @@ class LifecycleController:
             budget_s=budget_s,
         )
 
-    def _vram_bytes(self, device: str) -> int | None:
-        return self._probe(device, budget_s=self._config.probe_timeout_s).used_bytes
+    def _vram_reading(self, device: str) -> vram.VramReading:
+        return self._probe(device, budget_s=self._config.probe_timeout_s)
 
     # --- 动作 ---------------------------------------------------------------
 
@@ -156,7 +156,7 @@ class LifecycleController:
         """受理 → 置 desired → 后台执行 → 按 deadline 等待（design §5）。"""
         started = self._clock()
         device = self._signal.status().device
-        vram_before = self._vram_bytes(device)
+        vram_before = self._vram_reading(device)
 
         with self._meta_lock:
             if self._operation is not None:
@@ -185,7 +185,7 @@ class LifecycleController:
         worker,
         operation: Operation,
         state_before: str,
-        vram_before: int | None,
+        vram_before: vram.VramReading,
         started: float,
     ) -> dict:
         try:
@@ -200,6 +200,7 @@ class LifecycleController:
                 self._operation = None
                 desired_now = self._desired
             model_status = self._signal.status()
+            vram_after = self._vram_reading(model_status.device)
             late = operation.id in self._timed_out
             self._timed_out.discard(operation.id)
             self._log(
@@ -209,7 +210,7 @@ class LifecycleController:
                 state_after=self._state(desired_now, bool(model_status.loaded)),
                 desired=desired_now,
                 vram_before=vram_before,
-                vram_after=self._vram_bytes(model_status.device),
+                vram_after=vram_after,
                 elapsed_ms=elapsed_ms,
             )
 
@@ -229,7 +230,7 @@ class LifecycleController:
                 self._desired = RUNNING
             raise LifecycleError(E_UNLOAD_FAILED) from exc
         device = self._signal.status().device
-        return {"state": STOPPED, "vram_bytes": self._vram_bytes(device)}, "ok"
+        return {"state": STOPPED, "vram_bytes": self._vram_reading(device).used_bytes}, "ok"
 
     def _restore_worker(self) -> tuple[dict, str]:
         try:
@@ -253,9 +254,9 @@ class LifecycleController:
             f"state_before={fields['state_before']}",
             f"state_after={fields['state_after']}",
             f"desired={fields['desired']}",
-            f"vram_bytes_before={fields['vram_before']}",
-            f"vram_bytes_after={fields['vram_after']}",
-            f"vram_readable={fields['vram_after'] is not None}",
+            f"vram_bytes_before={fields['vram_before'].used_bytes}",
+            f"vram_bytes_after={fields['vram_after'].used_bytes}",
+            f"vram_readable={fields['vram_after'].readable}",
             f"contract_version={CONTRACT_VERSION}",
             f"elapsed_ms={fields['elapsed_ms']}",
         ]
