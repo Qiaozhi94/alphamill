@@ -1,0 +1,271 @@
+"""Kronos 生命周期控制面（F009）。
+
+控制器是控制面的**唯一写入口**：持有期望态 `desired` 与进行中动作 `operation`，
+保证同一时刻至多一个动作在执行。它**不存 `state`**——每次从
+`(desired, signal.status().loaded)` 派生，避免第二份真相源（design §2/§5）。
+
+三条硬语义（架构 §7.1）：
+1. `desired=stopped` 期间推理端点不得隐式加载模型——`allow_load()` 是该准入的开关；
+2. `E_TIMEOUT` 表示"动作仍在进行"，服务端不中断后台动作；最终落点由 `operation` 转
+   `null` 表达，迟到完成补写 `result=late_complete` 日志行；
+3. 返回任何错误信封之前，`operation` 已清空且 `(desired, model_loaded)` 已落在稳定态。
+"""
+
+from __future__ import annotations
+
+import contextlib
+import threading
+import time
+import uuid
+from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+from . import vram
+from .lifecycle_config import LifecycleConfig
+
+CONTRACT_VERSION = "1"
+CONTRACT_VERSION_HEADER = "X-Contract-Version"
+
+E_UNSUPPORTED_VERSION = "E_UNSUPPORTED_VERSION"
+E_BAD_REQUEST = "E_BAD_REQUEST"
+E_BUSY = "E_BUSY"
+E_TIMEOUT = "E_TIMEOUT"
+E_UNLOAD_FAILED = "E_UNLOAD_FAILED"
+E_UNAVAILABLE = "E_UNAVAILABLE"
+
+#: 契约允许的全部错误码（IR-004）：实现不得发明新码
+ERROR_CODES = (
+    E_UNSUPPORTED_VERSION,
+    E_BAD_REQUEST,
+    E_BUSY,
+    E_TIMEOUT,
+    E_UNLOAD_FAILED,
+    E_UNAVAILABLE,
+)
+
+RUNNING = "running"
+STOPPED = "stopped"
+TRANSITIONAL = "transitional"
+
+
+class LifecycleError(Exception):
+    """控制面错误：`code` 即 wire 上的单键错误信封内容。"""
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+class UnloadFailed(RuntimeError):
+    """卸载失败。`discarded` 表示模型引用是否已丢弃——它决定失败落点（design §5 表）。"""
+
+    def __init__(self, message: str, *, discarded: bool):
+        super().__init__(message)
+        self.discarded = discarded
+
+
+@dataclass(frozen=True)
+class Operation:
+    id: str
+    action: str
+    started_at: str
+
+    def as_dict(self) -> dict:
+        return {"id": self.id, "action": self.action, "started_at": self.started_at}
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+class LifecycleController:
+    def __init__(
+        self,
+        signal,
+        config: LifecycleConfig,
+        *,
+        emit=print,
+        clock=time.monotonic,
+    ):
+        self._signal = signal
+        self._config = config
+        self._emit = emit
+        self._clock = clock
+        self._desired = RUNNING
+        self._operation: Operation | None = None
+        self._meta_lock = threading.Lock()
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kronos-lifecycle")
+        self._current: Future | None = None
+        # 主线程放弃等待的动作 id：后台完成时据此补写 late_complete 收尾行（TR-002）
+        self._timed_out: set[str] = set()
+
+    # --- 派生态 -------------------------------------------------------------
+
+    def _state(self, desired: str, loaded: bool) -> str:
+        if desired == RUNNING and loaded:
+            return RUNNING
+        if desired == STOPPED and not loaded:
+            return STOPPED
+        return TRANSITIONAL
+
+    def allow_load(self) -> bool:
+        """推理准入：`desired=stopped` 期间禁止隐式加载（FR-003）。"""
+        with self._meta_lock:
+            return self._desired == RUNNING
+
+    def status(self) -> dict:
+        """只读查询：自带服务端 deadline，不进单飞执行器（动作进行中照样可达）。"""
+        deadline = self._clock() + self._config.status_timeout_s
+        with self._meta_lock:
+            desired, operation = self._desired, self._operation
+        model_status = self._signal.status()
+        reading = self._probe(model_status.device, budget_s=deadline - self._clock())
+        return {
+            "state": self._state(desired, bool(model_status.loaded)),
+            "desired": desired,
+            "contract_version": CONTRACT_VERSION,
+            "model_loaded": bool(model_status.loaded),
+            "vram_bytes": reading.used_bytes,
+            "vram_readable": reading.readable,
+            "device": model_status.device,
+            "operation": operation.as_dict() if operation else None,
+        }
+
+    def _probe(self, device: str, budget_s: float) -> vram.VramReading:
+        return vram.probe(
+            device=device,
+            mode=self._config.probe_mode,
+            probe_timeout_s=self._config.probe_timeout_s,
+            budget_s=budget_s,
+        )
+
+    def _vram_bytes(self, device: str) -> int | None:
+        return self._probe(device, budget_s=self._config.probe_timeout_s).used_bytes
+
+    # --- 动作 ---------------------------------------------------------------
+
+    def stop(self) -> dict:
+        return self._run_action("stop", STOPPED, self._config.stop_timeout_s)
+
+    def restore(self) -> dict:
+        return self._run_action("restore", RUNNING, self._config.restore_timeout_s)
+
+    def _run_action(self, action: str, desired: str, timeout_s: float) -> dict:
+        """受理 → 置 desired → 后台执行 → 按 deadline 等待（design §5）。"""
+        started = self._clock()
+        device = self._signal.status().device
+        vram_before = self._vram_bytes(device)
+
+        with self._meta_lock:
+            if self._operation is not None:
+                raise LifecycleError(E_BUSY)  # 不排队、不叠加
+            operation = Operation(uuid.uuid4().hex[:8], action, _now_iso())
+            previous_desired = self._desired
+            state_before = self._state(previous_desired, bool(self._signal.status().loaded))
+            self._desired = desired
+            self._operation = operation
+
+        worker = self._stop_worker if action == "stop" else self._restore_worker
+        future = self._executor.submit(
+            self._execute, worker, operation, state_before, vram_before, started
+        )
+        self._current = future
+        try:
+            return future.result(timeout=timeout_s)
+        except FutureTimeout:
+            # 不中断后台动作：中断会留下半加载态（NFR-004）。operation 保持非空，
+            # 后台完成时按同一 operation_id 补写 late_complete 收尾行。
+            self._timed_out.add(operation.id)
+            raise LifecycleError(E_TIMEOUT) from None
+
+    def _execute(
+        self,
+        worker,
+        operation: Operation,
+        state_before: str,
+        vram_before: int | None,
+        started: float,
+    ) -> dict:
+        try:
+            payload, result = worker()
+            return payload
+        except LifecycleError as exc:
+            result = exc.code
+            raise
+        finally:
+            elapsed_ms = int((self._clock() - started) * 1000)
+            with self._meta_lock:
+                self._operation = None
+                desired_now = self._desired
+            model_status = self._signal.status()
+            late = operation.id in self._timed_out
+            self._timed_out.discard(operation.id)
+            self._log(
+                operation=operation,
+                result="late_complete" if late else result,
+                state_before=state_before,
+                state_after=self._state(desired_now, bool(model_status.loaded)),
+                desired=desired_now,
+                vram_before=vram_before,
+                vram_after=self._vram_bytes(model_status.device),
+                elapsed_ms=elapsed_ms,
+            )
+
+    # --- 动作实现 -----------------------------------------------------------
+
+    def _stop_worker(self) -> tuple[dict, str]:
+        try:
+            self._signal.unload()
+        except UnloadFailed as exc:
+            if not exc.discarded:
+                # 什么都没动 → 回到原状最诚实（design §5 表第一行）
+                with self._meta_lock:
+                    self._desired = RUNNING
+            raise LifecycleError(E_UNLOAD_FAILED) from exc
+        except Exception as exc:  # 卸载尚未开始就失败，等同"未丢引用"
+            with self._meta_lock:
+                self._desired = RUNNING
+            raise LifecycleError(E_UNLOAD_FAILED) from exc
+        device = self._signal.status().device
+        return {"state": STOPPED, "vram_bytes": self._vram_bytes(device)}, "ok"
+
+    def _restore_worker(self) -> tuple[dict, str]:
+        try:
+            self._signal.eager_load()
+        except Exception as exc:
+            # 加载失败：desired 回落 stopped，否则实例停在"期望 running 但加载不上"的
+            # 过渡态里，state 落不回稳定态（design §5）。进程不退出。
+            with self._meta_lock:
+                self._desired = STOPPED
+            raise LifecycleError(E_UNAVAILABLE) from exc
+        return {"state": RUNNING}, "ok"
+
+    # --- 观测 ---------------------------------------------------------------
+
+    def _log(self, **fields) -> None:
+        operation: Operation = fields.pop("operation")
+        parts = [
+            f"action={operation.action}",
+            f"operation_id={operation.id}",
+            f"result={fields['result']}",
+            f"state_before={fields['state_before']}",
+            f"state_after={fields['state_after']}",
+            f"desired={fields['desired']}",
+            f"vram_bytes_before={fields['vram_before']}",
+            f"vram_bytes_after={fields['vram_after']}",
+            f"vram_readable={fields['vram_after'] is not None}",
+            f"contract_version={CONTRACT_VERSION}",
+            f"elapsed_ms={fields['elapsed_ms']}",
+        ]
+        self._emit(" ".join(parts))
+
+    # --- 测试与收尾辅助 -----------------------------------------------------
+
+    def wait_idle(self, timeout: float | None = None) -> None:
+        """等待在飞动作真正结束（迟到完成的可观测落点）。"""
+        future = self._current
+        if future is not None:
+            with contextlib.suppress(Exception):
+                future.result(timeout=timeout)
