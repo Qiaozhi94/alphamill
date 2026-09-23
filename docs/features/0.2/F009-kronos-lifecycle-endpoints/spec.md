@@ -2,7 +2,8 @@
 kind: feature
 id: F009
 version: "0.2"
-status: ready-for-development
+status: developing
+branch: feat/F009-kronos-lifecycle-endpoints
 gate_version: 1
 related_features: [F003, F004, F010]
 topics: [kronos, lifecycle, control-plane, gpu-slot, m2]
