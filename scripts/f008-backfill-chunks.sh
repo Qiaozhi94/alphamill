@@ -10,6 +10,15 @@
 #   CHUNK_MINUTES=15 MAX_CHUNKS=200 bash scripts/f008-backfill-chunks.sh 2
 #   MAX_CHUNKS=1 bash scripts/f008-backfill-chunks.sh 1    # 只跑一片（人工逐片放行）
 #   RUN_ID=<run_id> MAX_CHUNKS=1 bash scripts/f008-backfill-chunks.sh 1   # 续跑同一份记录
+#   MIN_INTERVAL=0.5 bash scripts/f008-backfill-chunks.sh 1               # 回退到保守节奏
+#
+# 限速（`--min-interval`，默认 0.2s）：`klines limit=1000` 单请求权重 4、配额 6000/分钟/IP，
+# 0.2s ⇒ 5 请求/秒 ⇒ 1200 权重/分 = 配额的 20%（采集器另占约 12 权重/分，可忽略）。
+# 2026-09-23 实测：热连接（ccxt 同形态 session + gzip）取 1000 根中位 0.226 s，加落库约
+# 0.08 s ⇒ 单批串行地板 ≈0.31 s。旧值 0.5 s 高于该地板、确实在卡（实测 118 k 行/分 ≈ 120
+# 请求/分）；降到 0.2 s 后间隔不再成为约束，预期 ≈193 k 行/分（**约 1.6×**，不是线性放大）。
+# 再往下调无益——已到串行地板；要更快只能上 pair 级并发（DQ-002 允许，未实现）。
+# 库内 `RateLimitPolicy` 默认仍是 0.5，保守值只在这里被运营参数覆盖。
 #
 # 退出条件：本批全部 pair completed/unavailable，或达到 MAX_CHUNKS，或连续 3 片无进展，
 # 或开片前置检查发现出口代理不通（exit 2，本片未启动、无 pair 被标记 failed）。
@@ -25,6 +34,7 @@ END="${END:-2026-09-10T15:52:00Z}"
 CHUNK_MINUTES="${CHUNK_MINUTES:-30}"
 MAX_CHUNKS="${MAX_CHUNKS:-96}"          # 96 × 30min = 48h 上限
 FETCH="${FETCH_LIMIT:-1000}"
+MIN_INTERVAL="${MIN_INTERVAL:-0.2}"     # 见上「限速」；0.5 = 回退保守值
 LOG_DIR="$REPO_F008/reports/backfill"
 mkdir -p "$LOG_DIR"
 
@@ -69,7 +79,8 @@ for chunk in $(seq 1 "$MAX_CHUNKS"); do
   log="$LOG_DIR/chunk-b${BATCH}-${stamp}.log"
   args=(--universe "$UNIVERSE" --batch "$BATCH" --start "$START" --end "$END"
         --lake-root "$LAKE" --reports-dir "$LOG_DIR"
-        --fetch-limit "$FETCH" --max-runtime-minutes "$CHUNK_MINUTES")
+        --fetch-limit "$FETCH" --min-interval "$MIN_INTERVAL"
+        --max-runtime-minutes "$CHUNK_MINUTES")
   if [[ -n "$RUN_ID" ]]; then
     args+=(--resume-run-id "$RUN_ID")
   fi
