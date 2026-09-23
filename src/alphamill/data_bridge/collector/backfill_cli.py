@@ -10,12 +10,12 @@ import logging
 import os
 from datetime import UTC, datetime, timedelta
 
+from .backfill_orchestrator import run_backfill
 from .db_writer import db_connect
 from .historical_backfill import (
     STATUS_FAILED,
     logger,
     refresh_aggregates,
-    run_backfill,
 )
 from .symbol_manager import parse_symbols
 

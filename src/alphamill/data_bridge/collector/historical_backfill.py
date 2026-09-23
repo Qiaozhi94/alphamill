@@ -14,7 +14,7 @@
 import logging
 import os
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from .backfill_boundaries import (
     delisting_end_for,
@@ -31,6 +31,16 @@ from .db_writer import normalize_ohlcv_rows, upsert_ohlcv
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 TIMEFRAME_MS = 60_000
 FETCH_LIMIT = int(os.getenv("BACKFILL_FETCH_LIMIT", "100"))
+
+#: 连续聚合的桶宽：刷新窗口至少要覆盖两个桶，否则 TimescaleDB 拒绝
+#: （`refresh window too small`）。
+AGGREGATE_BUCKETS = {
+    "ohlcv_5m": timedelta(minutes=5),
+    "ohlcv_15m": timedelta(minutes=15),
+    "ohlcv_1h": timedelta(hours=1),
+    "ohlcv_4h": timedelta(hours=4),
+    "ohlcv_1d": timedelta(days=1),
+}
 
 
 def retry_count(value: str | int) -> int:
@@ -243,14 +253,24 @@ def refresh_aggregates(conn, start: datetime, end: datetime):
         return
 
     aggregates = ["ohlcv_5m", "ohlcv_15m", "ohlcv_1h", "ohlcv_4h", "ohlcv_1d"]
+    # 调用方可能刚跑过只读查询（如编排层收尾的 `current_cursor`），psycopg2 会把事务留着开着，
+    # 此时切 autocommit 会报 `set_session cannot be used inside a transaction`（2026-09-23 实测：
+    # `python -m ...historical_backfill` 写完缺口后刷聚合必炸）。先收尾事务再切。
+    if not conn.autocommit:
+        conn.commit()
     previous_autocommit = conn.autocommit
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
             for aggregate in aggregates:
-                logger.info("refreshing aggregate=%s start=%s end=%s", aggregate, start, end)
+                # 刷新窗口必须覆盖该聚合至少两个桶，否则 TimescaleDB 报
+                # `refresh window too small`——缺口补齐这类分钟级窗口必然短于 1d 桶
+                # （2026-09-23 实测：06:00→06:51 刷 ohlcv_1d 失败）。
+                window_start = min(start, end - 2 * AGGREGATE_BUCKETS[aggregate])
+                logger.info("refreshing aggregate=%s start=%s end=%s", aggregate, window_start, end)
                 cur.execute(
-                    "CALL refresh_continuous_aggregate(%s, %s, %s)", (aggregate, start, end)
+                    "CALL refresh_continuous_aggregate(%s, %s, %s)",
+                    (aggregate, window_start, end),
                 )
     finally:
         conn.autocommit = previous_autocommit
