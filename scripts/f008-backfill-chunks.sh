@@ -42,16 +42,23 @@ prev_done=-1
 # 开片前置检查：出口代理不通时**快速失败**，而不是让每个 pair 各自耗尽 8 次退避重试
 # （2026-09-23 实测：NAS mihomo 选中节点 SG-2 挂掉 → 每 pair 约 6 分钟后被判 failed）。
 # 只读探测，不改任何状态；代理恢复后原样重跑本脚本即可。单次冷启动可能假失败，
-# 故连试 3 次，全失败才判不通。
+# 且节点抖动实测可自行恢复（2026-09-23 12:13 抖了约 1 分钟、URLTest 组随后自选新节点），
+# 故：3 次快试为一轮、最多 3 轮（轮间等 30s），全失败才判不通。
 preflight() {
-  local code=""
-  for _ in 1 2 3; do
-    code="$(curl -s -o /dev/null --max-time 15 -w '%{http_code}' \
-      -x "${BINANCE_HTTPS_PROXY:-}" https://api.binance.com/api/v3/time 2>/dev/null || true)"
-    [[ "$code" == "200" ]] && return 0
-    sleep 2
+  local code="" round
+  for round in 1 2 3; do
+    for _ in 1 2 3; do
+      code="$(curl -s -o /dev/null --max-time 15 -w '%{http_code}' \
+        -x "${BINANCE_HTTPS_PROXY:-}" https://api.binance.com/api/v3/time 2>/dev/null || true)"
+      [[ "$code" == "200" ]] && return 0
+      sleep 2
+    done
+    if (( round < 3 )); then
+      echo "[$(date -u +%H:%M:%SZ)] 前置检查第 $round 轮未通过（http=${code:-timeout}），30s 后重试"
+      sleep 30
+    fi
   done
-  echo "[$(date -u +%H:%M:%SZ)] 前置检查失败：出口代理 ${BINANCE_HTTPS_PROXY:-<未配置>} 取不到 Binance（http=${code:-timeout}，连试 3 次）"
+  echo "[$(date -u +%H:%M:%SZ)] 前置检查失败：出口代理 ${BINANCE_HTTPS_PROXY:-<未配置>} 取不到 Binance（http=${code:-timeout}，3 轮 × 3 次）"
   echo "  处置：先在 NAS 上确认 mihomo 选中节点是否存活（/proxies/<组>/delay），换到存活节点后重跑本脚本；本片未启动，无 pair 被标记 failed"
   exit 2
 }
