@@ -62,3 +62,5 @@ freqtrade/user_data/tradesv3.sqlite*
 # F002 Parquet 湖（分区数据 + manifest + symbol-map artifact，NAS 备份，不进 git）
 lake/
 reports/backfill/*.log
+# 逐片进度日志（stderr，体积大且可重跑复现）：入库只留逐片摘要 *.log.json 与 run.json
+reports/backfill/*.log.err

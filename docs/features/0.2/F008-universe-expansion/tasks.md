@@ -56,10 +56,10 @@ updated: 2026-09-19
 ### Phase 3：真实扩容执行
 
 - [x] T019 (`FR-001`, `FR-002`): 用 T001 的口径跑一次真实发现，人工复核 40 个候选（逐候选核对成交额排名、上线天数与排除原因均按 `DR-001` 入档）后冻结目标宇宙 — verify: `python -m alphamill.data_bridge.universe show --universe <id>` 输出 + 冻结记录
-- [ ] T020 (`FR-003`, `NFR-001`): 在执行机回填**批 1**（成交额前 30，含现有 6 对）——owner 主导，失败 pair 单独重跑 — verify: 批 1 的 `BackfillRun` 逐 pair `status=completed`（进行中：run `b40651e2a101-b1-20260921T152932Z`，证据见 `reports/f008/执行机取证-T002-T019.md` 与 `reports/backfill/<run_id>/run.json`）
+- [ ] T020 (`FR-003`, `NFR-001`): 在执行机回填**批 1**（成交额前 30，含现有 6 对）——owner 主导，失败 pair 单独重跑 — verify: 批 1 的 `BackfillRun` 逐 pair `status=completed`（进行中：run `6d85a249e8fe-b1-20260922T150054Z`，按 30 分钟片循环执行、各片以 `--resume-run-id` 共用同一份记录；证据见 `reports/f008/执行机取证-T020-T023.md` 与 `reports/backfill/<run_id>/run.json`）
 - [ ] T021 (`FR-003`, `NFR-001`): 回填**批 2**（第 31–40），复用同一套编排；批 1 已过门的 pair 不受影响 — verify: 批 2 的 `BackfillRun` 逐 pair `status=completed`
 - [ ] T022 (`FR-004`): 每批回填完成后立即对该批 pair 跑质量门，通过者准入、失败者隔离并记录原因；**批 1 过门即可供 `F003` 使用，不必等批 2** — verify: `pytest -q tests/integration/test_f008_quality_gate.py` + 逐 pair 判定记录
-- [ ] T023 (`FR-006`, `NFR-005`, `AC-011`): 两批都过门后跑一次全量导出与 NAS 备份，实测磁盘占用、导出耗时与备份时长并与 6 对基线及外推值对照 — verify: `tests/integration/test_f008_capacity_report.py`
+- [ ] T023 (`FR-006`, `NFR-005`, `AC-011`): 两批都过门后跑一次全量导出与 NAS 备份，实测磁盘占用、导出耗时与备份时长并与 6 对基线及外推值对照；**并完成准入切换**——把 `deployment/.env` 的 `SYMBOLS` 扩到已准入的 40 对后 `docker compose up -d --force-recreate data-collector`（`restart` 不重载 env），且切换前对新增 pair 跑追赶回填 `--start 2026-09-10T15:52:00Z --end <切换时刻>`（冻结窗口终点到切换时刻的洞，见 `reports/f008/执行机取证-T020-T023.md` §4） — verify: `tests/integration/test_f008_capacity_report.py` + 切换后 `ccxt_ingestor` 日志 `symbols_ok=40 symbols_failed=0` + 追赶回填的 `BackfillRun` 逐 pair `status=completed`
 
 ## 3. 验证与验收任务
 
@@ -79,7 +79,7 @@ updated: 2026-09-19
 - [x] T032 [TEST] (`US-003`, `AC-005`, `AC-006`, `AC-009`): 旅程 US-003 端到端验收——缺失率超限/边界未闭合/连续聚合不一致/重复主键四类 fixture 均被隔离并各记原因码、均不进导出清单；上线晚于窗口起点的 pair 按实际可得窗口算缺失率不被误判；全项通过者按 库追加 → artifact 发布 → 写准入记录 三步准入，发布的 artifact 可被下游 `load_explicit_universe` 加载，且 `symbol_map` 与导出清单允许不等 — verify: `pytest -q tests/integration/test_f008_quality_gate.py tests/unit/test_f008_quality_gate_window.py tests/integration/test_f008_export_integration.py`
 - [x] T033 [TEST] (`US-004`, `AC-007`, `AC-008`, `AC-013`): 旅程 US-004 端到端验收——含上市/退市/中途进出的成员 fixture 上 `universe_at(T)` 在各时点返回正确集合（左闭右开）；原地改写已发布历史区间被拒、退出只以追加新区间表达且历史数据不删；`schema_version` 不符或出现未知键时加载被拒 — verify: `pytest -q tests/unit/test_f008_membership.py tests/unit/test_f008_artifact.py`
 
-- [ ] T034: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
+- [ ] T034: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter；回写时须核对 T023 的准入切换两步（`SYMBOLS` 扩容 + 追赶回填）已执行并留证 — verify: `python3 tools/validate_spec_lifecycle.py`
       （编号说明：原收口任务在检视收口时由 `T029` 改编号为 `T034`，以满足 `check_task_dag` 的「收口任务编号最高、须有入边」两条规则；`T029` 现由「F007 消费面迁移」占用——它是开工前检查发现的契约漂移修复，必须排在最高编号之前。）
 
 ## 4. 依赖与并行关系
