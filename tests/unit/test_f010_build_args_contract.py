@@ -31,7 +31,7 @@ GPU_EXTRA_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
 ARG_RE = re.compile(r"^ARG ([A-Z_]+)(?:=(\S*))?$", re.M)
 TORCH_INSTALL_RE = re.compile(
-    r"pip install --no-cache-dir torch==(\S+) \\\n\s*--index-url (\S+)"
+    r"pip install --no-cache-dir(?: --\S+ \S+)* torch==(\S+) \\\n\s*--index-url (\S+)"
     r"(?: \\\n\s*(\$\{TORCH_EXTRA_INDEX_URL[^\n]*))?",
     re.M,
 )

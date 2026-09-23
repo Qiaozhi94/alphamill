@@ -246,8 +246,15 @@ nvidia-container-toolkit 并 `nvidia-ctk runtime configure --runtime=docker` 后
 `docker info` 的 Runtimes 须含 `nvidia`，否则守护进程直接拒绝设备请求（容器不启动，这**不是**
 严格分支的失败，见 F010 design §7）。
 
+**构建器**：GPU 镜像的 CUDA 依赖单个 wheel 达数百 MB，默认 buildx builder 的 RUN 步骤走
+bridge 网络，在执行机上连续三次读超时（约 155s 处）；改用 host 网络的 builder 一次成功
+（实测 20MB/s vs 7MB/s）。因此构建前 `export BUILDX_BUILDER=hostnet`（集成用例会自动选它）。
+Dockerfile 侧已固定 `--retries 10 --timeout 120`，并把 NVIDIA 依赖指向国内 PyPI 镜像
+（`TORCH_EXTRA_INDEX_URL`）——cu130 索引默认把它们指向 pypi.nvidia.com，该域名在本机不可用。
+
 ```bash
 # 启用 GPU 实例（执行机）
+export BUILDX_BUILDER=hostnet
 docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.gpu.yml \
   --profile kronos-real up -d --build kronos-signal-real
 docker logs quant-kronos-signal-real | grep '\[kronos-real\] model loaded'   # 实际设备 + torch CUDA 版本

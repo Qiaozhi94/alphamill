@@ -57,6 +57,11 @@ TRAINING_VRAM_BUDGET_MIB = 6 * 1024
 # sm_89 不在内（跑 sm_86 cubin，CUDA 次版本二进制兼容）。当前卡的判据是实跑运算，不是列表。
 REQUIRED_ARCHES = ("sm_120",)
 
+# 实例与探测都在 127.0.0.1：一律绕开环境里的 HTTP(S)_PROXY，否则代理会替失败的连接
+# 返回响应，让"/health 不可达"这类断言假绿（F010 T015 实测）。
+SESSION = requests.Session()
+SESSION.trust_env = False
+
 pytestmark = pytest.mark.integration
 INTEGRATION_REQUIRED = os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "true", "yes"}
 
@@ -71,8 +76,30 @@ def _require_integration(reason_unavailable: str | None = None) -> None:
         pytest.fail(reason_unavailable)
 
 
-def _run(cmd: list[str], timeout: int | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=ROOT)
+def _run(
+    cmd: list[str], timeout: int | None = None, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=ROOT, env=env)
+
+
+def _build_env() -> dict[str, str]:
+    """构建用环境：优先选 host 网络的 buildx builder。
+
+    默认 builder 的 RUN 步骤走 bridge 网络，CUDA 依赖（cudnn 553MB 等）在执行机上连续
+    三次读超时；host 网络实测 20MB/s vs 7MB/s，一次成功（F010 T008 实测）。builder 由
+    `BUILDX_BUILDER` 指定时听调用者的；否则本机存在名为 hostnet 的 builder 就用它。
+    """
+    env = dict(os.environ)
+    if "BUILDX_BUILDER" not in env:
+        listed = subprocess.run(
+            ["docker", "buildx", "ls", "--format", "{{.Name}}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if "hostnet" in listed.stdout.split():
+            env["BUILDX_BUILDER"] = "hostnet"
+    return env
 
 
 def _nvidia_query(field: str) -> str:
@@ -94,7 +121,7 @@ def _wait_for_health(prefix: str = "cuda") -> dict:
     last_error: str | None = None
     while time.monotonic() < deadline:
         try:
-            resp = requests.get(f"{BASE_URL}/health", timeout=5)
+            resp = SESSION.get(f"{BASE_URL}/health", timeout=5)
             if resp.status_code == 200:
                 health = resp.json()
                 if health.get("model_loaded") and str(health.get("device")).startswith(prefix):
@@ -107,7 +134,7 @@ def _wait_for_health(prefix: str = "cuda") -> dict:
 
 
 def _predict() -> dict:
-    resp = requests.get(f"{BASE_URL}/predict/BTC/USDT", params={"exchange": "binance"}, timeout=120)
+    resp = SESSION.get(f"{BASE_URL}/predict/BTC/USDT", params={"exchange": "binance"}, timeout=120)
     assert resp.status_code == 200, resp.text[:300]
     return resp.json()
 
@@ -137,7 +164,7 @@ def gpu_instance() -> Iterator[dict]:
     _run([*COMPOSE_GPU, "rm", "-sf", "kronos-signal-real"], timeout=120)
     baseline = _used_mib()
 
-    built = _run([*COMPOSE_GPU, "build", "kronos-signal-real"], timeout=3600)
+    built = _run([*COMPOSE_GPU, "build", "kronos-signal-real"], timeout=3600, env=_build_env())
     assert built.returncode == 0, f"GPU 镜像构建失败: {built.stderr[-2000:]}"
     up = _run([*COMPOSE_GPU, "up", "-d", "kronos-signal-real"], timeout=300)
     assert up.returncode == 0, f"GPU 实例拉起失败: {up.stderr[-2000:]}"
@@ -225,7 +252,7 @@ def test_resident_vram_within_budget(gpu_instance) -> None:
 
 
 def _cpu_image() -> str:
-    built = _run([*COMPOSE_CPU, "build", "kronos-signal-real"], timeout=3600)
+    built = _run([*COMPOSE_CPU, "build", "kronos-signal-real"], timeout=3600, env=_build_env())
     assert built.returncode == 0, f"CPU real 镜像构建失败: {built.stderr[-2000:]}"
     return _compose_image(COMPOSE_CPU, "kronos-signal-real")
 
@@ -291,14 +318,14 @@ def test_explicit_cuda_without_cuda_fails_visible(gpu_instance, case: str, reaso
         assert status_name == "exited" and int(exit_code) != 0, state.stdout
         assert int(restarts) == 0, f"{case}: 失败实例不得重启: {state.stdout}"
         with pytest.raises(requests.RequestException):
-            requests.get(f"http://127.0.0.1:{port}/health", timeout=3)
+            SESSION.get(f"http://127.0.0.1:{port}/health", timeout=3)
         print(f"\n[evidence] case={case} hostname={socket.gethostname()} exit={exit_code}")
     finally:
         _run(["docker", "rm", "-f", container], timeout=60)
 
 
 def _lifecycle(method: str, action: str) -> dict:
-    resp = requests.request(
+    resp = SESSION.request(
         method,
         f"{CONTROL_URL}/lifecycle/{action}",
         headers={"X-Contract-Version": "1"},

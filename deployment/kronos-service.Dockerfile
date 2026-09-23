@@ -23,10 +23,12 @@ ARG TORCH_VERSION=2.14.0
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
 ARG TORCH_EXTRA_INDEX_URL=
 
-RUN pip install --no-cache-dir torch==${TORCH_VERSION} \
+# --retries/--timeout：CUDA 依赖单个 wheel 达数百 MB，pip 默认 15s 读超时在本网络下必失败
+# （F010 T008 实测，design §4 开发期变更）。不影响解析出的版本与索引（NFR-001）。
+RUN pip install --no-cache-dir --retries 10 --timeout 120 torch==${TORCH_VERSION} \
     --index-url ${TORCH_INDEX_URL} \
     ${TORCH_EXTRA_INDEX_URL:+--extra-index-url ${TORCH_EXTRA_INDEX_URL}} \
- && pip install --no-cache-dir \
+ && pip install --no-cache-dir --retries 10 --timeout 120 \
     einops==0.8.2 \
     safetensors==0.8.0 \
     huggingface_hub==1.31.0 \

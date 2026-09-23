@@ -41,13 +41,13 @@ updated: 2026-09-21
 ### Phase 2：失败可见与可观测
 
 - [x] T006 (`FR-004`, `NFR-004`, `AC-004`): 把设备解析抽成 `_resolve_device()` 并由 `_load_predictor()` 调用（启动 eager load、F009 restore 重载、`/predict` 惰性加载共用）——**显式**设置 `KRONOS_DEVICE=cuda*` 时，`torch.version.cuda` 为空或 `is_available()` 为假即抛错并点名原因；`KRONOS_DEVICE` 未设置时保留既有宽松回落。先写单元测试（假 torch，两种拿不到 cuda 的情形 + 未设置回落 + `real_mode_startup` 抛 `SystemExit`）红，再实现转绿；删严格分支必须判红 — verify: `tests/unit/test_f010_device_strict.py` — 证据（2026-09-22）：red: `test_f010_device_strict.py` 7 failed / 2 passed（宽松回落为既有语义）→ green: 9 passed；变异：把 `if not self.device_explicit` 改成 `if True`（删严格分支）→ 5 failed；F004 运行时契约与 `/health` 套件同跑 23 passed
-- [ ] T007 (`TR-001`, `TR-002`, `AC-006`): 启动日志补一行"实际解析设备 + `torch.version.cuda`"，使"以为在 GPU、实际在 CPU"在日志里一眼可见 — verify: `tests/integration/test_f010_gpu_runtime.py`
+- [x] T007 (`TR-001`, `TR-002`, `AC-006`): 启动日志补一行"实际解析设备 + `torch.version.cuda`"，使"以为在 GPU、实际在 CPU"在日志里一眼可见 — verify: `tests/integration/test_f010_gpu_runtime.py` — 证据（2026-09-23，`qiaozhi-lt`）：启动日志 `[kronos-real] model loaded: device=cuda:0 torch_cuda=13.0`，集成用例逐字断言该行（AC-006 通过）
 
 ### Phase 3：执行机落地与取证
 
-- [ ] T008 (`FR-002`, `AC-006`): 在执行机以 GPU 参数构建并启动 `kronos-signal-real`，断言容器内 `torch.cuda.is_available()` 为真、`/health` 报 `device=cuda:<n>` 且 `model_loaded=true` — verify: `tests/integration/test_f010_gpu_runtime.py`
-- [ ] T009 (`US-001`, `AC-007`): 执行机上 `/predict` 产出 `source=kronos` 的真实信号，并记录设备侧已用显存相对基线的上升 — verify: `tests/integration/test_f010_gpu_runtime.py`
-- [ ] T010 (`US-003`, `AC-008`): 实测常驻显存峰值并与架构 §7.1 的 ≤3GB 预算对照；**超出即在架构 §7.1 白天行显式重标**（常驻预算与 F003 `vram_limit_gb` 训练预算不是同一量，常驻超标不改后者） — verify: `tests/integration/test_f010_gpu_runtime.py` + 架构 §7.1 时段表
+- [x] T008 (`FR-002`, `AC-006`): 在执行机以 GPU 参数构建并启动 `kronos-signal-real`，断言容器内 `torch.cuda.is_available()` 为真、`/health` 报 `device=cuda:<n>` 且 `model_loaded=true` — verify: `tests/integration/test_f010_gpu_runtime.py` — 证据（2026-09-23，`qiaozhi-lt`）：GPU 镜像 `alphamill/kronos-signal-real:gpu`（9.7GB）叠加 override 起实例：`/health` 报 `device=cuda:0`、`model_loaded=true`，容器 healthy；容器内 `torch.cuda.is_available()=true`、RTX 4060 Laptop / 驱动 616.64 / torch 2.14.0+cu130、capability (8,9)、arch=[sm_75,80,86,90,100,120]、GPU 实算与 CPU 一致。**构建约束**：默认 builder（bridge 网络）连续 3 次在清华镜像读超时（约 155s 处），改用仓内 `hostnet` builder（host 网络，实测 20MB/s vs 7MB/s）一次成功
+- [x] T009 (`US-001`, `AC-007`): 执行机上 `/predict` 产出 `source=kronos` 的真实信号，并记录设备侧已用显存相对基线的上升 — verify: `tests/integration/test_f010_gpu_runtime.py` — 证据（2026-09-23，`qiaozhi-lt`）：`/predict` 返回 `source=kronos` 真实信号；设备侧已用显存 0 MiB（基线）→ 563 MiB
+- [x] T010 (`US-003`, `AC-008`): 实测常驻显存峰值并与架构 §7.1 的 ≤3GB 预算对照；**超出即在架构 §7.1 白天行显式重标**（常驻预算与 F003 `vram_limit_gb` 训练预算不是同一量，常驻超标不改后者） — verify: `tests/integration/test_f010_gpu_runtime.py` + 架构 §7.1 时段表 — 证据（2026-09-23，`qiaozhi-lt`）：常驻峰值 **565 MiB**（5 次 /predict 采样均为 565），远低于架构 §7.1 白天行 ≤3GB（3072 MiB）预算 → **不触发重标**，§7.1 数字维持
 
 ### Phase 4：解除下游先红态
 
@@ -57,9 +57,9 @@ updated: 2026-09-21
 ## 3. 验证与验收任务
 
 - [x] T013 (`AC-001`, `AC-002`, `AC-003`): 运行参数化单元套件并逐条给出变异判红证明（改缺省值 / 把判据写死回 cpu 即红） — verify: `tests/unit/test_f010_build_args_contract.py`、`tests/unit/test_f010_compose_gpu_contract.py` — 证据（2026-09-22）：`test_f010_build_args_contract.py`（6 条缺省值/引用变异 + 全局 ARG 变异）与 `test_f010_compose_gpu_contract.py`（默认面 3 条 + override 13 条 + 越界服务 1 条变异）全部判红，含判据写回 `== 'cpu'`、删 `model_loaded`
-- [ ] T014 (`AC-005`): 运行迁移后的 F004 契约套件，全部既有变异必须仍判红，默认镜像 `import torch` 仍判红 — verify: `tests/unit/test_f004_compose_profile_contract.py`
-- [ ] T015 (`AC-004`): 两层证伪——单元层（开发机/CI）跑 `tests/unit/test_f010_device_strict.py` 并做删严格分支的变异判红；执行机层两例：① `docker run` GPU 镜像 `alphamill/kronos-signal-real:gpu`、**不加 `--gpus`**、`-e KRONOS_DEVICE=cuda` → 无设备分支；② 默认 CPU 镜像 + `-e KRONOS_DEVICE=cuda` → CPU wheel 分支；均断言非零退出、日志含对应文案、`/health` 不可达。**不得**以"开发机叠加 override 被守护进程拒绝"充当证据——那条路径容器从未启动，严格分支没被执行（文档检视 R1-003） — verify: `tests/unit/test_f010_device_strict.py` + 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f010_gpu_runtime.py`
-- [ ] T016 (`AC-006`, `AC-007`, `AC-008`): 在执行机取 GPU 证据（CUDA 可用、真实信号、显存上升与峰值对照），记录 hostname 与 GPU 型号 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f010_gpu_runtime.py`
+- [x] T014 (`AC-005`): 运行迁移后的 F004 契约套件，全部既有变异必须仍判红，默认镜像 `import torch` 仍判红 — verify: `tests/unit/test_f004_compose_profile_contract.py` — 证据（2026-09-23）：迁移后 `test_f004_compose_profile_contract.py` 27 passed，Dockerfile 变异 5→6 条（改 pin 缺省 / 改索引缺省 / 删索引引用）、compose 变异 13 条与 dockerignore 变异 2 条一条未删，全部判红；执行机上默认（mock 目标）镜像 `docker run --entrypoint python deployment-kronos-signal:latest -c 'import torch'` → `ModuleNotFoundError: No module named 'torch'`、退出码 1（NFR-001 否证仍成立）
+- [x] T015 (`AC-004`): 两层证伪——单元层（开发机/CI）跑 `tests/unit/test_f010_device_strict.py` 并做删严格分支的变异判红；执行机层两例：① `docker run` GPU 镜像 `alphamill/kronos-signal-real:gpu`、**不加 `--gpus`**、`-e KRONOS_DEVICE=cuda` → 无设备分支；② 默认 CPU 镜像 + `-e KRONOS_DEVICE=cuda` → CPU wheel 分支；均断言非零退出、日志含对应文案、`/health` 不可达。**不得**以"开发机叠加 override 被守护进程拒绝"充当证据——那条路径容器从未启动，严格分支没被执行（文档检视 R1-003） — verify: `tests/unit/test_f010_device_strict.py` + 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f010_gpu_runtime.py` — 证据（2026-09-23，`qiaozhi-lt`）：单元层 9 passed + 删严格分支变异 5 failed（见 T006）；执行机层两例均 exit=3、未重启、日志含对应文案、`/health` 不可达：① GPU 镜像不加 `--gpus` → `no CUDA device visible`；② CPU 镜像 → `torch is a CPU wheel`。两例均挂真实资产，预检通过后才触发严格分支（非守护进程拒绝）
+- [x] T016 (`AC-006`, `AC-007`, `AC-008`): 在执行机取 GPU 证据（CUDA 可用、真实信号、显存上升与峰值对照），记录 hostname 与 GPU 型号 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f010_gpu_runtime.py` — 证据（2026-09-23，`qiaozhi-lt`）：`ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f010_gpu_runtime.py` → 5 passed, 1 xfailed（T018 旅程待 F009）；hostname=qiaozhi-lt、RTX 4060 Laptop / 驱动 616.64 / torch 2.14.0+cu130
 - [ ] T017 (`AC-001`, `AC-002`, `AC-004`, `AC-005`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
