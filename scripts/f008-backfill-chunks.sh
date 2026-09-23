@@ -11,7 +11,8 @@
 #   MAX_CHUNKS=1 bash scripts/f008-backfill-chunks.sh 1    # 只跑一片（人工逐片放行）
 #   RUN_ID=<run_id> MAX_CHUNKS=1 bash scripts/f008-backfill-chunks.sh 1   # 续跑同一份记录
 #
-# 退出条件：本批全部 pair completed/unavailable，或达到 MAX_CHUNKS，或连续 3 片无进展。
+# 退出条件：本批全部 pair completed/unavailable，或达到 MAX_CHUNKS，或连续 3 片无进展，
+# 或开片前置检查发现出口代理不通（exit 2，本片未启动、无 pair 被标记 failed）。
 set -uo pipefail
 
 BATCH="${1:?用法: f008-backfill-chunks.sh <1|2>}"
@@ -38,7 +39,25 @@ RUN_ID="${RUN_ID:-}"
 stall=0
 prev_done=-1
 
+# 开片前置检查：出口代理不通时**快速失败**，而不是让每个 pair 各自耗尽 8 次退避重试
+# （2026-09-23 实测：NAS mihomo 选中节点 SG-2 挂掉 → 每 pair 约 6 分钟后被判 failed）。
+# 只读探测，不改任何状态；代理恢复后原样重跑本脚本即可。单次冷启动可能假失败，
+# 故连试 3 次，全失败才判不通。
+preflight() {
+  local code=""
+  for _ in 1 2 3; do
+    code="$(curl -s -o /dev/null --max-time 15 -w '%{http_code}' \
+      -x "${BINANCE_HTTPS_PROXY:-}" https://api.binance.com/api/v3/time 2>/dev/null || true)"
+    [[ "$code" == "200" ]] && return 0
+    sleep 2
+  done
+  echo "[$(date -u +%H:%M:%SZ)] 前置检查失败：出口代理 ${BINANCE_HTTPS_PROXY:-<未配置>} 取不到 Binance（http=${code:-timeout}，连试 3 次）"
+  echo "  处置：先在 NAS 上确认 mihomo 选中节点是否存活（/proxies/<组>/delay），换到存活节点后重跑本脚本；本片未启动，无 pair 被标记 failed"
+  exit 2
+}
+
 for chunk in $(seq 1 "$MAX_CHUNKS"); do
+  preflight
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   log="$LOG_DIR/chunk-b${BATCH}-${stamp}.log"
   args=(--universe "$UNIVERSE" --batch "$BATCH" --start "$START" --end "$END"
