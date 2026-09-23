@@ -47,6 +47,15 @@ class SymbolOutcome:
     error_class: str | None = None
 
 
+class BackfillConnectionLost(Exception):
+    """库连接已不可用（DB 容器被重建、连接被中断）。
+
+    这不是某个 pair 的失败：连接断了以后，余下每个 pair 都会"失败"，把它们逐个标 failed
+    既丢证据又误导。因此中止本轮、断点留在库里，下一片原样续跑（2026-09-23 实测：
+    同机另一路 Kronos 工作重建了 timescaledb 容器，导致整轮崩在 `conn.rollback()`）。
+    """
+
+
 def run_backfill(
     *,
     exchange_id: str,
@@ -131,7 +140,12 @@ def _run_one(
         )
     except Exception as exc:  # noqa: BLE001 - 单 pair 失败必须隔离，其他 pair 继续
         logger.exception("symbol failed exchange=%s symbol=%s", exchange_id, symbol)
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception as rollback_exc:  # noqa: BLE001 - 连接已断：中止本轮而不是逐 pair 判死
+            raise BackfillConnectionLost(
+                f"库连接不可用，已中止本轮（断点保留在 backfill_progress）：{rollback_exc}"
+            ) from rollback_exc
         cursor, _, done = current_cursor(conn, exchange_id, symbol, start, end)
         return SymbolOutcome(
             db_symbol=symbol,

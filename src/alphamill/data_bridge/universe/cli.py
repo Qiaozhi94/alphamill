@@ -30,6 +30,7 @@ import logging
 import sys
 from pathlib import Path
 
+from alphamill.data_bridge.collector.backfill_orchestrator import BackfillConnectionLost
 from alphamill.data_bridge.collector.db_writer import db_connect
 from alphamill.data_bridge.universe import artifact as artifact_mod
 from alphamill.data_bridge.universe import backfill_runner as runner
@@ -214,21 +215,27 @@ def _backfill(args) -> int:
     )
     conn = db_connect()
     try:
-        run = runner.run_backfill_batch(
-            universe_id=args.universe,
-            plans=plans,
-            start=start,
-            end=end,
-            conn=conn,
-            lake_root=lake_root,
-            reports_dir=Path(args.reports_dir) if args.reports_dir else None,
-            limiter=limiter,
-            batch=args.batch,
-            resume_run_id=args.resume_run_id,
-            max_runtime_seconds=(
-                None if args.max_runtime_minutes is None else args.max_runtime_minutes * 60
-            ),
-        )
+        try:
+            run = runner.run_backfill_batch(
+                universe_id=args.universe,
+                plans=plans,
+                start=start,
+                end=end,
+                conn=conn,
+                lake_root=lake_root,
+                reports_dir=Path(args.reports_dir) if args.reports_dir else None,
+                limiter=limiter,
+                batch=args.batch,
+                resume_run_id=args.resume_run_id,
+                max_runtime_seconds=(
+                    None if args.max_runtime_minutes is None else args.max_runtime_minutes * 60
+                ),
+            )
+        except BackfillConnectionLost as exc:
+            # 库连接被外力中断（如容器被重建）：中止本轮，不把余下 pair 逐个判 failed；
+            # 断点已在 backfill_progress，下一片原样续跑。
+            print(f"E_UNIVERSE_BACKFILL_CONNECTION_LOST: {exc}", file=sys.stderr)
+            return EXIT_TRANSIENT
     finally:
         conn.close()
     print(json.dumps(run.document(), ensure_ascii=False, indent=2))

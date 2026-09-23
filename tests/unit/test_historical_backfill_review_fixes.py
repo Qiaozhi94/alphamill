@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from psycopg2 import InterfaceError
 
 from alphamill.data_bridge.collector import historical_backfill as backfill
 from alphamill.data_bridge.collector.backfill_progress import ensure_progress_table
@@ -231,3 +232,33 @@ def test_refresh_aggregates_ends_open_transaction_first(monkeypatch) -> None:
     assert calls["ohlcv_1d"][1] == end - timedelta(days=2)
     assert calls["ohlcv_5m"][1] == datetime(2024, 9, 10, tzinfo=UTC)
     assert conn.autocommit is False  # 恢复原值
+
+
+def test_connection_lost_aborts_instead_of_marking_pairs_failed(monkeypatch) -> None:
+    """回归（2026-09-23）：库连接断了要中止本轮，而不是把余下 pair 逐个判 failed。
+
+    实测场景：同机另一路工作重建了 timescaledb 容器 → `_run_one` 的异常处理里
+    `conn.rollback()` 抛 `InterfaceError: connection already closed`，整轮崩掉；
+    若不中止，余下每个 pair 都会"失败"，既丢证据又误导。
+    """
+    from alphamill.data_bridge.collector import backfill_orchestrator as orch
+
+    class _DeadConn:
+        def rollback(self):
+            raise InterfaceError("connection already closed")
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("server closed the connection unexpectedly")
+
+    monkeypatch.setattr(orch, "fetch_symbol", _boom)
+
+    with pytest.raises(orch.BackfillConnectionLost, match="库连接不可用"):
+        orch._run_one(
+            exchange_id="binance",
+            exchange=object(),
+            conn=_DeadConn(),
+            symbol="LINK/USDT",
+            start=datetime(2024, 9, 10, tzinfo=UTC),
+            end=datetime(2024, 9, 11, tzinfo=UTC),
+            limiter=None,
+        )
