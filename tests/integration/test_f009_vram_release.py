@@ -1,20 +1,23 @@
-"""F009 AC-012：显存真实下降的判据载体（**先红态**）。
+"""F009 AC-012 / F010 AC-009：显存真实下降（**先红态已由 F010 解除**）。
 
 判据（架构 §7.1 显存确认条，逐字同源）：`stop` 后设备侧读数**真实下降**，
 **且**卸载后整卡可用显存达到训练预算（`vram_limit_gb`，与单槽取锁同一阈值）。
 只检查 `vram_bytes` 是合法整数的断言弱于成功声明——端点完全不释放显存也能通过。
 
-**先红态与解除者**：本文件以 `xfail(strict=True)` 标注。F009 的交付物是"判据已写成
-机器可判定断言并处于先红态"，不是显存下降本身——仓内当时没有任何 GPU Kronos 实例。
-**解除 xfail 与取真实证据归 F010（其 AC-009 / T011）**，F009 不以其完成为完成条件
-（F009 检视 R4-003）。F010 落地后本用例转绿即 XPASS 判红，届时必须显式移除标记。
+**历史与所有权**：本载体由 F009 交付并以 `xfail(strict=True)` 标注先红态——当时仓内没有
+任何 GPU Kronos 实例，判据不可能成立。F010 交付 GPU 基座后于 **2026-09-24** 在执行机
+`qiaozhi-lt` 取到真实证据并解除该标记（F010 T011 / AC-009）：
+
+    device=cuda:0  vram_before=1601699840  vram_after=1144520704
+    free_after=7.53GB  budget=6.0GB      # RTX 4060 Laptop / 驱动 616.64
 
 **为什么独立成文件**：放进 `test_f003_kronos_lifecycle.py` 会与 F003 T033 的
-「该文件在 `--runxfail` 下 0 xfailed」门禁互相拆台（先红态按真失败计）。
+「该文件在 `--runxfail` 下 0 xfailed」门禁互相拆台（先红态按真失败计）。解除后本文件
+仍独立——它需要 GPU 实例，与只需控制面语义的那批用例前置条件不同。
 
 执行机取证：
     ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 \
-      pytest -q tests/integration/test_f009_vram_release.py      # 不加 --runxfail
+      pytest -q tests/integration/test_f009_vram_release.py
 """
 
 from __future__ import annotations
@@ -34,15 +37,7 @@ TIMEOUT_STATUS, TIMEOUT_STOP, TIMEOUT_RESTORE = 5, 60, 120
 TRAINING_BUDGET_GB = float(os.getenv("KRONOS_TRAINING_BUDGET_GB", "6.0"))
 GIB = 1024**3
 
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.xfail(
-        strict=True,
-        reason="先红态（F009 AC-012）：仓内需有 GPU Kronos 实例才可能真实下降；"
-        "解除条件与解除者 = F010 的 AC-009 / T011（GPU 基座落地并取证）。"
-        "转绿即 XPASS 判红，届时须由 F010 显式移除本标记",
-    ),
-]
+pytestmark = pytest.mark.integration
 
 SESSION = requests.Session()
 SESSION.trust_env = False  # 代理会替失败连接返回响应，让显存断言假绿

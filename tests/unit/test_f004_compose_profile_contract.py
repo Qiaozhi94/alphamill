@@ -23,10 +23,14 @@ DOCKERFILE_PATH = ROOT / "deployment/kronos-service.Dockerfile"
 COMPOSE_PATH = ROOT / "deployment/docker-compose.yml"
 DOCKERIGNORE_PATH = ROOT / ".dockerignore"
 
-# design §2 锁定的 real 目标依赖 pin（与宿主 AC-006 实测集一致）
+# design §2 锁定的 real 目标依赖 pin（与宿主 AC-006 实测集一致）。torch 两条经 F010
+# FR-005 迁移为"构建参数缺省值 + pip install 引用该参数"：缺省即落地前的 CPU 字面量，
+# GPU 索引只由 docker-compose.gpu.yml 传入（解析语义见 test_f010_build_args_contract）。
 REAL_PIN_LINES = (
-    "torch==2.14.0",
-    "--index-url https://download.pytorch.org/whl/cpu",
+    "ARG TORCH_VERSION=2.14.0",
+    "ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu",
+    "torch==${TORCH_VERSION}",
+    "--index-url ${TORCH_INDEX_URL}",
     "einops==0.8.2",
     "safetensors==0.8.0",
     "huggingface_hub==1.31.0",
@@ -167,8 +171,12 @@ def _mutate(text: str, old: str, new: str) -> str:
     ("old", "new"),
     [
         ("FROM mock AS real", "FROM python:3.11-slim AS real"),  # 改派生关系
-        ("torch==2.14.0", "torch==9.9.9"),  # 改 torch pin
-        ("--index-url https://download.pytorch.org/whl/cpu", ""),  # 删 CPU wheel index
+        ("ARG TORCH_VERSION=2.14.0", "ARG TORCH_VERSION=9.9.9"),  # 改 torch pin 缺省值
+        (  # 改 wheel 索引缺省值（默认构建不再是 CPU wheel）
+            "ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu",
+            "ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130",
+        ),
+        ("--index-url ${TORCH_INDEX_URL}", ""),  # 删 wheel index（回落 PyPI 默认源）
         ("einops==0.8.2", ""),  # 删 einops pin
         ("huggingface_hub==1.31.0", ""),  # 删 huggingface_hub pin
     ],
