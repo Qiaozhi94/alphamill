@@ -112,12 +112,38 @@ def test_shrink_guard_can_be_confirmed_but_window_truncation_never_is():
         )
 
 
+def test_usable_baseline_refuses_fallback_in_incremental_mode(monkeypatch, tmp_path):
+    """回归（2026-09-24 检视 R1-001，Critical）：增量模式**不得**整版回退基线。
+
+    回退版当继承基线时 `start = 基线最大日期 + 1`，新 valid 清单会丢掉中间版本独有的分区
+    （文件还在盘上却不再被引用），而 `guard_full_shrink` 只在全量模式生效——即静默的数据链
+    损失。故增量遇到损坏的最新 valid 版本必须**拒绝启动**，并给出可执行的处置。
+    """
+    from alphamill.data_bridge.errors import ManifestIntegrityError
+
+    bad = {"status": "valid", "dataset": "ohlcv_1m", "partitions": [_partition("BTC-USDT")]}
+    monkeypatch.setattr(mf, "list_versions", lambda _root, _dataset: ["v2026.09.13", "v2026.09.21"])
+    monkeypatch.setattr(mf, "load_manifest", lambda _root, _dataset, _version: bad)
+    monkeypatch.setattr(mf, "verify_value_digest", lambda _spec, _manifest: None)
+
+    def _validate(_root, manifest, partitions=None):
+        raise ManifestIntegrityError("清单内文件缺失: ohlcv_1m/.../date=2026-09-18.r1.parquet")
+
+    monkeypatch.setattr(mf, "validate_manifest_integrity", _validate)
+
+    with pytest.raises(ManifestIntegrityError) as excinfo:
+        mf.usable_baseline(tmp_path, "ohlcv_1m")
+
+    assert "不允许回退基线" in str(excinfo.value)
+    assert "v2026.09.21" in str(excinfo.value)
+
+
 def test_usable_baseline_falls_back_when_newest_version_is_corrupt(monkeypatch, tmp_path, caplog):
-    """回归（2026-09-24）：最新版本完整性损坏时，基线回退到更早的可用版本。
+    """全量模式（`allow_fallback=True`）：最新版本损坏 → 回退到更早的可用版本。
 
     实测现场：`ohlcv_1m` 的 `v2026.09.21` 引用了 12 个 `date=2026-09-18/19` 分区文件而
-    磁盘上没有 → 全量导出在 `_baseline()` 处 `ManifestIntegrityError` 中断，缺失分区
-    永远没有机会被重新写出来。回退后导出可继续（并把坏版本引用的分区重建）。
+    磁盘上没有 → 导出在基线处 `ManifestIntegrityError` 中断，缺失分区永远没有机会被重新
+    写出来。全量模式从库重算全窗口，回退只是换个 diff 参照，故允许回退。
     """
     from alphamill.data_bridge.errors import ManifestIntegrityError
 
@@ -139,11 +165,11 @@ def test_usable_baseline_falls_back_when_newest_version_is_corrupt(monkeypatch, 
     monkeypatch.setattr(mf, "validate_manifest_integrity", _validate)
 
     with caplog.at_level("WARNING"):
-        version, manifest = mf.usable_baseline(tmp_path, "ohlcv_1m")
+        version, manifest = mf.usable_baseline(tmp_path, "ohlcv_1m", allow_fallback=True)
 
     assert version == "v2026.09.13"
     assert manifest is good
-    assert "完整性校验未通过" in caplog.text
+    assert "校验未通过" in caplog.text
 
 
 def test_usable_baseline_is_none_when_no_usable_version(monkeypatch, tmp_path):
@@ -162,4 +188,4 @@ def test_usable_baseline_is_none_when_no_usable_version(monkeypatch, tmp_path):
         "validate_manifest_integrity",
         lambda *_a, **_k: (_ for _ in ()).throw(ManifestIntegrityError("清单内文件缺失")),
     )
-    assert mf.usable_baseline(tmp_path, "ohlcv_1m") == (None, None)
+    assert mf.usable_baseline(tmp_path, "ohlcv_1m", allow_fallback=True) == (None, None)
