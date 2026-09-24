@@ -102,6 +102,12 @@ def _build_env() -> dict[str, str]:
     return env
 
 
+def _inspect(container: str) -> dict:
+    proc = _run(["docker", "inspect", container], timeout=60)
+    assert proc.returncode == 0, f"容器不存在或 docker 不可达: {proc.stderr}"
+    return json.loads(proc.stdout)[0]
+
+
 def _nvidia_query(field: str) -> str:
     proc = _run(["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader,nounits"], 30)
     assert proc.returncode == 0, f"nvidia-smi 不可用: {proc.stderr}"
@@ -157,9 +163,31 @@ def _require_nvidia_runtime() -> None:
 
 @pytest.fixture(scope="module")
 def gpu_instance() -> Iterator[dict]:
-    """以 GPU override 构建并拉起 real 实例；基线显存在实例起来之前读取。"""
+    """以 GPU override 构建并拉起 real 实例；基线显存在实例起来之前读取。
+
+    `KRONOS_REUSE_RUNNING=1` 时复用**已在跑**的 real 实例而不重建：9.7GB 的 GPU 镜像
+    重建一次要几十分钟，且构建期需要能访问 registry（实测断网时 buildkit 解析
+    `python:3.11-slim` 的 manifest 就失败）。复用不是默默省事——证据行会记下镜像
+    tag / id / 创建时间，好让"这份证据是哪个镜像跑出来的"可追；复用时基线显存取的是
+    **实例已在运行**时的读数，因此本模式下不断言"相对空载基线的上升"（见 AC-007 用例）。
+    """
     _require_integration()
     _require_nvidia_runtime()
+
+    if os.getenv("KRONOS_REUSE_RUNNING", "").lower() in {"1", "true", "yes"}:
+        info = _inspect(REAL_CONTAINER)
+        assert info["State"]["Running"] is True, "KRONOS_REUSE_RUNNING=1 但实例未在运行"
+        image = info["Config"]["Image"]
+        image_info = json.loads(
+            _run(["docker", "image", "inspect", image], timeout=60).stdout or "[{}]"
+        )[0]
+        print(
+            f"\n[evidence] reused image={image} id={image_info.get('Id', '?')[:19]} "
+            f"created={image_info.get('Created', '?')[:19]}"
+        )
+        health = _wait_for_health("cuda")
+        yield {"baseline_mib": None, "health": health, "reused": image}
+        return
 
     _run([*COMPOSE_GPU, "rm", "-sf", "kronos-signal-real"], timeout=120)
     baseline = _used_mib()
@@ -170,7 +198,7 @@ def gpu_instance() -> Iterator[dict]:
     assert up.returncode == 0, f"GPU 实例拉起失败: {up.stderr[-2000:]}"
 
     health = _wait_for_health("cuda")
-    yield {"baseline_mib": baseline, "health": health}
+    yield {"baseline_mib": baseline, "health": health, "reused": None}
 
     _run([*COMPOSE_GPU, "rm", "-sf", "kronos-signal-real"], timeout=120)
 
@@ -227,10 +255,15 @@ def test_predict_real_signal_and_vram_rises(gpu_instance) -> None:
     assert payload["source"] == "kronos", payload
     assert payload["rows_used"] >= 30, payload
     used = _used_mib()
-    assert used > gpu_instance["baseline_mib"], (
-        f"显存未上升: baseline={gpu_instance['baseline_mib']} used={used}"
-    )
-    print(f"\n[evidence] baseline_mib={gpu_instance['baseline_mib']} after_predict_mib={used}")
+    baseline = gpu_instance["baseline_mib"]
+    if baseline is None:
+        # 复用在跑实例：拿不到空载基线，退而断言"设备侧确实有显存被占用"，
+        # 并如实说明这不是"相对空载的上升"（不得把弱断言说成强结论）。
+        assert used > 0, f"复用实例但设备侧已用显存为 0: {used}"
+        print(f"\n[evidence] reused-instance used_mib={used}（无空载基线，不断言上升量）")
+    else:
+        assert used > baseline, f"显存未上升: baseline={baseline} used={used}"
+        print(f"\n[evidence] baseline_mib={baseline} after_predict_mib={used}")
 
 
 def test_resident_vram_within_budget(gpu_instance) -> None:
@@ -239,7 +272,8 @@ def test_resident_vram_within_budget(gpu_instance) -> None:
     for _ in range(PEAK_SAMPLES):
         _predict()
         samples.append(_used_mib())
-    peak = max(samples) - gpu_instance["baseline_mib"]
+    baseline = gpu_instance["baseline_mib"] or 0
+    peak = max(samples) - baseline
     print(
         f"\n[evidence] hostname={socket.gethostname()} gpu={_nvidia_query('name')}"
         f" baseline_mib={gpu_instance['baseline_mib']} samples_mib={samples}"
@@ -252,8 +286,28 @@ def test_resident_vram_within_budget(gpu_instance) -> None:
 
 
 def _cpu_image() -> str:
+    """构建（或按 `KRONOS_CPU_IMAGE` 指定）一个**当前代码的** CPU wheel real 镜像。
+
+    不许拿本地任意同名镜像顶替：CPU wheel 分支断言的是 F010 的严格设备解析，旧镜像
+    可能根本没有那段代码，用它取证等于测了别的东西。registry 不可达时宁可 skip——
+    "构建不了"与"断言不成立"是两回事，不得混为一谈。
+    """
+    pinned = os.getenv("KRONOS_CPU_IMAGE", "").strip()
+    if pinned:
+        exists = _run(["docker", "image", "inspect", pinned], timeout=60)
+        if exists.returncode != 0:
+            pytest.skip(f"KRONOS_CPU_IMAGE={pinned} 在本机不存在")
+        return pinned
+
     built = _run([*COMPOSE_CPU, "build", "kronos-signal-real"], timeout=3600, env=_build_env())
-    assert built.returncode == 0, f"CPU real 镜像构建失败: {built.stderr[-2000:]}"
+    if built.returncode != 0:
+        tail = built.stderr[-400:]
+        if "registry-1.docker.io" in tail or "failed to resolve source metadata" in tail:
+            pytest.skip(
+                "无法构建当前代码的 CPU wheel 镜像（registry 不可达）：本用例的证据须用"
+                "当前代码的镜像，旧镜像不算。网络恢复后重跑，或以 KRONOS_CPU_IMAGE 指定。"
+            )
+        pytest.fail(f"CPU real 镜像构建失败: {tail}")
     return _compose_image(COMPOSE_CPU, "kronos-signal-real")
 
 
@@ -336,15 +390,23 @@ def _lifecycle(method: str, action: str) -> dict:
     return resp.json()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T018 旅程红灯：待 F009 控制面合入主干（/lifecycle/*）且 T002 GPU 运行时就绪；"
-    "转绿即 XPASS 判红，须在 F010 T018 显式移除本标记",
-)
 def test_night_slot_journey(gpu_instance) -> None:
-    """T018 层 2 旅程：GPU 常驻 → stop → 显存真实下降且可用显存达训练预算 → restore → 真实信号。"""
+    """T018 层 2 旅程：GPU 常驻 → stop → 显存真实下降且可用显存达训练预算 → restore → 真实信号。
+
+    **先红态已解除**（2026-09-24，F010 T018）：该标记在 F009 控制面尚未合入主干时立起，
+    合入并重建带 `/lifecycle/*` 的 GPU 镜像后取到真实证据（执行机 `qiaozhi-lt`）：
+
+        常驻 563 MiB → stop 后 137 MiB → 卸载后整卡可用 7820 MiB ≥ 6GB 训练预算 → restore 恢复
+
+    这是"夜槽卸载腾显存"这条链路第一次端到端在真实显存上跑通——此前 F009 只在 CPU 实例上
+    验证过控制面语义，显存结论一律挂先红态。
+    """
     resident = _used_mib()
-    assert resident > gpu_instance["baseline_mib"], "GPU 常驻显存应 >0"
+    baseline = gpu_instance["baseline_mib"]
+    if baseline is None:
+        assert resident > 0, f"复用实例但设备侧已用显存为 0: {resident}"
+    else:
+        assert resident > baseline, f"GPU 常驻显存应高于空载基线: {baseline} -> {resident}"
 
     stopped = _lifecycle("POST", "stop")
     assert stopped["state"] == "stopped", stopped

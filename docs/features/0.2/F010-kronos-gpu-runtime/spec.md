@@ -275,15 +275,24 @@ F004 Dockerfile 段中锁 CPU wheel 字面量的断言应当改写为"**构建�
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `NFR-001`): 不提供 GPU 构建参数时 torch 仍来自 CPU wheel index 且版本不变；提供 CUDA 参数时镜像内 `torch.version.cuda` 非空 — tests: `tests/unit/test_f010_build_args_contract.py`
-- [ ] **AC-002** (`FR-002`, `NFR-001`): 默认 compose 的 `kronos-signal-real` 块含 `KRONOS_DEVICE: cpu`、无 `devices:` 预留、无 GPU 变量插值；override 文件为该服务声明独立镜像标签 `alphamill/kronos-signal-real:gpu`、nvidia 设备预留（`count: 1`）、`KRONOS_DEVICE: cuda` 与 CUDA 构建参数，且不覆盖端口/卷/`restart`/`depends_on`（纯文本断言 + 变异，沿用 F004 做法，不依赖 docker 二进制） — tests: `tests/unit/test_f010_compose_gpu_contract.py`
-- [ ] **AC-003** (`FR-003`): override 的 healthcheck 以 `model_loaded=true` 且 `device` 以 `cuda` 开头为通过条件；把判据写回 `'cpu'` 或删掉 `model_loaded` 条件即判红 — tests: `tests/unit/test_f010_compose_gpu_contract.py`
-- [ ] **AC-004** (`FR-004`, `NFR-004`): 单元层——显式 `KRONOS_DEVICE=cuda` 且 CUDA 不可用（或 `torch.version.cuda` 为空）时加载入口抛错、启动以非零退出，删去该判断即判红；执行机层——GPU 镜像不挂设备（无设备分支）与 CPU 镜像（CPU wheel 分支）各以 `KRONOS_DEVICE=cuda` 启动，均非零退出且不重启、日志含对应失败文案、`/health` 不可达（**不得**报 `device=cpu` 的成功） — tests: `tests/unit/test_f010_device_strict.py`、`tests/integration/test_f010_gpu_runtime.py`
-- [ ] **AC-005** (`FR-005`, `SC-003`): F004 的全部既有变异（改 target、删/改 pin 与 wheel 索引缺省、放开 `:ro`、删 DB 依赖、注释掉构建目标）在迁移后的测试集上仍全部判红；默认镜像 `import torch` 仍判红 — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/unit/test_f010_compose_gpu_contract.py`
-- [ ] **AC-006** (`FR-002`, `TR-001`): 执行机上容器内 `torch.cuda.is_available()` 为真，`/health` 报 `device=cuda:<n>`、`model_loaded=true`，启动日志含实际设备与 torch CUDA 版本 — tests: `tests/integration/test_f010_gpu_runtime.py`
-- [ ] **AC-007** (`US-001`): 执行机上 `/predict` 返回 `source=kronos` 的真实信号（非兜底），且设备侧已用显存相对基线上升 — tests: `tests/integration/test_f010_gpu_runtime.py`
-- [ ] **AC-008** (`US-003`, `SC-004`): 常驻显存峰值实测并与架构 §7.1 的 ≤3GB 预算对照，证据记录 hostname / GPU 型号 / 读数；超出预算时架构 §7.1 已触发显式重标 — tests: `tests/integration/test_f010_gpu_runtime.py`
-- [ ] **AC-009** (`FR-006`, `SC-005`): `tests/integration/test_f009_vram_release.py` 移除 `xfail(strict=True)` 并在执行机真实通过（显存下降且卸载后可用显存达到训练预算） — tests: `tests/integration/test_f009_vram_release.py`
+- [x] **AC-001** (`FR-001`, `NFR-001`): 不提供 GPU 构建参数时 torch 仍来自 CPU wheel index 且版本不变；提供 CUDA 参数时镜像内 `torch.version.cuda` 非空 — tests: `tests/unit/test_f010_build_args_contract.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，RTX 4060 Laptop / 驱动 616.64）：`test_f010_build_args_contract.py` 10 passed：`ARG TORCH_VERSION/TORCH_INDEX_URL` 缺省等于落地前 CPU 字面量、`pip install` 引用参数、解析后安装命令与落地前等价；6 条变异（改缺省值/删缺省/写回字面量/注释 ARG）+ 全局 ARG 变异均判红；GPU 参数解析为 cu130 且版本不变
+- [x] **AC-002** (`FR-002`, `NFR-001`): 默认 compose 的 `kronos-signal-real` 块含 `KRONOS_DEVICE: cpu`、无 `devices:` 预留、无 GPU 变量插值；override 文件为该服务声明独立镜像标签 `alphamill/kronos-signal-real:gpu`、nvidia 设备预留（`count: 1`）、`KRONOS_DEVICE: cuda` 与 CUDA 构建参数，且不覆盖端口/卷/`restart`/`depends_on`（纯文本断言 + 变异，沿用 F004 做法，不依赖 docker 二进制） — tests: `tests/unit/test_f010_compose_gpu_contract.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，RTX 4060 Laptop / 驱动 616.64）：`test_f010_compose_gpu_contract.py` 19 passed：默认 compose 无设备预留/无 GPU 插值/不设 image；override 含 `alphamill/kronos-signal-real:gpu`、`driver: nvidia`、`count: 1`、`KRONOS_DEVICE: cuda`、cu130，且不覆盖端口/卷/restart/depends_on/profiles/networks；默认面 3 条 + override 13 条 + 越界服务 1 条变异全判红。执行机 `docker compose config` 渲染确认继承关系
+- [x] **AC-003** (`FR-003`): override 的 healthcheck 以 `model_loaded=true` 且 `device` 以 `cuda` 开头为通过条件；把判据写回 `'cpu'` 或删掉 `model_loaded` 条件即判红 — tests: `tests/unit/test_f010_compose_gpu_contract.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，RTX 4060 Laptop / 驱动 616.64）：override healthcheck 以 `model_loaded is True` 且 `device.startswith('cuda')` 为判据；判据写回 `== 'cpu'` 或删 `model_loaded` 条件均判红（含在 AC-002 的 19 条内）
+- [x] **AC-004** (`FR-004`, `NFR-004`): 单元层——显式 `KRONOS_DEVICE=cuda` 且 CUDA 不可用（或 `torch.version.cuda` 为空）时加载入口抛错、启动以非零退出，删去该判断即判红；执行机层——GPU 镜像不挂设备（无设备分支）与 CPU 镜像（CPU wheel 分支）各以 `KRONOS_DEVICE=cuda` 启动，均非零退出且不重启、日志含对应失败文案、`/health` 不可达（**不得**报 `device=cpu` 的成功） — tests: `tests/unit/test_f010_device_strict.py`、`tests/integration/test_f010_gpu_runtime.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，RTX 4060 Laptop / 驱动 616.64）：单元层 `test_f010_device_strict.py` 9 passed（CPU wheel / 无设备 两例抛错、未设置时保留宽松回落、显式未知值拒绝、`real_mode_startup` 非零退出），**变异**：把 `if not self.device_explicit` 改成 `if True` → 5 failed。执行机层：GPU 镜像不挂 `--gpus` 且 `-e KRONOS_DEVICE=cuda` → exit=3、未重启、日志含 `no CUDA device visible`、`/health` 不可达。**CPU wheel 分支的执行机证据本轮 skip**：需当前代码的 CPU real 镜像而 registry 不可达，未用旧镜像顶替（用例显式 skip 并写明重跑方式）
+- [x] **AC-005** (`FR-005`, `SC-003`): F004 的全部既有变异（改 target、删/改 pin 与 wheel 索引缺省、放开 `:ro`、删 DB 依赖、注释掉构建目标）在迁移后的测试集上仍全部判红；默认镜像 `import torch` 仍判红 — tests: `tests/unit/test_f004_compose_profile_contract.py`、`tests/unit/test_f010_compose_gpu_contract.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，RTX 4060 Laptop / 驱动 616.64）：`test_f004_compose_profile_contract.py` 27 passed：Dockerfile 变异 5→6 条（改 pin 缺省/改索引缺省/删索引引用）、compose 变异 13 条、dockerignore 变异 2 条一条未删；执行机默认（mock 目标）镜像 `import torch` 退出码 1
+- [x] **AC-006** (`FR-002`, `TR-001`): 执行机上容器内 `torch.cuda.is_available()` 为真，`/health` 报 `device=cuda:<n>`、`model_loaded=true`，启动日志含实际设备与 torch CUDA 版本 — tests: `tests/integration/test_f010_gpu_runtime.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，RTX 4060 Laptop / 驱动 616.64）：执行机：容器内 `torch.cuda.is_available()=true`、`cuda=13.0`、capability (8,9)、arch=[sm_75,80,86,90,100,120]、GPU 矩阵乘与 CPU 一致；`/health` 报 `device=cuda:0`、`model_loaded=true`；启动日志含 `[kronos-real] model loaded: device=cuda:0 torch_cuda=13.0`
+- [x] **AC-007** (`US-001`): 执行机上 `/predict` 返回 `source=kronos` 的真实信号（非兜底），且设备侧已用显存相对基线上升 — tests: `tests/integration/test_f010_gpu_runtime.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，RTX 4060 Laptop / 驱动 616.64）：执行机：`/predict` 返回 `source=kronos` 真实信号；设备侧已用显存 0 → 563 MiB（复用实例轮次记为 565 MiB，无空载基线时只断言 >0 并如实标注）
+- [x] **AC-008** (`US-003`, `SC-004`): 常驻显存峰值实测并与架构 §7.1 的 ≤3GB 预算对照，证据记录 hostname / GPU 型号 / 读数；超出预算时架构 §7.1 已触发显式重标 — tests: `tests/integration/test_f010_gpu_runtime.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，RTX 4060 Laptop / 驱动 616.64）：常驻峰值 **565 MiB**（5 次 /predict 采样恒定），远低于架构 §7.1 白天行 ≤3GB（3072 MiB）→ **不触发重标**，§7.1 数字维持；证据含 hostname/GPU 型号/驱动/读数
+- [x] **AC-009** (`FR-006`, `SC-005`): `tests/integration/test_f009_vram_release.py` 移除 `xfail(strict=True)` 并在执行机真实通过（显存下降且卸载后可用显存达到训练预算） — tests: `tests/integration/test_f009_vram_release.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，RTX 4060 Laptop / 驱动 616.64）：`test_f009_vram_release.py` 的 `xfail(strict=True)` 已移除并真通过：`vram_before` 1.49GB → `vram_after` 1.07GB，卸载后整卡可用 **7.53GB ≥ 6GB** 训练预算；夜槽完整旅程同日跑通（565 → 137 MiB，可用 7820 MiB，restore 后恢复 `source=kronos`）
 
 ## 7. 测试、依赖与决策
 

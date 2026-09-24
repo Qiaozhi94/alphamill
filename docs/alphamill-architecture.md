@@ -683,7 +683,9 @@ mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围—�
   **实测（2026-09-24，执行机 `qiaozhi-lt`，RTX 4060 Laptop / 驱动 616.64）**：`kronos-signal-real`
   以 `device=cuda:0` 加载并产出 `source=kronos` 真实信号；**常驻显存峰值 565 MiB**，在下表白天行
   ≤3GB 预算之内，故该预算维持原值、不触发重标。
-  **仍未成立的部分**：`stop` 之后"显存真实下降且卸载后可用显存达到训练预算"这条结论尚未取证——
-  载体 `tests/integration/test_f009_vram_release.py` 由 F009 交付并保持 `xfail(strict=True)`，
-  解除与取证归 F010 的 T011/T018（需要带 F009 控制面的 GPU 镜像）。在那之前，控制面语义已可
-  依赖，但**显存释放能力不得声称已验证**。
+  **显存释放已验证（2026-09-24，F010 T011/T018）**：`stop` 之后显存真实下降且卸载后可用显存
+  达到训练预算——`vram_bytes` 1.49GB → 1.07GB，整卡可用 7.53GB ≥ 6GB（F003 `vram_limit_gb`
+  缺省值，故该缺省与下表夜槽行**均不重标**）；夜槽完整旅程亦已端到端跑通：常驻 565 MiB →
+  `stop` → 137 MiB → 可用 7820 MiB → `restore` → `/predict` 恢复 `source=kronos`。载体
+  `tests/integration/test_f009_vram_release.py` 的先红态已解除，现为常规通过用例。
+  至此控制面语义与显存释放能力**均已在真实 GPU 上验证**。
