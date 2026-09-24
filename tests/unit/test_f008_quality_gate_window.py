@@ -40,7 +40,10 @@ class _FakeCursor:
 
     def execute(self, sql: str, params=()):
         text = " ".join(sql.split())
-        if "FROM backfill_progress" in text:
+        if "time_bucket(%s::interval" in text:
+            # 桶对齐查询（2026-09-24 新增）：夹具里原样返回起点，两侧计数因此用同一个值
+            self._result = (params[1],)
+        elif "FROM backfill_progress" in text:
             self._result = (self._conn.backfill_status,)
         elif "min(time), max(time)" in text:
             start, end = params[2], params[3]
@@ -161,3 +164,50 @@ def test_stricter_threshold_quarantines_small_gap() -> None:
     assert loose.verdict == VERDICT_ACTIVE  # 1/7200 ≈ 0.014% ≤ 1%
     assert strict.verdict == VERDICT_QUARANTINED
     assert strict.reason_code == REASON_MISSING_RATIO
+
+
+def test_aggregate_check_uses_same_aligned_start_on_both_sides() -> None:
+    """回归（2026-09-24）：聚合对账两侧必须用同一个「按桶对齐后」的窗口起点。
+
+    DEXE 的 `listed_at=2024-12-24T11:30` 不落在 1h/4h/1d 的桶边界上：基表侧按「桶与窗口
+    重叠」计入 11:00 那个不完整桶，聚合侧若按 `bucket >= 11:30` 过滤就会漏掉它 → 该 pair
+    恒判 `aggregate_mismatch`（实测 1h/4h/1d 各差 25，恰等于 11:30–12:00 有数据的 symbol 数；
+    5m/15m 因 11:30 对齐而全等）。
+    """
+    from alphamill.data_bridge.universe import gate_sql
+
+    aligned = datetime(2024, 12, 24, 11, 0, tzinfo=UTC)
+    executed: list[tuple[str, tuple | None]] = []
+
+    class _Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def execute(self, sql, params=None):
+            executed.append((sql, params))
+
+        def fetchone(self):
+            if "time_bucket(%s::interval" in executed[-1][0]:
+                return (aligned,)
+            return (7,)
+
+    class _Conn:
+        def cursor(self):
+            return _Cursor()
+
+    out = gate_sql.aggregate_mismatch(
+        _Conn(),
+        "binance",
+        datetime(2024, 12, 24, 11, 30, tzinfo=UTC),
+        datetime(2026, 9, 10, 15, 52, tzinfo=UTC),
+    )
+
+    counted = [params for _sql, params in executed if params is not None and len(params) == 3]
+    assert counted, "应发出聚合侧与基表侧两条计数查询"
+    assert all(params[1] == aligned for params in counted), "两侧必须传同一个对齐起点"
+    assert list(out) == list(gate_sql.AGGREGATES)
+    assert all(item["aligned_start"] == "2024-12-24T11:00:00Z" for item in out.values())
+    assert all(item["match"] for item in out.values())

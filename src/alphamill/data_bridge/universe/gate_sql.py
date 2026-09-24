@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from alphamill.data_bridge.universe.canonical import utc_iso
+
 AGGREGATES = {
     "ohlcv_5m": "5 minutes",
     "ohlcv_15m": "15 minutes",
@@ -63,14 +65,23 @@ def duplicate_keys(
 
 
 def aggregate_mismatch(conn, exchange: str, start: datetime, end: datetime) -> dict[str, Any]:
-    """连续聚合与 1m 基表按桶重算精确一致（差得不多也不放行）。"""
+    """连续聚合与 1m 基表按桶重算精确一致（差得不多也不放行）。
+
+    窗口起点先按**该聚合的桶宽向下对齐**，再用同一个对齐值查两侧：基表侧按「桶与窗口有
+    重叠」计入（`time >= start` 分组后，跨窗口起点那个不完整的桶也在内），聚合侧若按
+    `bucket >= start` 过滤就会漏掉它——两侧口径不一致会让「上市时间不落在桶边界」的 pair
+    恒判不一致（2026-09-24 实测：DEXE `listed_at=2024-12-24T11:30`，1h/4h/1d 各差 25，
+    恰好等于在 11:30–12:00 有数据的 symbol 数；5m/15m 因 11:30 对齐而全等）。
+    """
     out: dict[str, Any] = {}
     with conn.cursor() as cur:
         for view, bucket in AGGREGATES.items():
+            cur.execute("SELECT time_bucket(%s::interval, %s::timestamptz)", (bucket, start))
+            aligned_start = cur.fetchone()[0]
             cur.execute(
                 f"SELECT count(*) FROM {view}"  # noqa: S608 - 视图名来自模块常量
                 " WHERE exchange = %s AND bucket >= %s AND bucket < %s",
-                (exchange, start, end),
+                (exchange, aligned_start, end),
             )
             view_rows = int(cur.fetchone()[0])
             cur.execute(
@@ -82,12 +93,13 @@ def aggregate_mismatch(conn, exchange: str, start: datetime, end: datetime) -> d
                     GROUP BY symbol, b
                 ) t
                 """,  # noqa: S608 - 桶宽来自模块常量
-                (exchange, start, end),
+                (exchange, aligned_start, end),
             )
             base_buckets = int(cur.fetchone()[0])
             out[view] = {
                 "rows": view_rows,
                 "base_buckets": base_buckets,
+                "aligned_start": utc_iso(aligned_start),
                 "match": view_rows == base_buckets,
             }
     return out
