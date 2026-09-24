@@ -5,7 +5,9 @@ ENV PYTHONUNBUFFERED=1
 
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install --no-cache-dir .
+# --retries/--timeout：本机到 PyPI 的链路会间歇性断流（F010 实测 BrokenPipeError 中断
+# 构建），pip 默认 5 次/15s 不够。real 层同样参数，见下。
+RUN pip install --no-cache-dir --retries 10 --timeout 120 .
 
 EXPOSE 8001
 CMD ["uvicorn", "alphamill.kronos_service.server:app", "--host", "0.0.0.0", "--port", "8001"]
