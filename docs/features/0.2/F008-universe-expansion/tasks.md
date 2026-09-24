@@ -109,7 +109,7 @@ updated: 2026-09-19
 - `T024/T025 -> T028`：统一质量门在各验收套件之后跑。
 - `T024/T025/T026/T027/T028/T029/T030/T031/T032/T033 -> T034`：全部验收套件、真实环境证据、文档修订、
   下游消费面迁移与旅程验收通过后，才回写 spec 验收证据与状态。
-- 与 `F003` 的关系：**批 1 过门（T022 的第一次执行）即满足 `F003` T035 的 ≥30 对前提**，不必等批 2 或 T023；在此之前 F003 的一切工作不被阻塞。
+- 与 `F003` 的关系：批 1 已过门（T022 首次执行，2026-09-24，**25 对 ACTIVE / 5 对隔离**，见 `reports/f008/执行机取证-T020-T023.md` §9）——**25 对尚未满足 `F003` T035 的 ≥30 对前提**，须等批 2（25 + 批 2 至多 10 = 至多 35）；在此之前 F003 的一切工作不被阻塞。
 - `F003 并入 main -> AC-009 跨消费者断言`：`factor_factory/generators/universe.py::load_explicit_universe` 当前只存在于 `feat/F003-alphagen-vendor`（F003 仍 `developing`），AC-009 的「产物可被它直接加载」一条在 F003 落地前**不可执行**——按项目 SOP「已知缺口显式标记」写成 `xfail(strict=True)` 并在 reason 里写明该分支依赖，F003 并入 main 后 XPASS 转红、强制摘除标记并真跑；F008 侧先由 `AC-013`（`tests/unit/test_f008_artifact.py`）锁死同一 schema 的键集合、排序与 digest 规则。
 - `T017 -> T023`：准入过滤与退市/隔离都会减少全量导出的分区数，可能命中 F002 的 `guard_full_shrink`；容量实测（T023）必须显式记录是否用了 `--allow-shrink` 与 manifest 的 `shrink_confirmed`，不得放宽守卫。
 

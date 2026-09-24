@@ -1,0 +1,11 @@
+refreshing continuous aggregates for 2024-09-10T00:00:00+00:00..2026-09-10T15:52:00+00:00
+2026-09-24 15:50:22,218 INFO refreshing aggregate=ohlcv_5m start=2024-09-10 00:00:00+00:00 end=2026-09-10 15:57:00+00:00
+2026-09-24 15:50:22,233 INFO refreshing aggregate=ohlcv_15m start=2024-09-10 00:00:00+00:00 end=2026-09-10 16:07:00+00:00
+2026-09-24 15:50:22,239 INFO refreshing aggregate=ohlcv_1h start=2024-09-10 00:00:00+00:00 end=2026-09-10 16:52:00+00:00
+2026-09-24 15:50:22,244 INFO refreshing aggregate=ohlcv_4h start=2024-09-10 00:00:00+00:00 end=2026-09-10 19:52:00+00:00
+2026-09-24 15:50:22,250 INFO refreshing aggregate=ohlcv_1d start=2024-09-10 00:00:00+00:00 end=2026-09-11 15:52:00+00:00
+E_UNIVERSE_GATE_QUARANTINED: BANK/USDT → missing_ratio_exceeded
+E_UNIVERSE_GATE_QUARANTINED: TRUMP/USDT → boundary_not_closed
+E_UNIVERSE_GATE_QUARANTINED: PUMP/USDT → missing_ratio_exceeded
+E_UNIVERSE_GATE_QUARANTINED: TUT/USDT → missing_ratio_exceeded
+E_UNIVERSE_GATE_QUARANTINED: ONDO/USDT → missing_ratio_exceeded

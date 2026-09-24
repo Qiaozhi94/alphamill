@@ -1,0 +1,272 @@
+[
+  {
+    "db_symbol": "BTC/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "ETH/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "SOL/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "ZEC/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "XRP/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "DOGE/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "BNB/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "PEPE/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "BANK/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "missing_ratio_exceeded",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "NEAR/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "ENA/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "SUI/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "UNI/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "ADA/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "WLD/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "TRUMP/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "boundary_not_closed",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "PUMP/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "missing_ratio_exceeded",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "LINK/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "LSK/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "AAVE/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "TUT/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "missing_ratio_exceeded",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "TAO/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "AVAX/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "ARB/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "DEXE/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "ACE/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "BCH/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "ONDO/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "missing_ratio_exceeded",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "FIL/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "XLM/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  }
+]
