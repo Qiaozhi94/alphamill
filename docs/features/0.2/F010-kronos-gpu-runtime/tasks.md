@@ -65,7 +65,7 @@ updated: 2026-09-21
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 - [x] T018 [TEST] (`AC-006`, `AC-007`, `AC-009`): 夜槽完整旅程——GPU 常驻（显存 >0）→ F009 `stop` → 显存真实下降且可用显存达训练预算 → 模拟取锁 → `restore` → `/predict` 恢复 `source=kronos`；夹具在 Phase 1 即以红灯立起，收尾在执行机全量执行 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q tests/integration/test_f010_gpu_runtime.py tests/integration/test_f009_vram_release.py` — 证据（2026-09-24，`qiaozhi-lt`）：[TEST] 夜槽旅程在执行机真通过（先红标记已移除）：常驻 **565 MiB** → `stop` → **137 MiB** → 卸载后整卡可用 **7820 MiB ≥ 6GB** → `restore` → `/predict` 恢复 `source=kronos`。镜像 `alphamill/kronos-signal-real:gpu-t033`（id sha256:77db3df8ebf0，2026-09-24T22:35:00 建，含 F009 控制面）。这是「夜槽卸载腾显存」链路第一次端到端在真实显存上跑通
-- [ ] T019: 回写 spec 验收证据并流转状态——经 `scripts/sdd_status.py --dry-run` 确认门禁后 `--advance` — verify: `python3 tools/validate_spec_lifecycle.py` + `sdd_status.py --dry-run` 输出
+- [x] T019: 回写 spec 验收证据并流转状态——经 `scripts/sdd_status.py --dry-run` 确认门禁后 `--advance` — verify: `python3 tools/validate_spec_lifecycle.py` + `sdd_status.py --dry-run` 输出 — 证据（2026-09-24）：spec 9 条验收清单逐条回填证据并勾选；`validate_spec_lifecycle` 与三个文档门禁全绿；状态经 `sdd_status.py --advance` 流转，不手改 frontmatter
 
 ## 4. 依赖与并行关系
 
