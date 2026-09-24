@@ -34,7 +34,18 @@ import requests
 from alphamill.kronos_service.kronos_real import ERR_CPU_WHEEL, ERR_NO_CUDA_DEVICE
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPOSE_BASE = ["docker", "compose", "-f", "deployment/docker-compose.yml"]
+# compose 的项目名缺省取自 compose 文件所在目录（deployment），**所有 worktree 共用**，
+# 于是生成的镜像名 `deployment-kronos-signal-real:latest` 会被并行会话互相覆盖——F010
+# T015 的证据事后无法复现就是这个机制（代码检视 R1-001）。用 worktree 目录名做项目名。
+COMPOSE_PROJECT = f"alphamill-{ROOT.name.removeprefix('alphamill-')}"
+COMPOSE_BASE = [
+    "docker",
+    "compose",
+    "-p",
+    COMPOSE_PROJECT,
+    "-f",
+    "deployment/docker-compose.yml",
+]
 COMPOSE_CPU = [*COMPOSE_BASE, "--profile", "kronos-real"]
 COMPOSE_GPU = [
     *COMPOSE_BASE,
@@ -293,6 +304,8 @@ def _cpu_image() -> str:
     "构建不了"与"断言不成立"是两回事，不得混为一谈。
     """
     pinned = os.getenv("KRONOS_CPU_IMAGE", "").strip()
+    # 说明：本机若已有「CPU wheel torch + 当前代码」的镜像，用 KRONOS_CPU_IMAGE 指定它比
+    # 重新构建快得多（registry 不可达时是唯一可行路径）。构建方式见 tasks T015 证据行。
     if pinned:
         exists = _run(["docker", "image", "inspect", pinned], timeout=60)
         if exists.returncode != 0:
@@ -326,10 +339,15 @@ def test_explicit_cuda_without_cuda_fails_visible(gpu_instance, case: str, reaso
     port = "18012"
     _run(["docker", "rm", "-f", container], timeout=60)
     try:
-        proc = _run(
+        # 后台起 + 显式 --restart=no：前台 `docker run` 的重启策略缺省本来就是 no、且返回时
+        # 容器已退出，那样写出来的"未重启""/health 不可达"两条断言是空断言（R1-007）。
+        # 现在容器活着的时候就去探 /health，退出后再探一次，两次结果都要符合契约。
+        started = _run(
             [
                 "docker",
                 "run",
+                "-d",
+                "--restart=no",
                 "--name",
                 container,
                 "-p",
@@ -352,28 +370,53 @@ def test_explicit_cuda_without_cuda_fails_visible(gpu_instance, case: str, reaso
             ],
             timeout=300,
         )
-        output = proc.stdout + proc.stderr
-        assert proc.returncode != 0, f"{case}: 显式 cuda 拿不到 CUDA 却未失败: {output[-1000:]}"
+        assert started.returncode == 0, f"{case}: 容器未起来: {started.stderr[-500:]}"
+
+        # 容器还活着的窗口内探一次：严格分支必须让服务**始终不进入可服务状态**，
+        # 而不是"先能答 /health 再退出"。
+        early_ok = None
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            state = _run(
+                [
+                    "docker",
+                    "inspect",
+                    "-f",
+                    "{{.State.Status}}|{{.State.ExitCode}}|{{.RestartCount}}",
+                    container,
+                ]
+            )
+            status_name, exit_code, restarts = state.stdout.strip().split("|")
+            if early_ok is None and status_name == "running":
+                try:
+                    early_ok = SESSION.get(f"http://127.0.0.1:{port}/health", timeout=2).status_code
+                except requests.RequestException:
+                    early_ok = "unreachable"
+            if status_name != "running":
+                break
+            time.sleep(1)
+        else:
+            pytest.fail(f"{case}: 120s 内容器未退出（严格分支没拦住？status={status_name}）")
+
+        logs = _run(["docker", "logs", container], timeout=60)
+        output = logs.stdout + logs.stderr
+        assert int(exit_code) != 0, f"{case}: 退出码为 0，显式 cuda 拿不到 CUDA 却未失败"
+        assert status_name == "exited", f"{case}: 终态应为 exited，实际 {status_name}"
+        assert int(restarts) == 0, f"{case}: 失败实例不得重启（RestartCount={restarts}）"
         assert "refusing to start" not in output, f"{case}: 预检未通过，严格分支未被执行"
         assert "[kronos-real] model load failed" in output, output[-1000:]
         assert reason in output, f"{case}: 日志缺失败文案 {reason!r}"
         assert "model loaded: device=cpu" not in output, f"{case}: 静默回落 cpu"
-
-        state = _run(
-            [
-                "docker",
-                "inspect",
-                "-f",
-                "{{.State.Status}}|{{.State.ExitCode}}|{{.RestartCount}}",
-                container,
-            ]
+        assert early_ok in (None, "unreachable"), (
+            f"{case}: 容器存活期间 /health 竟可达（HTTP {early_ok}）——"
+            "加载失败的实例不得进入可服务状态"
         )
-        status_name, exit_code, restarts = state.stdout.strip().split("|")
-        assert status_name == "exited" and int(exit_code) != 0, state.stdout
-        assert int(restarts) == 0, f"{case}: 失败实例不得重启: {state.stdout}"
         with pytest.raises(requests.RequestException):
             SESSION.get(f"http://127.0.0.1:{port}/health", timeout=3)
-        print(f"\n[evidence] case={case} hostname={socket.gethostname()} exit={exit_code}")
+        print(
+            f"\n[evidence] case={case} hostname={socket.gethostname()} exit={exit_code} "
+            f"restarts={restarts} health_while_running={early_ok}"
+        )
     finally:
         _run(["docker", "rm", "-f", container], timeout=60)
 

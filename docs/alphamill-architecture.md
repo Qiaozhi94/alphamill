@@ -683,6 +683,13 @@ mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围—�
   **实测（2026-09-24，执行机 `qiaozhi-lt`，RTX 4060 Laptop / 驱动 616.64）**：`kronos-signal-real`
   以 `device=cuda:0` 加载并产出 `source=kronos` 真实信号；**常驻显存峰值 565 MiB**，在下表白天行
   ≤3GB 预算之内，故该预算维持原值、不触发重标。
+  **两套读数的口径（代码检视 R1-009）**：下文出现的数字来自两个不同来源，不可混用——
+  ① **宿主 `nvidia-smi --query-gpu=memory.used`**（整卡已用，含 Windows 桌面合成器等其他租户）：
+  F010 的常驻峰值 565 MiB 与旅程里的 565 → 137 MiB 属此口径；② **容器内
+  `torch.cuda.mem_get_info` 的 `total - free`**（F009 `/lifecycle/status` 的 `vram_bytes`）：
+  1.49GB → 1.07GB 属此口径，数值更高是因为它含 CUDA context 与缓存分配器的保留量。
+  **常驻预算（下表白天行 ≤3GB）以 ① 对照**；两个口径都远低于该预算，结论不因选哪个而变。
+
   **显存释放已验证（2026-09-24，F010 T011/T018）**：`stop` 之后显存真实下降且卸载后可用显存
   达到训练预算——`vram_bytes` 1.49GB → 1.07GB，整卡可用 7.53GB ≥ 6GB（F003 `vram_limit_gb`
   缺省值，故该缺省与下表夜槽行**均不重标**）；夜槽完整旅程亦已端到端跑通：常驻 565 MiB →
