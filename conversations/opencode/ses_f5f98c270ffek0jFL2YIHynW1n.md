@@ -13,7 +13,7 @@ cost: 0.0002
 parent_id: "ses_f5f9a1cf7ffemPxb4yILEhSmY0"
 ---
 
-# look_at: Describe the visual layout of both screenshots in
+# look_at: Describe the visual layout of both screenshots in 
 
 ## user · 2026-09-14T14:51:57Z
 

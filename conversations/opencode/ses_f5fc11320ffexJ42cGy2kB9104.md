@@ -159,14 +159,14 @@ Author: qiaozhi <qiaozhi_li@126.com>
 Date:   Mon Sep 14 20:31:35 2026 +0800
 
     docs(f003,f008): 立项 AlphaGen 生成器平面与宇宙扩容，并按真实机器拓扑校正全局约束
-
+    
     F003（AlphaGen vendor 与可插拔生成器平面，draft）：
     - 三件套完整立项，覆盖 FR2.2/2.3/2.4/2.6；评测与门禁全部留给 F007
     - 关闭 Q-002/003/004/005：第二后端选人工 crypto 原生种子；不等 F007 的
       ResearchSnapshot（过渡期用显式 (dataset, data_version, value_digest) 绑定）；
       冒烟的 IC 对齐只做数值回归不产 verdict
     - Q-001 裁决为并行：宇宙扩容分配为 F008 同期推进，候选质量结论以其落地后的宇宙为准
-
+    
     F008（宇宙扩容与 point-in-time 宇宙台账，draft）：
     - 核心交付是 PIT 成员台账（只追加 + universe_at(T)），扩容是顺带
     - 台账按 symbol_map 同构做内容寻址 artifact（ADR-0007 / F007 IR-002 的定义）
@@ -189,14 +189,14 @@ Date:   Mon Sep 14 20:31:35 2026 +0800
 4: created: 2026-09-06
 5: updated: 2026-09-07
 6: ---
-7:
+7: 
 8: # Feature Specs Guide
-9:
+9: 
 10: 本目录记录 AlphaMill 的 feature-level SDD artifacts。所有需求按「一 feature 一
 11: 文件夹」输出，feature 文件夹按 PRD 的大版本（`0.1`、`0.2`…）分层存放。
-12:
+12: 
 13: ## Directory Shape
-14:
+14: 
 15: ```text
 16: docs/features/
 17:   README.md                   本文：规则与入口
@@ -208,7 +208,7 @@ Date:   Mon Sep 14 20:31:35 2026 +0800
 23:     <version>.md              版本发布与收口摘要（全部 done 后创建）
 24:   <version>/                  例如 0.1/
 25:     Fxxx-feature-name/
-26:
+26:   
 …[truncated]
   ```
   </details>
@@ -294,7 +294,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 > 规则：feature 状态变更（spec frontmatter）时必须同步本表；`done` 的 Feature 移出本表，
 > 交付记录进入 `docs/features/releases/<version>.md`。
 > 示例行（复制后替换，链接必须指向真实 spec.md）：
-> `| F001-<name> | 0.1 |
+> `| F001-<name> | 0.1 | 
 …[truncated]
   ```
   </details>
@@ -386,20 +386,20 @@ Let me read F004 files.
 10: created: 2026-09-12
 11: updated: 2026-09-12
 12: ---
-13:
+13: 
 14: # F004：Kronos 真实推理运行时（编排内可复现）
-15:
+15: 
 16: > Owner: Georg | Target: v0.2.x
-17:
+17: 
 18: ## 0. 来源与意图
-19:
+19: 
 20: - **PRD 来源**：`docs/alphamill-prd.md` FR3（信号生产）与 M1 运行基座
 21: - **架构来源**：`docs/alphamill-architecture.md` §七（部署拓扑）
 22: - **上游来源**：F001 AC-006（真实推理证据，当前靠仓外手工实例）、F002 检视 F002-Q001（容器化不在数据桥契约内，需独立载体）
 23: - **功能类型**：backend / infra
 24: - **规格模式**：lite
 25: - **变更类型**：ADDED
-26: - **一句话意图**：把 Kronos 真实模型推理纳入 `deployment/` 编排（可选
+26: - **一句话意图**：把 Kronos 真实模型推理纳入 `deployment/` 编排（可选 
 …[truncated]
   ```
   </details>
@@ -420,18 +420,18 @@ Let me read F004 files.
 8: created: 2026-09-12
 9: updated: 2026-09-12
 10: ---
-11:
+11: 
 12: # F004：Kronos 真实推理运行时 - 设计
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Tasks: `tasks.md`
-15:
+15: 
 16: ## 0. 输入与约束
-17:
+17: 
 18: - **行为契约**：`spec.md`（FR-001 / NFR-001）
 19: - **上游 Contract**：F001 冻结的 Kronos HTTP API（`GET /health`、`GET /predict/{symbol:path}`、`POST /predict_batch`），零改动
 20: - **执行环境**：与 F001 收口态一致（WSL2 + docker-ce；本机无独立显卡，CPU 推理实测 3.4–7.2s/次）
 21: - **实现约束**：`vendor/Kronos`（pin `67b630e`）与 `models/`（391MB + 16MB）不入库，由 F001 既有流程获取
-22:
+22: 
 23: ## 1. 技术概要
 …[truncated]
   ```
@@ -453,24 +453,24 @@ Let me read F004 files.
 8: created: 2026-09-12
 9: updated: 2026-09-12
 10: ---
-11:
+11: 
 12: # F004：Kronos 真实推理运行时 - 任务
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Design: `design.md`
-15:
+15: 
 16: ## 0. 来源与执行规则
-17:
+17: 
 18: - 行为与验收真相源：`spec.md`；技术方案与边界：`design.md`。
 19: - 每项任务只描述一个可验证动作，并引用合法的 US/需求/AC ID。
 20: - 完成且验证后立即把 `[ ]` 改为 `[x]`，不得最后统一补勾。
-21:
+21: 
 22: ## 1. 前置条件
-23:
+23: 
 24: - F001 已 done：薄壳、`vendor/Kronos` pin 与 `models/` 权重流程成立，AC-006 已有手工命令形态的实测证据。
 25: - spec §8 Q-001（是否阻塞 F002 done）未关闭前，本 feature 不进入 `ready-for-development`。
-26:
+26: 
 27: ## 2. 实现任务
-28:
+28: 
 
 …[truncated]
   ```
@@ -482,7 +482,7 @@ Let me read F004 files.
 - **tool**: `bash({"command": "echo \"=== F003 design headings ===\"; grep -n '^## \\|^### ' docs/features/0.2/F003-alphagen-vendor/design.md; echo; echo \"=== F003 spec headings ===\"; grep -n '^## \\|^### ' docs/features/0.2/F003-alphagen-vendor/spec.md", "workdir": "/home/georg/projects/alphamill"})`
 
 
-> [reasoning] Now let me look at F003 spec/design/tasks progress. F003 design has all DQ closed. Let me read F003 design section 0-1 and tasks to see the scope. And F003 spec sections. Let me also check what's missing to move from draft to ready-for-development.
+> [reasoning] Now let me look at F003 spec/design/tasks progress. F003 design has all DQ closed. Let me read F003 design section 0-1 and tasks to see the scope. And F003 spec sections. Let me also check what's missing to move from draft to ready-for-development. 
 
 Both are gate_version 1. Status draft. The gate to ready-for-development is all design DQ closed — which they are. So maybe they are essentially "ready" pending an owner review/verification run. Let me check if there's a review doc.
 
@@ -510,13 +510,13 @@ Let me read F003 spec headings + tasks.
 8: created: 2026-09-14
 9: updated: 2026-09-14
 10: ---
-11:
+11: 
 12: # F003：AlphaGen vendor 与可插拔生成器平面 - 任务
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Design: `design.md`
-15:
+15: 
 16: ## 0. 来源与执行规则
-17:
+17: 
 18: - 行为与验收真相源：`spec.md`；技术方案与边界：`design.md`。
 19: - 每项任务完成并跑过对应 verify 后立即勾选，不得最后统一补勾。
 20: - `[P]` 只用于修改不同文件、无顺序依赖且不争用同一状态的任务。
@@ -574,7 +574,7 @@ Let me read F003 spec headings + tasks.
 - **tool**: `bash({"command": "echo \"=== verify.py f003/f004 mention ===\"; grep -rn 'F003\\|F004' tools/ 2>/dev/null | head; echo \"=== all commits touching f004 ===\"; git log --oneline --all -- docs/features/0.2/F004-kronos-inference-runtime/; echo \"=== all commits touching f003 ===\"; git log --oneline --all -- docs/features/0.2/F003-alphagen-vendor/", "workdir": "/home/georg/projects/alphamill"})`
 
 
-> [reasoning] Both features are structurally complete: 9-section spec, 11-section design, 6-section tasks, all DQ closed, all Q closed. Status = draft.
+> [reasoning] Both features are structurally complete: 9-section spec, 11-section design, 6-section tasks, all DQ closed, all Q closed. Status = draft. 
 
 The F003 tasks list T001 as a prerequisite "关闭 spec 唯一剩余的开放问题" but that Q is already closed via commit bd87eac — so tasks are slightly stale relative to spec. Also T001/T002/T003/T004 prerequisites are unchecked. That's expected since not started.
 
@@ -1945,7 +1945,7 @@ ls F003 dir → design.md spec.md tasks.md only (done).
 
 Good.
 
-Format:
+Format: 
 - Lead: 结论
 - 证据 5 lines
 - 最可能的记忆来源
@@ -2042,7 +2042,7 @@ F003 is high-value (M2 core) but high-cost and blocked.
 
 Let me also consider: F003 depends on F008 for quality conclusions. F008 批1 is a data backfill (~2 weeks? "不必等满两周"). F008 is also a prerequisite. So the true critical path to M2 might be F008 → F003.
 
-Given all this, the best strategic advice:
+Given all this, the best strategic advice: 
 - F004 now (short, unblocked, closes F002 caveat).
 - Immediately fix F003's enablers: execution-machine access (hard blocker, unknown effort — do it now because it's on the critical path and could be slow) and kick off F008 批1.
 - Then F003.

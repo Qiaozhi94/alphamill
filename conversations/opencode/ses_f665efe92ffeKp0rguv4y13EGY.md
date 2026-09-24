@@ -305,9 +305,9 @@ drwxr-xr-x 14 georg georg   4096 Sep 10 00:21 ..
 <type>file</type>
 <content>
 1: """Storage, schema, and filesystem helpers for the experiment registry."""
-2:
+2: 
 3: from __future__ import annotations
-4:
+4: 
 5: import json
 6: import logging
 7: import sqlite3
@@ -316,20 +316,20 @@ drwxr-xr-x 14 georg georg   4096 Sep 10 00:21 ..
 10: from datetime import UTC, datetime
 11: from pathlib import Path
 12: from typing import TYPE_CHECKING
-13:
+13: 
 14: from .specs import (
 15:     IDENTITY_VERSION,
 16:     _validate_spec,
 17:     canonical_json,
 18:     training_hash_from_spec,
 19: )
-20:
+20: 
 21: if TYPE_CHECKING:
 22:     import numpy as np
-23:
+23: 
 24: logger = logging.getLogger(__name__)
 25: UTC = UTC
-26:
+26: 
 27: # ---------------------------------------------------------------------------
 28: # Sch
 …[truncated]
@@ -343,9 +343,9 @@ drwxr-xr-x 14 georg georg   4096 Sep 10 00:21 ..
 <type>file</type>
 <content>
 1: """Specification and hashing helpers for the experiment registry."""
-2:
+2: 
 3: from __future__ import annotations
-4:
+4: 
 5: import copy
 6: import hashlib
 7: import json
@@ -356,14 +356,14 @@ drwxr-xr-x 14 georg georg   4096 Sep 10 00:21 ..
 12: from enum import Enum
 13: from pathlib import Path
 14: from typing import Any
-15:
+15: 
 16: logger = logging.getLogger(__name__)
-17:
+17: 
 18: # Default seed — must match utils.modeling.RANDOM_SEED.
 19: # Duplicated here to avoid importing the full modeling stack (torch, etc.)
 20: # into a lightweight registry module.
 21: DEFAULT_SEED = 42
-22:
+22: 
 23: # Required fields in every training spec.  ``seed`` is enforced so that
 24: # two run
 …[truncated]
@@ -377,11 +377,11 @@ drwxr-xr-x 14 georg georg   4096 Sep 10 00:21 ..
 <type>file</type>
 <content>
 1: # Case Studies
-2:
+2: 
 3: Nine case studies thread through Chapters 6-20, applying the same ML4T workflow to different asset classes, frequencies, and trading constraints. Each case study defines a universe, builds labels and features, trains models from linear baselines through deep learning, and evaluates strategies through backtesting, portfolio construction, cost analysis, and risk management.
-4:
+4: 
 5: ## Overview
-6:
+6: 
 7: | # | Case Study | Asset Class | Frequency | Universe | Primary Label |
 8: |---|------------|-------------|-----------|----------|---------------|
 9: | 1 | [ETFs](etfs/) | Multi-asset ETFs | Daily | 100 ETFs | fwd_ret_21d |
@@ -412,17 +412,17 @@ Registry core found. Now reading RUN_LOG.md, the registry public API, and the tw
 <type>file</type>
 <content>
 1: # The Run Log
-2:
+2: 
 3: Every model training run, prediction set, causal-effect estimate, and backtest in
 4: the case studies is recorded in a per-case-study **run log**. The run log is a
 5: fully-deterministic experiment archive: each entry is content-addressed by a hash
 6: of its complete configuration, every artifact it points to is reproducible from
 7: that configuration, and nothing is anonymous or re-derivable only by re-running
 8: the pipeline.
-9:
+9: 
 10: The run log lives at `case_studies/{case_study}/run_log/` and consists of three
 11: things:
-12:
+12: 
 13: 1. A SQLite index (`registry.db`) that catalogs every run.
 14: 2. Filesystem subdirectories holding the artifacts each run produced
 15:    (`
@@ -437,17 +437,17 @@ Registry core found. Now reading RUN_LOG.md, the registry public API, and the tw
 <type>file</type>
 <content>
 1: """Unified experiment registry with content-addressed storage.
-2:
+2: 
 3: Three-level entity model::
-4:
+4: 
 5:     training_run → prediction_set → backtest_run
-6:
+6: 
 7: Each level is identified by a deterministic hash of its spec (the
 8: identity-defining configuration).  The DB is a lean queryable index;
 9: the filesystem ``spec.json`` is the source of truth.
-10:
+10: 
 11: Usage::
-12:
+12: 
 13:     from case_studies.utils.registry import (
 14:         build_training_spec,
 15:         load_preset,
@@ -468,15 +468,15 @@ Registry core found. Now reading RUN_LOG.md, the registry public API, and the tw
 <type>file</type>
 <content>
 1: # Crypto Perpetuals Funding
-2:
+2: 
 3: This case study uses Binance perpetual futures to examine an asset-class-specific return source:
 4: the transfer between long and short positions at each 8-hour funding settlement. Nineteen
 5: perpetuals create the book's smallest cross-section and highest non-intraday decision frequency.
 6: The pipeline therefore emphasizes completed-bar timing, official funding cash flows, transaction
 7: costs, and uncertainty from only two validation folds.
-8:
+8: 
 9: ## Dataset Profile
-10:
+10: 
 11: | Property | Value |
 12: |---|---|
 13: | Asset class | Crypto perpetual futures |
@@ -494,7 +494,7 @@ Registry core found. Now reading RUN_LOG.md, the registry public API, and the tw
 <content>
 1: strategy_id: crypto_perps_funding
 2: setup_version: v1
-3:
+3: 
 4: universe:
 5:   symbols:
 6:     - AAVEUSDT
@@ -519,11 +519,11 @@ Registry core found. Now reading RUN_LOG.md, the registry public API, and the tw
 25:   n_assets: 19
 26:   eligibility_rule: top_perps_by_volume
 27:   panel_note: Unbalanced panel; assets enter at listing date (no backfill).
-28:
+28: 
 29: decision:
 30:   cadence: 8_hour_funding_aligned
 31:   snapshot: pre_funding_timestamp
-32:
+32:   
 …[truncated]
   ```
   </details>
@@ -682,7 +682,7 @@ Batch reads.
 295:     runtime_provenance: dict | None = None,
 296: ) -> str:
 297:     """Register a training run. Returns training_hash.
-298:
+298: 
 299:     Parameters
 300:     ----------
 301:     case_study : str
@@ -690,7 +690,7 @@ Batch reads.
 303:     spec : dict
 304:         Identity-defining config (hashed). Must contain at least
 305:         ``family``, ``label``, and ``seed``. If ``seed`` is omitted,
-306:         DEFAULT_SEED (42)
+306:         DEFAULT_SEED (42) 
 …[truncated]
   ```
   </details>
@@ -734,7 +734,7 @@ Batch reads.
 <type>file</type>
 <content>
 1: from __future__ import annotations
-2:
+2: 
 3: import hashlib
 4: import json
 5: import os
@@ -745,12 +745,12 @@ Batch reads.
 10: from datetime import UTC, datetime
 11: from pathlib import Path
 12: from typing import TYPE_CHECKING
-13:
+13: 
 14: from scripts.create_experiment import create_experiment
 15: from utils.paths import REPO_ROOT
-16:
+16: 
 17: from .contracts import ExecutionTier
-18:
+18: 
 19: if TYPE_CHECKING:
 20:     from .catalog import BacktestCatalog, PredictionCatalog
 21:     from .causal import CausalRequest
@@ -769,19 +769,19 @@ Batch reads.
 <type>file</type>
 <content>
 1: """The declared model population, as a visible catalog.
-2:
+2: 
 3: A case study declares which models it fits in its training menus,
 4: ``config/training/<label>.yaml``. This module turns those menus into a Polars frame so a notebook
 5: can *show* the population it is about to fit rather than describe it in prose, and build the
 6: requests from the same frame the reader just saw.
-7:
+7: 
 8: Three case studies had each written a private copy of this before it existed here, and the copies
 9: had drifted: two of the three silently shrank the population when a configuration name was
 10: mistyped. Selection is strict here for that reason.
 11: """
-12:
+12: 
 13: from __future__ import annotations
-14:
+14: 
 15:
 …[truncated]
   ```
@@ -833,9 +833,9 @@ Now the prediction/backtest writers, crypto-specific modules, and the case-study
 794:     allow_partial: bool = False,
 795: ) -> str:
 796:     """Register a prediction set. Returns prediction_hash.
-797:
+797: 
 798:     Parameters
-799:
+799:   
 …[truncated]
   ```
   </details>
@@ -864,7 +864,7 @@ Now the prediction/backtest writers, crypto-specific modules, and the case-study
 1203:     elapsed_s: float | None = None,
 1204: ) -> str:
 1205:     """Register a backtest run. Returns backtest_hash.
-1206:
+1206: 
 1207:     Parameters
 1208:     ----------
 1209:     prediction_hash : str
@@ -880,27 +880,27 @@ Now the prediction/backtest writers, crypto-specific modules, and the case-study
 <type>file</type>
 <content>
 1: """Official Binance USD-M perpetual funding-rate data for the crypto case study."""
-2:
+2: 
 3: from __future__ import annotations
-4:
+4: 
 5: import io
 6: import zipfile
 7: from concurrent.futures import ThreadPoolExecutor, as_completed
 8: from datetime import UTC, date, datetime
 9: from pathlib import Path
-10:
+10: 
 11: import httpx
 12: import polars as pl
 13: import yaml
-14:
+14: 
 15: from data.exceptions import DataNotFoundError
 16: from utils import ML4T_DATA_PATH
 17: from utils.paths import get_case_study_dir
-18:
+18: 
 19: BASE_URL = "https://data.binance.vision/data/futures/um/monthly/fundingRate"
 20: FUNDING_PATH = ML4T_DATA_PATH / "crypto" / "market" / "funding_rate.parquet"
-21:
-22:
+21: 
+22: 
 …[truncated]
   ```
   </details>
@@ -1007,7 +1007,7 @@ ARTIFACT_SHA256 = {
 19:# Every model in this case study is trained to predict the label defined here, so an error in
 20:# it is silent where it is made and reaches every metric and every backtest after it. This
 21:# notebook fixes the execution convention, proves each labelled row has a complete forward
-22:# window, measures how much independent information those
+22:# window, measures how much independent information those 
 …[truncated]
   ```
   </details>
@@ -1051,27 +1051,27 @@ n
 <type>file</type>
 <content>
 1: """Funding-settlement accounting for perpetual-futures engine backtests."""
-2:
+2: 
 3: from __future__ import annotations
-4:
+4: 
 5: import math
 6: from datetime import UTC, datetime
 7: from functools import wraps
 8: from typing import Any
-9:
+9: 
 10: import polars as pl
-11:
-12:
+11: 
+12: 
 13: def _as_utc(value: datetime) -> datetime:
 14:     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
-15:
-16:
+15: 
+16: 
 17: class FundingSettlementLedger:
 18:     """Apply position-signed funding during the engine's bar-time update."""
-19:
+19: 
 20:     def __init__(self, funding_rates: pl.DataFrame) -> None:
 21:         required = {"symbol", "timestamp", "funding_rate"}
-22:
+22:   
 …[truncated]
   ```
   </details>
@@ -1108,7 +1108,7 @@ Let me batch.
 1: # Model configurations for fwd_ret_8h
 2: # Each entry references a preset in case_studies/config/{model_type}/.
 3: # Comment out lines to skip configs; add new preset names to extend.
-4:
+4: 
 5: linear:
 6: - ols
 7: - ridge_a0.001
@@ -1177,7 +1177,7 @@ Let me batch.
 <content>
 1: strategy_id: etfs
 2: setup_version: v1
-3:
+3: 
 4: universe:
 5:   assets:
 6:     - ACWI
@@ -1253,18 +1253,18 @@ docs/running-notebooks.md:245:Every model training run, prediction set, causal-e
 <content>
 72: from utils.paths import get_case_study_dir
 73: from utils.style import COLORS, FIGSIZE, add_message_title, show_with_alt
-74:
+74: 
 75: warnings.filterwarnings("ignore")
-76:
+76: 
 77: CASE_STUDY_ID = "crypto_perps_funding"
 78: CASE_DIR = get_case_study_dir(CASE_STUDY_ID)
 79: LABELS_DIR = CASE_DIR / "labels"
-80:
+80: 
 81: # %% [markdown]
 82: # Both parameters are unset by default, and both are read below. `START_DATE` trims the history
 83: # to a later start; `MAX_SYMBOLS` keeps only the first symbols in alphabetical order. Either one
 84: # shortens a run, at the cost of a thinner cross-section for the rank correlation in Section G.
-85:
+85: 
 86: # %% tags=["parameters"]
 87: MAX_SYMBOLS = Non
 …[truncated]
@@ -1281,7 +1281,7 @@ docs/running-notebooks.md:245:Every model training run, prediction set, causal-e
 
 
 > [reasoning] I have plenty. Let me now gather:
-- 03_financial_features.py feature families/list (function names and feature count 39).
+- 03_financial_features.py feature families/list (function names and feature count 39). 
 - us_equities_panel 06_linear imports and 16_backtest to compare.
 - research/execution.py run_model_population and run_backtests (writer orchestrators).
 - scripts/create_experiment.py (workspace copy) and download_artifacts.py (release/registry install).
@@ -1300,9 +1300,9 @@ Let me batch.
 <type>file</type>
 <content>
 1: # Case Study: US Equities Panel
-2:
+2: 
 3: This case study is the broadest cross-sectional equity workflow in the book. It uses daily OHLCV data from NASDAQ Data Link for ~3,200 US stocks spanning 1990 through 2018-Q1 to test whether weak per-stock signals translate into a tradable strategy when scaled across thousands of names. The Fundamental Law of Active Management is the operating frame: the per-stock edge is small, but breadth across the cross-section is supposed to compensate. The role of this case study is to hold that claim against measured signal quality, paired-bootstrap confidence intervals, and an explicit holdout window.
-4:
+4: 
 5: The pipeline is unusually long because t
 …[truncated]
   ```
@@ -1367,25 +1367,25 @@ Let me batch.
 <content>
 1: #!/usr/bin/env python3
 2: """Create a writable, isolated case-study experiment from installed artifacts."""
-3:
+3: 
 4: from __future__ import annotations
-5:
+5: 
 6: import argparse
 7: import json
 8: import shutil
 9: import stat
 10: import uuid
 11: from pathlib import Path
-12:
+12: 
 13: REPO_ROOT = Path(__file__).resolve().parent.parent
 14: GENERATED_DIRS = ("run_log", "labels", "features", "evaluation", "benchmark")
-15:
-16:
+15: 
+16: 
 17: def _make_writable(root: Path) -> None:
 18:     for path in (root, *root.rglob("*")):
 19:         path.chmod(path.stat().st_mode | stat.S_IWUSR)
-20:
-21:
+20: 
+21: 
 22: def create_experiment(
 23:     case_study: str,
 24:     output_root: Path,
@@ -1555,7 +1555,7 @@ Also I should note the scale table.
 
 Let me quickly check results references in us_equities 20_strategy_analysis and if there's a `results` dir writer.
 
-Also for #5 (config/registry enumerating nine case studies):
+Also for #5 (config/registry enumerating nine case studies): 
 - case_studies/config/ is shared model presets (not per-project enumeration).
 - The nine are enumerated in: scripts/download_artifacts.py CASE_STUDIES + ARTIFACT_SHA256; 06_strategy_definition/03_case_study_overview.py DISPLAY_NAMES/CHAPTER_TRACKS; case_studies/README.md table. There's no single central metadata registry file beyond these. The per-case `config/setup.yaml` is the SSOT for each.
 

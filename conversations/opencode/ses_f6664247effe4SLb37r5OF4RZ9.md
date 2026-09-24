@@ -27,7 +27,7 @@ cost: 0.0804
 
 > [reasoning] The user wants me to analyze the ml4t project (a code repository in the projects directory) and compare it with their current project (alphamill, an AI factor factory-led quant research and trading workflow). They want to know what points from ml4t they can reference.
 
-Let me start by understanding the intent. This is a research/investigation task - analyze an external project and compare with their current one. No implementation requested.
+Let me start by understanding the intent. This is a research/investigation task - analyze an external project and compare with their current one. No implementation requested. 
 
 Let me:
 1. Find the ml4t project location
@@ -200,12 +200,12 @@ Found both: `/home/georg/projects/ml4t-zh` (Stefan Jansen's ML4T course repo, 27
 <type>file</type>
 <content>
 1: # AlphaMill
-2:
+2: 
 3: AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，贯通数据治理 → 假设与因子 →
 4: 证据评测 → 组合与策略 → Freqtrade 执行 → 监控归因与复盘（中文别名：淘沙）。
-5:
+5: 
 6: ## 当前结构
-7:
+7: 
 8: - `docs/alphamill-prd.md`：正式 PRD（产品真相源），产品判断以此为准。
 9: - `docs/alphamill-architecture.md`：四平面架构与接口契约（架构真相源），随实现迭代。
 10: - `docs/alphamill-research-factor-mining.md`：因子挖掘/ML 选型调研证据（决策已提炼至 ADR-0001）。
@@ -225,28 +225,28 @@ Found both: `/home/georg/projects/ml4t-zh` (Stefan Jansen's ML4T course repo, 27
 <type>file</type>
 <content>
 1: # AlphaMill（淘沙）
-2:
+2: 
 3: > 以 AI 因子工厂为核心的加密量化研究与交易管线。
-4:
+4: 
 5: AlphaMill 将数据治理、假设生成、因子评测、严格验证、组合构建、交易执行和绩效复盘连接为
 6: 可复现的闭环，目标是持续发现并运营成本后有效的 Alpha。候选吞吐量是探索能力指标，不是
 7: 项目目的；有效独立性、证据可信度、组合边际贡献和线上表现共同决定研究产出是否有价值。
-8:
+8: 
 9: ## 核心闭环
-10:
+10: 
 11: ```text
 12: 数据快照 → AI 因子工厂 → 证据评测与验证 → 组合与策略 → Freqtrade 执行
 13:     ▲                                                      │
 14:     └──────── 新假设 ← AI/人工复盘 ← 监控、归因与生命周期 ──┘
 15: ```
-16:
+16: 
 17: - **AI 负责探索**：生成假设和因子、分析失败、提出下一轮实验。
 18: - **规则负责证据**：成本、多重检验、留出预算、最终确认和无前视审计均由确定性代码裁决。
 19: - **组合负责转化**：单因子和协同池 meta-factor 只有对现有组合产生正边际贡献才构成可信产出。
 20: - **执行负责反馈**：Freqtrade 承担 dry-run/paper/live 路径，成交和风险事件回流至同一证据链。
-21:
+21: 
 22: ## 成功标准
-23:
+23: 
 24: 北极星是滚动周期内新增的 **可信 Alpha**：候选须有效独立、成本后为正、通过最终确认与无前视
 25: 审
 …[truncated]
@@ -260,20 +260,20 @@ Found both: `/home/georg/projects/ml4t-zh` (Stefan Jansen's ML4T course repo, 27
 <type>file</type>
 <content>
 1: # BACKLOG —— 活跃 Feature 索引
-2:
+2: 
 3: 本文件只列 `status != done` 的 Feature，是 `docs/features/<version>/Fxxx-*/spec.md`
 4: frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独立状态真相源）。
-5:
+5: 
 6: | Feature | 版本 | 状态 | 链接 |
 7: |---|---|---|---|
 8: | F002-data-bridge | 0.2 | ready-for-development | [spec](docs/features/0.2/F002-data-bridge/spec.md) |
 9: | F004-kronos-inference-runtime | 0.2 | draft | [spec](docs/features/0.2/F004-kronos-inference-runtime/spec.md) |
-10:
+10: 
 11: > 规则：feature 状态变更（spec frontmatter）时必须同步本表；`done` 的 Feature 移出本表，
 12: > 交付记录进入 `docs/features/releases/<version>.md`。
 13: > 示例行（复制后替换，链接必须指向真实 spec.md）：
 14: > `| F001-<name> | 0.1 | draft | [spec](docs/features/0.1/F001-<name>/spec.md) |`
-15:
+15: 
 16: ## 规划中（编号已预留 / 待
 …[truncated]
   ```
@@ -286,14 +286,14 @@ Found both: `/home/georg/projects/ml4t-zh` (Stefan Jansen's ML4T course repo, 27
 <type>file</type>
 <content>
 1: # Machine Learning for Trading — 3rd Edition
-2:
+2: 
 3: **Build, test, and deploy ML-driven trading strategies — from data sourcing to live execution.**
-4:
+4: 
 5: This repository hosts the code for [*Machine Learning for Trading, 3rd Edition*](https://amzn.to/4eigy2F)
 6: by [Stefan Jansen](https://www.linkedin.com/in/applied-ai/) — a ground-up
 7: rebuild, organized around one end-to-end workflow: how you define a research idea and develop it iteratively into a
 8: strategy you can actually run, and keep running, in a live market.
-9:
+9: 
 10: - [Nine case studies](https://www.ml4trading.io/case-studies/) illustrate the workflow throughout the 27 chapters of the
 11:   book, from raw data through features, models, backtest
 …[truncated]
@@ -541,15 +541,15 @@ to continue: task(task_id="ses_f665ee612ffewlPli8XiMXca5y", load_skills=[], run_
 <type>file</type>
 <content>
 1: # AlphaMill — 系统架构设计
-2:
+2: 
 3: > 版本：v0.1 | 日期：2026-09-13 | 配套：[alphamill-prd.md](./alphamill-prd.md)
-4:
+4: 
 5: ---
-6:
+6: 
 7: ## 〇、存储三件套分工（TimescaleDB / Parquet / DuckDB）
-8:
+8: 
 9: **不是三选一的竞品，是流水线上的三段**：Parquet 是文件格式（箱子），DuckDB 是查询引擎（开箱的手），TimescaleDB 是数据库服务（实时柜台）。
-10:
+10: 
 11: | | TimescaleDB | Parquet 湖 | DuckDB |
 12: |---|---|---|---|
 13: | 本质 | PG 时序扩展（数据库服务） | 列式文件格式（无服务） | 进程内 OLAP 查询引擎 |
@@ -557,7 +557,7 @@ to continue: task(task_id="ses_f665ee612ffewlPli8XiMXca5y", load_skills=[], run_
 15: | 擅长 | 实时最新值、连续聚合、Grafana 直连 | 大范围列扫描、快照不可变=可复现 | 直接对 Parquet 跑 SQL |
 16: | 复现性 | ❌ 数据会被回补/修订 | ✅ 同一 data_version 永远同结果 | 无关（读的人） |
 17: | 角色 | **联机运营库** | **研究快照**（封存账本） | **取数入口**（会计的手） |
-18:
+18: 
 19: ```text
 20: CCXT 采集 ──写入──▶ TimescaleDB（联机运营库，随时改）
 21
@@ -572,30 +572,30 @@ to continue: task(task_id="ses_f665ee612ffewlPli8XiMXca5y", load_skills=[], run_
 <type>file</type>
 <content>
 1: # AlphaMill — 产品需求文档（PRD）
-2:
+2: 
 3: > 版本：v0.1 | 日期：2026-09-13 | 状态：草案
-4:
+4: 
 5: ## 一、背景与问题定义
-6:
+6: 
 7: ### 1.1 quant-crypto 复盘
-8:
+8: 
 9: 上一代项目 quant-crypto 已建成可复用的数据、推理、执行、风控与监控基础设施：631 万行
 10: 1m OHLCV、衍生品特征、Kronos 信号缓存、Freqtrade dry-run、风险保护、90 天留出门和信号
 11: 质量监控。最终状态为 `blocked_no_paper_candidate`：所有候选均未通过最终留出。
-12:
+12: 
 13: 这次失败暴露的不是单点工具缺失，而是研究到交易之间没有形成可持续运转的闭环：
-14:
+14: 
 15: - 假设主要靠人工提出，5 周只覆盖 3 个信号族，探索速度慢；
 16: - 因子生成、成本评估、统计验证与策略构建的优化目标不完全一致；
 17: - 数据、实验、信号和交易结果之间缺少统一谱系，复现与重定价成本高；
 18: - 失败结果没有结构化回流为下一轮假设，研究循环无法积累；
 19: - 研究 PASS、组合纳入、部署和线上衰减之间缺少完整生命周期管理。
-20:
+20: 
 21: AlphaMill 要解决的不是“多生成一些公式”，而是把 **Alpha 的发现、证伪、部署和运营**
 22: 做成一条可信、可复现、可持续学习的生产管线。
-23:
+23: 
 24: ### 1.2 项目决策
-25:
+25: 
 26: 1. **以 AI 因子工厂为核心引擎**：程序化、RL、人工与 LLM 共同生产带来
 …[truncated]
   ```
@@ -640,7 +640,7 @@ total 36
 drwxr-xr-x 6 georg georg 4096 Sep 12 01:27 .
 drwxr-xr-x 6 georg georg 4096 Sep 13 02:25 ..
 drwxr-xr-x 3 georg georg 4096 Sep 12 01:18 0.1
-drwxr-xr-x 4
+drwxr-xr-x 4 
 …[truncated]
   ```
   </details>
@@ -652,27 +652,27 @@ drwxr-xr-x 4
 <type>file</type>
 <content>
 1: # ADR-0003：验证门禁不降级 —— quant-crypto 教训制度化
-2:
+2: 
 3: - 日期：2026-09-06
 4: - 状态：Accepted
 5: - 决策人：Georg
 6: - 背景：quant-crypto 仓库 Phase 4 决策报告（2026-06-17，`blocked_no_paper_candidate`）与
 7:   PRD G4 / FR3
-8:
+8: 
 9: ## 背景
-10:
+10: 
 11: quant-crypto 的最终 90 天留出门连续拦下全部候选（低频 Ridge/HGB、regime 增强、成本感知、
 12: 衍生品 basis），看起来是"失败"，实际是验证协议在正确工作——它拦下的是会亏钱的东西。
 13: 真正的问题是 alpha 供给量（每周 ~5 个假设）与留出期样本量不足（69 笔交易的 FAIL/PASS
 14: 判定统计上不可信；regime filter 方向正确但 27 笔欠功效）。
-15:
+15: 
 16: 该门禁的价值来自它**从不放水**。任何"先上盘再观察"的妥协都会摧毁整个系统的可信度。
-17:
+17: 
 18: ## 决策
-19:
+19: 
 20: 1. **证据门不降级**：FactorDef 在选择期筛选后先构建并冻结 PortfolioDef，再由完整组合依次
 21:    通过最终 90 天留出和永久隔离最终确认；不得先看留出再组装策略，效率提升也不得来自放宽门禁。
-22: 2. **样本量门槛**：留出期 <30 笔输出 `UNDERPOWERED`（不判
+22: 2. **样本量门槛**：留出期 <30 笔输出 `UNDERPOWERED`（不判 
 …[truncated]
   ```
   </details>
@@ -684,18 +684,18 @@ drwxr-xr-x 4
 <type>file</type>
 <content>
 1: # ADR-0005：呈现与观测架构 —— 真相源/投影/展示三分与自建前端路线
-2:
+2: 
 3: - 日期：2026-09-13
 4: - 状态：Accepted
 5: - 决策人：Georg
 6: - 背景：呈现层长期路线；PRD FR8 / FR6.1 / FR6.4 / FR7.2 / FR7.4；架构文档 §〇 / §七
-7:
+7: 
 8: ## 背景
-9:
+9: 
 10: 当前呈现面三件：Grafana（`quant-overview` 平台观测 + `dryrun-monitoring` 策略运营，F001
 11: 迁入并验收有数）、FreqUI（Freqtrade 镜像自带，`api_server` 已启用）、CLI（`tools/verify.py`
 12: 门禁与操作）。三个结构性问题随里程碑逼近：
-13:
+13: 
 14: 1. **研究证据没有承载面**：评测台（FR3）落地后 M2 出口要求周产能 ≥100 候选，版本化报告
 15:    靠文件浏览不可持续；架构文档 §五 原计划的「Grafana 实验台账看板」与版本态产物形态
 16:    （文件 + 谱系图 + 逐因子下钻）不匹配。
@@ -731,18 +731,18 @@ Then wait for background agents.
 <type>file</type>
 <content>
 1: # ADR-0001：因子挖掘主引擎选型 —— AlphaGen vendor + 冒烟闸门 + 降级阶梯
-2:
+2: 
 3: - 日期：2026-09-06
 4: - 状态：Accepted
 5: - 决策人：Georg
 6: - 证据全文：[`docs/alphamill-research-factor-mining.md`](../alphamill-research-factor-mining.md)
-7:
+7: 
 8: ## 背景
-9:
+9: 
 10: PRD G3 要求因子工厂达到 ≥100 名义候选/周，同时报告有效独立数、来源和门禁漏斗；
 11: quant-crypto 实测约 5 个/周，探索能力不足。
 12: 对 2026-09 时点开源生态的调研结论：
-13:
+13: 
 14: - **AlphaGen**（ICT-FinD-Lab/alphagen，原 RL-MLDM，1.2k★）：RL 表达式生成 + 线性协同池；
 15:   核心优势是代码冻结带不走的——协同池（增量 IC reward，机制性防冗余）+ GPU 张量评估（吞吐）+ 量化原生算子。
 16:   已知问题：无 LICENSE（个人私有使用，风险可忽略）；核心 21 个月未实质更新；
@@ -759,25 +759,25 @@ Then wait for background agents.
 <type>file</type>
 <content>
 1: # ADR-0004：组合构建层 —— 协同池组合可部署化与 Top-K 策略映射
-2:
+2: 
 3: - 日期：2026-09-07
 4: - 状态：Accepted
 5: - 决策人：Georg
 6: - 背景：AlphaGen 协同池产出需要可部署路径；PRD FR2.6 / FR4 / FR5
-7:
+7: 
 8: ## 背景
-9:
+9: 
 10: AlphaGen 主引擎的核心产出是协同池（LinearAlphaPool：基础因子的线性组合，增量 IC reward
 11: 机制性防冗余）。如果部署只支持单因子策略并在多个候选中取 Top1，结果是：
-12:
+12: 
 13: 1. **组合 alpha 没有部署路径**——主引擎最有价值的输出在系统里是死产出；
 14: 2. Top1-only 同时丢弃了多存活因子的组合价值：N 个存活因子 = N 个独立策略的替代方案，
 15:    资本碎片化、费用×N、同一 pair 上多空信号冲突，均未设计。
-16:
+16: 
 17: 组合构建层是因子证据转化为交易能力的必需边界，不能由 Freqtrade 策略模板临时承担。
-18:
+18: 
 19: ## 决策
-20:
+20: 
 21: 1. **统一可部署对象**：所有待部署策略都表示为 PortfolioDef；单因子策略是单成员组合，协同池
 22:    meta-factor 可作为组合成员或冻结信号对象。二者走相同门禁，不因来源获得豁免。
 23: 2. **组合边际贡献门**：在选择期报告候选加入现有基准组合后的边际成本后收益、边际回撤、
@@ -793,22 +793,22 @@ Then wait for background agents.
 <type>file</type>
 <content>
 1: # ADR-0002：外部依赖管理策略 —— vendor / fork / 原样依赖三分法
-2:
+2: 
 3: - 日期：2026-09-06
 4: - 状态：Accepted
 5: - 决策人：Georg
 6: - 操作细节：[`docs/alphamill-integration.md`](../alphamill-integration.md) §五
-7:
+7: 
 8: ## 背景
-9:
+9: 
 10: AlphaMill 引入四个开源项目：AlphaGen（挖掘引擎）、Freqtrade（执行）、Vibe-Trading（可选第二实现/Agent）、
 11: Kronos（时序基础模型）。需要统一"改谁、不改谁、怎么跟上游"的规则。
-12:
+12: 
 13: 判断原则：**改动深度决定集成距离**。fork 仅适用于"要上游全部功能 + 必须改核心 + 上游不收 PR"
 14: 的窄缝——四个引入项没有一个落在缝里。
-15:
+15: 
 16: ## 决策
-17:
+17: 
 18: | 引入项 | 方式 | 要点 |
 19: |---|---|---|
 20: | AlphaGen | **vendor** 进主仓 | 动大手术（换数据层/现代化）+ 上游冻结 + 只用子集 |
@@ -1360,9 +1360,9 @@ Let me think. The user says "整理输出一份借鉴报告md文档放在目录�
 
 Actually the safest: put it in `docs/research/` since it's exactly "调研归档". But it's gitignored — user might want it tracked. Let me check .gitignore to understand. Also, there may be governance rules — docs/README says research entry is local-only.
 
-Hmm, but the user explicitly asked to place it in the directory. Let me consider: the user is the project owner. They want a report file. Given the doc ownership discipline, I should probably place it at `docs/research/ml4t-borrowing-report.md` (fits "前期调研归档") OR at repo root.
+Hmm, but the user explicitly asked to place it in the directory. Let me consider: the user is the project owner. They want a report file. Given the doc ownership discipline, I should probably place it at `docs/research/ml4t-borrowing-report.md` (fits "前期调研归档") OR at repo root. 
 
-Actually, let me re-read: "请将上面的结论整理输出一份借鉴报告md文档放在目录下" — "放在目录下" = "put it in the directory". Ambiguous which directory. Most likely the alphamill project directory.
+Actually, let me re-read: "请将上面的结论整理输出一份借鉴报告md文档放在目录下" — "放在目录下" = "put it in the directory". Ambiguous which directory. Most likely the alphamill project directory. 
 
 Given the project has a strict doc governance (docs/README.md is the sole entry), adding a file requires care. But docs/research/ is explicitly for research archives and is local-only. That seems the best fit and lowest risk. However, if it's gitignored, the user may not realize.
 
@@ -1456,7 +1456,7 @@ freqtrade/user_data/tradesv3.sqlite*
 …[truncated])`
 
 
-> [reasoning] `docs/research/` is gitignored (local-only) and doesn't exist yet. The user wants a report "放在目录下".
+> [reasoning] `docs/research/` is gitignored (local-only) and doesn't exist yet. The user wants a report "放在目录下". 
 
 Given the doc governance, I think the best placement is `docs/research/ml4t-borrowing-report.md` since that's literally what docs/research is for ("前期调研归档"). But it's local-only/gitignored — which might be fine since it's a research archive. However, the user might want it tracked as a durable design input.
 
@@ -1481,7 +1481,7 @@ Decision: create `docs/research/ml4t-borrowing-report.md`. It's the semantically
 
 Hmm, actually — maybe I should just ask a quick question about whether it should be tracked (docs/research is gitignored). But that might be over-asking. The user said "放在目录下" — I'll interpret as docs/research and clearly flag the gitignore implication. That respects their time (ADHD style: act).
 
-Actually, let me reconsider the location more carefully. The user's phrasing "放在目录下" (put it under the directory) most naturally reads as "put it in the project directory". Since docs/research doesn't exist, creating it is fine. But maybe they expect it at repo root or docs/.
+Actually, let me reconsider the location more carefully. The user's phrasing "放在目录下" (put it under the directory) most naturally reads as "put it in the project directory". Since docs/research doesn't exist, creating it is fine. But maybe they expect it at repo root or docs/. 
 
 I'll go with `docs/research/ml4t-borrowing-report.md` and explicitly state the path + that it's gitignored, offering to move it. This is the most governance-consistent choice.
 
@@ -1829,11 +1829,11 @@ Let me go.
 <type>file</type>
 <content>
 1: # Chapter 1: The Process Is Your Edge
-2:
+2: 
 3: The chapter establishes the chapter's central claim: in trading, durable performance depends less on picking a sophisticated model than on maintaining a disciplined research process that can survive changing markets, noisy signals, and real-world frictions. It gives readers a usable vocabulary for market change, shows why recent shocks exposed fragile assumptions, and reframes ML for trading as an adaptation problem rather than a model-selection contest.
-4:
+4: 
 5: ## Learning Objectives
-6:
+6: 
 7: * Distinguish structural breaks, regimes, data drift, concept drift, and online detection, and explain why static trading models degrade in changing markets
 
 …[truncated]
@@ -1847,12 +1847,12 @@ Let me go.
 <type>file</type>
 <content>
 1: # Chapter 20: Strategy Synthesis
-2:
+2: 
 3: The chapter passes nine case studies through the same standardized pipeline (data, features, labels, models, predictions, portfolios, costs, risk overlays) and reads what the resulting cross-section says about translating machine-learning predictions into trading strategies. The unit of comparison is each case study's arc from signal to frozen holdout, not a league-table ranking of Sharpe ratios. The chapter's value is diagnostic: it identifies where the pipeline amplifies or dampens signal, which family of constraints binds in which trading game, and where a second iteration is most likely to pay off.
-4:
+4: 
 5: ## Learning Objectives
-6:
-7: 1. Read
+6: 
+7: 1. Read 
 …[truncated]
   ```
   </details>
@@ -1864,11 +1864,11 @@ Let me go.
 <type>file</type>
 <content>
 1: # Chapter 27: The Systematic Edge
-2:
+2: 
 3: The chapter argues that the most important lesson of the book transcends any individual technique: process is the durable edge, not any single strategy. The 5-Stage ML4T Workflow functions as an alpha factory blueprint that defends against cognitive biases through falsifiable hypotheses, rigorous out-of-sample testing, and statistical corrections for multiple testing. The transition from learning steps to embodying a systematic mindset is framed as the critical career shift, with the chapter providing a strategic roadmap for career paths, learning resources, emerging technologies, and personal development.
-4:
+4: 
 5: ## Sections
-6:
+6: 
 7: ### 27.1 The Syst
 …[truncated]
   ```
@@ -1881,21 +1881,21 @@ Let me go.
 <type>file</type>
 <content>
 1: # What This Repository Is, and What It Is Not
-2:
+2: 
 3: This page states what you can do with this code before you invest time in it. Four levels, from
 4: "works today with one command" to "not promised at all". Read it once; it will save you from
 5: planning work the repository cannot support.
-6:
+6: 
 7: If you only read one line: **the case-study results behind the book download, so you can reach them
 8: without training anything.** Chapter notebooks are different - many train their own models on the
 9: spot, and that is the point of them. Everything beyond those two things costs progressively more.
-10:
+10: 
 11: ---
-12:
+12: 
 13: ## 1. Reproduce directly
-14:
+14: 
 15: No training, no GPU, no paid data.
-16:
+16: 
 17: **Ch
 …[truncated]
   ```
@@ -2603,7 +2603,7 @@ Let me write a concise final response.
 - **tool**: `bash({"command": "cd /home/georg/projects/alphamill && echo \"=== git status (architecture/docs 是否有改动) ===\" && git status --short && echo \"=== 仅统计 docs/ 下被跟踪文件的改动 ===\" && git diff --stat HEAD -- docs/ 2>/dev/null || echo \"(docs/ 无已跟踪改动)\""})`
 
 
-> [reasoning] The user wants me to write the architecture improvements into the borrowing report as well — but they say "先不要正式修改架构等内容" (don't formally modify architecture etc. yet).
+> [reasoning] The user wants me to write the architecture improvements into the borrowing report as well — but they say "先不要正式修改架构等内容" (don't formally modify architecture etc. yet). 
 
 Wait — the architecture improvements ARE already in the report (L3 section, 5 improvements A-E). Let me re-read.
 
@@ -2615,7 +2615,7 @@ Interpretation: "Still, write the architecture improvements into the borrowing r
 
 So they're clarifying: put the architecture improvements in the REPORT (research doc), not into the actual architecture docs. They may not have noticed L3 is already there. OR the previous write may not have actually included L3? Let me check — I verified with grep: line 138 `# L3｜系统架构层`. So L3 IS in the file.
 
-Wait, maybe the user is responding to my "下一步" where I offered to write an ADR (0006) or modify F007 spec. They're saying: don't do the formal ADR/architecture modification yet; instead just make sure the architecture improvements are captured in the borrowing doc.
+Wait, maybe the user is responding to my "下一步" where I offered to write an ADR (0006) or modify F007 spec. They're saying: don't do the formal ADR/architecture modification yet; instead just make sure the architecture improvements are captured in the borrowing doc. 
 
 So the correct response: confirm the architecture improvements are ALREADY in the report (L3, improvements A-E), and that I have NOT touched the actual architecture docs. Then verify that's true (git status / check no architecture docs modified).
 
@@ -2628,7 +2628,7 @@ Given ambiguity, the safe and correct action:
 2. Confirm no formal architecture files were modified — and verify with git status.
 3. If they want the architecture improvements expanded/more detailed in the report, do that.
 
-Actually, let me re-read even more carefully: "还是将架构的改进也写进借鉴文档中，先不要正式修改架构等内容".
+Actually, let me re-read even more carefully: "还是将架构的改进也写进借鉴文档中，先不要正式修改架构等内容". 
 
 I think the intent is: "Go ahead and also write the architecture improvements into the borrowing report; [but] don't formally modify the architecture [docs] etc. yet."
 
@@ -2665,13 +2665,13 @@ Let me do both.
 <type>file</type>
 <content>
 136: ---
-137:
+137: 
 138: # L3｜系统架构层
-139:
+139: 
 140: **先给结论**：ml4t 顶层架构（data infrastructure → research → **evidence boundary** → deployment → feedback loop）与 AlphaMill 四平面架构**同构**；AlphaMill 在治理/门禁/依赖纪律上更完整。因此 ml4t **不推翻** AlphaMill 架构，而是给出 **5 条结构性改进**。
-141:
+141: 
 142: ### L3-0 架构对照
-143:
+143: 
 144: | 维度 | AlphaMill | ml4t | 差异 / 启示 |
 145: |---|---|---|---|
 146: | 顶层切分 | 四平面（AI控制/证据治理/策略执行/数据） | 5 阶段（数据→研究→证据边界→部署→反馈） | ml4t 把"研究"单列；AlphaMill 把"AI 控制面"单列 |
@@ -2777,7 +2777,7 @@ Let me define:
 
 That's a solid expansion. Let me write it via edit replacing lines 138-196 (the entire L3 section up to before `---` at 198).
 
-I need oldString to match exactly. The section is lines 138-196. Let me construct the edit with the full old block. That's long but safe. Alternatively, I can do targeted edits:
+I need oldString to match exactly. The section is lines 138-196. Let me construct the edit with the full old block. That's long but safe. Alternatively, I can do targeted edits: 
 1. Insert disclaimer after line 140.
 2. Rewrite each A-E into structured form — that's many edits.
 
@@ -3043,26 +3043,26 @@ Let me do it.
 <type>file</type>
 <content>
 1: # ADR-NNN：[决策标题]
-2:
+2: 
 3: 日期：[YYYY-MM-DD]
 4: 状态：Proposed
 5: 关联规格：[spec link]
-6:
+6: 
 7: ## 背景
-8:
+8: 
 9: [需要做出什么决策，约束是什么。]
-10:
+10: 
 11: ## 决策
-12:
+12: 
 13: [选择及其明确边界。]
-14:
+14: 
 15: ## 备选方案
-16:
+16: 
 17: - [方案 A：优缺点]
 18: - [方案 B：优缺点]
-19:
+19: 
 20: ## 后果
-21:
+21: 
 22: - 正面：
 23: - 负面：
 24: - 后续行动：
@@ -3090,13 +3090,13 @@ Let me do it.
 10: created: 2026-09-06
 11: updated: 2026-09-06
 12: ---
-13:
+13: 
 14: # Fxxx：功能名称
-15:
+15: 
 16: > Owner: TBD | Target: v0.x.y
-17:
+17: 
 18: ## 0. 来源与意图
-19:
+19: 
 20: - **PRD 来源**：`docs/alphamill-prd.md` 相关章节：...
 21: - **架构来源**：`docs/alphamill-architecture.md` 相关章节：...
 22: - **系统设计 / Research / Contract 来源**：`docs/...` 相关实体/章节：...
@@ -3105,8 +3105,8 @@ Let me do it.
 25: - **规格模式**：lite / full
 26: - **变更类型**：ADDED / MODIFIED / REMOVED / MIXED
 27: - **一句话意图**：...
-28:
-29: ## 1.
+28: 
+29: ## 1. 
 …[truncated]
   ```
   </details>
@@ -3127,7 +3127,7 @@ Answer: There are three candidate locations, and the right one depends on the "s
 2. **立项时**: 每条问题转成对应 feature 的 `spec.md` §8「待确认问题」（`Q-xxx` checkbox），若有设计层问题则进 `design.md` §10（`DQ-xxx`），且 design 的必须清空才能进开发。
 3. **若某改进升级为跨 feature 决策**: 进 ADR（`docs/decisions/`）——但 ADR 模板没有专门的"待决策"节；它用「决策」+「备选方案」+「后果」记录已拍板内容，开放问题应在 spec 里。
 
-So the recommendation:
+So the recommendation: 
 - Now: add a **`### L3-8 待决策问题（Q-000）`** section in the report, using the repo's `Q-xxx` checkbox convention so it can be lifted wholesale into a future spec §8.
 - On 立项: move each Q into spec §8 / design §10 (repo canonical), and the report keeps the trace. Don't put them in ADR (no such section) unless a decision is actually made.
 
@@ -3226,7 +3226,7 @@ I need to add a `### L3-8 待决策问题` section to the report. Where exactly?
 - L3-6 优先级与依赖
 - L3-7 本次明确不改动的部分（边界声明）
 
-I should add L3-8 after L3-7, or place 待决策 before 边界声明. Hmm. Logically: L3-6 优先级 → L3-7 待决策问题 → L3-8 边界声明. But renumbering would be churn. Alternatively just add as L3-8 after L3-7. But "待决策问题" is a natural closing item; 边界声明 also closing.
+I should add L3-8 after L3-7, or place 待决策 before 边界声明. Hmm. Logically: L3-6 优先级 → L3-7 待决策问题 → L3-8 边界声明. But renumbering would be churn. Alternatively just add as L3-8 after L3-7. But "待决策问题" is a natural closing item; 边界声明 also closing. 
 
 I think cleanest: insert `### L3-8 待决策问题` after L3-7 (边界声明). But then 边界声明 says "本节仅为建议记录" and it's followed by questions — fine.
 
@@ -3236,16 +3236,16 @@ Hmm, but the existing L3-7 boundary declaration currently ends the section. Addi
 
 Let me decide: I'll insert `### L3-8 待决策问题` **after** L3-7, keeping numbering append-only (no renumber churn). The content references improving items. Actually, better UX: put 待决策 as the last item since it's the "actionable next" — and it's after the boundary declaration, which is slightly odd but acceptable.
 
-Alternatively insert before L3-7 and rename. Renaming L3-7 → L3-8 is a small edit. Let me do that for better logical flow:
+Alternatively insert before L3-7 and rename. Renaming L3-7 → L3-8 is a small edit. Let me do that for better logical flow: 
 L3-6 优先级与依赖
 L3-7 待决策问题  ← new
 L3-8 本次明确不改动的部分（边界声明） ← renamed from L3-7
 
 Hmm, but boundary declaration arguably should come before the concrete questions? No — boundary declaration is a meta-note about the whole section; conventionally it'd be at the top (where I put the blockquote disclaimer already) or at the end. There's already a blockquote at the top of L3 stating the nature. So the L3-7 boundary declaration at the end is a recap. Putting 待决策 before it is fine, or after.
 
-I'll go simple and low-risk: **append L3-8 待决策问题 after L3-7**. Numbering stays sequential. No renumber.
+I'll go simple and low-risk: **append L3-8 待决策问题 after L3-7**. Numbering stays sequential. No renumber. 
 
-Wait, but the user might prefer 待决策 as the natural final actionable. Let me just make it L3-8 and keep it after boundary. Actually, re-reading the flow: L3-6 优先级/依赖 (planning), L3-7 边界声明 (what not to change), L3-8 待决策 (questions). It's acceptable. Or I reorder to L3-6 → L3-7 待决策 → L3-8 边界.
+Wait, but the user might prefer 待决策 as the natural final actionable. Let me just make it L3-8 and keep it after boundary. Actually, re-reading the flow: L3-6 优先级/依赖 (planning), L3-7 边界声明 (what not to change), L3-8 待决策 (questions). It's acceptable. Or I reorder to L3-6 → L3-7 待决策 → L3-8 边界. 
 
 I'll do the reorder for better logic: rename existing L3-7 to L3-8 and insert 待决策 as L3-7. Hmm, that requires editing the L3-7 heading and adding content. Two edits or one. Let me do it cleanly with one edit that replaces the L3-7 heading block region.
 
@@ -3265,7 +3265,7 @@ newString:
 ### L3-8 本次明确不改动的部分（边界声明）
 ```
 
-That's a clean single edit.
+That's a clean single edit. 
 
 Now content for L3-7 待决策问题. Let me include the 6 questions I proposed, plus maybe a note about where each will move. And use the exact Q-xxx format.
 
