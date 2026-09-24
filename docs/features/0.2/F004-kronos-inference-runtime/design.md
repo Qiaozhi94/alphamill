@@ -44,7 +44,7 @@ updated: 2026-09-15
 | DB 环境（同 mock 服务） | `DB_HOST: timescaledb`、`DB_PORT: 5432`、`DB_USER`/`DB_PASSWORD`/`DB_NAME`（`${DB_*:-...}` 默认值与 compose 其余服务一致） |
 | 服务依赖 | `depends_on: timescaledb: {condition: service_healthy}` |
 | 网络 | `networks: [alphamill]` |
-| 端口 | host `8002` → container `8001`（mock 保持 host `8001`，互不顶替） |
+| 端口 | host `8002` → container `8001`（mock 保持 host `8001`，互不顶替）；**F009 T013 起 host bind 为 `127.0.0.1:8002:8001`**（控制面不对外，NFR-003） |
 
 运行链为 compose → real 容器（模型）→ TimescaleDB（healthy）→ HTTP：`/health` 的 `database` 段与 `/predict` 的 OHLCV 读取都要求 DB 可达；凭据、健康依赖或网络任一缺失都会让实例在就绪/预测时失败，由静态与容器门禁双向锁定（§8）。
 
@@ -63,7 +63,7 @@ HTTP 契约与 F001 完全一致；唯一可观察差异是 `/health` 的 `model
 - 启动：`docker compose -f deployment/docker-compose.yml --profile kronos-real up -d kronos-signal-real`；默认 profile 不含该服务；
 - 启动序列（real 模式）：进程启动 → **`server.py` 启动钩子**：**预检**（`KRONOS_REPO_PATH`、模型/分词器目录及必需文件存在）→ **eager load**（一次性加载 Kronos + Tokenizer，先于接收流量）→ 服务就绪；预检或加载任一失败 → 打印缺失路径/错误并**非零退出**（real 服务 `restart: "no"`，失败态可直接观察，不静默降级）；
 - readiness：容器 healthcheck 以 `/health` 的 `model_loaded=true`（且 `device=cpu`）为通过条件；mock 服务保持现状；
-- 端口：真实实例用 8002（host）→ 8001（container），与默认 mock 实例的 8001 并存，避免二者互相顶替；
+- 端口：真实实例用 8002（host）→ 8001（container），与默认 mock 实例的 8001 并存，避免二者互相顶替；F009 T013 起该 host 口绑 `127.0.0.1`；
 - 并发：单实例单 worker；**进程级锁**保证模型加载至多一次、推理互斥（并发请求排队），无其它共享状态；
 - 数据前置：`/predict` 需要目标 exchange/symbol ≥30 根已闭合 1m K 线（DB 已迁移，F001 回填产物）。
 

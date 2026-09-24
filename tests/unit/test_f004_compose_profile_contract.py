@@ -114,7 +114,9 @@ def assert_compose_real_service_contract(compose: str) -> None:
     # 依赖、网络、端口、失败语义与 readiness
     assert "timescaledb: {condition: service_healthy}" in real_block
     assert "networks: [alphamill]" in real_block
-    assert '- "8002:8001"' in real_block
+    # F009 T013 迁移：host bind 收严为回环（控制面不对外），原意不变——
+    # host 8002 不顶替 mock 的 8001，container 仍是 8001。
+    assert '- "127.0.0.1:8002:8001"' in real_block
     assert 'restart: "no"' in real_block, "real 服务失败不得自动重启（失败态保持可见）"
     assert "model_loaded') is True" in real_block and "device') == 'cpu'" in real_block, (
         "healthcheck 必须以 /health 的 model_loaded=true（且 device=cpu）为通过条件"
@@ -196,7 +198,14 @@ def test_dockerfile_mutations_fail_the_gate(old: str, new: str) -> None:
         ("timescaledb: {condition: service_healthy}", "timescaledb"),  # 删 healthy 依赖
         ("profiles: [kronos-real]\n", ""),  # 删 profile（real 变默认启动，破坏 NFR-001）
         ('restart: "no"', "restart: unless-stopped"),  # 破坏失败可见语义
-        ('- "8002:8001"', '- "8001:8001"'),  # 端口顶替默认实例
+        (  # 端口顶替默认实例
+            '- "127.0.0.1:8002:8001"',
+            '- "127.0.0.1:8001:8001"',
+        ),
+        (  # 退回未绑定地址：控制面被发布到 0.0.0.0（F009 NFR-003）
+            '- "127.0.0.1:8002:8001"',
+            '- "8002:8001"',
+        ),
         # F004-T001 回归：整行注释掉关键行必须判红——门禁读语义文本，不读裸子串
         ("profiles: [kronos-real]\n", "# profiles: [kronos-real]\n"),  # 注释掉 profile
         ("target: real\n", "# target: real\n"),  # 注释掉构建目标

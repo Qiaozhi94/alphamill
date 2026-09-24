@@ -83,8 +83,9 @@ services:
     container_name: quant-kronos-signal-real
     profiles: [kronos-real]
     restart: "no"
+    # 控制面能改变生产状态：只在回环与容器网络可达，不发布 0.0.0.0（F009 NFR-003）
     ports:
-      - "8002:8001"
+      - "127.0.0.1:8002:8001"
     environment:
       DB_HOST: timescaledb
       DB_PORT: 5432

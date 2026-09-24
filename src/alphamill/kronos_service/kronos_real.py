@@ -8,9 +8,11 @@ from pathlib import Path
 import pandas as pd
 
 try:  # Package import is used by the host service; fallback keeps the legacy CLI usable.
-    from .generator import clamp
+    from .generator import clamp, generate_placeholder_signal
+    from .lifecycle import UnloadFailed
 except ImportError:  # pragma: no cover - direct script compatibility only.
-    from generator import clamp
+    from generator import clamp, generate_placeholder_signal
+    from lifecycle import UnloadFailed
 
 # 上游 from_pretrained 认的权重文件名（Kronos / Tokenizer 目录内二选一）。
 WEIGHT_FILE_NAMES = ("model.safetensors", "pytorch_model.bin")
@@ -22,6 +24,12 @@ NOT_ENOUGH_DATA_REASON = "not_enough_data"
 ERR_CPU_WHEEL = "torch is a CPU wheel (torch.version.cuda is empty)"
 ERR_NO_CUDA_DEVICE = "no CUDA device visible in container (torch.cuda.is_available() is False)"
 ERR_UNKNOWN_DEVICE = "unsupported KRONOS_DEVICE value"
+
+# desired=stopped 期间的兜底信号 reason（F009 FR-003）：未进模型，消费端不得标 kronos。
+LIFECYCLE_STOPPED_REASON = "lifecycle_stopped"
+
+# 未进模型的全部 reason：/predict 据此拒绝标注 kronos 与权重路径。
+FALLBACK_REASONS = (NOT_ENOUGH_DATA_REASON, LIFECYCLE_STOPPED_REASON)
 
 
 @dataclass
@@ -57,6 +65,16 @@ class KronosRealSignal:
         self._load_error: str | None = None
         # 进程级锁：模型加载至多一次 + 推理互斥（spec FR-001 串行推理不变式）。
         self._lock = threading.Lock()
+        # 推理准入（F009 FR-003）：由生命周期控制器注入；未接控制面时默认放行，
+        # F004 既有行为与 mock 实例不受影响。
+        self._allow_load = lambda: True
+
+    def set_admission(self, allow_load) -> None:
+        """接入生命周期控制器的准入判定（server 在注册控制面路由时调用）。"""
+        self._allow_load = allow_load
+
+    def allow_load(self) -> bool:
+        return bool(self._allow_load())
 
     def preflight(self) -> list[str]:
         """启动预检：返回缺失资产的路径清单，空清单即通过（design §5）。
@@ -83,6 +101,26 @@ class KronosRealSignal:
         with self._lock:
             self._load_predictor()
 
+    def unload(self) -> None:
+        """卸载模型并释放 GPU 缓存（F009 FR-002，与 eager_load 对称）。
+
+        幂等：未加载时为 no-op。失败以 `UnloadFailed(discarded=...)` 表达落点——
+        `discarded=True` 表示模型引用已丢弃，该步不可逆，调用方不得假装回滚
+        （architecture §7.1 / F009 design §5 表）。
+        """
+        with self._lock:
+            torch = self._torch
+            if self._predictor is None and torch is None:
+                self._load_error = None
+                return
+            self._predictor = None  # 不可逆的一步
+            self._load_error = None
+            if torch is not None:
+                try:
+                    torch.cuda.empty_cache()
+                except Exception as exc:
+                    raise UnloadFailed(f"empty_cache failed: {exc}", discarded=True) from exc
+
     def status(self) -> ModelStatus:
         available = self._dependencies_available()
         return ModelStatus(
@@ -96,6 +134,13 @@ class KronosRealSignal:
         )
 
     def generate_signal(self, rows: list[dict]) -> dict:
+        if not self.allow_load():
+            # desired=stopped：走 F004 既有兜底路径，绝不触碰 _load_predictor——
+            # 否则 stop 之后一次 /predict 就把显存吃回去（F009 FR-003）。
+            signal = generate_placeholder_signal(rows)
+            signal["reason"] = LIFECYCLE_STOPPED_REASON
+            return signal
+
         if len(rows) < 30:
             return {
                 "signal_type": "neutral",
