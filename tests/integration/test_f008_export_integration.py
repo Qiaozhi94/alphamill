@@ -249,6 +249,109 @@ def test_universe_filter_flag_matches_explicit_admitted(seeded, f008_conn, tmp_p
     assert set(manifest["pairs"]) == {"BTC-USDT"}
 
 
+def _insert_ohlcv_row(conn, symbol: str, day: str) -> None:
+    """补一行 1m 种子：让该 pair 在基线的活跃跨度里出现「跨日缺口」（供 skipped 继承路径入镜）。"""
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO ohlcv_1m (time, exchange, symbol, open, high, low, close, volume)"
+            " VALUES (%s,'binance',%s,100,101,99,100,1)",
+            (datetime.fromisoformat(f"{day}T00:00:00+00:00"), symbol),
+        )
+    conn.commit()
+
+
+def test_universe_filter_tolerates_flags_of_excluded_pairs(seeded, f008_conn, tmp_path) -> None:
+    """回归（检视 C2 / R1-002）：被排除 pair 的未解决质量标记不得让整轮导出 FATAL。
+
+    种子数据在 `ohlcv_quality_flags` 里给 **BTC/USDT** 留了一条未解决标记，而本次
+    `--universe-filter` 算出的准入集合只有 ETH-USDT（`admit_pair` 真实落台账 + 准入判定）。
+    若把按准入集合收窄后的映射交给 `quality_flags()`，被排除的 BTC 取不到 lake_pair →
+    `DataBridgeError` → 整轮导出 FATAL、清单不发布。质量标记是**全湖记账**（回答「湖里哪些分区
+    有问题」），按准入集合收窄的只有导出分区；被排除者的标记必须仍记在它自己名下，不冒充准入 pair。
+    """
+    lake = seeded
+    universe_id = _frozen_definition(tmp_path)
+    admit_pair(
+        f008_conn,
+        definition=load_definition(universe_id, tmp_path / "lake"),
+        result=_active_result("ETH/USDT", "ETH-USDT"),
+        lake_root=tmp_path / "lake",
+        hostname="qiaozhi-gp",
+        listed_at=WINDOW_START,
+    )
+
+    summary = export_dataset(
+        "ohlcv_1m",
+        mode="full",
+        window_end=f"{D4}T00:00:00Z",
+        conn=f008_conn,
+        lake_root=lake,
+        universe_filter=True,
+    )
+    assert summary["status"] == "valid", summary
+    manifest = mf.load_manifest(lake, "ohlcv_1m", summary["data_version"])
+    assert set(manifest["pairs"]) == {"ETH-USDT"}, "准入集合确实只含被准入的那一对"
+    assert manifest["quality"]["flagged_partitions"] == ["binance/BTC-USDT/2026-09-01"]
+    assert manifest["quality"]["unresolved_total"] == 1
+    assert all("ETH-USDT" not in item for item in manifest["quality"]["flagged_partitions"])
+
+
+def test_incremental_universe_filter_does_not_mark_excluded_pairs_skipped(
+    seeded, f008_conn, tmp_path
+) -> None:
+    """回归（检视 C5 / R1-005）：策略排除的 pair 日期不得被写成「空单元格」进 `skipped`。
+
+    基线全量版本里 BTC-USDT 与 ETH-USDT 都有分区、且各有一条真实缺口（D2）→ 基线 `skipped`
+    里两条 pair 都在，能把**继承**路径也照进来。随后只准入 BTC-USDT 跑一次增量（窗口 = 基线
+    最大日期 +1 = D4，源库那天无数据）：若把未收窄的基线条目/基线 skipped 交给
+    `empty_cell_keys` / `synthesize_skipped`，被排除的 ETH 维度会按窗口日期判缺 →
+    `ETH-USDT/D4` 新进 skipped，基线里的 `ETH-USDT/D2` 也被原样继承——skipped 的语义是
+    「本该有分区却缺」，把策略排除说成数据缺口会逐版本累积，并在数据未变时因 skipped 变化
+    白白发布新版本。
+    """
+    lake = seeded
+    _insert_ohlcv_row(f008_conn, "ETH/USDT", "2026-09-03")
+    universe_id = _frozen_definition(tmp_path)
+    baseline = export_dataset(
+        "ohlcv_1m", mode="full", window_end=f"{D4}T00:00:00Z", conn=f008_conn, lake_root=lake
+    )
+    baseline_manifest = mf.load_manifest(lake, "ohlcv_1m", baseline["data_version"])
+    assert set(baseline_manifest["pairs"]) == {"BTC-USDT", "ETH-USDT"}
+    assert {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-02"} in (
+        baseline_manifest["skipped"]
+    ), "前置条件：基线里被排除 pair 有可继承的 skipped 键"
+
+    admit_pair(
+        f008_conn,
+        definition=load_definition(universe_id, tmp_path / "lake"),
+        result=_active_result("BTC/USDT", "BTC-USDT"),
+        lake_root=tmp_path / "lake",
+        hostname="qiaozhi-lt",
+        listed_at=WINDOW_START,
+    )
+    summary = export_dataset(
+        "ohlcv_1m",
+        mode="incremental",
+        window_end="2026-09-05T00:00:00Z",
+        conn=f008_conn,
+        lake_root=lake,
+        universe_filter=True,
+    )
+    assert summary["status"] == "valid", summary
+    manifest = mf.load_manifest(lake, "ohlcv_1m", summary["data_version"])
+    skipped = manifest["skipped"]
+    assert [item for item in skipped if item.get("pair") == "ETH-USDT"] == [], (
+        f"被排除 pair 的日期被写成空单元格: {skipped}"
+    )
+    # 窗口确实判过缺：准入 pair 自己缺席的日期照旧入档（不是「过滤后整片不判」）
+    assert {"exchange": "binance", "pair": "BTC-USDT", "date": "2026-09-04"} in skipped
+    assert {"exchange": "binance", "pair": "BTC-USDT", "date": "2026-09-02"} in skipped
+    # 排除 ≠ 删历史：被排除 pair 的湖分区按 F002 语义原样继承
+    assert {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-01"} in [
+        partition["logical_partition_key"] for partition in manifest["partitions"]
+    ]
+
+
 def test_admitted_filter_is_noop_for_datasets_without_pair_partition(
     seeded, f008_conn, tmp_path
 ) -> None:

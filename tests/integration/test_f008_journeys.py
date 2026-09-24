@@ -85,8 +85,9 @@ class _FakeExchange:
         return markets
 
     def fapiPublicGetKlines(self, params):
-        # 第 2 次会话把成交额整体放大 10 倍：排名法下候选与 universe_id 必须不变
-        volume = 1_000.0 * (self.session**0)
+        # 第 2 次会话把成交额整体放大 10 倍（`session=1` 保持既有默认响应逐字不变）。
+        # 排名法下候选与名次不变；`universe_id` 覆盖候选证据（`turnover_usdt`）故会变
+        volume = 1_000.0 * 10 ** (self.session - 1)
         return [
             [1_700_000_000_000 + i * 86_400_000, 1, 1, 1, 1, 10, 0, volume, 0, 0, 0, 0]
             for i in range(90)
@@ -169,6 +170,44 @@ def test_us001_definition_journey(lake, tmp_path, monkeypatch, capsys) -> None:
         "ETH/USDT",
         "SOL/USDT",
     )
+
+
+def test_us001_rediscovery_across_sessions_keeps_ranking(lake, monkeypatch, capsys) -> None:
+    """回归（检视 T-7）：`session` 必须真的放大成交额，第二次会话场景才不是空断言。
+
+    fixture 原为 `1_000.0 * (self.session**0)`——恒等于 1000、`session` 从未置 2，注释宣称的
+    「第 2 次会话放量 10 倍」从未发生。这里在同一 `--now` 下连跑两次 `discover`（第二次整场
+    ×10）：名次、入选集合与排除原因逐项不变（排名法自适应放量）；`universe_id` 则按
+    `design.md` §3 的 `sha256(criteria + snapshot_at + candidates)` 覆盖候选证据而**变**——
+    「排名不变 ⇒ `universe_id` 不变」与现实现不符，故本用例锁的是「候选择优不变」+
+    「放量真实发生」，不锁 id 相等（若将来身份收窄为「只覆盖入选集合」，须同步改写本用例）。
+    """
+    sessions = [_FakeExchange(session=1), _FakeExchange(session=2)]
+
+    def next_session(criteria, *, exchange=None, now=None):
+        from alphamill.data_bridge.universe.exchange_snapshot import fetch_snapshot
+
+        return fetch_snapshot(criteria, exchange=exchange or sessions.pop(0), now=now)
+
+    monkeypatch.setattr(cli, "fetch_snapshot", next_session)
+    snapshot_at = "2026-09-19T00:00:00Z"
+
+    assert cli.main(["discover", "--lake-root", str(lake), "--now", snapshot_at]) == 0
+    first = load_definition(read_json(capsys)["universe_id"], lake)
+    assert cli.main(["discover", "--lake-root", str(lake), "--now", snapshot_at]) == 0
+    second = load_definition(read_json(capsys)["universe_id"], lake)
+
+    def shape(definition):
+        return [(item.db_symbol, item.rank, item.excluded_reason) for item in definition.candidates]
+
+    assert shape(second) == shape(first), "整体等比例放量不得改变名次/入选/排除原因"
+    assert second.selected_pairs() == first.selected_pairs() == ("BTC/USDT",)
+    first_btc = next(item for item in first.candidates if item.db_symbol == "BTC/USDT")
+    second_btc = next(item for item in second.candidates if item.db_symbol == "BTC/USDT")
+    assert second_btc.turnover_usdt == pytest.approx(first_btc.turnover_usdt * 10), (
+        "第 2 次会话的 10 倍放量必须真的落到快照证据里（否则 fixture 又是死旋钮）"
+    )
+    assert second.universe_id != first.universe_id
 
 
 def _snapshot_from_exchange(criteria, *, exchange=None, now=None):
@@ -395,3 +434,46 @@ def test_us004_point_in_time_journey(f008_conn, lake) -> None:
     with pytest.raises(UniverseArtifactError, match="schema_version"):
         artifact_mod.load_artifact(forged, lake)
     assert artifact_mod.load_artifact(digest, lake).universe_at(t1 + timedelta(hours=1))
+
+
+def test_us004_membership_delete_is_rejected_by_trigger(f008_conn, lake) -> None:
+    """`AC-008` 的库侧证据（检视 T-6）：`no_mutation` 触发器的 DELETE 分支必须真的拦下删除。
+
+    `AC-008` = 「尝试原地改写已发布历史区间被拒绝；退出记录保留历史数据不删除」。US-004 旅程已
+    锁 UPDATE 分支（原地改写）；单元侧 `tests/unit/test_f008_membership.py` 只是源码文本扫描
+    （`assert "UPDATE " not in source`），不构成库侧证据。`005_universe_membership.sql` 声明的是
+    `BEFORE UPDATE OR DELETE`，删除历史区间这条路由本用例用真实库锁死——两条路都被结构性拦下。
+    """
+    universe_id = _freeze(lake)
+    t1, t2 = WINDOW_START, WINDOW_START + timedelta(days=2)
+    append_membership(
+        f008_conn,
+        [
+            MembershipRow(
+                exchange="binance",
+                market_type="spot",
+                db_symbol="BTC/USDT",
+                lake_pair="BTC-USDT",
+                valid_from=t1,
+                reason="listed",
+                universe_id=universe_id,
+            ),
+            MembershipRow(
+                exchange="binance",
+                market_type="spot",
+                db_symbol="BTC/USDT",
+                lake_pair="BTC-USDT",
+                valid_from=t2,
+                reason="delisted",
+                universe_id=universe_id,
+            ),
+        ],
+    )
+    assert len(load_membership(f008_conn, lake_pair="BTC-USDT")) == 2
+
+    with f008_conn.cursor() as cur, pytest.raises(psycopg2.Error, match="只追加"):
+        cur.execute("DELETE FROM universe_membership WHERE lake_pair = %s", ("BTC-USDT",))
+    f008_conn.rollback()
+
+    # 触发器在删除前整行拦下：历史区间原样保留（删除等于制造幸存者偏差，spec §5 不变量）
+    assert len(load_membership(f008_conn, lake_pair="BTC-USDT")) == 2

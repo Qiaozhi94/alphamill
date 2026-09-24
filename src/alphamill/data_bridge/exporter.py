@@ -143,6 +143,15 @@ def export_dataset(
             conn.close()
 
 
+def _admitted_only(
+    entries: list[dict[str, Any]], admitted: set[str] | None
+) -> list[dict[str, Any]]:
+    """按准入集合收窄基线条目：未准入 pair 的日期是**策略排除**，不是数据缺口（检视 R1-005）。"""
+    if admitted is None:
+        return entries
+    return [e for e in entries if (e.get("logical_partition_key") or e).get("pair") in admitted]
+
+
 def _export_one(
     conn,
     spec: registry.DatasetSpec,
@@ -156,7 +165,8 @@ def _export_one(
     universe_filter: bool = False,
 ) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
-    baseline_version, baseline = mf.usable_baseline(root, spec.name)
+    # 回退只允许全量模式（检视 R1-001）：增量把回退版当继承基线会丢中间版本的分区
+    baseline_version, baseline = mf.usable_baseline(root, spec.name, allow_fallback=mode == "full")
     baseline_partitions = baseline["partitions"] if baseline else []
 
     xmin, taken_at = reconcile.begin_snapshot_tx(conn)
@@ -171,10 +181,19 @@ def _export_one(
             market_type=spec.market_type,
         )
     symbol_map_ref = symbol_map.export_symbol_map(conn=conn, lake_root=root)
-    lake_pairs = partitions.lake_pairs_map(conn, market_type=spec.market_type, admitted=admitted)
+    # 未收窄的映射用于质量标记记账（检视 R1-002）：未准入 pair 的未解决标记不该让整轮导出
+    # FATAL；导出侧按准入集合在**本地**收窄（顺带让碰撞检查覆盖全部 symbol）
+    all_lake_pairs = partitions.lake_pairs_map(conn, market_type=spec.market_type)
+    lake_pairs = (
+        all_lake_pairs
+        if admitted is None
+        else {key: pair for key, pair in all_lake_pairs.items() if pair in admitted}
+    )
     excluded_null = reconcile.count_null_event_time(conn, spec)
     flagged, flagged_total = (
-        partitions.quality_flags(conn, lake_pairs) if spec.source_table == "ohlcv_1m" else ([], 0)
+        partitions.quality_flags(conn, all_lake_pairs)
+        if spec.source_table == "ohlcv_1m"
+        else ([], 0)
     )
     metadata_changed = mf.metadata_changed(
         baseline, symbol_map_ref.digest, flagged, flagged_total, excluded_null
@@ -215,11 +234,11 @@ def _export_one(
         mode,
         produced_keys,
         window_dates,
-        baseline_partitions=baseline_partitions,
-        baseline_skipped=baseline["skipped"] if baseline else [],
+        baseline_partitions=_admitted_only(baseline_partitions, admitted),
+        baseline_skipped=_admitted_only(baseline["skipped"] if baseline else [], admitted),
     )
     skipped = mf.synthesize_skipped(
-        baseline["skipped"] if baseline and mode == "incremental" else [],
+        _admitted_only(baseline["skipped"], admitted) if baseline and mode == "incremental" else [],
         produced_keys,
         empty_keys,
     )
