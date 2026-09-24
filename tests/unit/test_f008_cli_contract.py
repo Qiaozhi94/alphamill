@@ -558,3 +558,34 @@ def test_plan_batch_rejects_candidate_excluded_from_selection(lake) -> None:
     with pytest.raises(WindowError, match="入选集") as excinfo:
         runner.plan_batch(definition, pairs=[excluded[0]])
     assert "排除原因" in str(excinfo.value)
+
+
+def test_gate_rejects_empty_selection_with_nonzero_exit(lake, monkeypatch, capsys) -> None:
+    """回归（检视 R2-B3）：空判定集必须判红并报 `E_UNIVERSE_GATE_EMPTY`。
+
+    缺陷形态：`all([])` 为真 → 退出 0 报成功（fail-open）。变异：删掉 `cli._gate` 的空判定集
+    守卫后本用例红。另一条边界由 `test_gate_rejects_non_active_verdicts_with_nonzero_exit`
+    覆盖（全 QUARANTINED 只报各自判定码、**不得**报 EMPTY）。
+    """
+    from alphamill.data_bridge.collector import historical_backfill as backfill_mod
+
+    universe_id = _definition(lake)
+    cli.main(["freeze", "--def", universe_id, "--confirm", "--lake-root", str(lake)])
+    capsys.readouterr()
+    monkeypatch.setattr(backfill_mod, "refresh_aggregates", lambda conn, start, end: None)
+    monkeypatch.setattr(cli, "db_connect", lambda: _FakeConn())
+    monkeypatch.setattr(cli, "gate_and_admit", lambda *a, **k: [])
+
+    argv = [
+        "gate",
+        "--universe",
+        universe_id,
+        "--start",
+        WINDOW[0],
+        "--end",
+        WINDOW[1],
+        "--lake-root",
+        str(lake),
+    ]
+    assert cli.main(argv) == 2
+    assert "E_UNIVERSE_GATE_EMPTY" in capsys.readouterr().err

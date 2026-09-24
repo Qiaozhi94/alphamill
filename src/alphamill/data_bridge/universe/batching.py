@@ -95,7 +95,7 @@ def resume_mismatch(run, universe_id: str, start: datetime, end: datetime, selec
         return f"窗口 {run.window_start}~{run.window_end} != {utc_iso(start)}~{utc_iso(end)}"
     wanted = {plan.db_symbol for plan in selected}
     have = {plan.db_symbol for plan in run.plans()}
-    if wanted and wanted != have:
+    if wanted != have:
         return f"目标集合不一致：请求 {sorted(wanted)} vs 记录 {sorted(have)}"
     return None
 

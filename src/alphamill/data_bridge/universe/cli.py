@@ -16,6 +16,8 @@
 - `E_UNIVERSE_NOT_FROZEN` / `E_UNIVERSE_WINDOW` / `E_UNIVERSE_DISK`——`backfill` 未冻结 /
   窗口非法 / 磁盘余量不足；
 - `E_UNIVERSE_GATE_INCOMPLETE`（及其余非 ACTIVE 判定）——回填未完成即跑门禁；
+- `E_UNIVERSE_GATE_EMPTY`——`gate` 没有任何 pair 进入判定（`--pairs` 全被排除等），
+  此前 `all([])` 为真会退出 0 报成功（检视 R1-015）；
 - `E_UNIVERSE_NOT_FOUND`——`show` 的定义或 digest 不存在。
 
 退出码：`0` 成功；`1` 可重试的瞬时故障（库连接、IO）；`2` 数据裁决/启动期拒绝。

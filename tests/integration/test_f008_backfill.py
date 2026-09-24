@@ -265,7 +265,13 @@ def test_already_complete_pair_is_skipped_without_fetching(f008_conn, tmp_path) 
 
 
 def test_time_boxed_chunks_defer_and_resume(f008_conn, tmp_path) -> None:
-    """时间片到点：当前 pair 记 deferred 并保留断点，下一片续完且不重复（长跑分片执行）。"""
+    """时间片到点：当前 pair 记 deferred 并保留断点，下一片续完且不重复（长跑分片执行）。
+
+    **必须带生产 sink**（检视 R2-B1）：时间片到点时尚未开跑的 pair 的 `last_cursor` 是 `None`，
+    而事件契约的 `cursor` 不可空（`last_cursor` 才可空）——照发会让**每个分片到点即以
+    `E_UNIVERSE_EVENTS` 中止**。`_emit` 现在对「无游标的非失败结果」不发 progress 事件；
+    变异：把该跳过改掉，本用例红（事件目录由 `f008_conn` 改道到 tmp_path）。
+    """
     universe_id = _frozen_universe(tmp_path, pairs=("BTC", "ETH"))
     definition = load_definition(universe_id, tmp_path)
     plans = runner.plan_batch(definition)
@@ -280,6 +286,7 @@ def test_time_boxed_chunks_defer_and_resume(f008_conn, tmp_path) -> None:
         reports_dir=tmp_path / "reports",
         exchange=FakeExchange(),
         limiter=_limiter(),
+        event_sink=backfill_sink(),  # 生产接线（缺省 None 是库调用者的旁路）
         max_runtime_seconds=0.0,  # 立刻到点：第一个 pair 还没抓就 deferred
     )
     statuses = {item["db_symbol"]: item["status"] for item in first.pairs}
@@ -588,3 +595,45 @@ def test_non_active_verdict_emits_out_direction_admission_event(
     assert event.universe_id == universe_id
     # 非 ACTIVE 不动台账，也就不该有台账线事件
     assert events.read_events(events.EVENT_MEMBER_CHANGED, line="tradability") == ()
+
+
+def test_resume_rejects_mismatched_window_or_batch(f008_conn, tmp_path) -> None:
+    """回归（检视 R2-B2）：换窗口/换批次续跑必须**拒绝启动**，不得静默空跑报「本批全部完成」。
+
+    缺陷形态（删掉 `run_backfill_batch` 里的 `resume_mismatch` 调用）：已完成的 pair 不在
+    `pending` → 新窗口一行不取 → `remaining` 为空直接 `finished()`，CLI 退出 0，分片脚本
+    打印「本批全部完成」——把「参数打错」报成「跑完了」。变异后本用例必红。
+    """
+    universe_id = _frozen_universe(tmp_path, pairs=("BTC", "ETH"))
+    definition = load_definition(universe_id, tmp_path)
+    plans = runner.plan_batch(definition)
+    first = runner.run_backfill_batch(
+        universe_id=universe_id,
+        plans=plans,
+        start=WINDOW_START,
+        end=WINDOW_END,
+        conn=f008_conn,
+        lake_root=tmp_path,
+        reports_dir=tmp_path / "reports",
+        exchange=FakeExchange(),
+        limiter=_limiter(),
+        max_runtime_seconds=0.0,
+    )
+
+    base = {
+        "universe_id": universe_id,
+        "conn": f008_conn,
+        "lake_root": tmp_path,
+        "reports_dir": tmp_path / "reports",
+        "exchange": FakeExchange(),
+        "limiter": _limiter(),
+        "resume_run_id": first.run_id,
+    }
+    with pytest.raises(WindowError, match="续跑参数"):
+        runner.run_backfill_batch(
+            plans=plans, start=WINDOW_START, end=WINDOW_END + timedelta(days=1), **base
+        )
+    with pytest.raises(WindowError, match="续跑参数"):
+        runner.run_backfill_batch(plans=plans[:1], start=WINDOW_START, end=WINDOW_END, **base)
+    with pytest.raises(WindowError, match="续跑参数"):
+        runner.run_backfill_batch(plans=(), start=WINDOW_START, end=WINDOW_END, **base)

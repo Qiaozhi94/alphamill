@@ -46,13 +46,16 @@ def read_run_document(run_id: str, reports_dir: Path | None = None) -> dict:
         document = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise BackfillIncompleteError(f"运行记录损坏（JSON 无法解析）: {path}") from exc
+    if not isinstance(document, dict):
+        raise BackfillIncompleteError(f"运行记录结构非法（顶层应为对象）: {path}")
+    missing = sorted({"run_id", "universe_id", "window", "pairs"} - set(document))
+    if missing:
+        raise BackfillIncompleteError(f"运行记录缺必需键 {missing}: {path}")
     if document.get("schema_version") != SCHEMA_VERSION:
         raise BackfillIncompleteError(
             f"运行记录 schema_version 不符: {document.get('schema_version')!r} != {SCHEMA_VERSION}"
             f"（{path}）"
         )
-    if not isinstance(document, dict) or "window" not in document:
-        raise BackfillIncompleteError(f"运行记录结构非法（缺 window）: {path}")
     return document
 
 

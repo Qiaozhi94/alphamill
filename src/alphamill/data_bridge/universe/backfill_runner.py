@@ -225,11 +225,17 @@ def _emit(event_sink: EventSink | None, run: BackfillRun, payload: dict[str, Any
     """
     if event_sink is None:
         return
+    failed = payload.get("status") == backfill.STATUS_FAILED
+    if not failed and payload.get("last_cursor") is None:
+        # 无游标即无「进度」可报：契约的 `cursor` 是幂等键且不可空——时间片到点时尚未开跑的
+        # pair 会给出 last_cursor=None，照发会让整片以 E_UNIVERSE_EVENTS 中止（检视 R2-B1）；
+        # 运行记录已记 `deferred`/`pending`，事件流不重复表达。
+        return
     kind, body = backfill_event(
         run_id=run.run_id,
         started_at=run.started_at,
         payload=payload,
-        failed=payload.get("status") == backfill.STATUS_FAILED,
+        failed=failed,
     )
     event_sink(kind, body)
 
