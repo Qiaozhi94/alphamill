@@ -75,6 +75,28 @@ def test_read_run_document_rejects_corrupt_and_missing(tmp_path):
         run_record.read_run_document("run-missing", reports)
 
 
+def test_read_run_document_rejects_non_object_and_missing_keys(tmp_path):
+    """回归（检视 R2-B5）：合法 JSON 但非对象 / 缺必需键都必须转成领域错误。
+
+    缺陷形态：`document.get(...)` 在 `isinstance(document, dict)` 之前 → `[1,2,3]` 抛
+    `AttributeError`、缺 `run_id` 在 `load_run` 抛 `KeyError`——两者都逃出 `cli.main` 的
+    `except (UniverseError, OSError)`，变成 traceback + 退出 1（分片脚本会当可重试瞬时故障）。
+    """
+    reports = tmp_path / "reports"
+    target_dir = run_record.run_dir("run-F", reports)
+    target_dir.mkdir(parents=True)
+
+    (target_dir / run_record.RUN_FILE).write_text("[1, 2, 3]", encoding="utf-8")
+    with pytest.raises(BackfillIncompleteError, match="顶层应为对象"):
+        run_record.read_run_document("run-F", reports)
+
+    (target_dir / run_record.RUN_FILE).write_text(
+        '{"schema_version": 1, "window": {}}', encoding="utf-8"
+    )
+    with pytest.raises(BackfillIncompleteError, match="缺必需键"):
+        run_record.read_run_document("run-F", reports)
+
+
 def test_load_run_rejects_unknown_schema_version(tmp_path):
     """R1-014：`schema_version` 不符必须拒载，不得静默按新契约解读旧记录。"""
     reports = tmp_path / "reports"

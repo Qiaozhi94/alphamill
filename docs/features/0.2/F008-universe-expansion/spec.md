@@ -2,7 +2,7 @@
 kind: feature
 id: F008
 version: "0.2"
-status: developing
+status: code-reviewing
 branch: feat/F008-universe-expansion
 gate_version: 1
 related_features: [F001, F002, F003, F007]
@@ -311,7 +311,7 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
   - **实测（执行机 `qiaozhi-lt`，2026-09-24/25）**：磁盘占用 湖 **30,028** 分区文件 / **1,015 MB**（基线 8,860 / 272 MB）；单次全量导出 **860 s**（数据集级 839.82 s，基线 228 s；对 35 对外推 1,330 s 为 **0.65×**）；NAS 备份 **8,356 s**、NAS 端 **30,028** 个 parquet（三段 md5 校验一致）。记录：`reports/f008/capacity-report.json`；执行机门禁：`ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f008_capacity_report.py` = **4 passed**。NAS 备份的传输路径为 tailnet DERP 中继（执行机不在家网），详见 `reports/f008/执行机取证-T020-T023.md` §13.5
 - [x] **AC-012** (`IR-001`, `FR-002`, `FR-003`, `FR-004`): CLI 五个子命令的契约与 `design.md` §4 登记的全部九类启动期拒绝全覆盖——`discover` 口径缺字段 / 交易所不可达，`freeze` 缺 `--confirm` / 候选清单为空，`backfill` 定义未冻结 / 窗口非法 / 磁盘余量不足，`gate` 对回填未完成的 pair 判 `INCOMPLETE`，`show` 定义或 digest 不存在——各自以非零退出并给出可区分的原因 — tests: `tests/unit/test_f008_cli_contract.py`
 - [x] **AC-013** (`IR-003`, `IR-002`, `DR-003`): 台账 artifact 与 `BackfillRun` 均带 `schema_version`；artifact 加载方在 `schema_version` 与期望值不符、顶层或成员出现未知键时拒绝加载并报错，不做宽松忽略 — tests: `tests/unit/test_f008_artifact.py`
-- [x] **AC-014** (`IR-002`, `FR-006`, `NFR-003`): `F007` 的只读消费面（`evaluation/universe_ledger.py`，被 `experiment_store/research_snapshot.py` 调用）按 IR-002 的 canonical JSON 加载同一 digest 的 artifact，`universe_at(T)` 各时点结果与本 feature 台账一致；消费面不再残留任何 `<digest>.csv` 读写路径 — tests: `tests/contract/test_f007_upstream_contracts.py`
+- [x] **AC-014** (`IR-002`, `FR-006`, `NFR-003`): `F007` 的只读消费面（`src/alphamill/evaluation/universe_ledger.py`，被 `src/alphamill/experiment_store/research_snapshot.py` 调用）按 IR-002 的 canonical JSON 加载同一 digest 的 artifact，`universe_at(T)` 各时点结果与本 feature 台账一致；消费面不再残留任何 `<digest>.csv` 读写路径 — tests: `tests/contract/test_f007_upstream_contracts.py`
 
 ## 7. 测试、依赖与决策
 
