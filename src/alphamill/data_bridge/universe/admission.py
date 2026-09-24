@@ -204,6 +204,7 @@ def _parse_listed(value: str | None) -> datetime | None:
 def all_admitted(results: Iterable[AdmissionOutcome]) -> tuple[str, ...]:
     return tuple(item.db_symbol for item in results if item.verdict == VERDICT_ACTIVE)
 
+
 def _pending_membership_rows(conn, rows: list[MembershipRow]) -> list[MembershipRow]:
     """与台账对账，去掉 `(lake_pair, market_type, valid_from)` 已存在的行。
 

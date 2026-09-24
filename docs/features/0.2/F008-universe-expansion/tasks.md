@@ -61,6 +61,8 @@ updated: 2026-09-19
 - [ ] T022 (`FR-004`): 每批回填完成后立即对该批 pair 跑质量门，通过者准入、失败者隔离并记录原因；**批 1 过门即可供 `F003` 使用，不必等批 2** — verify: `pytest -q tests/integration/test_f008_quality_gate.py` + 逐 pair 判定记录（**已知结果**：定义里的 `listed_at` 取自永续上市日而门禁判的是现货数据，BANK/ONDO/PUMP/TUT 四对按现语义会因「永续上市 → 现货有数据」的空窗被判缺失率超限而隔离，属 owner 已裁决的预期结果，证据与后续修复项见 `reports/f008/执行机取证-T020-T023.md` §7）
 - [ ] T023 (`FR-006`, `NFR-005`, `AC-011`): 两批都过门后跑一次全量导出与 NAS 备份，实测磁盘占用、导出耗时与备份时长并与 6 对基线及外推值对照；**并完成准入切换**——把 `deployment/.env` 的 `SYMBOLS` 扩到已准入的 40 对后 `docker compose up -d --force-recreate data-collector`（`restart` 不重载 env），且切换前对新增 pair 跑追赶回填 `--start 2026-09-10T15:52:00Z --end <切换时刻>`（冻结窗口终点到切换时刻的洞，见 `reports/f008/执行机取证-T020-T023.md` §4） — verify: `tests/integration/test_f008_capacity_report.py` + 切换后 `ccxt_ingestor` 日志 `symbols_ok=40 symbols_failed=0` + 追赶回填的 `BackfillRun` 逐 pair `status=completed`
 
+- [x] T034 (`AC-006`): 回填入口补刷连续聚合——`backfill_runner` 直调 `run_backfill`，绕过了 `collector/backfill_cli.py` 末尾那次 `refresh_aggregates`，跨周期视图静默落后于 1m 基表（批 1 实测 `ohlcv_5m` 少 162 万个 5 分钟桶，`test_f001_row_reconciliation.py` 判红，只能人工 CALL 补刷）；改为以 `cli_support.refresh_aggregates_after` 包住回填，**时间片截断与异常退出同样刷**，刷新自身失败只告警不改批次结论。验收标准：新增单元用例先红后绿，且两处变异（去掉刷新包裹 / 去掉 `finally`）必须判红 — verify: `pytest -q tests/unit/test_f008_backfill_refresh.py`
+
 ## 3. 验证与验收任务
 
 - [x] T024 (`AC-001`, `AC-002`, `AC-004`, `AC-006`, `AC-007`, `AC-008`): 运行发现、定义、限速、窗口语义与台账单元套件 — verify: `pytest -q tests/unit/test_f008_discover.py tests/unit/test_f008_universe_def.py tests/unit/test_f008_rate_limit.py tests/unit/test_f008_quality_gate_window.py tests/unit/test_f008_membership.py`
@@ -79,8 +81,8 @@ updated: 2026-09-19
 - [x] T032 [TEST] (`US-003`, `AC-005`, `AC-006`, `AC-009`): 旅程 US-003 端到端验收——缺失率超限/边界未闭合/连续聚合不一致/重复主键四类 fixture 均被隔离并各记原因码、均不进导出清单；上线晚于窗口起点的 pair 按实际可得窗口算缺失率不被误判；全项通过者按 库追加 → artifact 发布 → 写准入记录 三步准入，发布的 artifact 可被下游 `load_explicit_universe` 加载，且 `symbol_map` 与导出清单允许不等 — verify: `pytest -q tests/integration/test_f008_quality_gate.py tests/unit/test_f008_quality_gate_window.py tests/integration/test_f008_export_integration.py`
 - [x] T033 [TEST] (`US-004`, `AC-007`, `AC-008`, `AC-013`): 旅程 US-004 端到端验收——含上市/退市/中途进出的成员 fixture 上 `universe_at(T)` 在各时点返回正确集合（左闭右开）；原地改写已发布历史区间被拒、退出只以追加新区间表达且历史数据不删；`schema_version` 不符或出现未知键时加载被拒 — verify: `pytest -q tests/unit/test_f008_membership.py tests/unit/test_f008_artifact.py`
 
-- [ ] T034: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter；回写时须核对 T023 的准入切换两步（`SYMBOLS` 扩容 + 追赶回填）已执行并留证，并回看「门禁与台账改用数据命名空间上市时间」这一独立修复项（`reports/f008/执行机取证-T020-T023.md` §7，owner 裁决为单独评审）是否已立项 — verify: `python3 tools/validate_spec_lifecycle.py`
-      （编号说明：原收口任务在检视收口时由 `T029` 改编号为 `T034`，以满足 `check_task_dag` 的「收口任务编号最高、须有入边」两条规则；`T029` 现由「F007 消费面迁移」占用——它是开工前检查发现的契约漂移修复，必须排在最高编号之前。）
+- [ ] T035: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter；回写时须核对 T023 的准入切换两步（`SYMBOLS` 扩容 + 追赶回填）已执行并留证，并回看「门禁与台账改用数据命名空间上市时间」这一独立修复项（`reports/f008/执行机取证-T020-T023.md` §7，owner 裁决为单独评审）是否已立项 — verify: `python3 tools/validate_spec_lifecycle.py`
+      （编号说明：原收口任务在检视收口时由 `T029` 改编号为 `T034`，2026-09-24 新增 `T034`（回填入口补刷聚合）后再顺延为 `T035`，以满足 `check_task_dag` 的「收口任务编号最高、须有入边」两条规则；`T029` 现由「F007 消费面迁移」占用——它是开工前检查发现的契约漂移修复，必须排在最高编号之前。）
 
 ## 4. 依赖与并行关系
 
@@ -106,8 +108,10 @@ updated: 2026-09-19
 - `T009/T013/T014/T015/T017 -> T025`：集成套件以回填编排、质量门与导出联动实现为前提。
 - `T011 -> T027`：先完成 `historical_backfill.py` 泛化（含 SOP 豁免表处理），再统一修订 integration §1.3 的过期表述。
 - `T009 -> T029`：F007 消费面迁移以 artifact 的 canonical JSON 契约为输入（T009 冻结该格式），并由 T029 的契约测试复核两侧 digest 一致。
+- `T023 -> T034`：聚合刷新的缺口是批 1 实跑暴露的，实测证据在先。
+- `T034 -> T035`：回填入口的聚合刷新落地后才回写验收证据（否则每批回填都要人工补刷，中途中断还会静默留缺口）。
 - `T024/T025 -> T028`：统一质量门在各验收套件之后跑。
-- `T024/T025/T026/T027/T028/T029/T030/T031/T032/T033 -> T034`：全部验收套件、真实环境证据、文档修订、
+- `T024/T025/T026/T027/T028/T029/T030/T031/T032/T033/T034 -> T035`：全部验收套件、真实环境证据、文档修订、
   下游消费面迁移与旅程验收通过后，才回写 spec 验收证据与状态。
 - 与 `F003` 的关系：批 1 已过门（T022 首次执行，2026-09-24，**25 对 ACTIVE / 5 对隔离**，见 `reports/f008/执行机取证-T020-T023.md` §9）——**25 对尚未满足 `F003` T035 的 ≥30 对前提**，须等批 2（25 + 批 2 至多 10 = 至多 35）；在此之前 F003 的一切工作不被阻塞。
 - `F003 并入 main -> AC-009 跨消费者断言`：`factor_factory/generators/universe.py::load_explicit_universe` 当前只存在于 `feat/F003-alphagen-vendor`（F003 仍 `developing`），AC-009 的「产物可被它直接加载」一条在 F003 落地前**不可执行**——按项目 SOP「已知缺口显式标记」写成 `xfail(strict=True)` 并在 reason 里写明该分支依赖，F003 并入 main 后 XPASS 转红、强制摘除标记并真跑；F008 侧先由 `AC-013`（`tests/unit/test_f008_artifact.py`）锁死同一 schema 的键集合、排序与 digest 规则。

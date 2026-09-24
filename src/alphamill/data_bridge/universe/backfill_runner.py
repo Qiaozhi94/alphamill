@@ -30,6 +30,7 @@ from alphamill.data_bridge.universe.batching import (
     split_already_complete,
 )
 from alphamill.data_bridge.universe.canonical import utc_iso
+from alphamill.data_bridge.universe.cli_support import refresh_aggregates_after
 from alphamill.data_bridge.universe.definition import UniverseDef, require_frozen
 from alphamill.data_bridge.universe.errors import BackfillIncompleteError
 from alphamill.data_bridge.universe.storage import atomic_create
@@ -197,17 +198,18 @@ def run_backfill_batch(
         _emit(event_sink, state["run"], payload)
 
     deadline = None if max_runtime_seconds is None else time.monotonic() + max_runtime_seconds
-    backfill.run_backfill(
-        exchange_id=exchange_id,
-        symbols=[plan.db_symbol for plan in remaining],
-        start=start,
-        end=end,
-        conn=conn,
-        exchange=exchange,
-        limiter=limiter,
-        should_stop=None if deadline is None else (lambda: time.monotonic() >= deadline),
-        on_outcome=on_outcome,
-    )
+    with refresh_aggregates_after(conn, start, end):  # 收尾必刷，中断也刷（见 cli_support）
+        backfill.run_backfill(
+            exchange_id=exchange_id,
+            symbols=[plan.db_symbol for plan in remaining],
+            start=start,
+            end=end,
+            conn=conn,
+            exchange=exchange,
+            limiter=limiter,
+            should_stop=None if deadline is None else (lambda: time.monotonic() >= deadline),
+            on_outcome=on_outcome,
+        )
     finished = state["run"].finished()
     _write_run(finished, reports_dir)
     return finished

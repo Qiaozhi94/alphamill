@@ -4,12 +4,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 from alphamill.data_bridge.universe.errors import WindowError
+
+logger = logging.getLogger(__name__)
 
 
 def refresh_aggregates(conn, start: datetime, end: datetime) -> None:
@@ -22,6 +26,25 @@ def refresh_aggregates(conn, start: datetime, end: datetime) -> None:
         file=sys.stderr,
     )
     backfill_mod.refresh_aggregates(conn, start, end)
+
+
+@contextmanager
+def refresh_aggregates_after(conn, start: datetime, end: datetime):
+    """包住回填：退出时刷新连续聚合，刷新失败只告警，不改批次结论。
+
+    回填入口（`backfill_runner`）直调 `run_backfill`，不经过 `collector/backfill_cli.py`
+    末尾那次刷新，跨周期视图会静默落后于 1m 基表——批 1 实测少 162 万个 5 分钟桶，
+    `tests/integration/test_f001_row_reconciliation.py` 判红，只能人工 CALL 补刷。
+    退出路径统一走 `finally`：时间片截断与异常退出同样已经写入了数据，不刷就留静默缺口。
+    刷新自身失败（锁超时等）不得吞掉批次结果——报告已落盘，缺口可事后补刷。
+    """
+    try:
+        yield
+    finally:
+        try:
+            refresh_aggregates(conn, start, end)
+        except Exception:  # noqa: BLE001 - 收尾动作，失败不改批次结论
+            logger.warning("刷新连续聚合失败，窗口 %s..%s 需人工补刷", start, end, exc_info=True)
 
 
 def apply_listing_starts(definition, plans, window_start: datetime) -> None:
