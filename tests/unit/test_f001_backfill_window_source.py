@@ -28,6 +28,14 @@ def test_window_file_is_used_by_code_and_supervisor() -> None:
 
 
 def test_backfill_universe_comes_from_tracked_window_file(monkeypatch) -> None:
+    """F001：universe 的**入库默认值**在 window.env；运行量允许被本机 `.env` 覆盖。
+
+    `SYMBOLS`/`EXCHANGES` 属运行量（`tools/f001_backfill_config` 的优先级：显式环境变量 >
+    本机 `deployment/.env` > 入库 window.env）；只有判据量禁止 `.env` 覆盖（见下一个用例）。
+    F008 扩容后运行时的 universe 是**扩容并准入后的 35 对**（point-in-time 台账 + 冻结定义
+    artifact，见 `reports/f008/执行机取证-T020-T023.md` §11），故此处不再要求逐字相等，改为断言
+    入库默认值仍被声明、且其成员被运行时集合**完全覆盖**——扩容不得悄悄丢掉 F001 的 pair。
+    """
     monkeypatch.delenv("SYMBOLS", raising=False)
     monkeypatch.delenv("EXCHANGES", raising=False)
     window_file = WINDOW_FILE.read_text(encoding="utf-8")
@@ -36,9 +44,18 @@ def test_backfill_universe_comes_from_tracked_window_file(monkeypatch) -> None:
 
     assert symbols
     assert exchanges
-    assert f"SYMBOLS={','.join(symbols)}" in window_file
+    tracked_symbols = _tracked_value(window_file, "SYMBOLS")
+    assert tracked_symbols, "入库 window.env 必须声明 SYMBOLS 默认值"
+    assert set(tracked_symbols) <= set(symbols), "运行时 universe 必须覆盖入库默认值"
     assert f"EXCHANGES={','.join(exchanges)}" in window_file
     assert f"DERIVATIVES_EXCHANGE={configured_derivatives_exchange()}" in window_file
+
+
+def _tracked_value(window_file: str, key: str) -> list[str]:
+    for line in window_file.splitlines():
+        if line.strip().startswith(f"{key}="):
+            return [item for item in line.split("=", 1)[1].strip().split(",") if item]
+    return []
 
 
 def test_runtime_dotenv_overrides_tracked_defaults_consistently(

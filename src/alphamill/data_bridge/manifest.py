@@ -17,6 +17,7 @@ from __future__ import annotations
 import errno
 import hashlib
 import json
+import logging
 import os
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -35,6 +36,8 @@ from alphamill.data_bridge.manifest_validation import (
     validate_manifest_shape as _validate_manifest_shape,
 )
 from alphamill.data_bridge.registry import DatasetSpec, require_dataset
+
+logger = logging.getLogger(__name__)
 
 SOURCE_TAG = "timescaledb@alphamill"
 
@@ -309,3 +312,32 @@ def publish_manifest(root: Path, manifest: dict[str, Any]) -> Path:
     finally:
         tmp.unlink(missing_ok=True)
     return final
+
+
+def usable_baseline(root: Path, dataset: str) -> tuple[str | None, dict[str, Any] | None]:
+    """取最新**可用**基线：`status=valid` 且清单内文件齐备。
+
+    损坏版本（分区文件缺失/字节数或 sha256 不符）不能当继承来源，否则一次损坏就让
+    此后所有导出都跑不动（2026-09-24 实测：`ohlcv_1m@v2026.09.21` 缺 12 个
+    `date=2026-09-18/19` 分区文件 → 全量导出 `ManifestIntegrityError` 中断，缺失分区
+    永无机会重建）。故从新到旧跳过损坏版本、回退到更早可用版本；损坏版本本身
+    **对直读它的消费方仍 fail-closed**（`load_manifest`/校验语义未变）。
+    """
+    for version in reversed(list_versions(root, dataset)):
+        try:
+            manifest = load_manifest(root, dataset, version)
+        except VersionNotFoundError:
+            logger.warning("基线 %s@%s 的 manifest 读不到，跳过", dataset, version)
+            continue
+        if manifest["status"] != "valid":
+            continue
+        try:
+            validate_manifest_integrity(root, manifest)
+            verify_value_digest(require_dataset(dataset), manifest)
+        except (ManifestIntegrityError, ValueError) as exc:
+            logger.warning(
+                "基线 %s@%s 完整性校验未通过（%s），回退到更早版本", dataset, version, exc
+            )
+            continue
+        return version, manifest
+    return None, None

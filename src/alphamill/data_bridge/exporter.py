@@ -15,7 +15,7 @@ from typing import Any
 from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge import partitions, paths, reconcile, registry, symbol_map
 from alphamill.data_bridge.collector.db_writer import db_connect
-from alphamill.data_bridge.errors import DataBridgeError, VersionNotFoundError
+from alphamill.data_bridge.errors import DataBridgeError
 from alphamill.data_bridge.export_policy import guard_full_shrink as _guard_full_shrink
 from alphamill.data_bridge.export_policy import merge_partitions as _merge_partitions
 from alphamill.data_bridge.export_summary import build_summary as _summary
@@ -24,17 +24,6 @@ logger = logging.getLogger(__name__)
 
 # 测试注入点（AC-010 并发 upsert）：签名 (conn) -> None，生产路径恒为 None。
 PostExportHook = Any
-
-
-def _baseline(root: Path, dataset: str) -> tuple[str | None, dict[str, Any] | None]:
-    try:
-        version = mf.latest_valid_version(root, dataset)
-        manifest = mf.load_manifest(root, dataset, version)
-        mf.validate_manifest_integrity(root, manifest)
-        mf.verify_value_digest(registry.require_dataset(dataset), manifest)
-        return version, manifest
-    except VersionNotFoundError:
-        return None, None
 
 
 def _resolve_window(
@@ -167,7 +156,7 @@ def _export_one(
     universe_filter: bool = False,
 ) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
-    baseline_version, baseline = _baseline(root, spec.name)
+    baseline_version, baseline = mf.usable_baseline(root, spec.name)
     baseline_partitions = baseline["partitions"] if baseline else []
 
     xmin, taken_at = reconcile.begin_snapshot_tx(conn)

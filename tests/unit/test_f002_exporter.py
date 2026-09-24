@@ -110,3 +110,56 @@ def test_shrink_guard_can_be_confirmed_but_window_truncation_never_is():
         export_policy.guard_full_shrink(
             baseline, [_partition("BTC-USDT")], dt.date(2026, 9, 14), allow_shrink=True
         )
+
+
+def test_usable_baseline_falls_back_when_newest_version_is_corrupt(monkeypatch, tmp_path, caplog):
+    """回归（2026-09-24）：最新版本完整性损坏时，基线回退到更早的可用版本。
+
+    实测现场：`ohlcv_1m` 的 `v2026.09.21` 引用了 12 个 `date=2026-09-18/19` 分区文件而
+    磁盘上没有 → 全量导出在 `_baseline()` 处 `ManifestIntegrityError` 中断，缺失分区
+    永远没有机会被重新写出来。回退后导出可继续（并把坏版本引用的分区重建）。
+    """
+    from alphamill.data_bridge.errors import ManifestIntegrityError
+
+    good = {"status": "valid", "dataset": "ohlcv_1m", "partitions": []}
+    bad = {"status": "valid", "dataset": "ohlcv_1m", "partitions": [_partition("BTC-USDT")]}
+
+    monkeypatch.setattr(mf, "list_versions", lambda _root, _dataset: ["v2026.09.13", "v2026.09.21"])
+    monkeypatch.setattr(
+        mf,
+        "load_manifest",
+        lambda _root, _dataset, version: bad if version.endswith(".21") else good,
+    )
+    monkeypatch.setattr(mf, "verify_value_digest", lambda _spec, _manifest: None)
+
+    def _validate(_root, manifest, partitions=None):
+        if manifest is bad:
+            raise ManifestIntegrityError("清单内文件缺失: ohlcv_1m/.../date=2026-09-18.r1.parquet")
+
+    monkeypatch.setattr(mf, "validate_manifest_integrity", _validate)
+
+    with caplog.at_level("WARNING"):
+        version, manifest = mf.usable_baseline(tmp_path, "ohlcv_1m")
+
+    assert version == "v2026.09.13"
+    assert manifest is good
+    assert "完整性校验未通过" in caplog.text
+
+
+def test_usable_baseline_is_none_when_no_usable_version(monkeypatch, tmp_path):
+    """所有版本都不可用（缺失/非 valid/损坏）时返回 (None, None)——与"从未导出过"同义。"""
+    from alphamill.data_bridge.errors import ManifestIntegrityError
+
+    monkeypatch.setattr(mf, "list_versions", lambda _root, _dataset: ["v2026.09.21"])
+    monkeypatch.setattr(
+        mf,
+        "load_manifest",
+        lambda _root, _dataset, _version: {"status": "valid", "partitions": []},
+    )
+    monkeypatch.setattr(mf, "verify_value_digest", lambda _spec, _manifest: None)
+    monkeypatch.setattr(
+        mf,
+        "validate_manifest_integrity",
+        lambda *_a, **_k: (_ for _ in ()).throw(ManifestIntegrityError("清单内文件缺失")),
+    )
+    assert mf.usable_baseline(tmp_path, "ohlcv_1m") == (None, None)

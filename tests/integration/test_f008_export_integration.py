@@ -249,6 +249,31 @@ def test_universe_filter_flag_matches_explicit_admitted(seeded, f008_conn, tmp_p
     assert set(manifest["pairs"]) == {"BTC-USDT"}
 
 
+def test_admitted_filter_is_noop_for_datasets_without_pair_partition(
+    seeded, f008_conn, tmp_path
+) -> None:
+    """回归（2026-09-24）：非 pair 分区的 dataset 不得因准入过滤而崩。
+
+    `signals_log` 的分区键只有 `date`（`symbol_map_enabled=False`），`discover_cells()` 给出的
+    单元格形状是 `(date,)`；过滤代码若硬取 `cell[1]` 就越界——真实全量导出实测
+    `IndexError: tuple index out of range`，整轮导出在 `ohlcv_1m` 之前中断。
+    这类 dataset 没有 `lake_pair` 维度，准入过滤对它保持原行为（不静默改数据）。
+    """
+    lake = seeded
+    summary = export_dataset(
+        "signals_log",
+        mode="full",
+        window_end=f"{D4}T00:00:00Z",
+        conn=f008_conn,
+        lake_root=lake,
+        admitted={"BTC-USDT"},
+    )
+    assert summary["status"] in {"valid", "no_op"}, summary
+    manifest = mf.load_manifest(lake, "signals_log", summary["data_version"])
+    # 无 pair 维度：manifest 不带 pairs 收窄语义，分区不得因过滤被丢
+    assert int(summary["partitions"]) == len(manifest["partitions"])
+
+
 def test_artifact_publish_is_stable_and_old_digest_survives(seeded, f008_conn, tmp_path) -> None:
     """AC-009：同内容同 digest 且逐字节一致；内容变化得新 digest，旧 digest 仍可读。"""
     from alphamill.data_bridge.universe.membership import MembershipRow, append_membership
