@@ -227,7 +227,7 @@ def check_pair(
             metrics,
         )
 
-    aggregates = aggregate_mismatch(conn, exchange, start, end)
+    aggregates = aggregate_mismatch(conn, exchange, db_symbol, start, end)
     metrics["aggregates"] = aggregates
     if any(not item["match"] for item in aggregates.values()):
         return _result(

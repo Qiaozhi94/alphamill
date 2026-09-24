@@ -64,8 +64,16 @@ def duplicate_keys(
         return int(cur.fetchone()[0])
 
 
-def aggregate_mismatch(conn, exchange: str, start: datetime, end: datetime) -> dict[str, Any]:
+def aggregate_mismatch(
+    conn, exchange: str, db_symbol: str, start: datetime, end: datetime
+) -> dict[str, Any]:
     """连续聚合与 1m 基表按桶重算精确一致（差得不多也不放行）。
+
+    **作用域是该 pair**（`FR-004`：「对每个新 pair 执行完整性校验」；scenario「某 pair 的连续
+    聚合行数与 1m 基表按桶重算不一致 → 该 pair 不进导出清单」）：两侧都按 `exchange + symbol`
+    过滤。原实现只按 `exchange` 聚合（2026-09-24 检视 R1-003），后果是跨 pair 相消——A 多 N 个
+    桶、B 少 N 个桶时总数相等，坏 pair 被放行；反之一个 pair 的桶缺口会把同批干净 pair 一起
+    判红。单 pair fixture 下这两种批量行为都不会出现，故一并补批量回归用例。
 
     窗口起点先按**该聚合的桶宽向下对齐**，再用同一个对齐值查两侧：基表侧按「桶与窗口有
     重叠」计入（`time >= start` 分组后，跨窗口起点那个不完整的桶也在内），聚合侧若按
@@ -80,8 +88,8 @@ def aggregate_mismatch(conn, exchange: str, start: datetime, end: datetime) -> d
             aligned_start = cur.fetchone()[0]
             cur.execute(
                 f"SELECT count(*) FROM {view}"  # noqa: S608 - 视图名来自模块常量
-                " WHERE exchange = %s AND bucket >= %s AND bucket < %s",
-                (exchange, aligned_start, end),
+                " WHERE exchange = %s AND symbol = %s AND bucket >= %s AND bucket < %s",
+                (exchange, db_symbol, aligned_start, end),
             )
             view_rows = int(cur.fetchone()[0])
             cur.execute(
@@ -89,11 +97,11 @@ def aggregate_mismatch(conn, exchange: str, start: datetime, end: datetime) -> d
                 SELECT count(*) FROM (
                     SELECT symbol, time_bucket('{bucket}', time) AS b
                     FROM ohlcv_1m
-                    WHERE exchange = %s AND time >= %s AND time < %s
+                    WHERE exchange = %s AND symbol = %s AND time >= %s AND time < %s
                     GROUP BY symbol, b
                 ) t
                 """,  # noqa: S608 - 桶宽来自模块常量
-                (exchange, aligned_start, end),
+                (exchange, db_symbol, aligned_start, end),
             )
             base_buckets = int(cur.fetchone()[0])
             out[view] = {

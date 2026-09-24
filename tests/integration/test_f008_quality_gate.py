@@ -202,6 +202,49 @@ def test_incomplete_backfill_is_not_pass(f008_conn) -> None:
     assert _check(f008_conn, "AAA/USDT").verdict == VERDICT_INCOMPLETE
 
 
+def test_batch_gate_isolates_the_broken_pair(f008_conn) -> None:
+    """批量双 pair：坏 pair 单独判红，**干净 pair 不得被连带判红**（检视 R1-003）。
+
+    旧实现在 exchange 上聚合两侧计数（不带 symbol）：BBB 少一个 5m 桶时，exchange 级
+    `view_rows=240 != base_buckets=239` → 同批的干净 pair CCC 也会拿到 `aggregate_mismatch`
+    ——本用例在旧实现下必红（CCC 被判隔离），这正是它作为回归锁的价值。作用域收到
+    「每个新 pair」（`FR-004`）后，BBB 隔离、AAA/CCC 仍 ACTIVE。
+
+    注：纯「相消掩盖」（坏 pair 因另一对的桶盈余而被放行）在本 fixture 里构造不出来——
+    600 分钟窗口恰好是 120 个 5m 桶，单 pair 的基表桶数上界就是 120，没有盈余空间；
+    作用域收到 pair 后该形态在结构上也不可能出现。
+    """
+    _insert(f008_conn, "AAA/USDT", list(range(600)))
+    _insert(f008_conn, "BBB/USDT", list(range(600)))
+    _insert(f008_conn, "CCC/USDT", list(range(600)))
+    _refresh_aggregates(f008_conn)
+    with f008_conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM ohlcv_1m WHERE symbol = 'BBB/USDT' AND time >= %s AND time < %s",
+            (WINDOW_START + timedelta(minutes=300), WINDOW_START + timedelta(minutes=305)),
+        )
+    f008_conn.commit()
+    for symbol in ("AAA/USDT", "BBB/USDT", "CCC/USDT"):
+        _mark_backfill_complete(f008_conn, symbol)
+
+    results = {
+        symbol: _check(f008_conn, symbol, lake_pair=f"{symbol.removesuffix('/USDT')}-USDT-PERP")
+        for symbol in ("AAA/USDT", "BBB/USDT", "CCC/USDT")
+    }
+    assert results["BBB/USDT"].verdict == VERDICT_QUARANTINED
+    assert results["BBB/USDT"].reason_code == REASON_AGGREGATE, results["BBB/USDT"].metrics
+    assert results["AAA/USDT"].verdict == VERDICT_ACTIVE, results["AAA/USDT"].metrics
+    assert results["CCC/USDT"].verdict == VERDICT_ACTIVE, results["CCC/USDT"].metrics
+
+    record_verdicts(
+        f008_conn,
+        [results["AAA/USDT"], results["BBB/USDT"], results["CCC/USDT"]],
+        universe_id=UNIVERSE_ID,
+        hostname="qiaozhi-lt",
+    )
+    assert admitted_pairs(f008_conn) == frozenset({"AAA-USDT-PERP", "CCC-USDT-PERP"})
+
+
 def test_quarantined_pair_is_not_admitted(f008_conn) -> None:
     _insert(f008_conn, "AAA/USDT", list(range(0, 300)))
     _mark_backfill_complete(f008_conn, "AAA/USDT")

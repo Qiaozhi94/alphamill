@@ -167,12 +167,15 @@ def test_stricter_threshold_quarantines_small_gap() -> None:
 
 
 def test_aggregate_check_uses_same_aligned_start_on_both_sides() -> None:
-    """回归（2026-09-24）：聚合对账两侧必须用同一个「按桶对齐后」的窗口起点。
+    """回归（2026-09-24）：聚合对账两侧必须同 `exchange + symbol`、同一个「按桶对齐后」的起点。
 
     DEXE 的 `listed_at=2024-12-24T11:30` 不落在 1h/4h/1d 的桶边界上：基表侧按「桶与窗口
     重叠」计入 11:00 那个不完整桶，聚合侧若按 `bucket >= 11:30` 过滤就会漏掉它 → 该 pair
     恒判 `aggregate_mismatch`（实测 1h/4h/1d 各差 25，恰等于 11:30–12:00 有数据的 symbol 数；
     5m/15m 因 11:30 对齐而全等）。
+
+    `symbol` 过滤是 2026-09-24 检视 R1-003 的修复：作用域必须是**该 pair**（`FR-004`），
+    否则跨 pair 相消能放行坏 pair。
     """
     from alphamill.data_bridge.universe import gate_sql
 
@@ -201,13 +204,61 @@ def test_aggregate_check_uses_same_aligned_start_on_both_sides() -> None:
     out = gate_sql.aggregate_mismatch(
         _Conn(),
         "binance",
+        "DEXE/USDT",
         datetime(2024, 12, 24, 11, 30, tzinfo=UTC),
         datetime(2026, 9, 10, 15, 52, tzinfo=UTC),
     )
 
-    counted = [params for _sql, params in executed if params is not None and len(params) == 3]
+    counted = [params for _sql, params in executed if params is not None and len(params) == 4]
     assert counted, "应发出聚合侧与基表侧两条计数查询"
-    assert all(params[1] == aligned for params in counted), "两侧必须传同一个对齐起点"
+    assert all(params[:2] == ("binance", "DEXE/USDT") for params in counted), (
+        "两侧必须同 exchange + 同 symbol（作用域＝该 pair）"
+    )
+    assert all(params[2] == aligned for params in counted), "两侧必须传同一个对齐起点"
     assert list(out) == list(gate_sql.AGGREGATES)
     assert all(item["aligned_start"] == "2024-12-24T11:00:00Z" for item in out.values())
     assert all(item["match"] for item in out.values())
+
+
+def test_aggregate_check_reports_mismatch_when_counts_differ() -> None:
+    """两侧计数不等必须判 `match=False`——否则「对不上」这条检查没有牙。
+
+    原用例的假游标对任何计数查询都回 `(7,)`，两侧恒等 → `match` 断言在任何实现下都真
+    （2026-09-24 检视 R1-007）。这里让视图侧与基表侧返回不同计数，断言检查真的能变红。
+    """
+    from alphamill.data_bridge.universe import gate_sql
+
+    aligned = datetime(2024, 12, 24, 11, 0, tzinfo=UTC)
+    executed: list[str] = []
+
+    class _Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def execute(self, sql, params=None):
+            executed.append(sql)
+
+        def fetchone(self):
+            if "time_bucket(%s::interval" in executed[-1]:
+                return (aligned,)
+            # 基表侧少一个桶（视图侧 7 行 vs 基表 6 桶）
+            return (6,) if "FROM ohlcv_1m" in executed[-1] else (7,)
+
+    class _Conn:
+        def cursor(self):
+            return _Cursor()
+
+    out = gate_sql.aggregate_mismatch(
+        _Conn(),
+        "binance",
+        "BBB/USDT",
+        datetime(2024, 12, 24, 11, 30, tzinfo=UTC),
+        datetime(2026, 9, 10, 15, 52, tzinfo=UTC),
+    )
+
+    assert out, "应产出各聚合的对账结果"
+    assert all(item["rows"] == 7 and item["base_buckets"] == 6 for item in out.values())
+    assert not any(item["match"] for item in out.values()), "计数不等必须判不一致"
