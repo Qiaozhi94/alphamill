@@ -197,18 +197,49 @@ class _UnprobeableDevice(FakeSignal):
         return type("S", (), {"loaded": self.loaded, "device": None})()
 
 
+class _UnloadRaisesPlainError(FakeSignal):
+    """卸载本身抛出非 UnloadFailed 的异常：什么都没动，应回落 running。"""
+
+    def unload(self) -> None:
+        raise RuntimeError("device busy")
+
+
 def test_unexpected_exception_still_returns_contract_envelope() -> None:
     """R1-001：任何未预期异常都必须落在契约信封里，不得漏成 HTTP 500。
 
     500 不带 `error` 字段，客户端会把它读成"端点不存在"并转入回落探测
     （架构 §7.1 错误码各司其职），把一次服务端内部故障误判成契约缺失。
     """
-    client, _ = _client(_RaisingAfterUnload())
+    signal = _UnloadRaisesPlainError()
+    client, controller = _client(signal)
 
     resp = client.post("/lifecycle/stop", headers=HEADERS)
 
     assert resp.status_code == 200, f"未预期异常漏成非契约响应: {resp.status_code}"
     assert resp.json() == {"error": lifecycle.E_UNLOAD_FAILED}, resp.text[:200]
+    after = controller.status()
+    assert (after["desired"], after["state"]) == ("running", "running"), (
+        f"卸载未开始就失败应回落 running 并落在稳定态: {after}"
+    )
+
+
+def test_reporting_failure_after_successful_unload_is_not_a_failed_unload() -> None:
+    """R2-001（修复引入）：卸载已成功、只是读数/状态查询失败时，不得谎报卸载失败。
+
+    卸载是不可逆的一步。把"报告失败"说成"卸载失败"会让编排以为显存还占着而不取锁
+    （白等一晚），更糟的是 desired 被回落 running 后状态停在 transitional，违反
+    「返回错误前已落稳定态」（architecture §7.1 失败落点）。
+    """
+    signal = _RaisingAfterUnload()
+    client, controller = _client(signal)
+
+    resp = client.post("/lifecycle/stop", headers=HEADERS)
+
+    assert resp.json() == {"state": "stopped", "vram_bytes": None}, resp.text[:200]
+    signal._broken = False  # 设备恢复可查后，落点必须是稳定的 stopped
+    after = controller.status()
+    assert (after["desired"], after["state"]) == ("stopped", "stopped"), after
+    assert after["operation"] is None
 
 
 def test_status_stays_reachable_when_probe_raises() -> None:

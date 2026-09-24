@@ -196,7 +196,11 @@ class LifecycleController:
         except FutureTimeout:
             # 不中断后台动作：中断会留下半加载态（NFR-004）。operation 保持非空，
             # 后台完成时按同一 operation_id 补写 late_complete 收尾行。
-            self._timed_out.add(operation.id)
+            with self._meta_lock:
+                if self._operation is not None:
+                    # 仅在动作确实还在飞时登记迟到：动作恰在 deadline 边缘完成时
+                    # 无条件登记会把 id 永久留在集合里（R1-003）。
+                    self._timed_out.add(operation.id)
             raise LifecycleError(E_TIMEOUT) from None
 
     def _execute(
@@ -215,11 +219,10 @@ class LifecycleController:
             result = exc.code
             raise
         except Exception as exc:
-            # worker 自己的 try 之外也可能抛（读设备名、探测显存）。这类异常必须按动作
-            # 映射成契约码，并把期望态收敛到该动作的失败落点——否则响应漏成 HTTP 500，
-            # 且实例停在过渡态（违反"返回错误前已落稳定态"，architecture §7.1）。
-            with self._meta_lock:
-                self._desired = RUNNING if operation.action == "stop" else STOPPED
+            # 兜底网：worker 自己的 try 之外仍可能抛。异常必须按动作映射成契约码，
+            # 并把期望态收敛成**稳定**态——否则响应漏成 HTTP 500 或状态停在过渡态
+            # （违反"返回错误前已落稳定态"，architecture §7.1 失败落点）。
+            self._converge_after_failure(operation.action)
             result = ACTION_FAILURE_CODE[operation.action]
             raise LifecycleError(result) from exc
         finally:
@@ -248,6 +251,20 @@ class LifecycleController:
             except Exception as exc:  # pragma: no cover - 观测降级路径
                 print(f"[kronos-lifecycle] log emit failed for {operation.id}: {exc}")
 
+    def _converge_after_failure(self, action: str) -> None:
+        """按**事实**把 desired 收敛到稳定态：以"模型是否还在内存里"为准。
+
+        读不到就取 fail-closed 的一侧——**不得声称已卸载**：谎称 stopped 会让夜槽
+        据此取锁训练，而模型可能还占着显存（OOM）；反向误报最多让编排白等一轮，
+        随后的 `restore` 幂等无副作用。
+        """
+        try:
+            loaded = bool(self._signal.status().loaded)
+        except Exception:
+            loaded = action == "stop"
+        with self._meta_lock:
+            self._desired = RUNNING if loaded else STOPPED
+
     # --- 动作实现 -----------------------------------------------------------
 
     def _stop_worker(self) -> tuple[dict, str]:
@@ -263,8 +280,15 @@ class LifecycleController:
             with self._meta_lock:
                 self._desired = RUNNING
             raise LifecycleError(E_UNLOAD_FAILED) from exc
-        device = self._signal.status().device
-        return {"state": STOPPED, "vram_bytes": self._vram_reading(device).used_bytes}, "ok"
+        # 卸载已成功（不可逆）。此后只是**报告**：读设备名或读显存失败不改变这个事实，
+        # 更不得谎报 E_UNLOAD_FAILED——那会让编排以为显存还占着而白等一晚
+        # （代码检视 R2-001：该路径此前会回落 desired=running 并停在 transitional）。
+        try:
+            device = self._signal.status().device
+            vram_bytes = self._vram_reading(device).used_bytes
+        except Exception:
+            vram_bytes = None
+        return {"state": STOPPED, "vram_bytes": vram_bytes}, "ok"
 
     def _restore_worker(self) -> tuple[dict, str]:
         try:
