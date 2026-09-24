@@ -4,6 +4,7 @@
 # 用法：
 #   bash scripts/f008-backfill.sh 1            # 批 1（成交额前 30）
 #   bash scripts/f008-backfill.sh 2            # 批 2（第 31–40）
+#   BACKFILL_FETCH_LIMIT=500 bash scripts/f008-backfill.sh 1   # 改每请求 K 线数（默认 1000）
 #
 # 续跑：中断后**原样重跑同一批**即可——逐 pair 断点由 backfill_progress.next_since 继续，
 # 已完成的 pair 由进度账本识别为 complete 直接跳过（幂等 upsert，不会产生重复行）。
@@ -33,8 +34,10 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG="$REPO_F008/reports/backfill/batch${BATCH}-${STAMP}.log"
 mkdir -p "$(dirname "$LOG")"
 
-# FETCH_LIMIT：Binance 现货 klines 单请求上限 1000 根（F001 默认 100 会让请求数多 10 倍）
-FETCH="${FETCH_LIMIT:-1000}"
+# 必须在加载 deployment/.env **之后**取值，且用独立命名空间：该 .env 里的 `FETCH_LIMIT=5`
+# 是给采集器的，同名会把回填打成 5 根/请求（2026-09-24 实测：3,402 批只推进 17,005 行）。
+# 1000 = Binance 现货 klines 单请求上限（F001 默认 100 会让请求数多 10 倍）。
+FETCH="${BACKFILL_FETCH_LIMIT:-1000}"
 ARGS=(--universe "$UNIVERSE" --batch "$BATCH" --start "$START" --end "$END"
       --lake-root "$LAKE" --reports-dir "$REPO_F008/reports/backfill"
       --fetch-limit "$FETCH")
