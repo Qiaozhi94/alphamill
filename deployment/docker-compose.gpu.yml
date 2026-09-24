@@ -15,9 +15,12 @@ services:
       args:
         # 只换索引，不覆盖 TORCH_VERSION：CPU/GPU 同为 2.14.0（2.14.0 无 cu128 包）
         TORCH_INDEX_URL: https://download.pytorch.org/whl/cu130
-        # NVIDIA 依赖（cudnn/nccl…）改从国内 PyPI 镜像取：cu130 索引把它们指向
-        # pypi.nvidia.com，执行机经代理下载其大文件连续失败（design §4 开发期变更）
-        TORCH_EXTRA_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+        # NVIDIA 依赖（cudnn/nccl…）的额外索引：**由构建机自己在 deployment/.env 里给**，
+        # 缺省空串 = 只用 cu130 索引（上游行为）。不把某台机器的网络绕行写死在这里——
+        # 镜像地址是 qiaozhi-lt 经代理访问 pypi.nvidia.com 失败的权宜之计，固化进"GPU 面
+        # 唯一配置处"会让任何机器都从第三方镜像解析 torch 的全部依赖，也违反 NFR-002
+        # 「迁移 qiaozhi-lab 时只改参数」（代码检视 R1-004）。
+        TORCH_EXTRA_INDEX_URL: ${TORCH_EXTRA_INDEX_URL:-}
     environment:
       # 显式设置 → 加载入口走严格分支：拿不到 CUDA 即启动失败，绝不回落 cpu（FR-004）
       KRONOS_DEVICE: cuda

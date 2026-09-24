@@ -25,8 +25,14 @@ GPU_OVERRIDE_PATH = ROOT / "deployment/docker-compose.gpu.yml"
 GPU_IMAGE = "alphamill/kronos-signal-real:gpu"
 GPU_TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu130"
 SERVICE_KEY_RE = re.compile(r"^  ([a-z][a-z0-9-]*):\n", re.M)
-# override 不得覆盖的键（仍由默认文件唯一定义，NFR-003）；按服务块内二级缩进键匹配。
-FORBIDDEN_OVERRIDE_KEYS = ("ports", "volumes", "restart", "depends_on", "profiles", "networks")
+# override **只许**出现的键（白名单，R1-002）：GPU 面就这几项，其余一律由默认文件唯一定义。
+# 用白名单而不是黑名单——黑名单只拦得住想到的那几个（network_mode / cap_add / command /
+# build.target 都曾整队绕过），而"只加 GPU 面"这件事可以正面枚举。
+ALLOWED_SERVICE_KEYS = {"image", "build", "environment", "deploy", "healthcheck"}
+ALLOWED_BUILD_KEYS = {"args"}
+ALLOWED_ENV_KEYS = {"KRONOS_DEVICE"}
+SERVICE_SUBKEY_RE = re.compile(r"(?m)^    ([A-Za-z_][\w.-]*):")
+BUILD_SUBKEY_RE = re.compile(r"(?m)^      ([A-Za-z_][\w.-]*):")
 
 
 def _strip_comments(text: str) -> str:
@@ -72,9 +78,38 @@ def assert_gpu_override_contract(override: str) -> None:
     assert re.search(r"(?m)^\s+count: 1$", block), "设备预留必须 count: 1（缺省即全部 GPU）"
     assert "capabilities: [gpu]" in block
     assert "privileged" not in block, "设备预留不得借道特权容器"
-    for key in FORBIDDEN_OVERRIDE_KEYS:
-        assert not re.search(rf"(?m)^    {key}:", block), f"override 不得覆盖 {key}"
+    assert_override_keys_whitelisted(block)
     assert_gpu_healthcheck(block)
+
+
+def assert_override_keys_whitelisted(block: str) -> None:
+    """服务块的键面是白名单：GPU 面之外的键一律判红（R1-002）。"""
+    keys = set(SERVICE_SUBKEY_RE.findall(block))
+    extra = keys - ALLOWED_SERVICE_KEYS
+    assert not extra, (
+        f"override 出现 GPU 面之外的键: {sorted(extra)}（白名单 {sorted(ALLOWED_SERVICE_KEYS)}）"
+    )
+
+    build_block = block[block.index("    build:") :] if "    build:" in block else ""
+    if build_block:
+        nxt = SERVICE_SUBKEY_RE.search(build_block[len("    build:") :])
+        build_block = build_block[: len("    build:") + nxt.start()] if nxt else build_block
+        build_keys = set(BUILD_SUBKEY_RE.findall(build_block))
+        extra_build = build_keys - ALLOWED_BUILD_KEYS
+        assert not extra_build, (
+            f"build 下只许 {sorted(ALLOWED_BUILD_KEYS)}，实际多出 {sorted(extra_build)}"
+        )
+
+    env_block = block[block.index("    environment:") :] if "    environment:" in block else ""
+    if env_block:
+        nxt = SERVICE_SUBKEY_RE.search(env_block[len("    environment:") :])
+        env_block = env_block[: len("    environment:") + nxt.start()] if nxt else env_block
+        env_keys = set(BUILD_SUBKEY_RE.findall(env_block))
+        extra_env = env_keys - ALLOWED_ENV_KEYS
+        assert not extra_env, (
+            f"environment 下只许 {sorted(ALLOWED_ENV_KEYS)}（其余由默认文件唯一定义），"
+            f"实际多出 {sorted(extra_env)}"
+        )
 
 
 def assert_gpu_healthcheck(block: str) -> None:
@@ -153,5 +188,35 @@ def test_override_touching_another_service_fails_the_gate() -> None:
     """override 只允许覆盖 kronos-signal-real：顺手改 mock 服务即判红。"""
     override = GPU_OVERRIDE_PATH.read_text(encoding="utf-8")
     mutated = override + "\n  kronos-signal:\n    environment:\n      KRONOS_DEVICE: cuda\n"
+    with pytest.raises(AssertionError):
+        assert_gpu_override_contract(mutated)
+
+
+# R1-002：门禁原为黑名单（只拦 6 个键），下列越界写法全部能过门禁。改白名单后逐条判红。
+OUT_OF_SCOPE_MUTATIONS = [
+    # 控制面被暴露到所有网卡，违反 F009 NFR-003「只在回环可达」与 F010 NFR-003
+    ("    environment:\n", "    network_mode: host\n    environment:\n"),
+    # 容器名被改 → F009/F003 客户端找错实例
+    ("    environment:\n", "    container_name: something-else\n    environment:\n"),
+    # GPU 镜像退回 mock 目标 → 镜像里根本没有 torch
+    ("      args:\n", "      target: mock\n      args:\n"),
+    # 越界覆盖运行时环境（模型路径由默认文件唯一定义）
+    ("      KRONOS_DEVICE: cuda\n", "      KRONOS_DEVICE: cuda\n      KRONOS_MODEL_PATH: /tmp/x\n"),
+    # 悄悄加能力位
+    ("    environment:\n", "    cap_add:\n      - SYS_ADMIN\n    environment:\n"),
+    # 越界覆盖 entrypoint/command
+    ("    environment:\n", '    command: ["sleep", "infinity"]\n    environment:\n'),
+]
+
+
+@pytest.mark.parametrize(("old", "new"), OUT_OF_SCOPE_MUTATIONS)
+def test_out_of_scope_override_keys_fail_the_gate(old: str, new: str) -> None:
+    """override 的键面必须是**白名单**：GPU 面之外的任何键都判红。
+
+    黑名单只能拦住想到的那几个——`network_mode`、`cap_add`、`command`、`build.target`
+    这些都能绕过（代码检视 R1-002 实测 6/6 过门禁）。GPU override 的职责是"只加 GPU 面"，
+    这一点可以正面枚举，所以该用白名单。
+    """
+    mutated = _mutate(GPU_OVERRIDE_PATH.read_text(encoding="utf-8"), old, new)
     with pytest.raises(AssertionError):
         assert_gpu_override_contract(mutated)

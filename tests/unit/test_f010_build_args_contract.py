@@ -25,9 +25,6 @@ GPU_OVERRIDE_PATH = ROOT / "deployment/docker-compose.gpu.yml"
 LEGACY_TORCH_VERSION = "2.14.0"
 LEGACY_TORCH_INDEX_URL = "https://download.pytorch.org/whl/cpu"
 GPU_TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu130"
-# NVIDIA 依赖（cudnn/nccl…）不走 pypi.nvidia.com——执行机经代理下载该域名大文件连续失败
-# （design §4 开发期变更）。缺省空串 → 默认构建的安装命令与落地前等价（NFR-001）。
-GPU_EXTRA_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
 ARG_RE = re.compile(r"^ARG ([A-Z_]+)(?:=(\S*))?$", re.M)
 TORCH_INSTALL_RE = re.compile(
@@ -101,10 +98,20 @@ def test_gpu_build_args_resolve_to_cu130_same_version() -> None:
 
 
 def test_gpu_override_passes_only_the_index_args() -> None:
-    """override 给出的构建参数与设计表同源：cu130 索引 + NVIDIA 依赖镜像，不覆盖 TORCH_VERSION。"""
+    """override 只钉 cu130 索引；额外索引改为**引用环境变量且缺省为空**，不写死某台机器的镜像。
+
+    R1-004：把 `pypi.tuna.tsinghua.edu.cn` 写死在 GPU 面唯一配置处，等于把 qiaozhi-lt 的
+    网络绕行固化成契约——任何机器构建都会从第三方镜像解析 torch 的全部依赖，也让
+    NFR-002「迁移只改参数」不成立。构建机自己在 deployment/.env 里给该变量。
+    """
     override = re.sub(r"(?m)^[ \t]*#.*$", "", GPU_OVERRIDE_PATH.read_text(encoding="utf-8"))
     assert f"TORCH_INDEX_URL: {GPU_TORCH_INDEX_URL}" in override
-    assert f"TORCH_EXTRA_INDEX_URL: {GPU_EXTRA_INDEX_URL}" in override
+    assert "TORCH_EXTRA_INDEX_URL: ${TORCH_EXTRA_INDEX_URL:-}" in override, (
+        "额外索引必须引用环境变量且缺省为空"
+    )
+    assert "tuna.tsinghua" not in override and "aliyun" not in override, (
+        "不得把具体镜像地址写进 GPU override（单机绕行不是契约）"
+    )
     assert "TORCH_VERSION" not in override, "GPU 构建不得覆盖 torch 版本（CPU/GPU 同版本）"
 
 

@@ -249,8 +249,18 @@ nvidia-container-toolkit 并 `nvidia-ctk runtime configure --runtime=docker` 后
 **构建器**：GPU 镜像的 CUDA 依赖单个 wheel 达数百 MB，默认 buildx builder 的 RUN 步骤走
 bridge 网络，在执行机上连续三次读超时（约 155s 处）；改用 host 网络的 builder 一次成功
 （实测 20MB/s vs 7MB/s）。因此构建前 `export BUILDX_BUILDER=hostnet`（集成用例会自动选它）。
-Dockerfile 侧已固定 `--retries 10 --timeout 120`，并把 NVIDIA 依赖指向国内 PyPI 镜像
-（`TORCH_EXTRA_INDEX_URL`）——cu130 索引默认把它们指向 pypi.nvidia.com，该域名在本机不可用。
+该 builder 不存在时先建一次（每台机器一次性）：
+
+```bash
+docker buildx create --name hostnet --driver docker-container \
+  --driver-opt network=host --use        # 已存在则 docker buildx use hostnet
+```
+
+**取包链路**：Dockerfile 两层 pip 都固定 `--retries 10 --timeout 120`（本机到 PyPI 的链路
+间歇断流，实测 BrokenPipeError 中断过构建）。cu130 索引把 torch 的 NVIDIA 依赖
+（cudnn/nccl…）指向 `pypi.nvidia.com`，该域名在本机经代理下载大文件会失败；需要绕行时在
+**本机** `deployment/.env` 里给 `TORCH_EXTRA_INDEX_URL`（例如国内 PyPI 镜像），
+compose override 只引用该变量、缺省为空——单机的网络绕行不写进 GPU 面契约（F010 R1-004）。
 
 ```bash
 # 启用 GPU 实例（执行机）
