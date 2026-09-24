@@ -250,8 +250,14 @@ class KronosRealSignal:
             return "cuda:0" if request.startswith("cuda") and torch.cuda.is_available() else "cpu"
         if request == "cpu":
             return "cpu"
-        if not request.startswith("cuda"):
-            raise RuntimeError(f"{ERR_UNKNOWN_DEVICE}: KRONOS_DEVICE={request!r} (cpu|cuda)")
+        # 只接受本 feature 真会用的那张卡的两种写法。`cuda:1` 之类**不得**被当成"以 cuda
+        # 开头"而悄悄解析成 cuda:0——那与下面 ERR_UNKNOWN_DEVICE 的判断自相矛盾，且会让
+        # 编排以为模型在别的卡上（单卡时段调度见架构 §7.1；代码检视 R1-005）。
+        if request not in ("cuda", "cuda:0"):
+            raise RuntimeError(
+                f"{ERR_UNKNOWN_DEVICE}: KRONOS_DEVICE={request!r}"
+                "（本 feature 只支持 cpu|cuda|cuda:0）"
+            )
         if not getattr(getattr(torch, "version", None), "cuda", None):
             raise RuntimeError(f"KRONOS_DEVICE={request} but {ERR_CPU_WHEEL}")
         if not torch.cuda.is_available():

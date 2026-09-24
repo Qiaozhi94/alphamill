@@ -44,7 +44,9 @@ class _Loader:
 
 def _install_fakes(monkeypatch, *, cuda_version, cuda_available, with_version=True):
     """装假 torch 与假 vendor model 模块；返回 from_pretrained 调用记录与 predictor 设备。"""
-    cuda_ns = types.SimpleNamespace(is_available=lambda: cuda_available)
+    # empty_cache：F009 的 unload() 会调它（卸载后释放缓存），假 torch 必须提供，
+    # 否则卸载路径会以 UnloadFailed 失败，测的就不是本用例关心的东西。
+    cuda_ns = types.SimpleNamespace(is_available=lambda: cuda_available, empty_cache=lambda: None)
     torch_ns = types.SimpleNamespace(cuda=cuda_ns)
     if with_version:
         torch_ns.version = types.SimpleNamespace(cuda=cuda_version)
@@ -178,3 +180,50 @@ def test_startup_exits_nonzero_when_explicit_cuda_unavailable(
     assert "[kronos-real] model load failed" in err
     assert kronos_real.ERR_CPU_WHEEL in err
     assert signal.status().loaded is False
+
+
+@pytest.mark.parametrize("request_value", ["cuda:1", "cuda:7", "CUDA", "cuda0"])
+def test_explicit_device_index_other_than_zero_is_rejected(
+    monkeypatch, tmp_path, request_value
+) -> None:
+    """R1-005：显式值不得被悄悄换成别的设备。
+
+    本 feature 的加载入口只会用 `cuda:0`（单卡，架构 §7.1 单卡时段调度）。之前
+    `KRONOS_DEVICE=cuda:1` 会被当成"以 cuda 开头"而解析成 `cuda:0`——编排以为模型在 1 号卡，
+    实际在 0 号卡，与 `ERR_UNKNOWN_DEVICE` 那条"显式值不得悄悄换"的判断自相矛盾。
+    """
+    signal = _make_signal(monkeypatch, tmp_path, request_value)
+    calls, _ = _install_fakes(monkeypatch, cuda_version="13.0", cuda_available=True)
+
+    with pytest.raises(RuntimeError, match=re.escape(kronos_real.ERR_UNKNOWN_DEVICE)):
+        _load(signal)
+    assert calls == []
+
+
+@pytest.mark.parametrize("request_value", ["cuda", "cuda:0"])
+def test_explicit_cuda_zero_forms_are_accepted(monkeypatch, tmp_path, request_value) -> None:
+    """`cuda` 与 `cuda:0` 是同一张卡的两种写法，都接受。"""
+    signal = _make_signal(monkeypatch, tmp_path, request_value)
+    _, devices = _install_fakes(monkeypatch, cuda_version="13.0", cuda_available=True)
+
+    _load(signal)
+
+    assert devices == ["cuda:0"]
+
+
+def test_device_keeps_last_loaded_value_after_unload(monkeypatch, tmp_path) -> None:
+    """R1-006：卸载后 `device` 仍报上次加载的设备，且这是**有意**的（spec §5 已澄清）。
+
+    置回 `cpu` 会让 F009 的显存探测按 CPU 口径返回"确定为 0 且可读"，把整卡上其他租户
+    占用的显存谎报成 0——比保留旧值危险。判"是否加载"看 `model_loaded`，不要看 `device`。
+    """
+    signal = _make_signal(monkeypatch, tmp_path, "cuda")
+    _install_fakes(monkeypatch, cuda_version="13.0", cuda_available=True)
+    _load(signal)
+    assert signal.status().device == "cuda:0"
+
+    signal.unload()
+
+    status = signal.status()
+    assert status.loaded is False, "卸载后必须如实报未加载"
+    assert status.device == "cuda:0", "device 保留上次加载设备（供 F009 选显存口径）"

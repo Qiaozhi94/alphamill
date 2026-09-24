@@ -410,17 +410,27 @@ def test_night_slot_journey(gpu_instance) -> None:
 
     stopped = _lifecycle("POST", "stop")
     assert stopped["state"] == "stopped", stopped
-    after_stop = _used_mib()
-    assert after_stop < resident, f"stop 后显存未下降: {resident} -> {after_stop}"
-    free = _free_mib()
-    assert free >= TRAINING_VRAM_BUDGET_MIB, (
-        f"卸载后可用显存 {free} MiB < 训练预算 {TRAINING_VRAM_BUDGET_MIB} MiB"
-    )
-    # 模拟夜槽取锁：卸载态下推理走兜底，不得重新加载模型
-    assert _predict()["source"] != "kronos"
+    # stop 之后的任何失败都必须先把实例恢复常驻再抛出（R1-003）：复用模式下这就是执行机
+    # 的运营实例，留在 desired=stopped 会让白天 /predict 一直返回兜底信号而无人察觉，
+    # 而 fixture 在复用模式下（有意）不做清理。
+    try:
+        after_stop = _used_mib()
+        assert after_stop < resident, f"stop 后显存未下降: {resident} -> {after_stop}"
+        free = _free_mib()
+        assert free >= TRAINING_VRAM_BUDGET_MIB, (
+            f"卸载后可用显存 {free} MiB < 训练预算 {TRAINING_VRAM_BUDGET_MIB} MiB"
+        )
+        # 模拟夜槽取锁：卸载态下推理走兜底，不得重新加载模型
+        assert _predict()["source"] != "kronos"
+    finally:
+        try:
+            recovered = _lifecycle("POST", "restore")
+        except Exception as exc:  # 不吞原始断言：恢复失败只打印，交由原异常继续冒泡
+            print(f"\n[warn] 旅程收尾 restore 失败，实例可能仍处 stopped: {exc}")
+        else:
+            print(f"\n[cleanup] 旅程收尾 restore -> {recovered}")
 
-    restored = _lifecycle("POST", "restore")
-    assert restored["state"] == "running", restored
+    assert _lifecycle("GET", "status")["state"] == "running"
     assert _predict()["source"] == "kronos"
     print(
         f"\n[evidence] journey resident_mib={resident} after_stop_mib={after_stop} free_mib={free}"
