@@ -180,8 +180,16 @@ def test_load_rejects_unknown_key_even_with_valid_digest(tmp_path) -> None:
 
 
 def test_load_missing_artifact_fails_closed(tmp_path) -> None:
-    with pytest.raises(UniverseArtifactError, match="不可读"):
+    """「不存在」必须是 `E_UNIVERSE_NOT_FOUND`（与未知 definition id 同码），不是内容类错误。
+
+    检视 R1-004：原先缺失文件经 `read_bytes` 归到 `E_UNIVERSE_ARTIFACT`，于是「还没发布」
+    与「已损坏」共用一码，脚本无法区分；`cli.py`/`errors.py`/design §4 登记的是 NOT_FOUND。
+    """
+    from alphamill.data_bridge.universe.errors import UniverseNotFoundError
+
+    with pytest.raises(UniverseNotFoundError) as excinfo:
         load_artifact("sha256:" + "0" * 64, tmp_path)
+    assert excinfo.value.code == "E_UNIVERSE_NOT_FOUND"
 
 
 def test_artifact_path_rejects_bad_digest(tmp_path) -> None:

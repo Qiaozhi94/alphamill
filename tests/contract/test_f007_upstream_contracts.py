@@ -2,8 +2,10 @@
 
 这些测试固定的是 **F007 消费者侧**契约（字段名与枚举）。F003/F008 尚在开发中，
 差异会在这里先变红。覆盖：universe artifact digest/canonical/schema 校验与
-`universe_at(T)` 时点语义；生成侧只消费 completed 运行、拒绝者仍入分母、未知原因码失败关闭；
-算子能力登记表默认拒绝；协同池无豁免；信号适配不改数值与 `source=placeholder` 分层。
+`universe_at(T)` 时点语义；**F008 发布器产出的字节按同一 digest 被 F007 消费面装载**
+（两侧 canonical 序列化各自独立实现，跨实现漂移在此失败关闭）；生成侧只消费 completed
+运行、拒绝者仍入分母、未知原因码失败关闭；算子能力登记表默认拒绝；协同池无豁免；
+信号适配不改数值与 `source=placeholder` 分层。
 """
 
 from __future__ import annotations
@@ -16,6 +18,9 @@ from pathlib import Path
 import pytest
 
 from alphamill.data_bridge import paths
+from alphamill.data_bridge.symbol_map import derive_pairs
+from alphamill.data_bridge.universe.artifact import publish_artifact
+from alphamill.data_bridge.universe.membership import TradabilityInterval
 from alphamill.evaluation import upstream_contracts as uc
 from alphamill.evaluation.universe_ledger import UniverseMember, publish_universe
 
@@ -198,6 +203,128 @@ def test_universe_artifact_dir_is_lake_metadata(tmp_path):
 def test_default_lake_root_matches_data_bridge(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHAMILL_LAKE_DIR", str(tmp_path))
     assert uc.universe_artifact_dir() == paths.lake_root() / "_metadata" / "universes"
+
+
+# F008 生产侧命名空间：同一 `db_symbol` 在 spot 与 perp 两个湖内命名空间成对登记
+# （design §3 定稿口径），`-PERP` 后缀由生产侧 `symbol_map.derive_pairs` 加一次。
+BTC_SPOT = derive_pairs("BTC/USDT", "spot")[0]
+BTC_PERP = derive_pairs("BTC/USDT:USDT", "perp")[0]
+ETH_PERP = derive_pairs("ETH/USDT:USDT", "perp")[0]
+SOL_PERP = derive_pairs("SOL/USDT:USDT", "perp")[0]
+F008_MICRO_FROM = datetime(2026, 7, 10, 0, 0, 0, 500_000, tzinfo=UTC)
+
+# F008 发布器应当落盘的 canonical 文档：按 (lake_pair, valid_from) 排序、时间戳为
+# UTC ISO-8601（`Z`、微秒保留 6 位）、`valid_to=null` 表示当前有效。
+F008_DOCUMENT = {
+    "schema_version": 1,
+    "members": [
+        {"lake_pair": "BTC-USDT", "valid_from": "2026-07-10T00:00:00Z", "valid_to": None},
+        {
+            "lake_pair": "BTC-USDT-PERP",
+            "valid_from": "2026-07-10T00:00:00Z",
+            "valid_to": "2026-08-15T00:00:00Z",
+        },
+        {"lake_pair": "ETH-USDT-PERP", "valid_from": "2026-07-01T00:00:00Z", "valid_to": None},
+        {
+            "lake_pair": "SOL-USDT-PERP",
+            "valid_from": "2026-07-10T00:00:00.500000Z",
+            "valid_to": None,
+        },
+    ],
+}
+
+
+def _f008_intervals() -> list[TradabilityInterval]:
+    """F008 生产侧发布器入参：刻意乱序，排序由发布器负责。"""
+    return [
+        TradabilityInterval(lake_pair=ETH_PERP, valid_from=ETH_FROM, valid_to=None),
+        TradabilityInterval(lake_pair=BTC_PERP, valid_from=BTC_FROM, valid_to=BTC_TO),
+        TradabilityInterval(lake_pair=BTC_SPOT, valid_from=BTC_FROM, valid_to=None),
+        TradabilityInterval(lake_pair=SOL_PERP, valid_from=F008_MICRO_FROM, valid_to=None),
+    ]
+
+
+def test_f008_publisher_digest_is_loadable_by_f007(tmp_path):
+    """F008 发布器产出的字节必须能按同一 digest 被 F007 消费面装载。
+
+    两侧 canonical 序列化是刻意各自独立实现（发布侧 `data_bridge/universe/canonical.py`、
+    消费侧 `evaluation/universe_ledger.py`，互不 import）：本用例是把 **F008 发布字节** 交给
+    **F007 只读加载** 的唯一一处，任一侧键序/分隔符/时间格式/尾随字节漂移都在这里变红，
+    而不是等到 `--universe` 路径拒载 artifact。
+    """
+    digest, target = publish_artifact(_f008_intervals(), tmp_path)
+
+    # 1) stdlib 独立复算 digest 与 canonical 字节（不 import 任何一侧的规范化模块）
+    payload = target.read_bytes()
+    assert digest == "sha256:" + hashlib.sha256(payload).hexdigest()
+    assert payload == _independent_payload(F008_DOCUMENT)
+    assert target == _artifact_path(tmp_path, digest)
+
+    # 2) F007 侧按同一 digest 加载：成员区间逐条一致
+    ledger = uc.load_universe(digest, tmp_path)
+    assert ledger.digest == digest
+    assert ledger.schema_version == uc.UNIVERSE_SCHEMA_VERSION
+    assert [(m.lake_pair, m.valid_from, m.valid_to) for m in ledger.members] == [
+        (BTC_SPOT, BTC_FROM, None),
+        (BTC_PERP, BTC_FROM, BTC_TO),
+        (ETH_PERP, ETH_FROM, None),
+        (SOL_PERP, F008_MICRO_FROM, None),
+    ]
+    # pair 归一化只发生在 F008 生产侧：F007 按 `lake_pair` 原样比对，不二次加 `-PERP`
+    # （否则会读成 `BTC-USDT-PERP-PERP`，整个 perp 命名空间静默漏掉）
+    assert (BTC_SPOT, BTC_PERP, ETH_PERP, SOL_PERP) == (
+        "BTC-USDT",
+        "BTC-USDT-PERP",
+        "ETH-USDT-PERP",
+        "SOL-USDT-PERP",
+    )
+
+    # 3) universe_at(T) 与 F008 台账语义一致：半开区间 [valid_from, valid_to)
+    assert ledger.universe_at(T0) == ("ETH-USDT-PERP",)
+    assert ledger.universe_at(BTC_FROM - timedelta(seconds=1)) == ("ETH-USDT-PERP",)
+    assert ledger.universe_at(BTC_FROM) == (  # 左闭（SOL 尚差 0.5 秒，见微秒用例）
+        "BTC-USDT",
+        "BTC-USDT-PERP",
+        "ETH-USDT-PERP",
+    )
+    assert ledger.universe_at(BTC_TO - timedelta(seconds=1)) == (
+        "BTC-USDT",
+        "BTC-USDT-PERP",
+        "ETH-USDT-PERP",
+        "SOL-USDT-PERP",
+    )
+    assert ledger.universe_at(BTC_TO) == ("BTC-USDT", "ETH-USDT-PERP", "SOL-USDT-PERP")  # 右开
+    assert ledger.universe_at(T_MID) == (
+        "BTC-USDT",
+        "BTC-USDT-PERP",
+        "ETH-USDT-PERP",
+        "SOL-USDT-PERP",
+    )
+    assert ledger.universe_at(T3) == ("BTC-USDT", "ETH-USDT-PERP", "SOL-USDT-PERP")
+    # 微秒精度逐位保留：截断会把 SOL 的生效边界整体前移
+    assert ledger.universe_at(F008_MICRO_FROM - timedelta(microseconds=1)) == (
+        "BTC-USDT",
+        "BTC-USDT-PERP",
+        "ETH-USDT-PERP",
+    )
+    assert ledger.universe_at(F008_MICRO_FROM) == (
+        "BTC-USDT",
+        "BTC-USDT-PERP",
+        "ETH-USDT-PERP",
+        "SOL-USDT-PERP",
+    )
+
+    # 4) `IR-002` 冻结 `ensure_ascii=False`：非 ASCII 成员名逐字进字节（不写成 \uXXXX）。
+    #    两侧任一方改转义设置，消费侧的 canonical 复算就会与发布字节不符而拒载。
+    wide_digest, wide_target = publish_artifact(
+        [TradabilityInterval(lake_pair="币安-BTC-USDT", valid_from=T0, valid_to=None)],
+        tmp_path,
+    )
+    wide_payload = wide_target.read_bytes()
+    assert "币安-BTC-USDT".encode() in wide_payload
+    assert b"\\u" not in wide_payload
+    assert wide_digest == "sha256:" + hashlib.sha256(wide_payload).hexdigest()
+    assert uc.load_universe(wide_digest, tmp_path).universe_at(T0) == ("币安-BTC-USDT",)
 
 
 # ---------- F003 生成侧 ----------
@@ -386,3 +513,14 @@ def test_non_numeric_signal_is_rejected():
             adapter_version="v1",
             signal_column="signal",
         )
+
+
+def test_load_universe_rejects_malformed_digest_before_io(tmp_path) -> None:
+    """`sha256:` 前缀不够：路径成分必须在拼路径前被拒（检视 R1-004）。
+
+    `sha256:../escape` 若只查前缀，`..` 会成为路径成分——先读 artifact 目录外的文件、再被
+    digest 比对拒掉。消费侧的校验规则与发布侧 `artifact.is_digest()` 一致（各自独立实现）。
+    """
+    for bad in ("sha256:../escape", "sha256:" + "Z" * 64, "sha256:short", "not-a-digest"):
+        with pytest.raises(uc.UpstreamContractError):
+            uc.load_universe(bad, tmp_path)

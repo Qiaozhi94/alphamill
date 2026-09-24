@@ -187,9 +187,22 @@ def publish_universe(members: Iterable[UniverseMember], lake_root: Path | None =
     return digest
 
 
+def _is_digest(value: Any) -> bool:
+    """`sha256:<64hex>` 严格校验（检视 R1-004）。
+
+    只查前缀就拼路径会让 `sha256:../x` 成为路径成分、先读到 artifact 目录外的文件再被 digest
+    比对拒绝——本模块**独立实现**该校验（不 import 发布侧，两侧互为对照），与发布侧
+    `artifact.is_digest()` 同规则。
+    """
+    if not isinstance(value, str) or not value.startswith(DIGEST_PREFIX):
+        return False
+    body = value[len(DIGEST_PREFIX) :]
+    return len(body) == 64 and all(char in "0123456789abcdef" for char in body)
+
+
 def load_universe(digest: str, lake_root: Path | None = None) -> UniverseLedger:
     """按显式 digest 只读加载；digest 缺失/不符、未知键或版本不符即失败关闭。"""
-    if not isinstance(digest, str) or not digest.startswith(DIGEST_PREFIX):
+    if not _is_digest(digest):
         raise UpstreamContractError(f"universe digest 缺失或格式非法: {digest!r}")
     path = universe_artifact_dir(lake_root) / f"{digest}.json"
     if not path.is_file():
