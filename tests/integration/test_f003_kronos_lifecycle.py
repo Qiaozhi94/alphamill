@@ -212,31 +212,43 @@ def test_busy_rejects_conflicting_action() -> None:
 
 
 def test_timeout_envelope_is_not_a_terminal_failure() -> None:
-    """服务端 deadline 到点 → `E_TIMEOUT`，且动作仍在进行（operation 非空）。
+    """服务端 deadline 到点 → `E_TIMEOUT`，动作**不被中断**，且同窗口冲突动作得 `E_BUSY`。
 
-    以**客户端**极短超时无法验证该语义（那只会得到 OSError）——服务端 deadline 由
-    `KRONOS_LIFECYCLE_*_TIMEOUT_S` 承载。本用例只在实例被配成短 deadline 时才有意义，
-    因此以 `KRONOS_EXPECT_SHORT_DEADLINE=1` 显式开启，默认跳过而不是假绿。
+    用 **restore** 制造窗口而不是 stop：CPU 实例上卸载是瞬时的，拿 1ms 的 stop deadline
+    去撞它是竞态取证——实测同一实例上会时红时绿（代码检视 R3-001）。加载模型是秒级动作，
+    配一个极短的 restore deadline 就能稳定观测到"仍在进行"。
+
+    以**客户端**极短超时验证不了该语义（那只会得到 OSError）：deadline 归服务端，由
+    `KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S` 承载。因此本用例以
+    `KRONOS_EXPECT_SHORT_DEADLINE=1` 显式开启，默认跳过而不是假绿。
     """
     _require_ready()
     if os.getenv("KRONOS_EXPECT_SHORT_DEADLINE", "").lower() not in {"1", "true", "yes"}:
         pytest.skip(
-            "需把实例的 KRONOS_LIFECYCLE_STOP_TIMEOUT_S 配成短值并设 "
+            "需把实例的 KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S 配成短值并设 "
             "KRONOS_EXPECT_SHORT_DEADLINE=1 才能观测 E_TIMEOUT（F009 AC-011）"
         )
 
-    resp = SESSION.post(
-        f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP
-    ).json()
+    SESSION.post(f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
+    _wait_idle()
 
+    resp = SESSION.post(
+        f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
+    ).json()
     assert resp == {"error": "E_TIMEOUT"}, resp
 
-    # "不中断"的可判定证据：动作最终落地在与 desired 一致的稳定态，而不是被砍掉。
-    # （窗口本身未必抓得到——CPU 实例上卸载是瞬时的，超时返回时可能已经完成。）
+    # 同一窗口：动作仍在进行（operation 非空、state=transitional），冲突动作立即被拒。
+    during = _status()
+    assert during["operation"] is not None, f"E_TIMEOUT 不是终态: {during}"
+    assert during["state"] == "transitional", during
+    busy = SESSION.post(
+        f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP
+    ).json()
+    assert busy == {"error": "E_BUSY"}, busy
+
+    # 不中断的可判定证据：动作最终落在与 desired 一致的稳定态，而不是被砍掉。
     final = _wait_idle()
-    assert final["state"] == "stopped", f"超时不得中断后台动作: {final}"
-    assert final["desired"] == "stopped"
-    SESSION.post(f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE)
+    assert final["state"] == "running" and final["desired"] == "running", final
 
 
 def test_night_slot_journey() -> None:
