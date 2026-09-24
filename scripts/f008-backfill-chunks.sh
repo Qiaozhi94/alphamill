@@ -11,6 +11,7 @@
 #   MAX_CHUNKS=1 bash scripts/f008-backfill-chunks.sh 1    # 只跑一片（人工逐片放行）
 #   RUN_ID=<run_id> MAX_CHUNKS=1 bash scripts/f008-backfill-chunks.sh 1   # 续跑同一份记录
 #   MIN_INTERVAL=0.5 bash scripts/f008-backfill-chunks.sh 1               # 回退到保守节奏
+#   BACKFILL_FETCH_LIMIT=500 bash scripts/f008-backfill-chunks.sh 1     # 改每请求 K 线数（默认 1000）
 #
 # 限速（`--min-interval`，默认 0.2s）：`klines limit=1000` 单请求权重 4、配额 6000/分钟/IP，
 # 0.2s ⇒ 5 请求/秒 ⇒ 1200 权重/分 = 配额的 20%（采集器另占约 12 权重/分，可忽略）。
@@ -33,7 +34,6 @@ START="${START:-2024-09-10T00:00:00Z}"
 END="${END:-2026-09-10T15:52:00Z}"
 CHUNK_MINUTES="${CHUNK_MINUTES:-30}"
 MAX_CHUNKS="${MAX_CHUNKS:-96}"          # 96 × 30min = 48h 上限
-FETCH="${FETCH_LIMIT:-1000}"
 MIN_INTERVAL="${MIN_INTERVAL:-0.2}"     # 见上「限速」；0.5 = 回退保守值
 LOG_DIR="$REPO_F008/reports/backfill"
 mkdir -p "$LOG_DIR"
@@ -43,6 +43,10 @@ set -a
 . "$PROD/deployment/.env"
 set +a
 cd "$REPO_F008"
+
+# 必须在加载 deployment/.env **之后**取值，且用独立命名空间：该 .env 里的 `FETCH_LIMIT=5`
+# 是给采集器的，同名会把回填打成 5 根/请求（2026-09-24 实测：3,402 批只推进 17,005 行）。
+FETCH="${BACKFILL_FETCH_LIMIT:-1000}"
 
 # RUN_ID 可由环境传入以续跑同一份 BackfillRun（人工逐片放行时用）
 RUN_ID="${RUN_ID:-}"
