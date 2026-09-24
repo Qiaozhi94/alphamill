@@ -50,5 +50,5 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 
 - F003 AlphaGen vendor 与可插拔生成器平面（v0.2, developing）→ `docs/features/0.2/F003-alphagen-vendor/`
 - F008 宇宙扩容与 point-in-time 宇宙台账（v0.2, developing）→ `docs/features/0.2/F008-universe-expansion/`
-- F009 Kronos 服务生命周期控制面端点（v0.2, developing）→ `docs/features/0.2/F009-kronos-lifecycle-endpoints/`
+- F009 Kronos 服务生命周期控制面端点（v0.2, code-reviewing）→ `docs/features/0.2/F009-kronos-lifecycle-endpoints/`
 - F010 Kronos GPU 推理基座（v0.2, developing）→ `docs/features/0.2/F010-kronos-gpu-runtime/`

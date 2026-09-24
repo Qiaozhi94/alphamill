@@ -2,14 +2,14 @@
 kind: feature
 id: F009
 version: "0.2"
-status: developing
+status: code-reviewing
 branch: feat/F009-kronos-lifecycle-endpoints
 gate_version: 1
 related_features: [F003, F004, F010]
 topics: [kronos, lifecycle, control-plane, gpu-slot, m2]
 doc_kind: spec
 created: 2026-09-20
-updated: 2026-09-20
+updated: 2026-09-24
 ---
 
 # F009：Kronos 服务生命周期控制面端点
@@ -411,18 +411,31 @@ stopped  -> stopped  stop 幂等重入；restore 失败（E_UNAVAILABLE）；停
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `IR-001`, `IR-003`): `status` 返回八字段；模型加载失败后与动作进行中仍可达；**动作执行窗口内返回 `state=transitional` 且 `operation` 非空**（取值域外的值或缺字段即判红）；读数不可得时为成功响应且 `vram_readable=false`/`vram_bytes=null`、不含 `error` 键；探测卡住时仍在服务端 deadline 内返回 — tests: `tests/unit/test_f009_lifecycle_contract.py`
-- [ ] **AC-002** (`FR-002`, `NFR-004`): `stop` 置 `desired=stopped`、卸载模型并释放缓存、返回 `state=stopped` 与 `vram_bytes`；重复调用不报错；进程存活（`status`/`restore` 随后可达）；**卸载失败返回 `E_UNLOAD_FAILED`，且丢引用前失败落回 `running`、丢引用后（含 `empty_cache` 抛错）保持 `stopped`，两种情况 `operation` 均已清空** — tests: `tests/unit/test_f009_lifecycle_contract.py`
-- [ ] **AC-003** (`FR-003`): `desired=stopped` 期间连续 `/predict` 与 `/predict_batch` 均走兜底路径、来源不标 `kronos`，且 `model_loaded` 始终 false、`state` 始终 `stopped` — tests: `tests/unit/test_f009_stopped_admission.py`
-- [ ] **AC-004** (`FR-004`): `restore` 重新加载返回 `state=running`，重复调用不重复加载；加载失败返回 `E_UNAVAILABLE`、不伪报 `running`、**进程不退出** — tests: `tests/unit/test_f009_lifecycle_contract.py`
-- [ ] **AC-005** (`FR-005`, `IR-002`, `IR-004`): 版本不匹配与头缺失均以恰为单键的 `{"error": "E_UNSUPPORTED_VERSION"}` 拒绝；成功响应不含 `error`；空体与 `{}` 放行；含额外参数的请求体以 `E_BAD_REQUEST` 被拒且不执行动作（两个错误码互不代用） — tests: `tests/unit/test_f009_lifecycle_errors.py`
-- [ ] **AC-006** (`FR-006`): 动作进行中时冲突动作立即 `E_BUSY`；超时返回 `E_TIMEOUT` 且 `operation` 仍非空、后台不被中断；动作完成后 `operation` 转 `null` 且 `state` 与 `desired` 一致；**对卸载前 / 丢引用后 / `empty_cache` 三个注入点分别断言响应、`desired`、`model_loaded`、`operation`**，任一注入点停在过渡态即判红 — tests: `tests/unit/test_f009_lifecycle_errors.py`
-- [ ] **AC-007** (`FR-007`, `NFR-005`): 显存探测按 `mem_get_info` → `nvidia-smi` 顺序回退且不查进程列表；`KRONOS_VRAM_PROBE_MODE` 的三个合法值逐个生效（`torch`/`nvidia_smi` 不回退到另一来源）、`KRONOS_VRAM_PROBE_TIMEOUT_S` 生效且探测超时按读数不可得处理、status 不超过服务端 deadline；五个变量的非法值一律启动期判红不静默回退 — tests: `tests/unit/test_f009_vram_probe.py`
-- [ ] **AC-008** (`TR-001`, `TR-002`, `TR-003`): stop/restore 各写一行含 `operation_id` 的结构化日志；超时后的迟到完成补写同 id 收尾行；字段集与 TR-001 一致且不含主机路径或凭据 — tests: `tests/unit/test_f009_lifecycle_logging.py`
-- [ ] **AC-009** (`NFR-001`, `NFR-003`, `IR-005`): mock 实例不注册 `/lifecycle/*`（返回 404）且默认镜像 `import torch` 仍判红；compose 不把控制面端口发布到 `0.0.0.0` — tests: `tests/integration/test_f009_lifecycle_deployment.py`
-- [ ] **AC-010** (`FR-009`, `SC-004`): F003 客户端对三个动作分别设置 socket deadline，且逐个**严格大于**对应服务端 deadline（缺省 5+5 / 60+5 / 120+5）；**只要本轮发出过 `stop`**（含 `E_TIMEOUT`、其他错误、连接中断），正常结束、取锁失败、运行异常三条退出路径都恰好调用一次 `restore`；`state=transitional` 判 fail-closed；"已释放"判定含训练预算条件（与 `vram_limit_gb` 同源、未声明即不可确认）且 `vram_readable=false` 单独记 reason。变异证明：把恢复条件改回"只在同步确认 stopped 时"、去掉 deadline 余量、去掉预算判据、忽略 `vram_readable` 各自判红 — tests: `tests/unit/test_f003_gpu_slot.py`、`tests/unit/test_f003_cli_contract.py`
-- [ ] **AC-011** (`FR-008`, `SC-003`): 执行机上 `tests/integration/test_f003_kronos_lifecycle.py` 的控制面语义用例 0 xfailed 通过，模块级 `xfail(strict=True)` 已移除，补齐 `E_BUSY`/`E_TIMEOUT`/额外参数用例（额外参数断言 `E_BAD_REQUEST`，不得是 `E_UNSUPPORTED_VERSION`） — tests: `tests/integration/test_f003_kronos_lifecycle.py`
-- [ ] **AC-012** (`SC-005`, `NFR-006`): 显存真实下降的判据以机器可判定断言落盘（读数下降，且卸载后可用显存达到训练预算 `vram_limit_gb`），以 `xfail(strict=True)` 标注且在无 GPU 环境下确为 xfail 而非 XPASS。**本 AC 到此为止即算满足**——解除先红态与真实显存证据归 F010 的 AC-009/T011，本 feature 不以 F010 的完成为完成条件（R4-003）。断言须落在独立载体：放进 `test_f003_kronos_lifecycle.py` 会与 F003 T033「该文件 0 xfailed」的机器门禁互相拆台（`--runxfail` 使先红态按真失败计） — tests: `tests/integration/test_f009_vram_release.py`
+- [x] **AC-001** (`FR-001`, `IR-001`, `IR-003`): `status` 返回八字段；模型加载失败后与动作进行中仍可达；**动作执行窗口内返回 `state=transitional` 且 `operation` 非空**（取值域外的值或缺字段即判红）；读数不可得时为成功响应且 `vram_readable=false`/`vram_bytes=null`、不含 `error` 键；探测卡住时仍在服务端 deadline 内返回 — tests: `tests/unit/test_f009_lifecycle_contract.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：`test_f009_lifecycle_contract.py` 13 passed：八字段齐备、动作窗口内 transitional + operation 非空、加载失败后仍可达、status 不被动作阻塞（<0.3s）；CPU 实例 vram_bytes=0/readable=true
+- [x] **AC-002** (`FR-002`, `NFR-004`): `stop` 置 `desired=stopped`、卸载模型并释放缓存、返回 `state=stopped` 与 `vram_bytes`；重复调用不报错；进程存活（`status`/`restore` 随后可达）；**卸载失败返回 `E_UNLOAD_FAILED`，且丢引用前失败落回 `running`、丢引用后（含 `empty_cache` 抛错）保持 `stopped`，两种情况 `operation` 均已清空** — tests: `tests/unit/test_f009_lifecycle_contract.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：stop 置 desired=stopped 并卸载、幂等、进程存活（status/restore 随后可达）；两个注入点落点分别为「回落 running」与「保持 stopped」，operation 均已清空
+- [x] **AC-003** (`FR-003`): `desired=stopped` 期间连续 `/predict` 与 `/predict_batch` 均走兜底路径、来源不标 `kronos`，且 `model_loaded` 始终 false、`state` 始终 `stopped` — tests: `tests/unit/test_f009_stopped_admission.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：`test_f009_stopped_admission.py` 5 passed + **变异判红**（去掉准入分支 → 3 failed）；执行机旅程：停机后 5 次 /predict 全部 source=placeholder、model_loaded 恒 false
+- [x] **AC-004** (`FR-004`): `restore` 重新加载返回 `state=running`，重复调用不重复加载；加载失败返回 `E_UNAVAILABLE`、不伪报 `running`、**进程不退出** — tests: `tests/unit/test_f009_lifecycle_contract.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：restore 幂等（已加载不重复 from_pretrained）；加载失败 E_UNAVAILABLE + desired 回落 stopped + 未抛 SystemExit
+- [x] **AC-005** (`FR-005`, `IR-002`, `IR-004`): 版本不匹配与头缺失均以恰为单键的 `{"error": "E_UNSUPPORTED_VERSION"}` 拒绝；成功响应不含 `error`；空体与 `{}` 放行；含额外参数的请求体以 `E_BAD_REQUEST` 被拒且不执行动作（两个错误码互不代用） — tests: `tests/unit/test_f009_lifecycle_errors.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：`test_f009_lifecycle_errors.py` 19 passed：缺头与版本不匹配均恰为单键信封；额外参数 4 例均 E_BAD_REQUEST 且未执行动作；成功响应无 error 键
+- [x] **AC-006** (`FR-006`): 动作进行中时冲突动作立即 `E_BUSY`；超时返回 `E_TIMEOUT` 且 `operation` 仍非空、后台不被中断；动作完成后 `operation` 转 `null` 且 `state` 与 `desired` 一致；**对卸载前 / 丢引用后 / `empty_cache` 三个注入点分别断言响应、`desired`、`model_loaded`、`operation`**，任一注入点停在过渡态即判红 — tests: `tests/unit/test_f009_lifecycle_errors.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：执行机实测：2.27s restore 期间并发 stop → E_BUSY，原动作返回 running；短 deadline 实例 stop → E_TIMEOUT，动作未中断、最终落点 stopped/desired=stopped、operation 转 null。**修复记录**：路由原为 async def 同步调用控制器，事件循环阻塞使单飞失效（并发 stop 被受理），改经 run_in_threadpool
+- [x] **AC-007** (`FR-007`, `NFR-005`): 显存探测按 `mem_get_info` → `nvidia-smi` 顺序回退且不查进程列表；`KRONOS_VRAM_PROBE_MODE` 的三个合法值逐个生效（`torch`/`nvidia_smi` 不回退到另一来源）、`KRONOS_VRAM_PROBE_TIMEOUT_S` 生效且探测超时按读数不可得处理、status 不超过服务端 deadline；五个变量的非法值一律启动期判红不静默回退 — tests: `tests/unit/test_f009_vram_probe.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：`test_f009_vram_probe.py` 21 passed：三级回退不查进程列表、单一来源不跨源、探测超时取配置与剩余预算较小者、五变量非法值逐条点名判红
+- [x] **AC-008** (`TR-001`, `TR-002`, `TR-003`): stop/restore 各写一行含 `operation_id` 的结构化日志；超时后的迟到完成补写同 id 收尾行；字段集与 TR-001 一致且不含主机路径或凭据 — tests: `tests/unit/test_f009_lifecycle_logging.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：`test_f009_lifecycle_logging.py` 6 passed：字段集白名单且顺序固定、含 operation_id、迟到完成补写 late_complete 同 id 行、无主机路径/凭据
+- [x] **AC-009** (`NFR-001`, `NFR-003`, `IR-005`): mock 实例不注册 `/lifecycle/*`（返回 404）且默认镜像 `import torch` 仍判红；compose 不把控制面端口发布到 `0.0.0.0` — tests: `tests/integration/test_f009_lifecycle_deployment.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：执行机 `test_f009_lifecycle_deployment.py` 10 passed：新镜像带控制面代码但 mock 注册路由数为 0（三端点 404）、默认镜像 import torch 退出码非零、compose 绑 127.0.0.1:8002 且 3 条端口变异判红
+- [x] **AC-010** (`FR-009`, `SC-004`): **服务端侧契约**——三个动作的 deadline 缺省值（5/60/120）与「客户端 deadline 必须严格大于同一动作的服务端 deadline（缺省 +5s 余量）」这条规则由本 feature 断言，含余量为 0 / 未知动作 / 服务端改配置后下限随之上移四类判红 — tests: `tests/unit/test_f009_client_edge_contract.py`
+  - **验收边界（代码检视 R1-006 裁决，2026-09-24）**：客户端实现的五项（分动作超时、训练预算与 `vram_readable` 分账、deadline 余量、`restore_required` 触发条件、`transitional` fail-closed）及其变异判红，载体是 `feat/F003-alphagen-vendor` 分支的 `test_f003_gpu_slot.py` / `test_f003_cli_contract.py`——它们依赖 F003 客户端代码，本 feature 分支上不存在，故不作为本 spec 的 tests 路径；交付边证据见 tasks T014/T021（60 passed + 五条变异逐一判红）。原写法把这两个路径直接写进 AC，会让 `code-reviewing` 状态下的规格门禁必红（AC tests 路径存在性在该状态强制）。
+  - 证据（2026-09-24）：本地载体 9 passed（先红：常量与函数未实现时 9 failed）；F003 侧 60 passed 与五条变异判红见 tasks T014/T021
+- [x] **AC-011** (`FR-008`, `SC-003`): 执行机上 `tests/integration/test_f003_kronos_lifecycle.py` 的控制面语义用例 0 xfailed 通过，模块级 `xfail(strict=True)` 已移除，补齐 `E_BUSY`/`E_TIMEOUT`/额外参数用例（额外参数断言 `E_BAD_REQUEST`，不得是 `E_UNSUPPORTED_VERSION`） — tests: `tests/integration/test_f003_kronos_lifecycle.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：执行机 8012：`--runxfail` 跑 test_f003_kronos_lifecycle.py → **6 passed / 0 xfailed**，模块级 xfail 已移除；额外参数用例断言恰为 E_BAD_REQUEST
+- [x] **AC-012** (`SC-005`, `NFR-006`): 显存真实下降的判据以机器可判定断言落盘（读数下降，且卸载后可用显存达到训练预算 `vram_limit_gb`），以 `xfail(strict=True)` 标注且在无 GPU 环境下确为 xfail 而非 XPASS。**本 AC 到此为止即算满足**——解除先红态与真实显存证据归 F010 的 AC-009/T011，本 feature 不以 F010 的完成为完成条件（R4-003）。断言须落在独立载体：放进 `test_f003_kronos_lifecycle.py` 会与 F003 T033「该文件 0 xfailed」的机器门禁互相拆台（`--runxfail` 使先红态按真失败计） — tests: `tests/integration/test_f009_vram_release.py`
+  - 证据（2026-09-23/24，hostname=qiaozhi-lt，device=cpu）：`test_f009_vram_release.py` 独立载体，判据为「读数下降 ∧ 卸载后可用显存 ≥ 训练预算」；不加 --runxfail 运行 → **1 xfailed 而非 XPASS**；解除条件与解除者写明 F010 AC-009/T011
 
 ## 7. 测试、依赖与决策
 

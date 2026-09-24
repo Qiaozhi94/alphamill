@@ -880,6 +880,39 @@
 - **裁决分布**：accepted 17 / partial 1 / rejected 0。**建议命中率**：18 条中 15 条 `fix_summary` 与 `suggested_fix` 实质一致；三条偏离都是往更彻底的方向走——R1-001 从"纳入或等待"具体化为立 F010 并配先红态纪律；R1-007 的判据同时写进了契约正文而不只是 AC；R2-003 的修复顺带给 `check_doc_consistency` 加了会判红的钉点。
 - **跨循环联动**：R1-006 与循环 14 的 R012 是同一条缺陷的两半（restore 所有权 / 分动作超时），由两个独立视角分别发现——代码检视从实现侧撞上"停了不恢复"，文档检视从契约侧看出"客户端没有 restore 且超时口径错"。这条互证说明两类检视不是重复劳动。
 
+## 循环 19：F009 Kronos 服务生命周期控制面端点 代码检视
+
+- report_type: code-review | round: 1（full-scan）→ 2（diff-only）→ 3（diff-only，封顶轮） | 状态: 闭环
+- 日期：2026-09-24 | 基线：`304b336`（F009 `code-reviewing`，分支 `feat/F009-kronos-lifecycle-endpoints`）→ 终基线见收口提交
+- 检视人：Claude Opus 5（同会话内先实现后检视，按 skill §8 显式切换视角逐条独立核对）| 裁决：owner（AC-010 验收边界一条）
+- 范围：源码 `lifecycle.py` / `lifecycle_api.py` / `lifecycle_config.py` / `vram.py` 四个新模块 + `kronos_real.py` / `server.py` / compose / `.env.example`，以及它们与架构 §7.1 生命周期契约的逐格一致性
+- 结论：10 条（3 高 / 4 中 / 3 低），全部关闭；其中 1 条为修复引入（`fix-regression`，自伤率 1/4 = 25% 按第 2 轮新发现计）。1 条 High 属"规格自身不可满足"（AC-010 把验收挂在另一分支的文件上），按 skill §7 升级为规格裁决。
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| R1-001 | 未预期异常逃出控制器，客户端拿到 HTTP 500 而不是单键信封，且 status 随之不可达 | 高 | 正确性 | 根因 | 原始编码 | fixed | 动作执行器把非 LifecycleError 异常按动作映射成契约码并收敛 desired；status 的探测异常按"读数不可得"吞掉 | 映射 `ACTION_FAILURE_CODE`（stop→E_UNLOAD_FAILED / restore→E_UNAVAILABLE）+ 收敛 desired；`_probe` 吞异常记为不可读；`finally` 观测段改为不可抛（否则顶替原始异常且日志断线） | tests/unit/test_f009_lifecycle_errors.py::test_unexpected_exception_still_returns_contract_envelope、::test_status_stays_reachable_when_probe_raises | 1 | 1 | unhandled-path-escapes-contract |
+| R1-006 | AC-010 把验收挂在 F003 分支的测试文件上，`code-reviewing` 状态下规格门禁必红 | 高 | 正确性 | 契约漂移 | 规格自身不可满足 | fixed | 把跨分支载体从 AC 的 tests 字段移出，改由本分支可跑的服务端侧契约载体承载，交付边记录留在 tasks | 拆验收边界（owner 裁决）：F009 新增 `SERVER_DEADLINES` / `client_deadline_floor()` 与 9 条断言只管服务端侧契约；客户端五项行为与变异判红仍由 `feat/F003-alphagen-vendor` 的 `test_f003_gpu_slot.py` / `test_f003_cli_contract.py` 承载，写进 AC-010 的边界说明 | tests/unit/test_f009_client_edge_contract.py（9 条） | 1 | 1 | cross-branch-evidence-unreachable |
+| R2-001 | 卸载已成功、只是随后读状态失败时谎报 E_UNLOAD_FAILED 并停在 transitional | 高 | 正确性 | 根因 | **修复引入** | fixed | 把"报告失败"与"卸载失败"分开；兜底收敛按事实而不是按动作方向 | `_stop_worker` 的卸载后读数步骤自带 try（失败只让 `vram_bytes=None`，动作仍算成功）；兜底网改为 `_converge_after_failure`，按"模型是否还在内存里"收敛，读不到时取 fail-closed 一侧（绝不声称已卸载，否则夜槽取锁会 OOM） | tests/unit/test_f009_lifecycle_errors.py::test_reporting_failure_after_successful_unload_is_not_a_failed_unload | 2 | 2 | error-path-lies-about-irreversible-step |
+| R1-002 | 冲突动作先做显存探测才判忙，探测卡住时 E_BUSY 会被拖到 probe_timeout | 中 | 正确性 | 根因 | 原始编码 | fixed | 把单飞判定移到探测之前：受理失败的路径不该碰设备 | 判忙前置；基线显存改在受理成功后才读（只服务日志行，不参与受理判定） | tests/unit/test_f009_lifecycle_errors.py::test_busy_is_immediate_and_does_not_touch_the_device | 1 | 1 | ordering-defeats-fast-path |
+| R1-003 | 迟到标记 `_timed_out` 的读写有竞态，且竞态发生时 operation id 永久泄漏 | 中 | 正确性 | 根因 | 原始编码 | fixed | add/discard 一律在 `_meta_lock` 内，且仅当 operation 仍非空时登记迟到 | 迟到记账与 operation 读写同锁；`add` 前确认动作仍在飞 | tests/unit/test_f009_lifecycle_errors.py::test_timeout_keeps_background_running_then_operation_clears | 1 | 2 | unsynchronized-bookkeeping |
+| R2-002 | 受理**之前**抛出的异常绕过控制器兜底网，端点仍会漏成 HTTP 500 | 中 | 正确性 | 根因 | 原始编码 | fixed | 在 wire 层收口这一类，而不是逐个路径堵漏 | wire 层加最后一道兜底（按端点映射 `ACTION_FAILURE_CODE`）；status 无失败码可用，改为如实降级 `model_loaded=false` / `device=unknown` / 读数不可得 | tests/unit/test_f009_lifecycle_errors.py::test_wire_layer_never_leaks_non_contract_response、::test_status_reports_unknown_instead_of_leaking_500 | 2 | 2 | unhandled-path-escapes-contract |
+| R2-003 | 非 cuda 且非 cpu 的设备名（空串/unknown）被按 CPU 实例报 0 且可读，即编造读数 | 中 | 正确性 | 根因 | 原始编码 | fixed | 把"确实是 0"与"读不到"在探测层就分开，不靠调用方补救 | 只有 `cpu`/`cpu:*` 报 0 且可读；其余非 cuda 设备一律 `readable=false`/`bytes=None`（source=unknown_device） | tests/unit/test_f009_vram_probe.py::test_non_cuda_non_cpu_device_is_unreadable_not_zero | 2 | 2 | fabricated-reading-masquerades-as-fact |
+| R3-001 | 用 1ms 的 stop deadline 取 E_TIMEOUT 证据是竞态的，同一实例上时红时绿 | 中 | 测试覆盖 | 根因 | 流程缺陷 | fixed | 改用慢动作制造窗口：卸载在 CPU 上瞬时，加载模型是秒级 | 集成用例改为 stop→等空闲→restore（配 `KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S=0.05`）取 E_TIMEOUT，同窗口顺带取 E_BUSY 与"不中断"的落点证据；连跑 3 次稳定通过 | tests/integration/test_f003_kronos_lifecycle.py::test_timeout_envelope_is_not_a_terminal_failure | 3 | 3 | flaky-evidence-from-racy-window |
+| R1-004 | `wait_idle` 是测试专用等待器，却留在生产控制器的公开面上 | 低 | 质量 | 根因 | 原始编码 | fixed | 明确它的用途与非契约地位（docstring + 不进 wire 层） | docstring 写明非契约地位、存在理由与客户端等价手段（轮询 `operation` 转 null） | —（文档性修复，无行为变更） | 1 | 1 | test-hook-in-production-api |
+| R1-005 | `E_TIMEOUT` 的服务端 deadline 无法在契约集成用例里默认取证，只能靠外部改配置 | 低 | 测试覆盖 | 症状 | 原始编码 | fixed | 保持现状但在 tasks/spec 写明取证方式，避免以后误读成"未覆盖" | tasks §0 补一条：E_TIMEOUT 须用短 deadline 实例 + `KRONOS_EXPECT_SHORT_DEADLINE=1`，E_BUSY 的窗口须用 restore 制造 | —（文档性修复） | 1 | 1 | — |
+
+**模式性教训**
+
+- **`unhandled-path-escapes-contract` 出现两次（R1-001、R2-002）**：契约面写得再细，只要"未预期异常"没有归口，客户端拿到的就是无 `error` 字段的 500——而按架构 §7.1，那会被读成"服务端未实现本契约"并转入回落探测，一次内部故障被误判成契约缺失。教训：**错误信封的完备性要在最外层收口一次**（wire 层按端点映射），而不是逐个内部路径堵漏；第一次修复只堵了 worker 内部，第二次才把类关掉。
+- **`fabricated-reading-masquerades-as-fact`（R2-003）与 F009 自己的设计原则同源**：spec 花了整节区分"读数不可得"与"确实是 0"，实现却在 `device` 非 cuda 时一律报 0/可读——即把"不知道"写成了"确定为零"。教训：凡是有"不可得"语义的字段，默认分支必须落在不可得那一侧，而不是落在看起来无害的 0。
+- **`error-path-lies-about-irreversible-step`（R2-001，本轮唯一自伤）**：兜底网按"动作方向"回滚期望态，而不是按"不可逆的一步是否已发生"。卸载丢引用之后回滚 running 是谎报——spec §5 早已写明"不可逆的一步之后只准前进"，修复时没有回读该不变量。教训：写兜底分支前先回读该动作的失败落点表，兜底不是"随便落在一个看起来安全的态"。
+- **`flaky-evidence-from-racy-window`（R3-001）**：取证手段本身有竞态时，"通过"不构成证据——同一实例上先红后绿，红绿都不可信。教训：制造观测窗口要用**量级确定**的慢动作（加载模型秒级），不要拿毫秒级 deadline 去撞瞬时动作。
+- **`origin` 分布**：original-coding 6、规格自身不可满足 1、fix-regression 1、流程缺陷 1、症状 1。**存活轮数**：R1 的 6 条中 5 条 1→1 当轮关闭、R1-003 跨到第 2 轮；R2 的 3 条当轮关闭；R3-001 当轮关闭。未触发不收敛升级协议（无 finding 连续 3 轮修不动）。
+- **裁决分布**：accepted 10 / partial 0 / rejected 0。**建议命中率**：10 条中 9 条实质一致；唯一偏离是 R1-005——建议"保持现状 + 写文档"，实际在第 3 轮发现该取证方式本身竞态（R3-001），改成了 restore 制造窗口。这说明"接受现状并写进文档"这类处置要警惕：文档化的是一个不稳的做法。
+- **执行机证据的时效性**：检视改了 wire 层之后，第 1/2 轮之前取的执行机证据（T022/T024）全部失效，收口前用新镜像重取（8012 正常 deadline + 8013 短 restore deadline 两台 CPU 实例）。教训：代码检视改动生产路径后，执行机证据必须重取，不能沿用改动前的"已通过"。
+- **跨分支交付边（R1-006）**：`validate_spec_lifecycle` 在 `code-reviewing`/`done` 状态强制 AC 的 tests 路径存在，这与"跨 feature 交付边在本 feature 内验收"的写法结构性冲突。裁决为拆边界——服务端侧契约归 F009、客户端行为归 F003 分支承载。这条模式（`cross-branch-evidence-unreachable`）以后凡是"本 feature 要验收另一分支的代码"都会撞上，立项时就该按此拆。
+
+
 ## 循环 18：F010 Kronos GPU 推理基座 规格文档检视
 
 - report_type: doc-review
