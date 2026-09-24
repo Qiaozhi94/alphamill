@@ -962,7 +962,7 @@ report_type: code-review · feature: F009 · status: closed · rounds: 1（full-
 
 ## 循环 20：F010 Kronos GPU 推理基座 代码检视
 
-report_type: code-review · feature: F010 · status: 检视收敛，待 CI · rounds: 1（full-scan）→ 2（diff-only）→ 3（diff-only，封顶轮）→ 收口核对 · 收口 CI: 待跑（CI 只在 push main / PR 时触发，收口时 `gh` 连不上 GitHub）
+report_type: code-review · feature: F010 · status: closed · rounds: 1（full-scan）→ 2（diff-only）→ 3（diff-only，封顶轮）→ 收口核对 · 收口 CI: 36034315951 绿（PR #6，py3.11 + py3.13）
 
 - 日期：2026-09-24～25 | 基线：`54f0f14`（F010 `code-reviewing`）→ 终基线 `bb0adf6`（分支 `feat/F010-kronos-gpu-runtime`）
 - 检视人：Claude Opus 5.5（独立会话，只检视不修复）| 取证机器：`qiaozhi-lt`（执行机，按 `hostname` 核对）
@@ -988,6 +988,8 @@ report_type: code-review · feature: F010 · status: 检视收敛，待 CI · ro
 | R2-005 | 旅程用例 stop 调用在 try 之外 | 低 | 正确性 | 根因 | 修复引入 | fixed | try 前移 | 同建议 | tests/integration/test_f010_gpu_runtime.py::test_night_slot_journey | 2 | 3 | — |
 | R2-006 | 修复提交 3 条 finding 合一 | 低 | 质量 | 根因 | 流程缺陷 | fixed | 一 finding 一 commit | 第 3 轮起按 finding 拆（R2-004/005 同函数合一，理由成立） | — | 2 | 3 | — |
 | R3-002 | healthcheck 白名单无变异锁（删规则仍全绿）；`assert True or …` 仍过门禁 | 低 | 测试覆盖 | 根因 | 修复引入 | fixed | `healthcheck.test` 等值断言 + 收窄 `pytest.raises` | 改为解析 assert 条件结构（两项 and、禁 or 短路与恒真项）+ 两条变异；检视方变异：删白名单规则 / 删 or 检查 / 删整段各判红 | tests/unit/test_f010_compose_gpu_contract.py::test_short_circuited_healthcheck_fails_the_gate、::test_healthcheck_whitelist_rule_is_covered_by_a_mutation | 3 | 收口 | red-for-wrong-reason |
+
+- 收口备注：`gh` 默认走本机代理 127.0.0.1:7897 时超时，去掉 *_proxy 环境变量直连 GitHub API 可用。
 
 **裁决记录**：#1 R1-002 partial（第 2 轮，剩余→R2-002，第 3 轮关闭）；#2 R1-007 partial（第 2 轮，剩余→R2-004，第 3 轮关闭；首轮建议里的 `--restart=no` 本身有缺陷）。
 
