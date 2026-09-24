@@ -83,7 +83,11 @@ def admit_pair(
     # 同一 db_symbol 写**两条湖内命名空间**：研究数据集 ohlcv_1m 是 spot（`BTC-USDT`），
     # derivatives_* 是 perp（`BTC-USDT-PERP`）；F003 的张量掩码按 lake_pair 过滤，
     # 少一条就会让对应数据集的分区被整片掩掉。
-    append_membership(conn, _membership_rows(result, valid_from, definition.universe_id))
+    pending = _pending_membership_rows(
+        conn, _membership_rows(result, valid_from, definition.universe_id)
+    )
+    if pending:
+        append_membership(conn, pending)
     steps.append(STEP_LEDGER)
 
     # 步骤 2：artifact 发布（库是真相源，湖内是它的内容寻址快照）
@@ -199,3 +203,20 @@ def _parse_listed(value: str | None) -> datetime | None:
 
 def all_admitted(results: Iterable[AdmissionOutcome]) -> tuple[str, ...]:
     return tuple(item.db_symbol for item in results if item.verdict == VERDICT_ACTIVE)
+
+def _pending_membership_rows(conn, rows: list[MembershipRow]) -> list[MembershipRow]:
+    """与台账对账，去掉 `(lake_pair, market_type, valid_from)` 已存在的行。
+
+    `append_membership` 的幂等**由调用方负责**（见其 docstring），而库侧触发器会拒绝
+    同一 pair 的重复/回填 `valid_from`：门禁复跑（同一 pair 同一上市日）会在第二步
+    追加时被拒（2026-09-24 实测：第二次 `gate` 在 BTC 上报「追加序非法」而整轮中断）。
+    已存在的成员关系本就是同一个事实，跳过追加即可；真正的变更（退市、改上市日）
+    走新区间。
+    """
+    existing: set[tuple[str, str, datetime]] = set()
+    for lake_pair in {row.lake_pair for row in rows}:
+        existing.update(
+            (row.lake_pair, row.market_type, row.valid_from)
+            for row in load_membership(conn, lake_pair=lake_pair)
+        )
+    return [row for row in rows if (row.lake_pair, row.market_type, row.valid_from) not in existing]

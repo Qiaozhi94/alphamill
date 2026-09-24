@@ -111,6 +111,36 @@ def test_admit_pair_runs_three_steps_in_order(seeded, f008_conn, tmp_path) -> No
     assert verdicts["BTC-USDT"].verdict == VERDICT_ACTIVE
 
 
+def test_admit_pair_is_idempotent_across_gate_reruns(seeded, f008_conn, tmp_path) -> None:
+    """回归（2026-09-24）：门禁复跑不得因重复追加台账行而中断。
+
+    第二次 `gate` 曾在 BTC 上报「`universe_membership` 追加序非法」整轮中断——库侧
+    触发器按设计拒绝重复/回填 `valid_from`，所以幂等必须由调用方按
+    `(lake_pair, market_type, valid_from)` 去重（`append_membership` 的契约）。
+    """
+    universe_id = _frozen_definition(tmp_path)
+    definition = load_definition(universe_id, tmp_path / "lake")
+    result = _active_result("BTC/USDT", "BTC-USDT")
+    kwargs = {
+        "definition": definition,
+        "result": result,
+        "lake_root": tmp_path / "lake",
+        "hostname": "qiaozhi-lt",
+        "listed_at": WINDOW_START,
+    }
+
+    first = admit_pair(f008_conn, **kwargs)
+    second = admit_pair(f008_conn, **kwargs)
+
+    assert second.steps == (STEP_LEDGER, STEP_ARTIFACT, STEP_ADMISSION)
+    assert second.artifact_digest == first.artifact_digest
+    rows = load_membership(f008_conn)
+    assert sorted((row.market_type, row.lake_pair) for row in rows) == [
+        ("perp", "BTC-USDT-PERP"),
+        ("spot", "BTC-USDT"),
+    ], "复跑不得产生重复台账行"
+
+
 def test_quarantined_pair_records_verdict_without_touching_ledger(
     seeded, f008_conn, tmp_path
 ) -> None:
