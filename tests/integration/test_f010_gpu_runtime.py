@@ -347,9 +347,10 @@ def test_explicit_cuda_without_cuda_fails_visible(gpu_instance, case: str, reaso
     port = "18012"
     _run(["docker", "rm", "-f", container], timeout=60)
     try:
-        # 后台起 + 显式 --restart=no：前台 `docker run` 的重启策略缺省本来就是 no、且返回时
-        # 容器已退出，那样写出来的"未重启""/health 不可达"两条断言是空断言（R1-007）。
-        # 现在容器活着的时候就去探 /health，退出后再探一次，两次结果都要符合契约。
+        # 后台起容器：前台 `docker run` 返回时容器已退出，"/health 不可达"那条断言恒真
+        # （R1-007）。**不写 --restart=no**：那样"未重启"同样恒真（R2-004）——重启策略由
+        # F004 的 compose 契约锁定（`restart: "no"`，见 test_f004_compose_profile_contract），
+        # 这里不重复断言它，只断言"加载失败的实例始终没进入可服务状态"。
         started = _run(
             [
                 "docker",
@@ -380,28 +381,22 @@ def test_explicit_cuda_without_cuda_fails_visible(gpu_instance, case: str, reaso
         )
         assert started.returncode == 0, f"{case}: 容器未起来: {started.stderr[-500:]}"
 
-        # 容器还活着的窗口内探一次：严格分支必须让服务**始终不进入可服务状态**，
-        # 而不是"先能答 /health 再退出"。
-        early_ok = None
+        # 容器存活的**每一轮**都探 /health，而不是只探首轮——只探一次的话"不可达"多半只
+        # 反映"服务还没开始监听"，而不是"它拒绝进入可服务状态"（R2-004）。重启策略不在这里
+        # 断言：F004 的 compose 契约已锁 `restart: "no"`，这里断言它等于恒真。
+        probes: list[object] = []
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
             state = _run(
-                [
-                    "docker",
-                    "inspect",
-                    "-f",
-                    "{{.State.Status}}|{{.State.ExitCode}}|{{.RestartCount}}",
-                    container,
-                ]
+                ["docker", "inspect", "-f", "{{.State.Status}}|{{.State.ExitCode}}", container]
             )
-            status_name, exit_code, restarts = state.stdout.strip().split("|")
-            if early_ok is None and status_name == "running":
-                try:
-                    early_ok = SESSION.get(f"http://127.0.0.1:{port}/health", timeout=2).status_code
-                except requests.RequestException:
-                    early_ok = "unreachable"
+            status_name, exit_code = state.stdout.strip().split("|")
             if status_name != "running":
                 break
+            try:
+                probes.append(SESSION.get(f"http://127.0.0.1:{port}/health", timeout=2).status_code)
+            except requests.RequestException:
+                probes.append("unreachable")
             time.sleep(1)
         else:
             pytest.fail(f"{case}: 120s 内容器未退出（严格分支没拦住？status={status_name}）")
@@ -410,20 +405,19 @@ def test_explicit_cuda_without_cuda_fails_visible(gpu_instance, case: str, reaso
         output = logs.stdout + logs.stderr
         assert int(exit_code) != 0, f"{case}: 退出码为 0，显式 cuda 拿不到 CUDA 却未失败"
         assert status_name == "exited", f"{case}: 终态应为 exited，实际 {status_name}"
-        assert int(restarts) == 0, f"{case}: 失败实例不得重启（RestartCount={restarts}）"
         assert "refusing to start" not in output, f"{case}: 预检未通过，严格分支未被执行"
         assert "[kronos-real] model load failed" in output, output[-1000:]
         assert reason in output, f"{case}: 日志缺失败文案 {reason!r}"
         assert "model loaded: device=cpu" not in output, f"{case}: 静默回落 cpu"
-        assert early_ok in (None, "unreachable"), (
-            f"{case}: 容器存活期间 /health 竟可达（HTTP {early_ok}）——"
+        assert all(p == "unreachable" for p in probes), (
+            f"{case}: 容器存活期间 /health 曾可达（探测序列 {probes}）——"
             "加载失败的实例不得进入可服务状态"
         )
         with pytest.raises(requests.RequestException):
             SESSION.get(f"http://127.0.0.1:{port}/health", timeout=3)
         print(
             f"\n[evidence] case={case} hostname={socket.gethostname()} exit={exit_code} "
-            f"restarts={restarts} health_while_running={early_ok}"
+            f"health_probes_while_running={probes}（restart 策略由 F004 compose 契约锁定）"
         )
     finally:
         _run(["docker", "rm", "-f", container], timeout=60)
@@ -459,12 +453,13 @@ def test_night_slot_journey(gpu_instance) -> None:
     else:
         assert resident > baseline, f"GPU 常驻显存应高于空载基线: {baseline} -> {resident}"
 
-    stopped = _lifecycle("POST", "stop")
-    assert stopped["state"] == "stopped", stopped
-    # stop 之后的任何失败都必须先把实例恢复常驻再抛出（R1-003）：复用模式下这就是执行机
-    # 的运营实例，留在 desired=stopped 会让白天 /predict 一直返回兜底信号而无人察觉，
-    # 而 fixture 在复用模式下（有意）不做清理。
+    # try 的起点必须在 **stop 调用之前**（R2-005）：stop 本身失败时模型可能已被丢弃
+    # （F009 的落点表：丢引用后保持 stopped），那种情况同样需要恢复。
+    # 复用模式下这就是执行机的运营实例，留在 desired=stopped 会让白天 /predict 一直返回
+    # 兜底信号而无人察觉，而 fixture 在复用模式下（有意）不做清理。
     try:
+        stopped = _lifecycle("POST", "stop")
+        assert stopped["state"] == "stopped", stopped
         after_stop = _used_mib()
         assert after_stop < resident, f"stop 后显存未下降: {resident} -> {after_stop}"
         free = _free_mib()
