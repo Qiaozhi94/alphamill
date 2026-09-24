@@ -25,6 +25,7 @@ updated: 2026-09-20
 - **mock 依赖面红线**：F004 NFR-001 的否证测试「默认镜像 `import torch` 判红」全程保持绿；torch / GPU 相关导入一律惰性化，控制面路由只在 real 实例注册。
 - **GPU 前置诚实纪律**：F010 落地前，凡依赖真实显存变化的结论一律标注未验证，不得以 CPU 实例上的通过充当证据（spec NFR-006）。
 - **状态写入口唯一**：状态流转一律经 `scripts/sdd_status.py --dry-run/--advance`，不手改 frontmatter，不手工编辑 `BACKLOG.md` 的派生行。
+- **`E_TIMEOUT` 的取证方式**（代码检视 R1-005）：服务端 deadline 缺省 60s/120s，CPU 实例上卸载是瞬时的，默认配置下**观测不到**超时。取证须另起一个把 `KRONOS_LIFECYCLE_STOP_TIMEOUT_S` 配成极短值（实测 0.001）的实例，并以 `KRONOS_EXPECT_SHORT_DEADLINE=1` 打开该用例；默认配置下它按 skip 处理，不是"未覆盖"。同理 `E_BUSY` 的窗口要用 `restore`（加载模型秒级）制造，用 `stop` 抓不到。
 
 ## 1. 前置条件
 

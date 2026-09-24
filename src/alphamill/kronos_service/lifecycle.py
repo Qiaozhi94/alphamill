@@ -296,10 +296,16 @@ class LifecycleController:
         ]
         self._emit(" ".join(parts))
 
-    # --- 测试与收尾辅助 -----------------------------------------------------
+    # --- 非契约辅助（不经 wire 层暴露） ------------------------------------
 
     def wait_idle(self, timeout: float | None = None) -> None:
-        """等待在飞动作真正结束（迟到完成的可观测落点）。"""
+        """等待在飞动作真正结束。**不是契约的一部分**，wire 层不暴露它。
+
+        存在理由：`E_TIMEOUT` 之后动作仍在后台跑，测试与进程收尾需要一个确定的
+        汇合点，否则只能轮询 `status().operation` 睡眠等待（既慢又易 flaky）。
+        客户端侧的等价手段仍是轮询 `operation` 转 `null`（FR-006），不要把这个
+        方法当成可依赖的外部接口。
+        """
         future = self._current
         if future is not None:
             with contextlib.suppress(Exception):

@@ -18,6 +18,15 @@ ENV_STOP_TIMEOUT = "KRONOS_LIFECYCLE_STOP_TIMEOUT_S"
 ENV_RESTORE_TIMEOUT = "KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S"
 
 
+#: 服务端三个动作的 deadline 缺省值（架构 §7.1 动作表）。客户端 socket deadline 另算，
+#: 且必须**严格更大**——两端同值时客户端先抛 OSError，服务端规范的 E_TIMEOUT 信封收不到
+#: （F009 FR-009 / 检视 R4-002）。
+SERVER_DEADLINES = {"status": 5.0, "stop": 60.0, "restore": 120.0}
+
+#: 客户端 deadline 相对服务端的缺省余量（秒）。
+CLIENT_DEADLINE_MARGIN_S = 5.0
+
+
 class ConfigError(ValueError):
     """配置非法：启动期抛出，消息点名变量（FR-007）。"""
 
@@ -67,3 +76,25 @@ def load_config(env: dict | None = None) -> LifecycleConfig:
         stop_timeout_s=_positive(env, ENV_STOP_TIMEOUT, 60.0),
         restore_timeout_s=_positive(env, ENV_RESTORE_TIMEOUT, 120.0),
     )
+
+
+def client_deadline_floor(
+    action: str,
+    *,
+    server_deadline_s: float | None = None,
+    margin_s: float = CLIENT_DEADLINE_MARGIN_S,
+) -> float:
+    """某个动作的**客户端** deadline 下限 = 服务端 deadline + 余量（FR-009）。
+
+    服务端侧只负责给出这条下限；真正设置 socket 超时的是 F003 客户端
+    （`kronos_offload.client_deadline`），其行为与变异判红在 F003 分支验收。
+    """
+    if action not in SERVER_DEADLINES:
+        raise ConfigError(f"未知动作 {action!r}，取值须为 {'|'.join(SERVER_DEADLINES)}")
+    if margin_s <= 0:
+        raise ConfigError(
+            f"客户端余量必须为正（实际 {margin_s}）：两端同值时客户端先超时，"
+            "服务端的 E_TIMEOUT 信封收不到"
+        )
+    base = SERVER_DEADLINES[action] if server_deadline_s is None else server_deadline_s
+    return base + margin_s
