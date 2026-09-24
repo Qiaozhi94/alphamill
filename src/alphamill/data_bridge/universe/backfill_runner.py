@@ -1,42 +1,42 @@
-"""分批回填编排：批次切分、断点续跑、逐 pair 隔离与 `BackfillRun` 落盘。
+"""分批回填编排：批次切分、断点续跑、逐 pair 隔离与 `BackfillRun` 落盘（`FR-003`/`DR-003`/T013）。
 
-（`FR-003` / `DR-003` / `NFR-002` / `AC-003` / `AC-010` / T013 / T014）
-
-三条结构性保证：**未冻结不得驱动**（入口先 `require_frozen()`）；**断点续跑**（每写完一个
-pair 就落盘 `BackfillRun`，重跑跳过已完成 pair，未完成的由 `backfill_progress.next_since`
-继续）；**失败隔离**（单 pair 失败只记自己的断点与错误分类，其他 pair 继续）。
+三条结构性保证：**未冻结不得驱动**（入口先 `require_frozen()`）；**断点续跑**（每写完一个 pair
+就落盘 `BackfillRun`，重跑跳过已完成 pair，未完成的由 `backfill_progress.next_since` 继续）；
+**失败隔离**（单 pair 失败只记自己的断点与错误分类，其他 pair 继续）。
 """
 
 from __future__ import annotations
 
 import dataclasses
-import json
 import socket
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from alphamill.data_bridge import paths
 from alphamill.data_bridge.collector import backfill_orchestrator as backfill
 from alphamill.data_bridge.collector.backfill_progress import current_cursor
 from alphamill.data_bridge.universe.batching import (
     DEFAULT_BATCH_SPLIT,
     PairPlan,
     plan_batch,
+    resume_mismatch,
     run_window_check,
     split_already_complete,
 )
 from alphamill.data_bridge.universe.canonical import utc_iso
 from alphamill.data_bridge.universe.cli_support import refresh_aggregates_after
 from alphamill.data_bridge.universe.definition import UniverseDef, require_frozen
-from alphamill.data_bridge.universe.errors import BackfillIncompleteError
-from alphamill.data_bridge.universe.storage import atomic_create
-
-SCHEMA_VERSION = 1
-_RUN_FILE = "run.json"
+from alphamill.data_bridge.universe.errors import BackfillIncompleteError, WindowError
+from alphamill.data_bridge.universe.event_sink import EventSink, backfill_event
+from alphamill.data_bridge.universe.run_record import (
+    SCHEMA_VERSION,
+    read_run_document,
+    run_dir,
+    write_run_document,
+)
 
 # 批次切分与窗口校验在 `batching.py`；这里 re-export 保持调用方导入路径不变。
 __all__ = [
@@ -50,7 +50,6 @@ __all__ = [
     "run_window_check",
 ]
 _DONE_STATUSES = frozenset({backfill.STATUS_COMPLETED, backfill.STATUS_UNAVAILABLE})
-EventSink = Callable[[str, dict[str, Any]], None]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -137,9 +136,8 @@ def run_backfill_batch(
 ) -> BackfillRun:
     """执行一批 pair；未冻结的宇宙、非法窗口与空批次都在启动期拒绝。
 
-    `max_runtime_seconds` 为**时间片**：到点后当前 pair 保存断点并以 `deferred` 收尾，
-    其余 pair 保持 pending——调用方（`scripts/f008-backfill-chunks.sh`）循环调用即可把
-    数天的长跑切成一片片执行，单片被打断只损失一片。
+    `max_runtime_seconds` 为**时间片**：到点后当前 pair 存断点并以 `deferred` 收尾、其余保持
+    pending——调用方（`scripts/f008-backfill-chunks.sh`）循环调用即可切片长跑，单片被打断只损失一片。
     """
     run_window_check(start, end)
     definition = require_frozen(universe_id, lake_root)
@@ -148,20 +146,26 @@ def run_backfill_batch(
         raise BackfillIncompleteError(f"universe {universe_id} 的本批目标为空，拒绝启动空跑")
 
     exchange_id = exchange_id or definition.criteria.exchange
-    state: dict[str, BackfillRun] = {
-        "run": load_run(resume_run_id, reports_dir)
-        if resume_run_id
-        else _initial_run(
-            definition=definition,
-            selected=selected,
-            start=start,
-            end=end,
-            limiter=limiter,
-            hostname=hostname or socket.gethostname(),
-            batch=batch,
-            now=datetime.now(UTC),
-        )
-    }
+    if resume_run_id:
+        # 续跑必须与本次请求同宇宙、同窗口、同目标集合：不一致时静默空跑会报「全部完成」（R1-009）
+        resumed = load_run(resume_run_id, reports_dir)
+        why = resume_mismatch(resumed, universe_id, start, end, selected)
+        if why is not None:
+            raise WindowError(f"续跑参数与运行记录不符，拒绝启动以免静默空跑：{why}")
+        state: dict[str, BackfillRun] = {"run": resumed}
+    else:
+        state = {
+            "run": _initial_run(
+                definition=definition,
+                selected=selected,
+                start=start,
+                end=end,
+                limiter=limiter,
+                hostname=hostname or socket.gethostname(),
+                batch=batch,
+                now=datetime.now(UTC),
+            )
+        }
     _write_run(state["run"], reports_dir)
 
     backfill.ensure_progress_table(conn)
@@ -216,34 +220,18 @@ def run_backfill_batch(
 
 
 def _emit(event_sink: EventSink | None, run: BackfillRun, payload: dict[str, Any]) -> None:
+    """逐 pair 结果 → 严格事件（形状在 `event_sink.backfill_event`）：`payload` 里的运行态字段
+    （`hostname`/`status`/`error`/`ledger_rows`/`note`）**不进事件流**——契约是精确键集合。
+    """
     if event_sink is None:
         return
-    common = {
-        "run_id": run.run_id,
-        "lake_pair": payload.get("lake_pair"),
-        "hostname": run.hostname,
-    }
-    if payload.get("status") == backfill.STATUS_FAILED:
-        event_sink(
-            "backfill.failed",
-            {
-                **common,
-                "error_class": payload.get("error_class"),
-                "retries": None,
-                "last_cursor": payload.get("last_cursor"),
-                "error": payload.get("error"),
-            },
-        )
-        return
-    event_sink(
-        "backfill.progress",
-        {
-            **common,
-            "rows": payload.get("rows"),
-            "cursor": payload.get("last_cursor"),
-            "status": payload.get("status"),
-        },
+    kind, body = backfill_event(
+        run_id=run.run_id,
+        started_at=run.started_at,
+        payload=payload,
+        failed=payload.get("status") == backfill.STATUS_FAILED,
     )
+    event_sink(kind, body)
 
 
 def _outcome_payload(
@@ -262,6 +250,8 @@ def _outcome_payload(
         "last_cursor": None if cursor is None else utc_iso(cursor),
         "error": outcome.error,
         "error_class": outcome.error_class,
+        # 真实尝试次数（首次 + 退避重试）：`backfill.failed.retries` 的唯一来源
+        "attempts": outcome.attempts,
     }
 
 
@@ -313,17 +303,12 @@ def _run_id(universe_id: str, batch: int | None, now: datetime) -> str:
     return f"{short}-b{batch or 0}-{now.strftime('%Y%m%dT%H%M%SZ')}"
 
 
-def run_dir(run_id: str, reports_dir: Path | None = None) -> Path:
-    root = (
-        Path(reports_dir) if reports_dir is not None else paths.REPO_ROOT / "reports" / "backfill"
-    )
-    return root / run_id
-
-
 def load_run(run_id: str, reports_dir: Path | None = None) -> BackfillRun:
-    """按 run_id 载入运行记录（断点续跑的入口）。"""
-    path = run_dir(run_id, reports_dir) / _RUN_FILE
-    document = json.loads(path.read_text(encoding="utf-8"))
+    """按 run_id 载入运行记录（断点续跑的入口）：缺失/损坏/结构非法一律明确报错。
+
+    fail-closed 的取值与原子写都在 `run_record`；本函数只把文档装配成 `BackfillRun`。
+    """
+    document = read_run_document(run_id, reports_dir)
     window = document["window"]
     return BackfillRun(
         run_id=str(document["run_id"]),
@@ -340,10 +325,5 @@ def load_run(run_id: str, reports_dir: Path | None = None) -> BackfillRun:
 
 
 def _write_run(run: BackfillRun, reports_dir: Path | None) -> None:
-    """运行记录是**可更新的运行态**（不是内容寻址 artifact）：逐 pair 落盘以保留断点。"""
-    target = run_dir(run.run_id, reports_dir) / _RUN_FILE
-    payload = json.dumps(run.document(), sort_keys=True, indent=2, ensure_ascii=False).encode()
-    if target.is_file():
-        target.write_bytes(payload)
-        return
-    atomic_create(target, payload)
+    """逐 pair 落盘运行记录（原子替换，见 `run_record.write_run_document`）。"""
+    write_run_document(run.run_id, run.document(), reports_dir)

@@ -98,3 +98,8 @@ class RateLimitExhaustedError(UniverseError):
     """限流退避重试超上限：该 pair 标 failed 并保留断点，never 提速。"""
 
     code = "E_UNIVERSE_RATE_LIMIT"
+
+    def __init__(self, *args: object, attempts: int = 1) -> None:
+        super().__init__(*args)
+        #: 真实尝试次数（首次 + 退避重试）——`backfill.failed.retries` 的唯一来源。
+        self.attempts = attempts

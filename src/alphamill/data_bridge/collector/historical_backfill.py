@@ -16,6 +16,8 @@ import os
 import time
 from datetime import UTC, datetime, timedelta
 
+from alphamill.data_bridge.errors import mark_attempts
+
 from .backfill_boundaries import (
     delisting_end_for,
     listing_start_for,
@@ -160,6 +162,8 @@ def fetch_symbol(
                         total,
                         str(exc),
                     )
+                    # 退避重试的次数只有这里看得到；编排层据此落 backfill.failed.retries
+                    mark_attempts(exc, attempt)
                     raise
                 sleep_for = min(2**attempt, 10)
                 logger.warning(

@@ -10,13 +10,14 @@ from __future__ import annotations
 import socket
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from alphamill.data_bridge.universe import artifact as artifact_mod
 from alphamill.data_bridge.universe.canonical import parse_utc
 from alphamill.data_bridge.universe.definition import UniverseDef
 from alphamill.data_bridge.universe.errors import QualityGateError
+from alphamill.data_bridge.universe.event_sink import emit_member_changed
 from alphamill.data_bridge.universe.membership import (
     MembershipRow,
     append_membership,
@@ -57,12 +58,28 @@ def admit_pair(
     hostname: str | None = None,
     listed_at: datetime | None = None,
     start: datetime | None = None,
+    events_dir: Path | None = None,
 ) -> AdmissionOutcome:
-    """单 pair 准入：库追加 → artifact 发布 → 写准入记录；QUARANTINED 只记判定。"""
+    """单 pair 准入：库追加 → artifact 发布 → 写准入记录；QUARANTINED 只记判定。
+
+    两条 `universe.member_changed` 与库侧动作同点发出（`TR-001`）：台账追加处记
+    `line=tradability`（每条实际落库的湖内命名空间一行，`reason` 取台账原因码），判定
+    记录处记 `line=admission`（`reason` 取质量门原因码，ACTIVE 取 `ACTIVE`）。事件写入
+    失败向上抛（门禁不降级）——库里有了动作而事件流没有，等于证据链断裂。
+    """
     steps: list[str] = []
     if result.verdict != VERDICT_ACTIVE:
         record_verdicts(conn, [result], universe_id=definition.universe_id, hostname=hostname)
         steps.append(STEP_ADMISSION)
+        emit_member_changed(
+            lake_pair=result.lake_pair,
+            direction="out",
+            effective_at=_admission_moment(start),
+            reason=result.reason_code or result.verdict,
+            universe_id=definition.universe_id,
+            line="admission",
+            events_dir=events_dir,
+        )
         return AdmissionOutcome(
             db_symbol=result.db_symbol,
             lake_pair=result.lake_pair,
@@ -88,6 +105,16 @@ def admit_pair(
     )
     if pending:
         append_membership(conn, pending)
+    for row in pending:  # 台账追加处逐条留痕（spot / perp 两条湖内命名空间各一行）
+        emit_member_changed(
+            lake_pair=row.lake_pair,
+            direction="in",
+            effective_at=row.valid_from,
+            reason=row.reason,
+            universe_id=row.universe_id,
+            line="tradability",
+            events_dir=events_dir,
+        )
     steps.append(STEP_LEDGER)
 
     # 步骤 2：artifact 发布（库是真相源，湖内是它的内容寻址快照）
@@ -99,6 +126,15 @@ def admit_pair(
     # 步骤 3：写准入记录（准入状态真相源，与台账区间相互独立）
     record_verdicts(conn, [result], universe_id=definition.universe_id, hostname=hostname)
     steps.append(STEP_ADMISSION)
+    emit_member_changed(
+        lake_pair=result.lake_pair,
+        direction="in",
+        effective_at=_admission_moment(start, valid_from),
+        reason=VERDICT_ACTIVE,
+        universe_id=definition.universe_id,
+        line="admission",
+        events_dir=events_dir,
+    )
     return AdmissionOutcome(
         db_symbol=result.db_symbol,
         lake_pair=result.lake_pair,
@@ -121,6 +157,7 @@ def gate_and_admit(
     hostname: str | None = None,
     thresholds=None,
     require_backfill_complete: bool = True,
+    events_dir: Path | None = None,
 ) -> list[AdmissionOutcome]:
     """对目标 pair 跑门禁并逐 pair 准入（通过者走三步，失败者只记判定）。"""
     chosen = _selected(definition, pairs)
@@ -145,9 +182,16 @@ def gate_and_admit(
             hostname=hostname or socket.gethostname(),
             listed_at=listed.get(result.db_symbol),
             start=window_start,
+            events_dir=events_dir,
         )
         for result in results
     ]
+
+
+def _admission_moment(start: datetime | None, valid_from: datetime | None = None) -> datetime:
+    """判定线 `effective_at`：判定窗口起点优先（复跑同窗口 → 同幂等键、不重复追加），
+    未给窗口时退回台账 `valid_from`（ACTIVE），再退回判定时刻。"""
+    return start or valid_from or datetime.now(UTC)
 
 
 def _membership_rows(

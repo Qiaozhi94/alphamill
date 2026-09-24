@@ -35,6 +35,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
+from alphamill.data_bridge.errors import mark_attempts
 from alphamill.data_bridge.universe.errors import RateLimitExhaustedError, UniverseError
 
 T = TypeVar("T")
@@ -155,7 +156,9 @@ class RateLimiter:
         """acquire 后执行 `func`；限流与瞬时网络异常按指数退避重试，超上限抛异常。
 
         其余异常不重试、原样抛出；退避用尽后抛 `RateLimitExhaustedError`，最后一次
-        异常挂在 `__cause__` 上（`from exc` 保留因果链）。
+        异常挂在 `__cause__` 上（`from exc` 保留因果链）。两者都带**真实尝试次数**
+        （`mark_attempts` / `RateLimitExhaustedError.attempts`），供 T013 编排落
+        `backfill.failed.retries`——异常抛到编排层时次数已不可见，此处是唯一观测点。
         """
         attempts = self._policy.max_retries
         last_exc: Exception | None = None
@@ -164,6 +167,7 @@ class RateLimiter:
             try:
                 return func(*args, **kwargs)
             except Exception as exc:
+                mark_attempts(exc, attempt)
                 if not is_retryable_error(exc):
                     raise
                 last_exc = exc
@@ -171,7 +175,8 @@ class RateLimiter:
                     self._wait(self._policy.backoff_seconds(attempt))
         raise RateLimitExhaustedError(
             f"退避重试超上限（max_retries={attempts}，最后一次："
-            f"{type(last_exc).__name__}: {last_exc}）"
+            f"{type(last_exc).__name__}: {last_exc}）",
+            attempts=attempts,
         ) from last_exc
 
     def _wait(self, seconds: float) -> None:

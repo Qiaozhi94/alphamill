@@ -61,6 +61,7 @@ from alphamill.data_bridge.universe.errors import (
     UniverseError,
     WindowError,
 )
+from alphamill.data_bridge.universe.event_sink import backfill_sink
 from alphamill.data_bridge.universe.exchange_snapshot import fetch_snapshot
 from alphamill.data_bridge.universe.rate_limit import RateLimiter, RateLimitPolicy
 from alphamill.data_bridge.universe.verdicts import VERDICT_ACTIVE
@@ -225,6 +226,8 @@ def _backfill(args) -> int:
                 lake_root=lake_root,
                 reports_dir=Path(args.reports_dir) if args.reports_dir else None,
                 limiter=limiter,
+                # 生产路径必须真接线：事件目录走 ALPHAMILL_EVENTS_DIR / 默认根
+                event_sink=backfill_sink(),
                 batch=args.batch,
                 resume_run_id=args.resume_run_id,
                 max_runtime_seconds=(
@@ -282,6 +285,13 @@ def _gate(args) -> int:
                 f"E_UNIVERSE_GATE_{item.verdict}: {item.db_symbol} → {item.reason_code}",
                 file=sys.stderr,
             )
+    if not outcomes:
+        # 空判定集必须判红：`all([])` 为真会让「什么都没跑」退出 0（检视 R1-015，fail-open）
+        print(
+            "E_UNIVERSE_GATE_EMPTY: 没有任何 pair 进入判定（--pairs 是否都不在入选集内？）",
+            file=sys.stderr,
+        )
+        return EXIT_REJECTED
     return EXIT_OK if all(item.verdict == VERDICT_ACTIVE for item in outcomes) else EXIT_REJECTED
 
 

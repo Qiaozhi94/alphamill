@@ -17,7 +17,7 @@ from conftest import D4, export_symbol_map_for, seed_f002_data
 from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge.exporter import export_dataset
 from alphamill.data_bridge.universe import artifact as artifact_mod
-from alphamill.data_bridge.universe import cli
+from alphamill.data_bridge.universe import cli, event_store
 from alphamill.data_bridge.universe.admission import admit_pair
 from alphamill.data_bridge.universe.definition import (
     build_definition,
@@ -266,7 +266,9 @@ def test_us002_backfill_journey(f008_conn, lake, tmp_path) -> None:
     assert first.failed_pairs() == ("BTC/USDT",)
     assert _rows(f008_conn, "ETH/USDT") > 0  # 另一个 pair 不受影响
     assert any(kind == "backfill.failed" for kind, _ in events)
-    assert all(payload["hostname"] == "qiaozhi-lt" for _, payload in events)
+    # hostname 归 BackfillRun 运行记录（AC-010），不进事件流：事件契约是精确键集合
+    assert all(set(payload) == set(event_store.PAYLOAD_FIELDS[kind]) for kind, payload in events)
+    assert runner.load_run(first.run_id, tmp_path / "reports").hostname == "qiaozhi-lt"
 
     # 断点续跑：重跑同一 run，跳过已完成 pair，不产生重复行
     class _Resumed(_FakeExchange):

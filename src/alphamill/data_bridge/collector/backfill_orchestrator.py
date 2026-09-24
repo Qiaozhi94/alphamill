@@ -22,6 +22,7 @@ from alphamill.data_bridge.collector.historical_backfill import (
     fetch_symbol,
     logger,
 )
+from alphamill.data_bridge.errors import attempts_of
 
 __all__ = [
     "STATUS_COMPLETED",
@@ -45,6 +46,9 @@ class SymbolOutcome:
     last_cursor: datetime | None
     error: str | None = None
     error_class: str | None = None
+    #: 失败时的**真实尝试次数**（首次 + 退避重试，由 `mark_attempts` 标注）：
+    #: 事件层据此落 `backfill.failed.retries`；非失败状态不承载该语义，缺省 1。
+    attempts: int = 1
 
 
 class BackfillConnectionLost(Exception):
@@ -154,6 +158,7 @@ def _run_one(
             last_cursor=cursor,
             error=str(exc),
             error_class=type(exc).__name__,
+            attempts=attempts_of(exc),
         )
     cursor, status, done = current_cursor(conn, exchange_id, symbol, start, end)
     if status == "unavailable":

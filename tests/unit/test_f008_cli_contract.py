@@ -13,13 +13,16 @@ from pathlib import Path
 
 import pytest
 
+from alphamill.data_bridge.universe import batching as runner
 from alphamill.data_bridge.universe import cli
+from alphamill.data_bridge.universe.admission import AdmissionOutcome
 from alphamill.data_bridge.universe.definition import (
     build_definition,
     load_definition,
     write_definition,
 )
 from alphamill.data_bridge.universe.discover import evaluate
+from alphamill.data_bridge.universe.errors import WindowError
 from tests.f008_fixtures import criteria_for, market, snapshot
 
 WINDOW = ("2026-09-01T00:00:00Z", "2026-09-04T00:00:00Z")
@@ -372,7 +375,23 @@ def test_gate_refreshes_aggregates_before_checking(lake, monkeypatch, capsys) ->
         backfill_mod, "refresh_aggregates", lambda conn, start, end: calls.append((start, end))
     )
     monkeypatch.setattr(cli, "db_connect", lambda: _FakeConn())
-    monkeypatch.setattr(cli, "gate_and_admit", lambda *a, **k: [])
+    # 返回一条真实 ACTIVE 判定：空判定集现在是**判红**路径（检视 R1-015），
+    # 本用例要验的是「先刷聚合再判定」，故给一条能过门的结论。
+    monkeypatch.setattr(
+        cli,
+        "gate_and_admit",
+        lambda *a, **k: [
+            AdmissionOutcome(
+                db_symbol="BTC/USDT",
+                lake_pair="BTC-USDT-PERP",
+                verdict="ACTIVE",
+                reason_code=None,
+                steps=("admission",),
+                artifact_digest=None,
+                listed_at=None,
+            )
+        ],
+    )
     code = cli.main(
         [
             "gate",
@@ -519,3 +538,23 @@ def test_show_at_rejects_unknown_digest(lake, capsys) -> None:
         == 2
     )
     assert "E_UNIVERSE_NOT_FOUND" in capsys.readouterr().err
+
+
+def test_plan_batch_rejects_candidate_excluded_from_selection(lake) -> None:
+    """`--pairs` 必须对**入选集**校验：候选里被排除者此前静默变空批次（检视 R1-015）。
+
+    被排除者通过校验时，过滤后得到空序列；`gate` 会因 `all([])` 为真**退出 0 报成功**——
+    即 fail-open（`backfill` 侧只被下游「空批次」闸门拦下，报错文案与真实原因无关）。
+    这里直接锁 `plan_batch` 的拒绝行为，并要求错误里带上排除原因。
+    """
+    criteria = criteria_for(turnover_rank_top_n=2)
+    definition = build_definition(
+        criteria, evaluate(snapshot(*[market(base) for base in ("BTC", "ETH", "SOL")]), criteria)
+    )
+    excluded = [item.db_symbol for item in definition.candidates if item.excluded_reason]
+    assert excluded, "fixture 必须真的产生一个被排除的候选"
+    assert excluded[0] not in definition.selected_pairs()
+
+    with pytest.raises(WindowError, match="入选集") as excinfo:
+        runner.plan_batch(definition, pairs=[excluded[0]])
+    assert "排除原因" in str(excinfo.value)

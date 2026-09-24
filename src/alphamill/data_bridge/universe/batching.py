@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from alphamill.data_bridge.collector.backfill_progress import current_cursor
+from alphamill.data_bridge.universe.canonical import utc_iso
 from alphamill.data_bridge.universe.definition import UniverseDef
 from alphamill.data_bridge.universe.errors import WindowError
 
@@ -43,13 +44,24 @@ def plan_batch(
     pairs: Sequence[str] | None = None,
     batch_split: int = DEFAULT_BATCH_SPLIT,
 ) -> tuple[PairPlan, ...]:
-    """按成交额排名切分批次：批 1 = 前 `batch_split`（含现有 6 对），批 2 = 其余。"""
+    """按成交额排名切分批次：批 1 = 前 `batch_split`（含现有 6 对），批 2 = 其余。
+
+    `pairs` 只接受**入选**（`definition.selected`）的 pair：候选里被排除者（稳定币对、杠杆
+    代币、跌出前 N……）此前能通过校验却在过滤后得到空批次，`gate` 会以「空列表 all() 为真」
+    退出 0 报成功（检视 R1-015，fail-open）。排除原因随错误一并给出。
+    """
     selected = definition.selected
     if pairs is not None:
         wanted = {pair.strip() for pair in pairs if pair.strip()}
-        unknown = sorted(wanted - {item.db_symbol for item in definition.candidates})
+        chosen = {item.db_symbol for item in selected}
+        unknown = sorted(wanted - chosen)
         if unknown:
-            raise WindowError(f"以下 pair 不在宇宙定义内: {unknown}")
+            reasons = {
+                item.db_symbol: item.excluded_reason
+                for item in definition.candidates
+                if item.db_symbol in set(unknown)
+            }
+            raise WindowError(f"以下 pair 不在本宇宙的入选集内: {unknown}（排除原因: {reasons}）")
         return tuple(_plan(item) for item in selected if item.db_symbol in wanted)
     if batch is None:
         return tuple(_plan(item) for item in selected)
@@ -67,6 +79,25 @@ def run_window_check(start: datetime, end: datetime) -> None:
         raise WindowError("回填窗口必须带时区（UTC）")
     if start >= end:
         raise WindowError(f"回填窗口非法：start({start}) 必须早于 end({end})")
+
+
+def resume_mismatch(run, universe_id: str, start: datetime, end: datetime, selected) -> str | None:
+    """续跑参数与运行记录不一致时的说明（检视 R1-009）；一致返回 `None`。
+
+    原先 `--resume-run-id` 只用 run 记录里的 pairs：换窗口/换批次续跑时已完成的 pair 不在
+    pending → 一行不取 → `remaining` 为空直接 `finished()`，CLI 退出 0、分片脚本打印
+    「本批全部完成」——把「参数打错」报成「跑完了」。`run` 按鸭子类型使用（避免与
+    `backfill_runner` 形成循环依赖）。
+    """
+    if run.universe_id != universe_id:
+        return f"universe_id {run.universe_id} != {universe_id}"
+    if (run.window_start, run.window_end) != (utc_iso(start), utc_iso(end)):
+        return f"窗口 {run.window_start}~{run.window_end} != {utc_iso(start)}~{utc_iso(end)}"
+    wanted = {plan.db_symbol for plan in selected}
+    have = {plan.db_symbol for plan in run.plans()}
+    if wanted and wanted != have:
+        return f"目标集合不一致：请求 {sorted(wanted)} vs 记录 {sorted(have)}"
+    return None
 
 
 def _plan(item) -> PairPlan:
