@@ -31,7 +31,7 @@ from alphamill.data_bridge.universe.canonical import (
     sha256_prefixed,
     utc_iso,
 )
-from alphamill.data_bridge.universe.errors import UniverseArtifactError
+from alphamill.data_bridge.universe.errors import UniverseArtifactError, UniverseNotFoundError
 from alphamill.data_bridge.universe.membership import TradabilityInterval
 from alphamill.data_bridge.universe.storage import atomic_create, read_bytes
 
@@ -185,8 +185,14 @@ def load_artifact(
     *,
     expected_schema_version: int = SCHEMA_VERSION,
 ) -> ArtifactLedger:
-    """按显式 digest 载入：digest 不符、版本不符、未知键或非 canonical 一律拒绝。"""
+    """按显式 digest 载入：digest 不符、版本不符、未知键或非 canonical 一律拒绝。
+
+    「不存在」与「内容非法」分开报（检视 R1-004）：前者是 `E_UNIVERSE_NOT_FOUND`（与未知
+    definition id 同码，脚本据此区分「还没发布」），后者才是 `E_UNIVERSE_ARTIFACT`。
+    """
     path = artifact_path(digest, lake_root)
+    if not path.is_file():
+        raise UniverseNotFoundError(f"universe artifact 不存在: {digest}（{path}）")
     payload = read_bytes(path, what="universe artifact")
     try:
         document = json.loads(payload.decode("utf-8"))

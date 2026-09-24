@@ -81,7 +81,14 @@ def split_pairs(value: str | None) -> list[str] | None:
 
 def parse_moment(text: str) -> datetime:
     normalized = text.strip().replace("Z", "+00:00")
-    parsed = datetime.fromisoformat(normalized)
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        # 语法非法（`yesterday`/`2024-9-10`/月份越界）收口成 `E_UNIVERSE_WINDOW`（退出 2）：
+        # 裸 `ValueError` 会逃出 `cli.main` 的 except，变成 traceback + 退出 1，
+        # 而退出 1 的语义是「可重试瞬时故障」——分片脚本会无限重试永远不合法的参数。
+        # `--start/--end/--at/--now` 共用此处，一处收口。
+        raise WindowError(f"时间戳无法解析（UTC ISO8601）: {text!r}") from exc
     if parsed.tzinfo is None:
         raise WindowError(f"时间必须带时区（UTC ISO8601）: {text!r}")
     return parsed.astimezone(UTC)

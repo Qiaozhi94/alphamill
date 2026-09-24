@@ -201,6 +201,29 @@ def test_backfill_rejects_invalid_and_missing_window(lake, monkeypatch, capsys) 
     assert "E_UNIVERSE_WINDOW" in capsys.readouterr().err
 
 
+def test_backfill_rejects_malformed_window_timestamp(lake, monkeypatch, capsys) -> None:
+    """语法非法的时间戳是启动期拒绝（`E_UNIVERSE_WINDOW` / 退出 2），不得以 `ValueError` 逃逸。
+
+    逃逸的后果不是「报错难看」：`cli.main` 只捕 `(UniverseError, OSError)`，裸 `ValueError`
+    变成 traceback + 退出 1，而退出 1 的语义是「可重试的瞬时故障」——分片脚本会无限重试一个
+    永远不可能合法的参数（检视定位的 error-code-escape）。
+    """
+    universe_id = _definition(lake)
+    cli.main(["freeze", "--def", universe_id, "--confirm", "--lake-root", str(lake)])
+    capsys.readouterr()
+    monkeypatch.delenv("BACKFILL_WINDOW_START", raising=False)
+    monkeypatch.delenv("BACKFILL_WINDOW_END", raising=False)
+
+    base = ["backfill", "--universe", universe_id, "--lake-root", str(lake)]
+    malformed = (
+        [*base, "--start", "yesterday", "--end", WINDOW[1]],
+        [*base, "--start", WINDOW[0], "--end", "2024-13-01T00:00:00Z"],
+    )
+    for argv in malformed:
+        assert cli.main(argv) == 2
+        assert "E_UNIVERSE_WINDOW" in capsys.readouterr().err
+
+
 def test_backfill_fetch_limit_overrides_module_default(lake, monkeypatch, capsys) -> None:
     """`--fetch-limit` 覆盖单次请求根数（Binance 现货上限 1000，默认 100 会让请求数多 10 倍）。"""
     from alphamill.data_bridge.collector import historical_backfill as backfill_mod
@@ -275,6 +298,43 @@ def _raise_disk(*_args, **_kwargs):
     raise InsufficientDiskError("磁盘余量不足：测试注入")
 
 
+def test_backfill_rejects_insufficient_disk_from_real_estimate(lake, monkeypatch, capsys) -> None:
+    """磁盘闸门要由真实 `capacity` 估算驱动：只注入探测到的余量，不替掉判定本身。
+
+    上一条用例把 `cli.require_headroom` 整条替成「抛异常」，于是 `capacity` 三个函数
+    一个都没跑到（把 `require_headroom` 改成恒不抛也照样绿）。这里只猴补 `free_bytes`，
+    `estimate_rows → required_bytes → require_headroom` 全走产品代码。
+    """
+    from alphamill.data_bridge.universe import backfill_runner as runner
+    from alphamill.data_bridge.universe import capacity
+
+    universe_id = _definition(lake)
+    cli.main(["freeze", "--def", universe_id, "--confirm", "--lake-root", str(lake)])
+    capsys.readouterr()
+    monkeypatch.setattr(capacity, "free_bytes", lambda path: 0)
+    monkeypatch.setattr(cli, "db_connect", lambda: _FakeConn())
+
+    def must_not_run(**_kwargs):
+        raise AssertionError("磁盘余量不足时必须停在启动期，不得进入回填")
+
+    monkeypatch.setattr(runner, "run_backfill_batch", must_not_run)
+    code = cli.main(
+        [
+            "backfill",
+            "--universe",
+            universe_id,
+            "--start",
+            WINDOW[0],
+            "--end",
+            WINDOW[1],
+            "--lake-root",
+            str(lake),
+        ]
+    )
+    assert code == 2
+    assert "E_UNIVERSE_DISK" in capsys.readouterr().err
+
+
 # ---------- show ----------
 
 
@@ -341,6 +401,72 @@ class _FakeConn:
         return None
 
 
+def _outcome(db_symbol: str, verdict: str, reason_code: str | None):
+    from alphamill.data_bridge.universe.admission import AdmissionOutcome
+
+    return AdmissionOutcome(
+        db_symbol=db_symbol,
+        lake_pair=db_symbol.replace("/", "-"),
+        verdict=verdict,
+        reason_code=reason_code,
+        steps=("admission_recorded",),
+        artifact_digest=None,
+        listed_at=None,
+    )
+
+
+def test_gate_rejects_non_active_verdicts_with_nonzero_exit(lake, monkeypatch, capsys) -> None:
+    """gate 的退出码必须跟着判定走：非 ACTIVE → 2，且 stderr 给出 `E_UNIVERSE_GATE_<判定>`。
+
+    既有 gate 用例把 `gate_and_admit` 替成返回 `[]`——`all([])` 为真，退出码恒 0，
+    于是「非 ACTIVE 判非零退出」这条契约没有任何断言（强制 `EXIT_OK` 也照样绿）。
+    这里返回真实的 `AdmissionOutcome`：ACTIVE 与 QUARANTINED 混排，再单跑 INCOMPLETE。
+    """
+    from alphamill.data_bridge.collector import historical_backfill as backfill_mod
+
+    universe_id = _definition(lake)
+    cli.main(["freeze", "--def", universe_id, "--confirm", "--lake-root", str(lake)])
+    capsys.readouterr()
+    monkeypatch.setattr(backfill_mod, "refresh_aggregates", lambda conn, start, end: None)
+    monkeypatch.setattr(cli, "db_connect", lambda: _FakeConn())
+    argv = [
+        "gate",
+        "--universe",
+        universe_id,
+        "--start",
+        WINDOW[0],
+        "--end",
+        WINDOW[1],
+        "--lake-root",
+        str(lake),
+    ]
+
+    monkeypatch.setattr(
+        cli,
+        "gate_and_admit",
+        lambda *a, **k: [
+            _outcome("BTC/USDT", "ACTIVE", None),
+            _outcome("ETH/USDT", "QUARANTINED", "aggregate_mismatch"),
+        ],
+    )
+    assert cli.main(argv) == 2
+    captured = capsys.readouterr()
+    assert [item["verdict"] for item in json.loads(captured.out)] == ["ACTIVE", "QUARANTINED"]
+    assert "E_UNIVERSE_GATE_QUARANTINED" in captured.err
+    assert "ETH/USDT → aggregate_mismatch" in captured.err
+    assert "E_UNIVERSE_GATE_ACTIVE" not in captured.err  # 通过者不得产生拒绝行
+
+    monkeypatch.setattr(
+        cli,
+        "gate_and_admit",
+        lambda *a, **k: [_outcome("ETH/USDT", "INCOMPLETE", "backfill_incomplete")],
+    )
+    assert cli.main(argv) == 2
+    captured = capsys.readouterr()
+    assert "E_UNIVERSE_GATE_INCOMPLETE" in captured.err
+    assert "ETH/USDT → backfill_incomplete" in captured.err
+
+
 def test_show_prints_definition_and_exclusions(lake, capsys) -> None:
     criteria = criteria_for(turnover_rank_top_n=1)
     definition = build_definition(
@@ -381,10 +507,15 @@ def test_show_at_requires_digest_and_reads_artifact(lake, capsys) -> None:
 
 
 def test_show_at_rejects_unknown_digest(lake, capsys) -> None:
+    """未知 digest 属「不存在」→ `E_UNIVERSE_NOT_FOUND`（检视 R1-004）。
+
+    原先它与「内容非法」共用 `E_UNIVERSE_ARTIFACT`，脚本无法区分「还没发布」与「已损坏」；
+    内容非法路径仍报 `E_UNIVERSE_ARTIFACT`（见 `tests/unit/test_f008_artifact.py` 的键集合用例）。
+    """
     assert (
         cli.main(
             ["show", "--at", WINDOW[0], "--digest", "sha256:" + "2" * 64, "--lake-root", str(lake)]
         )
         == 2
     )
-    assert "E_UNIVERSE_ARTIFACT" in capsys.readouterr().err
+    assert "E_UNIVERSE_NOT_FOUND" in capsys.readouterr().err
