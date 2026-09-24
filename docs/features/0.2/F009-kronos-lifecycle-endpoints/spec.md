@@ -2,7 +2,7 @@
 kind: feature
 id: F009
 version: "0.2"
-status: developing
+status: code-reviewing
 branch: feat/F009-kronos-lifecycle-endpoints
 gate_version: 1
 related_features: [F003, F004, F010]
