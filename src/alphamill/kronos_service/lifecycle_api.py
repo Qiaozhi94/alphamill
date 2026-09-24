@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from .lifecycle import (
+    ACTION_FAILURE_CODE,
     CONTRACT_VERSION,
     CONTRACT_VERSION_HEADER,
     E_BAD_REQUEST,
@@ -61,7 +62,7 @@ def build_lifecycle_router(controller: LifecycleController) -> APIRouter:
             return _envelope(E_UNSUPPORTED_VERSION)
         return await run_in_threadpool(controller.status)
 
-    async def _action(request: Request, run) -> JSONResponse | dict:
+    async def _action(request: Request, run, action: str) -> JSONResponse | dict:
         # 顺序固定：版本协商 → 请求体形态 → 动作。E_UNSUPPORTED_VERSION 是客户端判定
         # "服务端未实现本契约"的入口，不得被请求体校验复用（架构 §7.1）。
         if not _version_ok(request):
@@ -72,13 +73,18 @@ def build_lifecycle_router(controller: LifecycleController) -> APIRouter:
             return await run_in_threadpool(run)
         except LifecycleError as exc:
             return _envelope(exc.code)
+        except Exception:
+            # 最后一道兜底（R2-002）：逐个路径堵漏堵不完，而无 `error` 字段的 500 会被
+            # 客户端读成"端点不存在"并转入回落探测。任何未预期异常都按端点映射成该
+            # 动作的失败码——控制器侧已负责把状态收敛到稳定态。
+            return _envelope(ACTION_FAILURE_CODE[action])
 
     @router.post("/stop")
     async def stop(request: Request):
-        return await _action(request, controller.stop)
+        return await _action(request, controller.stop, "stop")
 
     @router.post("/restore")
     async def restore(request: Request):
-        return await _action(request, controller.restore)
+        return await _action(request, controller.restore, "restore")
 
     return router

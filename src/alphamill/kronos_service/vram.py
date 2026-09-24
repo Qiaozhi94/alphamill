@@ -76,9 +76,15 @@ def probe(
     `budget_s` 是调用方（status）剩余的处理预算：子进程超时取它与 `probe_timeout_s`
     的较小者，预算耗尽则直接判不可得——status 的 deadline 优先于拿到读数。
     """
-    if not device.startswith("cuda"):
-        # 无 CUDA 实例：语义完整，读数是确定的 0 而非"不可得"（spec §3 边界场景）
+    if device == "cpu" or device.startswith("cpu:"):
+        # 无 CUDA 实例：语义完整，读数是确定的 0 而非"不可得"（spec §3 边界场景 /
+        # NFR-005：device=cpu 时 vram_bytes=0、vram_readable=true）。
         return VramReading(used_bytes=0, readable=True, source="cpu")
+
+    if not device.startswith("cuda"):
+        # 既不是 cuda 也不是 cpu（空串、unknown、mps…）：**不得**假装是 CPU 实例报 0，
+        # 那是编造读数——"读不到"与"确实是 0"在编排侧的处置完全不同（R2-003）。
+        return VramReading(used_bytes=None, readable=False, source="unknown_device")
 
     if budget_s <= 0:
         return VramReading(used_bytes=None, readable=False, source="unavailable")

@@ -305,3 +305,52 @@ def test_busy_is_immediate_and_does_not_touch_the_device() -> None:
     assert excinfo.value.code == lifecycle.E_BUSY
     assert probes == [], "被拒的动作不得触碰设备"
     assert elapsed < 0.2, f"E_BUSY 被探测拖慢到 {elapsed:.2f}s"
+
+
+class _AlwaysBrokenSignal(FakeSignal):
+    """状态查询始终抛错：受理**之前**就失败的路径。"""
+
+    def status(self):
+        raise RuntimeError("model status unavailable")
+
+
+@pytest.mark.parametrize(
+    ("path", "method", "expected"),
+    [
+        ("/lifecycle/stop", "post", lifecycle.E_UNLOAD_FAILED),
+        ("/lifecycle/restore", "post", lifecycle.E_UNAVAILABLE),
+    ],
+)
+def test_wire_layer_never_leaks_non_contract_response(
+    path: str, method: str, expected: str
+) -> None:
+    """R2-002：wire 层必须有最后一道兜底，任何未预期异常都不得漏成 HTTP 500。
+
+    受理前（读状态、算 state_before）抛的异常此前会绕过控制器的兜底网直达 FastAPI
+    默认处理。逐个堵路径堵不完，故在 wire 层按端点映射契约码，把这一类关掉。
+    """
+    client, _ = _client(_AlwaysBrokenSignal())
+
+    resp = getattr(client, method)(path, headers=HEADERS)
+
+    assert resp.status_code == 200, f"{path} 漏成非契约响应: {resp.status_code}"
+    assert resp.json() == {"error": expected}, resp.text[:200]
+
+
+def test_status_reports_unknown_instead_of_leaking_500() -> None:
+    """status 没有失败码可用（契约只给了 E_UNSUPPORTED_VERSION），因此它必须**可达**：
+
+    状态查询本身抛错时如实报 `model_loaded=false` + `device=unknown` + 读数不可得，
+    让客户端按 fail-closed 处置，而不是拿到一个无 `error` 字段的 500 误判成端点不存在。
+    """
+    client, _ = _client(_AlwaysBrokenSignal())
+
+    resp = client.get("/lifecycle/status", headers=HEADERS)
+
+    assert resp.status_code == 200, resp.text[:120]
+    payload = resp.json()
+    assert payload["model_loaded"] is False
+    assert payload["device"] == "unknown"
+    assert payload["vram_readable"] is False and payload["vram_bytes"] is None
+    assert payload["state"] in ("stopped", "transitional")
+    assert "error" not in payload

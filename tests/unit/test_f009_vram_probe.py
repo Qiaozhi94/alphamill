@@ -56,6 +56,18 @@ def test_cpu_instance_reports_zero_and_readable() -> None:
     assert reading.used_bytes == 0
 
 
+@pytest.mark.parametrize("device", ["", "unknown", "mps", "xpu:0"])
+def test_non_cuda_non_cpu_device_is_unreadable_not_zero(device: str) -> None:
+    """R2-003：既不是 cuda 也不是 cpu 的设备名不得按 CPU 实例报 0/可读。
+
+    报 0 等于编造读数——编排会把"读不到"误当成"确实没占显存"，据此取锁训练。
+    """
+    reading = vram.probe(device=device, mode="auto", probe_timeout_s=2.0, budget_s=5.0)
+
+    assert reading.readable is False
+    assert reading.used_bytes is None
+
+
 def test_auto_prefers_torch_mem_get_info() -> None:
     reading = vram.probe(
         device="cuda:0",

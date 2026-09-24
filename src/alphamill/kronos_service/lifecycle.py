@@ -124,16 +124,23 @@ class LifecycleController:
         deadline = self._clock() + self._config.status_timeout_s
         with self._meta_lock:
             desired, operation = self._desired, self._operation
-        model_status = self._signal.status()
-        reading = self._probe(model_status.device, budget_s=deadline - self._clock())
+        # status 没有可用的失败码（契约只给了 E_UNSUPPORTED_VERSION），所以它必须可达：
+        # 状态查询本身抛错就如实降级为"未加载 + 设备未知 + 读数不可得"，让客户端
+        # fail-closed，而不是抛出去变成无 error 字段的 500（客户端会误判成端点不存在）。
+        try:
+            model_status = self._signal.status()
+            loaded, device = bool(model_status.loaded), model_status.device
+        except Exception:
+            loaded, device = False, "unknown"
+        reading = self._probe(device, budget_s=deadline - self._clock())
         return {
-            "state": self._state(desired, bool(model_status.loaded)),
+            "state": self._state(desired, loaded),
             "desired": desired,
             "contract_version": CONTRACT_VERSION,
-            "model_loaded": bool(model_status.loaded),
+            "model_loaded": loaded,
             "vram_bytes": reading.used_bytes,
             "vram_readable": reading.readable,
-            "device": model_status.device,
+            "device": device,
             "operation": operation.as_dict() if operation else None,
         }
 
