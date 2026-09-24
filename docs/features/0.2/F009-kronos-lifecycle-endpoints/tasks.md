@@ -72,7 +72,7 @@ updated: 2026-09-20
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 - [x] T024 [TEST] (`AC-002`, `AC-003`, `AC-011`): 夜槽一轮完整旅程——`status`（running）→ `stop` → **连打若干 `/predict` 确认模型没有被唤醒**（`model_loaded` 恒 false、来源不为 kronos）→ `restore` → `status` 确认 running 且 `/predict` 恢复 kronos 来源；夹具在 Phase 1 即以红灯立起，收尾在执行机全量执行 — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q tests/integration/test_f003_kronos_lifecycle.py` + 旅程逐步记录 — 证据（2026-09-23）：[TEST] 旅程在执行机全量执行：running → stop → 连打 5 次 /predict（source=placeholder、model_loaded 恒 false）→ restore → /predict 恢复 source=kronos
-- [ ] T025: 回写 spec 验收证据并流转状态——**经 `scripts/sdd_status.py --dry-run` 确认门禁后 `--advance`**，不手改 frontmatter、不手工编辑 BACKLOG 派生行；同步更正 BACKLOG 中 2026-09-19 那条打在 mock 上的 404 复测记录 — verify: `python3 tools/validate_spec_lifecycle.py` + `sdd_status.py --dry-run` 输出
+- [x] T025: 回写 spec 验收证据并流转状态——**经 `scripts/sdd_status.py --dry-run` 确认门禁后 `--advance`**，不手改 frontmatter、不手工编辑 BACKLOG 派生行；同步更正 BACKLOG 中 2026-09-19 那条打在 mock 上的 404 复测记录 — verify: `python3 tools/validate_spec_lifecycle.py` + `sdd_status.py --dry-run` 输出 — 证据（2026-09-24）：spec 12 条验收清单逐条回填证据并勾选；BACKLOG 的 2026-09-19 mock 404 记录已更正为「已被取代」并补 kronos-signal-real 的重取结论；`validate_spec_lifecycle` + 三个文档门禁全绿；状态经 `sdd_status.py --advance` 流转，不手改 frontmatter
 
 ## 4. 依赖与并行关系
 
