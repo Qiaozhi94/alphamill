@@ -9,7 +9,7 @@ related_features: [F001, F002, F003, F007]
 topics: [data-bridge, universe, backfill, data-quality, point-in-time, m2]
 doc_kind: spec
 created: 2026-09-14
-updated: 2026-09-19
+updated: 2026-09-25
 ---
 
 # F008：宇宙扩容与 point-in-time 宇宙台账
@@ -297,20 +297,21 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `DR-001`): 同一口径与同一交易所快照两次发现得到相同候选清单与相同 universe_id；逐候选筛选指标入档 — tests: `tests/unit/test_f008_discover.py`
-- [ ] **AC-002** (`FR-002`): 未冻结的候选清单驱动回填被非零拒绝；冻结后成员增删产生新版本且旧版本不可改写 — tests: `tests/unit/test_f008_universe_def.py`
-- [ ] **AC-003** (`FR-003`, `NFR-002`): 回填中断后重跑从断点继续、不写重复行、行数与预期一致 — tests: `tests/integration/test_f008_backfill.py`
-- [ ] **AC-004** (`FR-003`, `NFR-001`): 限流错误触发退避重试且不超过上限，请求速率不因失败而提高 — tests: `tests/unit/test_f008_rate_limit.py`
-- [ ] **AC-005** (`FR-004`, `DR-004`): 缺失率超限、未闭合边界、连续聚合对不上、重复主键四类 fixture 均被拦在导出清单外并各记原因码；全项通过者进入清单（重复主键 fixture 以无主键约束的 scratch 源表承载——参考表 `ohlcv_1m` 的主键使重复无法构造，用真实表只能得到恒真的空转断言） — tests: `tests/integration/test_f008_quality_gate.py`
-- [ ] **AC-006** (`FR-004`): 上线晚于回填窗口起点的 pair 按实际可得窗口计算缺失率，不被误判为缺失 — tests: `tests/unit/test_f008_quality_gate_window.py`
-- [ ] **AC-007** (`FR-005`, `NFR-003`): 含上市/退市/中途进出的 fixture 上，universe_at(T) 在各时点返回正确成员集合 — tests: `tests/unit/test_f008_membership.py`
-- [ ] **AC-008** (`FR-005`, `DR-002`): 尝试原地改写已发布历史区间被拒绝；退出记录保留历史数据不删除 — tests: `tests/unit/test_f008_membership.py`
-- [ ] **AC-009** (`FR-006`, `IR-002`): 台账 artifact 同内容得同 digest 且逐字节一致、内容变化得新 digest 且旧 digest 仍可读；发布出的 artifact 能被下游 `factor_factory.generators.universe.load_explicit_universe` 按 digest 直接加载通过；新 pair 进入导出清单后 symbol_map 同样满足该性质 — tests: `tests/integration/test_f008_export_integration.py`
-- [ ] **AC-010** (`TR-001`, `TR-002`, `DR-003`, `NFR-004`): 成员变更与回填进度/失败事件可按 run 与 pair 查询，且台账可交易期变更与准入状态变更可按 `line` 区分；运行记录标注 hostname — tests: `tests/integration/test_f008_backfill.py`
-- [ ] **AC-011** (`NFR-005`): 扩容后实测记录磁盘占用、单次全量导出耗时与 NAS 备份时长，并与 F002 的 6 对基线对照 — tests: `tests/integration/test_f008_capacity_report.py`
-- [ ] **AC-012** (`IR-001`, `FR-002`, `FR-003`, `FR-004`): CLI 五个子命令的契约与 `design.md` §4 登记的全部九类启动期拒绝全覆盖——`discover` 口径缺字段 / 交易所不可达，`freeze` 缺 `--confirm` / 候选清单为空，`backfill` 定义未冻结 / 窗口非法 / 磁盘余量不足，`gate` 对回填未完成的 pair 判 `INCOMPLETE`，`show` 定义或 digest 不存在——各自以非零退出并给出可区分的原因 — tests: `tests/unit/test_f008_cli_contract.py`
-- [ ] **AC-013** (`IR-003`, `IR-002`, `DR-003`): 台账 artifact 与 `BackfillRun` 均带 `schema_version`；artifact 加载方在 `schema_version` 与期望值不符、顶层或成员出现未知键时拒绝加载并报错，不做宽松忽略 — tests: `tests/unit/test_f008_artifact.py`
-- [ ] **AC-014** (`IR-002`, `FR-006`, `NFR-003`): `F007` 的只读消费面（`evaluation/universe_ledger.py`，被 `experiment_store/research_snapshot.py` 调用）按 IR-002 的 canonical JSON 加载同一 digest 的 artifact，`universe_at(T)` 各时点结果与本 feature 台账一致；消费面不再残留任何 `<digest>.csv` 读写路径 — tests: `tests/contract/test_f007_upstream_contracts.py`
+- [x] **AC-001** (`FR-001`, `DR-001`): 同一口径与同一交易所快照两次发现得到相同候选清单与相同 universe_id；逐候选筛选指标入档 — tests: `tests/unit/test_f008_discover.py`
+- [x] **AC-002** (`FR-002`): 未冻结的候选清单驱动回填被非零拒绝；冻结后成员增删产生新版本且旧版本不可改写 — tests: `tests/unit/test_f008_universe_def.py`
+- [x] **AC-003** (`FR-003`, `NFR-002`): 回填中断后重跑从断点继续、不写重复行、行数与预期一致 — tests: `tests/integration/test_f008_backfill.py`
+- [x] **AC-004** (`FR-003`, `NFR-001`): 限流错误触发退避重试且不超过上限，请求速率不因失败而提高 — tests: `tests/unit/test_f008_rate_limit.py`
+- [x] **AC-005** (`FR-004`, `DR-004`): 缺失率超限、未闭合边界、连续聚合对不上、重复主键四类 fixture 均被拦在导出清单外并各记原因码；全项通过者进入清单（重复主键 fixture 以无主键约束的 scratch 源表承载——参考表 `ohlcv_1m` 的主键使重复无法构造，用真实表只能得到恒真的空转断言） — tests: `tests/integration/test_f008_quality_gate.py`
+- [x] **AC-006** (`FR-004`): 上线晚于回填窗口起点的 pair 按实际可得窗口计算缺失率，不被误判为缺失 — tests: `tests/unit/test_f008_quality_gate_window.py`
+- [x] **AC-007** (`FR-005`, `NFR-003`): 含上市/退市/中途进出的 fixture 上，universe_at(T) 在各时点返回正确成员集合 — tests: `tests/unit/test_f008_membership.py`
+- [x] **AC-008** (`FR-005`, `DR-002`): 尝试原地改写已发布历史区间被拒绝；退出记录保留历史数据不删除 — tests: `tests/unit/test_f008_membership.py`
+- [x] **AC-009** (`FR-006`, `IR-002`): 台账 artifact 同内容得同 digest 且逐字节一致、内容变化得新 digest 且旧 digest 仍可读；发布出的 artifact 能被下游 `factor_factory.generators.universe.load_explicit_universe` 按 digest 直接加载通过；新 pair 进入导出清单后 symbol_map 同样满足该性质 — tests: `tests/integration/test_f008_export_integration.py`
+- [x] **AC-010** (`TR-001`, `TR-002`, `DR-003`, `NFR-004`): 成员变更与回填进度/失败事件可按 run 与 pair 查询，且台账可交易期变更与准入状态变更可按 `line` 区分；运行记录标注 hostname — tests: `tests/integration/test_f008_backfill.py`
+- [x] **AC-011** (`NFR-005`): 扩容后实测记录磁盘占用、单次全量导出耗时与 NAS 备份时长，并与 F002 的 6 对基线对照 — tests: `tests/integration/test_f008_capacity_report.py`
+  - **实测（执行机 `qiaozhi-lt`，2026-09-24/25）**：磁盘占用 湖 **30,028** 分区文件 / **1,015 MB**（基线 8,860 / 272 MB）；单次全量导出 **860 s**（数据集级 839.82 s，基线 228 s；对 35 对外推 1,330 s 为 **0.65×**）；NAS 备份 **8,356 s**、NAS 端 **30,028** 个 parquet（三段 md5 校验一致）。记录：`reports/f008/capacity-report.json`；执行机门禁：`ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f008_capacity_report.py` = **4 passed**。NAS 备份的传输路径为 tailnet DERP 中继（执行机不在家网），详见 `reports/f008/执行机取证-T020-T023.md` §13.5
+- [x] **AC-012** (`IR-001`, `FR-002`, `FR-003`, `FR-004`): CLI 五个子命令的契约与 `design.md` §4 登记的全部九类启动期拒绝全覆盖——`discover` 口径缺字段 / 交易所不可达，`freeze` 缺 `--confirm` / 候选清单为空，`backfill` 定义未冻结 / 窗口非法 / 磁盘余量不足，`gate` 对回填未完成的 pair 判 `INCOMPLETE`，`show` 定义或 digest 不存在——各自以非零退出并给出可区分的原因 — tests: `tests/unit/test_f008_cli_contract.py`
+- [x] **AC-013** (`IR-003`, `IR-002`, `DR-003`): 台账 artifact 与 `BackfillRun` 均带 `schema_version`；artifact 加载方在 `schema_version` 与期望值不符、顶层或成员出现未知键时拒绝加载并报错，不做宽松忽略 — tests: `tests/unit/test_f008_artifact.py`
+- [x] **AC-014** (`IR-002`, `FR-006`, `NFR-003`): `F007` 的只读消费面（`evaluation/universe_ledger.py`，被 `experiment_store/research_snapshot.py` 调用）按 IR-002 的 canonical JSON 加载同一 digest 的 artifact，`universe_at(T)` 各时点结果与本 feature 台账一致；消费面不再残留任何 `<digest>.csv` 读写路径 — tests: `tests/contract/test_f007_upstream_contracts.py`
 
 ## 7. 测试、依赖与决策
 
