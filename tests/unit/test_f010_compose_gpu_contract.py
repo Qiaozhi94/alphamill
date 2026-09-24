@@ -78,7 +78,7 @@ def assert_gpu_override_contract(override: str) -> None:
     assert "capabilities: [gpu]" in block
     assert "privileged" not in block, "设备预留不得借道特权容器"
     assert_override_keys_whitelisted(override)
-    assert_gpu_healthcheck(block)
+    assert_gpu_healthcheck(override)
 
 
 def assert_override_keys_whitelisted(override: str) -> None:
@@ -128,12 +128,41 @@ def assert_override_keys_whitelisted(override: str) -> None:
     )
 
 
-def assert_gpu_healthcheck(block: str) -> None:
-    """healthcheck 判据：model_loaded=true 且 device 以 cuda 开头（FR-003）。"""
-    assert "healthcheck:" in block
-    assert "model_loaded') is True" in block, "GPU healthcheck 必须要求 model_loaded=true"
-    assert "startswith('cuda')" in block, "GPU healthcheck 必须以 device 以 cuda 开头为判据"
-    assert "== 'cpu'" not in block, "GPU healthcheck 不得沿用 cpu 判据"
+def assert_gpu_healthcheck(override: str) -> None:
+    """healthcheck 判据：`model_loaded=true` 且 `device` 以 cuda 开头（FR-003）。
+
+    按 **assert 语句的实际条件**校验，不按子串——`assert True or h.get('model_loaded') …`
+    含有全部关键子串却恒真（R3-002），子串匹配拦不住它。
+    """
+    doc = yaml.safe_load(override) or {}
+    test = ((doc.get("services") or {}).get("kronos-signal-real") or {}).get("healthcheck", {})
+    assert isinstance(test, dict), f"healthcheck 必须是映射（不得 disable）: {test!r}"
+    command = test.get("test")
+    assert isinstance(command, list) and command[:1] == ["CMD-SHELL"], (
+        f"healthcheck.test 必须是 CMD-SHELL 形式: {command!r}"
+    )
+    shell = " ".join(command[1:])
+
+    asserted = re.search(r"assert\s+(?P<cond>.+?),", shell)
+    assert asserted, f"healthcheck 命令里找不到 assert 条件: {shell!r}"
+    condition = asserted.group("cond")
+
+    # 条件必须是「两个判据以 and 相连」，且不含恒真短路
+    parts = [p.strip() for p in re.split(r"\band\b", condition)]
+    assert len(parts) == 2, f"判据应为两项以 and 相连（model_loaded 与 device）: {condition!r}"
+    # 只拦"独立的恒真项"与 or 短路：`is True` 是合法判据的一部分，不能一律禁 True
+    assert not re.search(r"\bor\b", condition), f"判据不得用 or 短路: {condition!r}"
+    for part in parts:
+        assert not re.fullmatch(r"(True|1|1\s*==\s*1)", part.strip()), (
+            f"判据项不得恒真: {part!r}（完整条件 {condition!r}）"
+        )
+    assert any("model_loaded" in p and "is True" in p for p in parts), (
+        f"缺 model_loaded is True 判据: {condition!r}"
+    )
+    assert any("startswith('cuda')" in p for p in parts), (
+        f"缺 device 以 cuda 开头判据: {condition!r}"
+    )
+    assert "== 'cpu'" not in condition, "GPU healthcheck 不得沿用 cpu 判据"
 
 
 def test_default_compose_has_no_gpu_surface() -> None:
@@ -308,3 +337,43 @@ def test_feature_does_not_touch_default_env_example() -> None:
     assert "cu130" not in env_example and "tuna.tsinghua" not in env_example, (
         "默认 .env.example 不得出现 GPU/镜像相关配置"
     )
+
+
+def test_short_circuited_healthcheck_fails_the_gate() -> None:
+    """R3-002：判据被短路（`assert True or 原判据`）必须判红。
+
+    原门禁按子串匹配"含 model_loaded / startswith('cuda')"——把整个条件短路掉之后，
+    这些子串**依然都在**，于是一个恒真的 healthcheck 能过门禁：容器永远 healthy，
+    报 cpu 的实例也会被判就绪，FR-003 的第二道网形同虚设。
+    """
+    override = GPU_OVERRIDE_PATH.read_text(encoding="utf-8")
+    mutated = override.replace(
+        "assert h.get('model_loaded')", "assert True or h.get('model_loaded')"
+    )
+    assert mutated != override, "变异基准串不存在（healthcheck 命令改过？需同步本用例）"
+
+    with pytest.raises(AssertionError):
+        assert_gpu_override_contract(mutated)
+
+
+def test_healthcheck_whitelist_rule_is_covered_by_a_mutation() -> None:
+    """R3-002 的另一半：healthcheck 的白名单规则本身要有变异锁住。
+
+    检视实测「删掉 healthcheck 白名单规则 → 30 passed」——规则没有任何用例依赖它。
+    这里正面构造它该拦的两种写法：多加 interval（应由默认文件继承）、整体 disable。
+    """
+    override = GPU_OVERRIDE_PATH.read_text(encoding="utf-8")
+
+    with_interval = override.replace(
+        "    healthcheck:\n      test:", "    healthcheck:\n      interval: 3s\n      test:"
+    )
+    assert with_interval != override
+    with pytest.raises(AssertionError, match="healthcheck"):
+        assert_gpu_override_contract(with_interval)
+
+    disabled = re.sub(
+        r"(?ms)^    healthcheck:\n.*?\n(?=\Z)", "    healthcheck: disable\n", override
+    )
+    assert disabled != override
+    with pytest.raises((AssertionError, TypeError)):
+        assert_gpu_override_contract(disabled)
