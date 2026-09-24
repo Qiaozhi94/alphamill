@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_PATH = ROOT / "deployment/docker-compose.yml"
@@ -31,8 +32,6 @@ SERVICE_KEY_RE = re.compile(r"^  ([a-z][a-z0-9-]*):\n", re.M)
 ALLOWED_SERVICE_KEYS = {"image", "build", "environment", "deploy", "healthcheck"}
 ALLOWED_BUILD_KEYS = {"args"}
 ALLOWED_ENV_KEYS = {"KRONOS_DEVICE"}
-SERVICE_SUBKEY_RE = re.compile(r"(?m)^    ([A-Za-z_][\w.-]*):")
-BUILD_SUBKEY_RE = re.compile(r"(?m)^      ([A-Za-z_][\w.-]*):")
 
 
 def _strip_comments(text: str) -> str:
@@ -78,38 +77,55 @@ def assert_gpu_override_contract(override: str) -> None:
     assert re.search(r"(?m)^\s+count: 1$", block), "设备预留必须 count: 1（缺省即全部 GPU）"
     assert "capabilities: [gpu]" in block
     assert "privileged" not in block, "设备预留不得借道特权容器"
-    assert_override_keys_whitelisted(block)
+    assert_override_keys_whitelisted(override)
     assert_gpu_healthcheck(block)
 
 
-def assert_override_keys_whitelisted(block: str) -> None:
-    """服务块的键面是白名单：GPU 面之外的键一律判红（R1-002）。"""
-    keys = set(SERVICE_SUBKEY_RE.findall(block))
-    extra = keys - ALLOWED_SERVICE_KEYS
+def assert_override_keys_whitelisted(override: str) -> None:
+    """服务块的键面是白名单，且按 **YAML 语义**取键（R1-002 定白名单、R2-002 改语义解析）。
+
+    不按文本缩进取键：flow 写法（`build: {target: mock}`）、`healthcheck: disable`、
+    `deploy.replicas` 都能从正则下面溜过去——第 1 轮的白名单就是这么被绕的。
+    """
+    doc = yaml.safe_load(override) or {}
+    services = doc.get("services") or {}
+    assert list(services) == ["kronos-signal-real"], (
+        f"override 只允许覆盖 kronos-signal-real: {list(services)}"
+    )
+    svc = services["kronos-signal-real"] or {}
+    extra = set(svc) - ALLOWED_SERVICE_KEYS
     assert not extra, (
         f"override 出现 GPU 面之外的键: {sorted(extra)}（白名单 {sorted(ALLOWED_SERVICE_KEYS)}）"
     )
 
-    build_block = block[block.index("    build:") :] if "    build:" in block else ""
-    if build_block:
-        nxt = SERVICE_SUBKEY_RE.search(build_block[len("    build:") :])
-        build_block = build_block[: len("    build:") + nxt.start()] if nxt else build_block
-        build_keys = set(BUILD_SUBKEY_RE.findall(build_block))
-        extra_build = build_keys - ALLOWED_BUILD_KEYS
-        assert not extra_build, (
-            f"build 下只许 {sorted(ALLOWED_BUILD_KEYS)}，实际多出 {sorted(extra_build)}"
-        )
+    build = svc.get("build")
+    assert isinstance(build, dict), f"build 必须是映射，实际 {type(build).__name__}"
+    extra_build = set(build) - ALLOWED_BUILD_KEYS
+    assert not extra_build, f"build 下只许 {sorted(ALLOWED_BUILD_KEYS)}，多出 {sorted(extra_build)}"
 
-    env_block = block[block.index("    environment:") :] if "    environment:" in block else ""
-    if env_block:
-        nxt = SERVICE_SUBKEY_RE.search(env_block[len("    environment:") :])
-        env_block = env_block[: len("    environment:") + nxt.start()] if nxt else env_block
-        env_keys = set(BUILD_SUBKEY_RE.findall(env_block))
-        extra_env = env_keys - ALLOWED_ENV_KEYS
-        assert not extra_env, (
-            f"environment 下只许 {sorted(ALLOWED_ENV_KEYS)}（其余由默认文件唯一定义），"
-            f"实际多出 {sorted(extra_env)}"
-        )
+    env = svc.get("environment")
+    assert isinstance(env, dict), f"environment 必须是映射（键值写法），实际 {type(env).__name__}"
+    extra_env = set(env) - ALLOWED_ENV_KEYS
+    assert not extra_env, (
+        f"environment 下只许 {sorted(ALLOWED_ENV_KEYS)}（其余由默认文件唯一定义），"
+        f"多出 {sorted(extra_env)}"
+    )
+
+    deploy = svc.get("deploy")
+    assert isinstance(deploy, dict) and set(deploy) == {"resources"}, (
+        f"deploy 下只许 resources（不得有 replicas 等——单卡单实例，架构 §7.1）: {deploy}"
+    )
+    resources = deploy["resources"] or {}
+    assert set(resources) == {"reservations"}, (
+        f"deploy.resources 下只许 reservations: {list(resources)}"
+    )
+    reservations = resources["reservations"] or {}
+    assert set(reservations) == {"devices"}, f"reservations 下只许 devices: {list(reservations)}"
+
+    healthcheck = svc.get("healthcheck")
+    assert isinstance(healthcheck, dict) and set(healthcheck) == {"test"}, (
+        f"healthcheck 只许覆盖 test（interval 等继承默认文件，也不得 disable）: {healthcheck}"
+    )
 
 
 def assert_gpu_healthcheck(block: str) -> None:
@@ -246,3 +262,32 @@ def test_integration_suite_scopes_project_name_to_image_build_only() -> None:
             assert "build" in line or "_compose_image" in line, (
                 f"带 -p 的项目名只许用于构建/解析镜像名，实际出现在: {line.strip()}"
             )
+
+
+# R2-002：正则取键会被这些写法绕过——flow 写法把键写在一行、`healthcheck: disable` 直接
+# 关掉健康检查、deploy 下塞 replicas。改用 YAML 语义解析后逐条判红。
+YAML_EVASION_MUTATIONS = [
+    # healthcheck 整体关掉：判据没了，报 cpu 的实例也会被判就绪
+    (
+        "    healthcheck:\n      test:\n",
+        "    healthcheck: disable\n    _unused:\n      test:\n",
+    ),
+    # build 用 flow 写法：正则按缩进取键时看不见 target
+    (
+        "    build:\n      args:\n",
+        "    build: {target: mock, args: \n",
+    ),
+    # deploy 下塞 replicas：多副本违反单卡单实例（架构 §7.1）
+    (
+        "    deploy:\n      resources:\n",
+        "    deploy:\n      replicas: 3\n      resources:\n",
+    ),
+]
+
+
+@pytest.mark.parametrize(("old", "new"), YAML_EVASION_MUTATIONS)
+def test_yaml_level_evasions_fail_the_gate(old: str, new: str) -> None:
+    """门禁必须按 **YAML 语义**取键，不能按文本缩进正则取键（R2-002）。"""
+    mutated = _mutate(GPU_OVERRIDE_PATH.read_text(encoding="utf-8"), old, new)
+    with pytest.raises((AssertionError, Exception)):
+        assert_gpu_override_contract(mutated)

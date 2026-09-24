@@ -38,6 +38,10 @@ dev = [
   # 因别的包装着它而全绿，CI 干净环境却在收集期 ImportError（F009 代码检视收口时实测：
   # 两个 Python 版本同时红）。显式声明并纳入 check_dep_pins 范围校验。
   "httpx>=0.28,<1",
+  # compose 契约门禁按 YAML 语义取键（F010 R2-002：正则取键会被 flow 写法、`healthcheck:
+  # disable`、嵌套键绕过）。本地由别的包传递安装过，但**未声明 = CI 干净环境必红**——
+  # 与 httpx 那次（266c9d6）同一个坑，故显式声明并纳入 check_dep_pins。
+  "pyyaml>=6,<7",
   "ruff>=0.16,<0.17",
 ]
 
