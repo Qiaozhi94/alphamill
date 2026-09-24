@@ -167,3 +167,69 @@ def test_error_codes_are_limited_to_contract(monkeypatch) -> None:
     }
 
     assert set(lifecycle.ERROR_CODES) == allowed
+
+
+class _RaisingAfterUnload(FakeSignal):
+    """卸载成功，但随后读状态时抛出未预期异常。
+
+    R1-001 复现载体：worker 自己的 try 只包住 unload/eager_load，其后的
+    `status().device` 与显存探测在 try 之外，那里抛的异常原本会漏成 HTTP 500。
+    """
+
+    def __init__(self, *, fail_after: int = 2):
+        super().__init__()
+        self._calls = 0
+        self._fail_after = fail_after
+
+    def status(self):
+        self._calls += 1
+        if self._calls > self._fail_after:
+            raise RuntimeError("driver query failed")
+        return type("S", (), {"loaded": self.loaded, "device": self.device})()
+
+
+class _UnprobeableDevice(FakeSignal):
+    """设备名是意外类型：探测层会抛错，但控制面必须照样可达（读数记为不可得）。"""
+
+    def status(self):
+        return type("S", (), {"loaded": self.loaded, "device": None})()
+
+
+def test_unexpected_exception_still_returns_contract_envelope() -> None:
+    """R1-001：任何未预期异常都必须落在契约信封里，不得漏成 HTTP 500。
+
+    500 不带 `error` 字段，客户端会把它读成"端点不存在"并转入回落探测
+    （架构 §7.1 错误码各司其职），把一次服务端内部故障误判成契约缺失。
+    """
+    client, _ = _client(_RaisingAfterUnload())
+
+    resp = client.post("/lifecycle/stop", headers=HEADERS)
+
+    assert resp.status_code == 200, f"未预期异常漏成非契约响应: {resp.status_code}"
+    assert resp.json() == {"error": lifecycle.E_UNLOAD_FAILED}, resp.text[:200]
+
+
+def test_status_stays_reachable_when_probe_raises() -> None:
+    """R1-001：显存探测抛错不得让 status 不可达——可达性不依赖探测成功（AC-001）。"""
+    client, _ = _client(_UnprobeableDevice())
+
+    resp = client.get("/lifecycle/status", headers=HEADERS)
+
+    assert resp.status_code == 200, f"status 被探测异常打挂: {resp.status_code}"
+    payload = resp.json()
+    assert payload["vram_readable"] is False
+    assert payload["vram_bytes"] is None
+    assert "error" not in payload
+
+
+def test_unexpected_restore_failure_maps_to_unavailable() -> None:
+    """restore 侧的未预期异常映射为 E_UNAVAILABLE，并把 desired 收敛到 stopped。"""
+    signal = FakeSignal(loaded=False)
+    signal.load_error = MemoryError("device side blew up")
+    client, controller = _client(signal)
+
+    resp = client.post("/lifecycle/restore", headers=HEADERS)
+
+    assert resp.json() == {"error": lifecycle.E_UNAVAILABLE}
+    after = controller.status()
+    assert after["state"] == "stopped" and after["operation"] is None

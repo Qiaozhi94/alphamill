@@ -45,6 +45,10 @@ ERROR_CODES = (
     E_UNAVAILABLE,
 )
 
+#: 每个动作的失败码（架构 §7.1 错误码表）：未预期异常也必须映射到这里，
+#: 否则异常会以 HTTP 500 漏出去，而客户端把无 `error` 字段的响应读成"端点不存在"。
+ACTION_FAILURE_CODE = {"stop": E_UNLOAD_FAILED, "restore": E_UNAVAILABLE}
+
 RUNNING = "running"
 STOPPED = "stopped"
 TRANSITIONAL = "transitional"
@@ -134,12 +138,21 @@ class LifecycleController:
         }
 
     def _probe(self, device: str, budget_s: float) -> vram.VramReading:
-        return vram.probe(
-            device=device,
-            mode=self._config.probe_mode,
-            probe_timeout_s=self._config.probe_timeout_s,
-            budget_s=budget_s,
-        )
+        """探测显存；**任何异常都按读数不可得处理**。
+
+        控制面的可达性不依赖探测成功（AC-001 / §5 不变量）：探测抛错就把它记成
+        `vram_readable=false`，而不是让 status 变成 500——后者会让编排分不清
+        "读数缺失"与"控制面故障"，而这两件事的处置完全不同。
+        """
+        try:
+            return vram.probe(
+                device=device,
+                mode=self._config.probe_mode,
+                probe_timeout_s=self._config.probe_timeout_s,
+                budget_s=budget_s,
+            )
+        except Exception:
+            return vram.VramReading(used_bytes=None, readable=False, source="unavailable")
 
     def _vram_reading(self, device: str) -> vram.VramReading:
         return self._probe(device, budget_s=self._config.probe_timeout_s)
@@ -188,31 +201,46 @@ class LifecycleController:
         vram_before: vram.VramReading,
         started: float,
     ) -> dict:
+        result = ACTION_FAILURE_CODE[operation.action]  # 兜底：finally 的日志行必须有值
         try:
             payload, result = worker()
             return payload
         except LifecycleError as exc:
             result = exc.code
             raise
+        except Exception as exc:
+            # worker 自己的 try 之外也可能抛（读设备名、探测显存）。这类异常必须按动作
+            # 映射成契约码，并把期望态收敛到该动作的失败落点——否则响应漏成 HTTP 500，
+            # 且实例停在过渡态（违反"返回错误前已落稳定态"，architecture §7.1）。
+            with self._meta_lock:
+                self._desired = RUNNING if operation.action == "stop" else STOPPED
+            result = ACTION_FAILURE_CODE[operation.action]
+            raise LifecycleError(result) from exc
         finally:
             elapsed_ms = int((self._clock() - started) * 1000)
             with self._meta_lock:
                 self._operation = None
                 desired_now = self._desired
-            model_status = self._signal.status()
-            vram_after = self._vram_reading(model_status.device)
-            late = operation.id in self._timed_out
-            self._timed_out.discard(operation.id)
-            self._log(
-                operation=operation,
-                result="late_complete" if late else result,
-                state_before=state_before,
-                state_after=self._state(desired_now, bool(model_status.loaded)),
-                desired=desired_now,
-                vram_before=vram_before,
-                vram_after=vram_after,
-                elapsed_ms=elapsed_ms,
-            )
+                late = operation.id in self._timed_out
+                self._timed_out.discard(operation.id)
+            # 观测不得掩盖动作结果：状态读取、探测与写日志任一抛错都只丢这行日志，
+            # 不改变本次动作要抛出/返回的东西（否则原始异常被 finally 顶替，事后归因断线）。
+            try:
+                model_status = self._signal.status()
+                state_after = self._state(desired_now, bool(model_status.loaded))
+                vram_after = self._vram_reading(getattr(model_status, "device", "") or "")
+                self._log(
+                    operation=operation,
+                    result="late_complete" if late else result,
+                    state_before=state_before,
+                    state_after=state_after,
+                    desired=desired_now,
+                    vram_before=vram_before,
+                    vram_after=vram_after,
+                    elapsed_ms=elapsed_ms,
+                )
+            except Exception as exc:  # pragma: no cover - 观测降级路径
+                print(f"[kronos-lifecycle] log emit failed for {operation.id}: {exc}")
 
     # --- 动作实现 -----------------------------------------------------------
 
