@@ -291,3 +291,20 @@ def test_yaml_level_evasions_fail_the_gate(old: str, new: str) -> None:
     mutated = _mutate(GPU_OVERRIDE_PATH.read_text(encoding="utf-8"), old, new)
     with pytest.raises((AssertionError, Exception)):
         assert_gpu_override_contract(mutated)
+
+
+def test_feature_does_not_touch_default_env_example() -> None:
+    """默认面红线（spec NFR-001 / tasks §0）：本 feature 不改 `deployment/.env.example`。
+
+    R2-003：第 1 轮为 R1-004 把 `TORCH_EXTRA_INDEX_URL` 的说明写进了 .env.example，
+    那是**默认面**，红线明写不动它——构建机各自的绕行配置属运维动作，说明位置在
+    `docs/alphamill-integration.md` §七。红线不因一次方便而改；要改得先改 spec。
+    """
+    env_example = (ROOT / "deployment/.env.example").read_text(encoding="utf-8")
+
+    assert "TORCH_EXTRA_INDEX_URL" not in env_example, (
+        "GPU 构建的额外索引不得写进默认 .env.example（默认面红线）"
+    )
+    assert "cu130" not in env_example and "tuna.tsinghua" not in env_example, (
+        "默认 .env.example 不得出现 GPU/镜像相关配置"
+    )
