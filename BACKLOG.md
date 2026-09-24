@@ -7,7 +7,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 |---|---|---|---|
 | F003-alphagen-vendor | 0.2 | developing | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
 | F008-universe-expansion | 0.2 | developing | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
-| F010-kronos-gpu-runtime | 0.2 | developing | [spec](docs/features/0.2/F010-kronos-gpu-runtime/spec.md) |
+| F010-kronos-gpu-runtime | 0.2 | code-reviewing | [spec](docs/features/0.2/F010-kronos-gpu-runtime/spec.md) |
 
 > **F009 已收口（2026-09-24，done）**：控制面三端点已在 main 上，交付记录见
 > `docs/features/releases/0.2.md`；F010 的 T011/T012/T018 可以开始。
