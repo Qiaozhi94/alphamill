@@ -267,10 +267,17 @@ def refresh_aggregates(conn, start: datetime, end: datetime):
                 # `refresh window too small`——缺口补齐这类分钟级窗口必然短于 1d 桶
                 # （2026-09-23 实测：06:00→06:51 刷 ohlcv_1d 失败）。
                 window_start = min(start, end - 2 * AGGREGATE_BUCKETS[aggregate])
-                logger.info("refreshing aggregate=%s start=%s end=%s", aggregate, window_start, end)
+                # 末端还要再外扩一个桶：`refresh_continuous_aggregate` 不物化**跨越窗口终点**
+                # 的那个不完整桶，而门禁的一致性检查按 `bucket >= start AND bucket < end`
+                # 计数——数据正好停在窗口终点的 pair 因此恒判 `aggregate_mismatch`
+                # （2026-09-24 实测：24 个新 pair 全缺窗口最后一天的日桶，末端外扩一天后即物化）。
+                window_end = end + AGGREGATE_BUCKETS[aggregate]
+                logger.info(
+                    "refreshing aggregate=%s start=%s end=%s", aggregate, window_start, window_end
+                )
                 cur.execute(
                     "CALL refresh_continuous_aggregate(%s, %s, %s)",
-                    (aggregate, window_start, end),
+                    (aggregate, window_start, window_end),
                 )
     finally:
         conn.autocommit = previous_autocommit

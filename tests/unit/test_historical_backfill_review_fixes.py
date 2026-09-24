@@ -231,6 +231,9 @@ def test_refresh_aggregates_ends_open_transaction_first(monkeypatch) -> None:
     # 窗口短于两个桶时必须放宽，否则 TimescaleDB 报 `refresh window too small`
     assert calls["ohlcv_1d"][1] == end - timedelta(days=2)
     assert calls["ohlcv_5m"][1] == datetime(2024, 9, 10, tzinfo=UTC)
+    # 末端必须外扩一个桶，否则跨越窗口终点的不完整桶不被物化（门禁恒判 aggregate_mismatch）
+    assert calls["ohlcv_1d"][2] == end + timedelta(days=1)
+    assert calls["ohlcv_5m"][2] == end + timedelta(minutes=5)
     assert conn.autocommit is False  # 恢复原值
 
 
