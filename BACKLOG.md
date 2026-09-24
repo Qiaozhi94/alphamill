@@ -7,9 +7,10 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 |---|---|---|---|
 | F003-alphagen-vendor | 0.2 | developing | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
 | F008-universe-expansion | 0.2 | developing | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
-| F009-kronos-lifecycle-endpoints | 0.2 | code-reviewing | [spec](docs/features/0.2/F009-kronos-lifecycle-endpoints/spec.md) |
 | F010-kronos-gpu-runtime | 0.2 | developing | [spec](docs/features/0.2/F010-kronos-gpu-runtime/spec.md) |
 
+> **F009 已收口（2026-09-24，done）**：控制面三端点已在 main 上，交付记录见
+> `docs/features/releases/0.2.md`；F010 的 T011/T012/T018 可以开始。
 > **F009 与 F003 的前置边**：F009 的端点缺失**不阻塞 F003 开工与接口验收**（客户端按
 > 架构 §7.1 观测→处置决策表 fail-closed 兜底）。
 > T033 要求 `test_f003_kronos_lifecycle.py` 以 0 xfailed 通过，即真实卸载取证的先决条件是

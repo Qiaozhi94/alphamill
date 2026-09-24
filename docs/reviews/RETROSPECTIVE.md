@@ -882,7 +882,8 @@
 
 ## 循环 19：F009 Kronos 服务生命周期控制面端点 代码检视
 
-- report_type: code-review | round: 1（full-scan）→ 2（diff-only）→ 3（diff-only，封顶轮） | 状态: 闭环
+report_type: code-review · feature: F009 · status: closed · rounds: 1（full-scan）→ 2（diff-only）→ 3（diff-only，封顶轮） · 收口 CI: 35995587247 绿
+
 - 日期：2026-09-24 | 基线：`304b336`（F009 `code-reviewing`，分支 `feat/F009-kronos-lifecycle-endpoints`）→ 终基线见收口提交
 - 检视人：Claude Opus 5（同会话内先实现后检视，按 skill §8 显式切换视角逐条独立核对）| 裁决：owner（AC-010 验收边界一条）
 - 范围：源码 `lifecycle.py` / `lifecycle_api.py` / `lifecycle_config.py` / `vram.py` 四个新模块 + `kronos_real.py` / `server.py` / compose / `.env.example`，以及它们与架构 §7.1 生命周期契约的逐格一致性

@@ -2,7 +2,8 @@
 kind: feature
 id: F009
 version: "0.2"
-status: code-reviewing
+status: done
+status_evidence: CI 35995587247 绿；代码检视 3 轮 10 条全闭（循环 19 入库）；执行机证据：契约套件 6 passed/0 xfailed、mock 三端点 404、显存载体 1 xfailed 非 XPASS、夜槽旅程通过
 branch: feat/F009-kronos-lifecycle-endpoints
 gate_version: 1
 related_features: [F003, F004, F010]
