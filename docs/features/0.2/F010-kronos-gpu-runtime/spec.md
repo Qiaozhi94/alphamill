@@ -2,7 +2,8 @@
 kind: feature
 id: F010
 version: "0.2"
-status: code-reviewing
+status: done
+status_evidence: merge d6e2525（PR #6）+ CI 36035471354 绿（main）/ 36034315951 绿（PR）；代码检视 3 轮 17 条全闭（循环 20）
 branch: feat/F010-kronos-gpu-runtime
 gate_version: 1
 related_features: [F003, F004, F009]

@@ -7,10 +7,11 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 |---|---|---|---|
 | F003-alphagen-vendor | 0.2 | developing | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
 | F008-universe-expansion | 0.2 | developing | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
-| F010-kronos-gpu-runtime | 0.2 | code-reviewing | [spec](docs/features/0.2/F010-kronos-gpu-runtime/spec.md) |
 
 > **F009 已收口（2026-09-24，done）**：控制面三端点已在 main 上，交付记录见
 > `docs/features/releases/0.2.md`；F010 的 T011/T012/T018 可以开始。
+> **F010 已收口（2026-09-25，done）**：GPU 基座已在 main 上（PR #6，`d6e2525`），交付记录见
+> `docs/features/releases/0.2.md`；F009 AC-012 的显存先红态已解除。
 > **F009 与 F003 的前置边**：F009 的端点缺失**不阻塞 F003 开工与接口验收**（客户端按
 > 架构 §7.1 观测→处置决策表 fail-closed 兜底）。
 > T033 要求 `test_f003_kronos_lifecycle.py` 以 0 xfailed 通过，即真实卸载取证的先决条件是
@@ -21,7 +22,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 > **2026-09-24 重取（F009 T022，`kronos-signal-real`）**：控制面已落地——`--runxfail` 跑
 > `test_f003_kronos_lifecycle.py` 得 **6 passed / 0 xfailed**（含 E_BUSY / E_TIMEOUT /
 > E_BAD_REQUEST 三类错误路径）；同一新镜像在 mock 实例上注册的 `/lifecycle` 路由数为 0、
-> 三端点仍 404，两件事各自成立。真实卸载的**显存**取证仍等 F010（其 AC-009/T011）。
+> 三端点仍 404，两件事各自成立。真实卸载的**显存**取证已由 F010 于 2026-09-24 完成（其 AC-009/T011）。
 
 > **F010 → F003 同步项**（F010 文档检视 R1-002，2026-09-21）：`pyproject.toml` `mining` extra
 > 注释中的 `--index-url .../cu128` 示例对 torch ≥2.12 已无对应 wheel（cu128 止于 2.11.0）；
