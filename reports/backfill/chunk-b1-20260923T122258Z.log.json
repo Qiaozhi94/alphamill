@@ -1,7 +1,21 @@
 {
+  "schema_version": 1,
+  "run_id": "6d85a249e8fe-b1-20260922T150054Z",
+  "universe_id": "sha256:6d85a249e8fe509518443afb3407d0ed6ea736260c570c8f860676e0c466a709",
   "batch": 1,
-  "finished_at": "2026-09-24T04:16:43.189243Z",
+  "window": {
+    "start": "2024-09-10T00:00:00Z",
+    "end": "2026-09-10T15:52:00Z"
+  },
+  "rate_limit": {
+    "base_backoff_seconds": 1.0,
+    "max_backoff_seconds": 60.0,
+    "max_retries": 8,
+    "min_interval_seconds": 0.5
+  },
   "hostname": "qiaozhi-lt",
+  "started_at": "2026-09-22T15:00:54.663885Z",
+  "finished_at": "2026-09-23T12:53:00.883544Z",
   "pairs": [
     {
       "db_symbol": "AAVE/USDT",
@@ -183,33 +197,33 @@
     },
     {
       "db_symbol": "ONDO/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "ONDO-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 28,
+      "status": "completed",
       "rows": 744592,
-      "status": "completed"
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
     },
     {
       "db_symbol": "PEPE/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "PEPE-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 8,
+      "status": "completed",
       "rows": 1052152,
-      "status": "completed"
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
     },
     {
       "db_symbol": "PUMP/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "PUMP-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 17,
+      "status": "completed",
       "rows": 524362,
-      "status": "completed"
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
     },
     {
       "db_symbol": "SOL/USDT",
@@ -225,73 +239,73 @@
     },
     {
       "db_symbol": "SUI/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "SUI-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 12,
-      "rows": 1052152,
-      "status": "completed"
+      "status": "deferred",
+      "rows": 1050000,
+      "last_cursor": "2026-09-09T04:00:00Z",
+      "error": "SUI/USDT 时间片到点，断点 2026-09-09T04:00:00+00:00",
+      "error_class": null
     },
     {
       "db_symbol": "TAO/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "TAO-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 22,
-      "rows": 1052152,
-      "status": "completed"
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
     },
     {
       "db_symbol": "TRUMP/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "TRUMP-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 16,
-      "rows": 863002,
-      "status": "completed"
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2025-01-18T13:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
     },
     {
       "db_symbol": "TUT/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "TUT-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 21,
-      "rows": 765772,
-      "status": "completed"
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2025-03-20T09:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
     },
     {
       "db_symbol": "UNI/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "UNI-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 13,
-      "rows": 1052152,
-      "status": "completed"
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
     },
     {
       "db_symbol": "WLD/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "WLD-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 15,
-      "rows": 1052152,
-      "status": "completed"
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
     },
     {
       "db_symbol": "XLM/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "XLM-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 30,
-      "rows": 1052152,
-      "status": "completed"
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
     },
     {
       "db_symbol": "XRP/USDT",
@@ -307,27 +321,13 @@
     },
     {
       "db_symbol": "ZEC/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "ZEC-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 4,
-      "rows": 1052152,
-      "status": "completed"
+      "status": "deferred",
+      "rows": 658870,
+      "last_cursor": "2025-12-11T13:10:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
     }
-  ],
-  "rate_limit": {
-    "base_backoff_seconds": 1.0,
-    "max_backoff_seconds": 60.0,
-    "max_retries": 8,
-    "min_interval_seconds": 0.5
-  },
-  "run_id": "6d85a249e8fe-b1-20260922T150054Z",
-  "schema_version": 1,
-  "started_at": "2026-09-22T15:00:54.663885Z",
-  "universe_id": "sha256:6d85a249e8fe509518443afb3407d0ed6ea736260c570c8f860676e0c466a709",
-  "window": {
-    "end": "2026-09-10T15:52:00Z",
-    "start": "2024-09-10T00:00:00Z"
-  }
+  ]
 }

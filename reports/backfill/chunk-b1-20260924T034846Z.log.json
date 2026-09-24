@@ -1,7 +1,21 @@
 {
+  "schema_version": 1,
+  "run_id": "6d85a249e8fe-b1-20260922T150054Z",
+  "universe_id": "sha256:6d85a249e8fe509518443afb3407d0ed6ea736260c570c8f860676e0c466a709",
   "batch": 1,
-  "finished_at": "2026-09-24T04:16:43.189243Z",
+  "window": {
+    "start": "2024-09-10T00:00:00Z",
+    "end": "2026-09-10T15:52:00Z"
+  },
+  "rate_limit": {
+    "base_backoff_seconds": 1.0,
+    "max_backoff_seconds": 60.0,
+    "max_retries": 8,
+    "min_interval_seconds": 0.5
+  },
   "hostname": "qiaozhi-lt",
+  "started_at": "2026-09-22T15:00:54.663885Z",
+  "finished_at": "2026-09-24T04:16:43.189243Z",
   "pairs": [
     {
       "db_symbol": "AAVE/USDT",
@@ -235,13 +249,13 @@
     },
     {
       "db_symbol": "TAO/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "TAO-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 22,
+      "status": "completed",
       "rows": 1052152,
-      "status": "completed"
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
     },
     {
       "db_symbol": "TRUMP/USDT",
@@ -265,33 +279,33 @@
     },
     {
       "db_symbol": "UNI/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "UNI-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 13,
+      "status": "completed",
       "rows": 1052152,
-      "status": "completed"
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
     },
     {
       "db_symbol": "WLD/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "WLD-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 15,
+      "status": "completed",
       "rows": 1052152,
-      "status": "completed"
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
     },
     {
       "db_symbol": "XLM/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "XLM-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 30,
+      "status": "completed",
       "rows": 1052152,
-      "status": "completed"
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
     },
     {
       "db_symbol": "XRP/USDT",
@@ -307,27 +321,13 @@
     },
     {
       "db_symbol": "ZEC/USDT",
-      "error": null,
-      "error_class": null,
       "lake_pair": "ZEC-USDT",
-      "last_cursor": "2026-09-10T15:52:00Z",
       "rank": 4,
+      "status": "completed",
       "rows": 1052152,
-      "status": "completed"
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
     }
-  ],
-  "rate_limit": {
-    "base_backoff_seconds": 1.0,
-    "max_backoff_seconds": 60.0,
-    "max_retries": 8,
-    "min_interval_seconds": 0.5
-  },
-  "run_id": "6d85a249e8fe-b1-20260922T150054Z",
-  "schema_version": 1,
-  "started_at": "2026-09-22T15:00:54.663885Z",
-  "universe_id": "sha256:6d85a249e8fe509518443afb3407d0ed6ea736260c570c8f860676e0c466a709",
-  "window": {
-    "end": "2026-09-10T15:52:00Z",
-    "start": "2024-09-10T00:00:00Z"
-  }
+  ]
 }
