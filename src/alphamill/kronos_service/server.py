@@ -6,15 +6,20 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 try:  # Package import is used by the host service; fallback keeps the legacy CLI usable.
-    from . import kronos_real
+    from . import kronos_real, lifecycle_config
     from .db_adapter import healthcheck, latest_ohlcv
     from .generator import generate_placeholder_signal
     from .kronos_real import real_signal
+    from .lifecycle import LifecycleController
+    from .lifecycle_api import build_lifecycle_router
 except ImportError:  # pragma: no cover - direct script compatibility only.
     import kronos_real
+    import lifecycle_config
     from db_adapter import healthcheck, latest_ohlcv
     from generator import generate_placeholder_signal
     from kronos_real import real_signal
+    from lifecycle import LifecycleController
+    from lifecycle_api import build_lifecycle_router
 
 
 class PredictResponse(BaseModel):
@@ -56,6 +61,14 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Kronos Signal Service", version="0.1.0", lifespan=lifespan)
+
+# 控制面只在 real 实例注册（F009 IR-005 / NFR-001）：mock 上 /lifecycle/* 自然 404，
+# 客户端命中决策表第三行的回落探测。配置非法在此判红——启动期失败优于夜槽才发现。
+lifecycle_controller: LifecycleController | None = None
+if real_signal.enabled:
+    lifecycle_controller = LifecycleController(real_signal, lifecycle_config.load_config())
+    real_signal.set_admission(lifecycle_controller.allow_load)
+    app.include_router(build_lifecycle_router(lifecycle_controller))
 
 
 @app.get("/health")
@@ -145,7 +158,7 @@ def build_prediction(symbol: str, exchange: str, limit: int) -> PredictResponse:
         signal = real_signal.generate_signal(rows)
         # 未进模型的兜底信号不得标 kronos、也不得回报权重路径（F004-C002/R005：
         # 证据标签必须真实 earned；数据不足时 /predict 无有效输入）。
-        if signal["reason"] == kronos_real.NOT_ENOUGH_DATA_REASON:
+        if signal["reason"] in kronos_real.FALLBACK_REASONS:
             source = "placeholder"
             model = "placeholder"
         else:

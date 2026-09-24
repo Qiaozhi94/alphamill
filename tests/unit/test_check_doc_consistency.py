@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import pathlib
+import re
 import shutil
 
 import pytest
@@ -115,13 +116,16 @@ def test_active_feature_indexes_go_red_on_claude_drift(tmp_path: pathlib.Path) -
 def test_active_feature_indexes_go_red_on_readme_drift(tmp_path: pathlib.Path) -> None:
     _copy_index_tree(tmp_path)
     readme = tmp_path / "docs" / "README.md"
-    readme.write_text(
-        readme.read_text(encoding="utf-8").replace(
-            "活跃 feature 索引（当前 F003/F008/F009/F010）",
-            "活跃 feature 索引（当前 F003）",
-        ),
-        encoding="utf-8",
+    original = readme.read_text(encoding="utf-8")
+    # 变异按**模式**改写而不是写死当前活跃集：每次 feature 收口活跃集都会变，
+    # 写死基准串会让这条变异用例在收口时假红（F009 收口实测）。
+    mutated = re.sub(
+        r"活跃 feature 索引（当前 [^）]+）", "活跃 feature 索引（当前 F003）", original
     )
+    assert mutated != original, (
+        "变异基准模式不存在（docs/README.md 的活跃索引行改过？需同步本用例）"
+    )
+    readme.write_text(mutated, encoding="utf-8")
     assert "active_feature_indexes_aligned" in _check_ids(
         cdc.check_active_feature_indexes(tmp_path)
     )

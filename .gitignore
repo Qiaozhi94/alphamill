@@ -42,6 +42,9 @@ docs/research/
 docs/reviews/*
 # ...例外：curated 摘要入库
 !docs/reviews/RETROSPECTIVE.md
+# ...例外：owner 明确要求入库的过程稿归档（原文照搬，仅存档用）
+!docs/reviews/archive/
+!docs/reviews/archive/**
 
 # 本地运行时密钥（模板为 deployment/.env.example，真实凭据人工搬运不进 git）
 deployment/.env

@@ -6,18 +6,28 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 | Feature | 版本 | 状态 | 链接 |
 |---|---|---|---|
 | F003-alphagen-vendor | 0.2 | developing | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
-| F008-universe-expansion | 0.2 | ready-for-development | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
-| F009-kronos-lifecycle-endpoints | 0.2 | ready-for-development | [spec](docs/features/0.2/F009-kronos-lifecycle-endpoints/spec.md) |
-| F010-kronos-gpu-runtime | 0.2 | doc-reviewing | [spec](docs/features/0.2/F010-kronos-gpu-runtime/spec.md) |
+| F008-universe-expansion | 0.2 | developing | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
+| F010-kronos-gpu-runtime | 0.2 | developing | [spec](docs/features/0.2/F010-kronos-gpu-runtime/spec.md) |
 
+> **F009 已收口（2026-09-24，done）**：控制面三端点已在 main 上，交付记录见
+> `docs/features/releases/0.2.md`；F010 的 T011/T012/T018 可以开始。
 > **F009 与 F003 的前置边**：F009 的端点缺失**不阻塞 F003 开工与接口验收**（客户端按
 > 架构 §7.1 观测→处置决策表 fail-closed 兜底）。
 > T033 要求 `test_f003_kronos_lifecycle.py` 以 0 xfailed 通过，即真实卸载取证的先决条件是
 > 端点就绪并部署于执行机。
-> **2026-09-19 复测**：`kronos-signal` 服务在 `qiaozhi-lt:8001` 在跑（`/health` 正常、
-> `device=cpu`），但 `/lifecycle/status` 返回 **404**，端点仍未实现；该次探测打在 mock
-> 实例上，按契约 mock 不是合法取证目标（无显存可释放），结论成立但基线须在 F009
-> 落地时以 `kronos-signal-real` 重取（F009 tasks T022）。
+> **~~2026-09-19 复测~~**（已被 F009 T022 取代）：那次 404 打在 mock 实例 `qiaozhi-lt:8001`
+> 上，而按契约 mock **本就不注册** `/lifecycle/*`（F009 IR-005），因此它既不能证明"端点未
+> 实现"，也不是合法取证目标。
+> **2026-09-24 重取（F009 T022，`kronos-signal-real`）**：控制面已落地——`--runxfail` 跑
+> `test_f003_kronos_lifecycle.py` 得 **6 passed / 0 xfailed**（含 E_BUSY / E_TIMEOUT /
+> E_BAD_REQUEST 三类错误路径）；同一新镜像在 mock 实例上注册的 `/lifecycle` 路由数为 0、
+> 三端点仍 404，两件事各自成立。真实卸载的**显存**取证仍等 F010（其 AC-009/T011）。
+
+> **F010 → F003 同步项**（F010 文档检视 R1-002，2026-09-21）：`pyproject.toml` `mining` extra
+> 注释中的 `--index-url .../cu128` 示例对 torch ≥2.12 已无对应 wheel（cu128 止于 2.11.0）；
+> Kronos GPU 镜像定为 `torch==2.14.0` + `whl/cu130`。**已同步**（2026-09-21，
+> `feat/F003-alphagen-vendor@fb915f0`）：注释改为写明 cu128 上限与 cu130 + 驱动 R580+
+> 的对齐路径；执行机现用 `2.10.0+cu128` 不变，驱动下限由 F010 T002 核验。
 
 > 规则：feature 状态变更（spec frontmatter）时必须同步本表；`done` 的 Feature 移出本表，
 > 交付记录进入 `docs/features/releases/<version>.md`。

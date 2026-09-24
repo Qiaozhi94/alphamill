@@ -37,9 +37,8 @@ def _db_available() -> bool:
     return True
 
 
-def _settled_rows(conn) -> int:
-    """统计 2 分钟前的已闭 K 线行数（排除采集窗口内的分钟边界抖动）。"""
-    cutoff = datetime.now(UTC) - timedelta(minutes=2)
+def _settled_rows(conn, cutoff: datetime) -> int:
+    """统计 cutoff 之前的已闭 K 线行数；两次统计须共用同一 cutoff，否则跨分钟会多数一根。"""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -60,11 +59,12 @@ def test_collector_smoke_single_symbol_idempotent():
         try:
             first = ccxt_ingestor.run_cycle(conn, "binance", exchange, ["BTC/USDT"])
             conn.commit()
-            settled_after_first = _settled_rows(conn)
+            cutoff = datetime.now(UTC) - timedelta(minutes=2)
+            settled_after_first = _settled_rows(conn, cutoff)
 
             second = ccxt_ingestor.run_cycle(conn, "binance", exchange, ["BTC/USDT"])
             conn.commit()
-            settled_after_second = _settled_rows(conn)
+            settled_after_second = _settled_rows(conn, cutoff)
         finally:
             close = getattr(exchange, "close", None)
             if callable(close):
@@ -74,7 +74,7 @@ def test_collector_smoke_single_symbol_idempotent():
 
     assert first, "采集周期未返回统计"
     assert second, "复跑周期未返回统计"
-    # 已闭 K 线在两次紧邻周期之间不应增长（分钟边界抖动被 2 分钟 cutoff 排除）。
+    # 已闭 K 线在两次紧邻周期之间不应增长（固定 cutoff 排除分钟边界与在跑采集器的新 K 线）。
     assert settled_after_second == settled_after_first, (
         f"幂等违规：复跑后已闭 K 线增加 {settled_after_second - settled_after_first} 行"
     )

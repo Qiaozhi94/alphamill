@@ -2,17 +2,17 @@
 
 **契约目标是真实推理服务 `kronos-signal-real`（执行机 GPU 实例）**——夜槽卸载为的是
 释放 GPU 显存，mock 服务（`kronos-signal`，8001，无 torch）无显存可释放，不是本契约的
-对象，也不是合法的测试目标（R4-002）。服务端端点（`GET /lifecycle/status`、
-`POST /lifecycle/stop`、`POST /lifecycle/restore`）属待分配 feature（BACKLOG「Kronos
-服务生命周期端点」）——本文件以 `xfail(strict=True)` 显式声明当前「服务端未实现」的
-先红态：端点落地后 XPASS 即红，落地 feature 必须移除本标记并补 `E_BUSY` / `E_TIMEOUT`
-错误路径用例（F004 tasks §5）。
+对象，也不是合法的测试目标（R4-002）。服务端端点（`GET /lifecycle/status`、`POST /lifecycle/stop`、
+`POST /lifecycle/restore`）由 **F009** 交付；本文件的模块级 `xfail(strict=True)` 已随
+F009 T015 移除，改为**真红真绿**：失败即失败。显存真实下降的判据不在此文件——它在
+`test_f009_vram_release.py` 以先红态等 F010 取证（F009 AC-012）；本文件必须保持
+**0 xfailed**，否则 F003 T033 的 `--runxfail` 门禁不可能通过。
 
 开关纪律（双保险，缺一即 skip）：
 - 未设 `ALPHAMILL_INTEGRATION` → skip（与 F004 容器套件同纪律）；
 - 未设 `KRONOS_CONTROL_URL` → skip（**无默认地址**：契约目标必须显式指定，避免默认
   打到 mock 的 404 上制造假红/假绿；T033 的 verify 命令给出执行机取值）。
-设了以后失败就是失败（当前被 strict xfail 吸收为 xfailed，即预期红）。**404 / 连接
+设了以后失败就是失败。**404 / 连接
 拒绝不构成契约通过**：「端点未实现」正是先红态本身，任何用例不得把它解释成服务端
 行为合法。
 
@@ -25,6 +25,9 @@
 from __future__ import annotations
 
 import os
+import socket
+import threading
+import time
 
 import pytest
 import requests
@@ -34,14 +37,11 @@ CONTRACT_VERSION = "1"
 # 客户端超时取契约默认值：status 5s / stop 60s / restore 120s（可配项的缺省档）。
 TIMEOUT_STATUS, TIMEOUT_STOP, TIMEOUT_RESTORE = 5, 60, 120
 
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.xfail(
-        strict=True,
-        reason="服务端控制面端点属待分配 feature（BACKLOG「Kronos 服务生命周期端点」）；"
-        "端点落地后 XPASS 即红，须移除本标记（F004 tasks §5）",
-    ),
-]
+pytestmark = pytest.mark.integration
+
+# 探测一律不走环境代理：代理会替失败连接返回响应，让「端点不可达」类断言假绿。
+SESSION = requests.Session()
+SESSION.trust_env = False
 
 INTEGRATION_REQUIRED = os.getenv("ALPHAMILL_INTEGRATION", "").lower() in {"1", "true", "yes"}
 CONTROL_URL = os.getenv("KRONOS_CONTROL_URL", "").strip().rstrip("/")
@@ -62,11 +62,42 @@ def _headers(version: str = CONTRACT_VERSION) -> dict[str, str]:
 
 
 def _status() -> dict:
-    resp = requests.get(
+    resp = SESSION.get(
         f"{CONTROL_URL}/lifecycle/status", headers=_headers(), timeout=TIMEOUT_STATUS
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def _wait_idle(timeout: float = 60.0) -> dict:
+    """等实例回到稳定态（operation 为 null）。
+
+    动作是异步的：`E_TIMEOUT` 返回后后台仍在跑。用例之间不等待就会互相污染——
+    下一条用例会拿到上一条留下的 `E_BUSY`（F009 T022 实测）。
+    """
+    deadline = time.monotonic() + timeout
+    status = _status()
+    while status["operation"] is not None and time.monotonic() < deadline:
+        time.sleep(0.2)
+        status = _status()
+    assert status["operation"] is None, f"{timeout}s 内 operation 未清空: {status}"
+    return status
+
+
+@pytest.fixture(autouse=True)
+def idle_instance():
+    """每条用例前后都把实例带回 running 且无在飞动作，避免用例间互相污染。"""
+    if not INTEGRATION_REQUIRED or not CONTROL_URL:
+        yield
+        return
+    _wait_idle()
+    yield
+    _wait_idle()
+    if _status()["state"] != "running":
+        SESSION.post(
+            f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
+        )
+        _wait_idle()
 
 
 def test_stop_restore_contract() -> None:
@@ -77,7 +108,7 @@ def test_stop_restore_contract() -> None:
     for field in ("contract_version", "model_loaded", "vram_bytes", "device"):
         assert field in before, f"status 响应缺字段 {field}"
 
-    stop = requests.post(f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
+    stop = SESSION.post(f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
     stop.raise_for_status()
     stopped = stop.json()
     assert stopped["state"] == "stopped"
@@ -88,7 +119,7 @@ def test_stop_restore_contract() -> None:
     assert after["state"] == "stopped"
     assert isinstance(after["vram_bytes"], int) and after["vram_bytes"] >= 0
 
-    restore = requests.post(
+    restore = SESSION.post(
         f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
     )
     restore.raise_for_status()
@@ -99,16 +130,14 @@ def test_stop_restore_contract() -> None:
 def test_stop_restore_idempotent() -> None:
     """重复 stop 返回 state=stopped 不报错；重复 restore 返回 state=running。"""
     _require_ready()
-    first = requests.post(f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
+    first = SESSION.post(f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
     first.raise_for_status()
-    second = requests.post(
-        f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP
-    )
+    second = SESSION.post(f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
     second.raise_for_status()
     assert second.json()["state"] == "stopped"
 
-    requests.post(f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE)
-    again = requests.post(
+    SESSION.post(f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE)
+    again = SESSION.post(
         f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
     )
     again.raise_for_status()
@@ -122,9 +151,142 @@ def test_unsupported_contract_version_rejected() -> None:
     假性通过（实测 mock 404 → XPASS strict 红），门禁等于没牙。
     """
     _require_ready()
-    resp = requests.get(
+    resp = SESSION.get(
         f"{CONTROL_URL}/lifecycle/status", headers=_headers("999"), timeout=TIMEOUT_STATUS
     )
     assert resp.json().get("error") == "E_UNSUPPORTED_VERSION", (
         f"不支持的契约版本未被按契约拒绝：{resp.status_code} {resp.text[:200]}"
+    )
+
+
+def test_extra_parameters_rejected_as_bad_request() -> None:
+    """请求体含契约外的键 → 恰为 `{"error": "E_BAD_REQUEST"}`（F009 AC-011）。
+
+    **不得**是 `E_UNSUPPORTED_VERSION`——后者是客户端判定「服务端未实现本契约」的入口，
+    两者混用会把自己的请求构造错误误读成服务端缺失（架构 §7.1 错误码各司其职）。
+    """
+    _require_ready()
+    resp = SESSION.post(
+        f"{CONTROL_URL}/lifecycle/stop",
+        headers=_headers(),
+        json={"force": True},
+        timeout=TIMEOUT_STOP,
+    )
+
+    assert resp.json() == {"error": "E_BAD_REQUEST"}, resp.text[:200]
+    assert _status()["state"] == "running", "被拒的请求不得执行动作"
+
+
+def test_busy_rejects_conflicting_action() -> None:
+    """动作进行中 → 冲突动作立即 `E_BUSY`，不排队不叠加（架构 §7.1 单飞）。
+
+    用 **restore** 制造窗口而不是 stop：卸载在 CPU 实例上是瞬时的，而重新加载模型
+    要秒级，窗口稳定可观测（F009 T022 实测——用 stop 制造窗口会大概率抓不到）。
+    """
+    _require_ready()
+    SESSION.post(f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
+    _wait_idle()
+    outcome: dict = {}
+
+    def _restore() -> None:
+        outcome["restore"] = SESSION.post(
+            f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
+        ).json()
+
+    worker = threading.Thread(target=_restore)
+    worker.start()
+    busy_seen = None
+    deadline = time.monotonic() + TIMEOUT_RESTORE
+    while time.monotonic() < deadline and worker.is_alive():
+        resp = SESSION.post(
+            f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP
+        ).json()
+        if resp.get("error"):
+            busy_seen = resp
+            break
+        time.sleep(0.05)
+    worker.join(timeout=TIMEOUT_RESTORE)
+
+    assert busy_seen == {"error": "E_BUSY"}, f"冲突动作未被立即拒绝: {busy_seen}"
+    assert outcome.get("restore") == {"state": "running"}, "原动作不得受冲突请求影响"
+
+
+def test_timeout_envelope_is_not_a_terminal_failure() -> None:
+    """服务端 deadline 到点 → `E_TIMEOUT`，动作**不被中断**，且同窗口冲突动作得 `E_BUSY`。
+
+    用 **restore** 制造窗口而不是 stop：CPU 实例上卸载是瞬时的，拿 1ms 的 stop deadline
+    去撞它是竞态取证——实测同一实例上会时红时绿（代码检视 R3-001）。加载模型是秒级动作，
+    配一个极短的 restore deadline 就能稳定观测到"仍在进行"。
+
+    以**客户端**极短超时验证不了该语义（那只会得到 OSError）：deadline 归服务端，由
+    `KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S` 承载。因此本用例以
+    `KRONOS_EXPECT_SHORT_DEADLINE=1` 显式开启，默认跳过而不是假绿。
+    """
+    _require_ready()
+    if os.getenv("KRONOS_EXPECT_SHORT_DEADLINE", "").lower() not in {"1", "true", "yes"}:
+        pytest.skip(
+            "需把实例的 KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S 配成短值并设 "
+            "KRONOS_EXPECT_SHORT_DEADLINE=1 才能观测 E_TIMEOUT（F009 AC-011）"
+        )
+
+    SESSION.post(f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
+    _wait_idle()
+
+    resp = SESSION.post(
+        f"{CONTROL_URL}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
+    ).json()
+    assert resp == {"error": "E_TIMEOUT"}, resp
+
+    # 同一窗口：动作仍在进行（operation 非空、state=transitional），冲突动作立即被拒。
+    during = _status()
+    assert during["operation"] is not None, f"E_TIMEOUT 不是终态: {during}"
+    assert during["state"] == "transitional", during
+    busy = SESSION.post(
+        f"{CONTROL_URL}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP
+    ).json()
+    assert busy == {"error": "E_BUSY"}, busy
+
+    # 不中断的可判定证据：动作最终落在与 desired 一致的稳定态，而不是被砍掉。
+    final = _wait_idle()
+    assert final["state"] == "running" and final["desired"] == "running", final
+
+
+def test_night_slot_journey() -> None:
+    """层 2 旅程（F009 T024）：running → stop → 连打 /predict 不唤醒 → restore → 恢复。
+
+    这条是本 feature 的核心价值：`stopped` 必须**待得住**。若推理路径会隐式重载模型，
+    夜槽卸载等于没卸——显存被下一个请求吃回去（检视 R1-002）。
+    """
+    _require_ready()
+    symbol = os.getenv("KRONOS_JOURNEY_SYMBOL", "BTC/USDT")
+    base = CONTROL_URL
+
+    assert _status()["state"] == "running"
+    warm = SESSION.get(f"{base}/predict/{symbol}", timeout=TIMEOUT_RESTORE)
+    if warm.status_code != 200:
+        pytest.skip(f"{symbol} 无可用行情，旅程无法取证: {warm.status_code}")
+    assert warm.json()["source"] == "kronos", warm.json()
+
+    stopped = SESSION.post(f"{base}/lifecycle/stop", headers=_headers(), timeout=TIMEOUT_STOP)
+    assert stopped.json()["state"] == "stopped"
+    _wait_idle()
+
+    for _ in range(5):
+        payload = SESSION.get(f"{base}/predict/{symbol}", timeout=TIMEOUT_STATUS).json()
+        assert payload["source"] != "kronos", f"停机期间竟标了 kronos: {payload}"
+        assert payload["model"] == "placeholder", payload
+        status = _status()
+        assert status["state"] == "stopped" and status["model_loaded"] is False, status
+
+    restored = SESSION.post(
+        f"{base}/lifecycle/restore", headers=_headers(), timeout=TIMEOUT_RESTORE
+    )
+    assert restored.json()["state"] == "running"
+    _wait_idle()
+    after = SESSION.get(f"{base}/predict/{symbol}", timeout=TIMEOUT_RESTORE).json()
+    assert after["source"] == "kronos", after
+    print(
+        f"\n[evidence] hostname={socket.gethostname()} journey: running -> stop -> "
+        f"5x predict(source={payload['source']}, model_loaded=False) -> restore -> "
+        f"predict(source={after['source']})"
     )
