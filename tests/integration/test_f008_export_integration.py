@@ -449,3 +449,49 @@ def test_artifact_loads_with_f003_explicit_universe_consumer(tmp_path) -> None:
     digest, path = artifact_mod.publish_artifact(intervals, tmp_path)
     ledger = load_explicit_universe(path, expected_digest=digest, expected_schema_version=1)
     assert ledger.universe_at(WINDOW_START + timedelta(minutes=1)) == frozenset({"BTC-USDT-PERP"})
+
+
+def test_incremental_universe_filter_keeps_skipped_for_non_pair_dataset(
+    seeded, f008_conn, tmp_path
+) -> None:
+    """回归（检视第 2 轮 N1）：非 pair 分区 dataset 的基线 `skipped` 不得被准入过滤清空。
+
+    `signals_log` 的逻辑键只有 `date`、**没有 `pair`**：`_admitted_only` 若按「pair 不在准入
+    集合内」一刀切，会把它的缺口账整片丢掉——`manifest.skipped` 静默缩水，`content_changed`
+    还会因此白发布一个版本（缺口账是「本该有分区却缺」，不是策略排除）。修复前本用例必红。
+    """
+    lake = seeded
+    with f008_conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO signals_log (time, exchange, symbol, source, signal_type, confidence,"
+            " metadata, latest_candle, expected_return, volatility, direction_prob,"
+            " realized_return_60m, evaluated_at)"
+            " VALUES (%s,'binance','BTC/USDT','placeholder','buy',0.9,'{}'::jsonb,"
+            " %s, 0.01, 0.2, 0.6, NULL, NULL)",  # D4 一行 → 全量 span D1..D4 里 D3 成缺口
+            (datetime(2026, 9, 4, 12, tzinfo=UTC), datetime(2026, 9, 4, 9, tzinfo=UTC)),
+        )
+    f008_conn.commit()
+
+    baseline = export_dataset(
+        "signals_log",
+        mode="full",
+        window_end="2026-09-05T00:00:00Z",
+        conn=f008_conn,
+        lake_root=lake,
+    )
+    baseline_manifest = mf.load_manifest(lake, "signals_log", baseline["data_version"])
+    assert {"date": "2026-09-03"} in baseline_manifest["skipped"], "前置条件：基线要有可继承的缺口"
+
+    summary = export_dataset(
+        "signals_log",
+        mode="incremental",
+        window_end="2026-09-06T00:00:00Z",
+        conn=f008_conn,
+        lake_root=lake,
+        admitted={"BTC-USDT"},  # 非空准入集合即触发旧缺陷
+    )
+    manifest = mf.load_manifest(lake, "signals_log", summary["data_version"])
+    assert {"date": "2026-09-03"} in manifest["skipped"], (
+        f"非 pair 分区数据集的基线缺口被准入过滤清空: {manifest['skipped']}"
+    )
+    assert {"date": "2026-09-05"} in manifest["skipped"], "本轮窗口缺口照旧入档"

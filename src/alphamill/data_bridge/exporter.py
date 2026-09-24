@@ -1,7 +1,6 @@
 """TimescaleDB → Parquet 导出编排：快照读取、分区写入、对账与 manifest 发布。
 
-增量版本继承未变分区；full 版本以当前源库全量结果为组成，但仍复用未变文件。
-文件与 manifest 的发布均不可变；对账失败保留 invalid 审计版本。CLI 入口见底部 `main()`。
+增量继承未变分区；full 以源库全量结果为组成但复用未变文件；对账失败保留 invalid 版本。
 """
 
 from __future__ import annotations
@@ -109,12 +108,11 @@ def export_dataset(
 ) -> dict[str, Any]:
     """导出单个 dataset（design §4 契约）；返回 manifest 摘要 dict。
 
-    mode: incremental（默认，窗口 = 上一 valid manifest 最大日期 +1 ~ window_end）
-          | full（全 span 重导 + 分区级 diff，仅在内容变化时发布新版本）。
-    window_end: 窗口开区间上界；缺省为今日 00:00 UTC，即导到昨天。
-    allow_shrink: full 模式下确认源库收缩确属有意（见 _guard_full_shrink）。
-    admitted: F008 导出准入集合（`lake_pair`）；`None`（默认）行为与 F002 现状逐字节一致。
-    universe_filter: 按「台账可交易 ∩ 质量门 ACTIVE」在本 dataset 的窗口终点上现算准入集合
+    mode: incremental（默认，窗口 = 上一 valid manifest 最大日期 +1 ~ window_end）| full
+          （全 span 重导 + 分区级 diff，仅在内容变化时发布新版本）；`window_end` 缺省为今日 00:00Z。
+    `allow_shrink`: full 模式下确认源库收缩确属有意（见 `_guard_full_shrink`）。
+    `admitted`: F008 导出准入集合（`lake_pair`）；`None`（默认）与 F002 现状逐字节一致。
+    `universe_filter`: 按「台账可交易 ∩ 质量门 ACTIVE」在本 dataset 的窗口终点上现算准入集合
         （F008 `FR-006`）；与显式 `admitted` 互斥，只在本参数为真且未显式给出集合时生效。
     """
     if mode not in ("incremental", "full"):
@@ -146,10 +144,15 @@ def export_dataset(
 def _admitted_only(
     entries: list[dict[str, Any]], admitted: set[str] | None
 ) -> list[dict[str, Any]]:
-    """按准入集合收窄基线条目：未准入 pair 的日期是**策略排除**，不是数据缺口（检视 R1-005）。"""
+    """按准入集合收窄基线条目：未准入 pair 的日期是策略排除，不是数据缺口（检视 R1-005）。
+
+    没有 `pair` 键的条目（非 pair 分区数据集如 `signals_log`）不参与裁剪，否则整片缺口账被清掉
+    （检视第 2 轮 N1）；与 `produce_partitions` 的 `pair_partitioned` 守卫同类。
+    """
     if admitted is None:
         return entries
-    return [e for e in entries if (e.get("logical_partition_key") or e).get("pair") in admitted]
+    keys = [(e.get("logical_partition_key") or e).get("pair") for e in entries]
+    return [e for e, key in zip(entries, keys, strict=True) if key is None or key in admitted]
 
 
 def _export_one(
@@ -181,8 +184,7 @@ def _export_one(
             market_type=spec.market_type,
         )
     symbol_map_ref = symbol_map.export_symbol_map(conn=conn, lake_root=root)
-    # 未收窄的映射用于质量标记记账（检视 R1-002）：未准入 pair 的未解决标记不该让整轮导出
-    # FATAL；导出侧按准入集合在**本地**收窄（顺带让碰撞检查覆盖全部 symbol）
+    # 未收窄映射用于质量标记记账（检视 R1-002）：未准入 pair 的标记不该让整轮导出 FATAL
     all_lake_pairs = partitions.lake_pairs_map(conn, market_type=spec.market_type)
     lake_pairs = (
         all_lake_pairs

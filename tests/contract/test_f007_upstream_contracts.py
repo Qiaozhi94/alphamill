@@ -515,12 +515,18 @@ def test_non_numeric_signal_is_rejected():
         )
 
 
-def test_load_universe_rejects_malformed_digest_before_io(tmp_path) -> None:
-    """`sha256:` 前缀不够：路径成分必须在拼路径前被拒（检视 R1-004）。
+def test_load_universe_rejects_malformed_digest_before_io(tmp_path, monkeypatch) -> None:
+    """`sha256:` 前缀不够：格式非法的 digest 必须在**碰文件系统之前**被拒（检视 R1-023）。
 
-    `sha256:../escape` 若只查前缀，`..` 会成为路径成分——先读 artifact 目录外的文件、再被
-    digest 比对拒掉。消费侧的校验规则与发布侧 `artifact.is_digest()` 一致（各自独立实现）。
+    用例的牙（第 2 轮 N3 修正）：只断言异常类型区分不了「格式非法」与「文件不存在」（同一
+    `UpstreamContractError`），故这里 ①断言错误文案是「格式非法」，②把 `Path.is_file` 换成
+    记录器——格式非法时若发生任何存在性探测，断言即红。消费侧校验与发布侧
+    `artifact.is_digest()` 同规则（各自独立实现）。
     """
+    probed: list[Path] = []
+    monkeypatch.setattr(Path, "is_file", lambda self: probed.append(self) or False)
+
     for bad in ("sha256:../escape", "sha256:" + "Z" * 64, "sha256:short", "not-a-digest"):
-        with pytest.raises(uc.UpstreamContractError):
+        with pytest.raises(uc.UpstreamContractError, match="格式非法"):
             uc.load_universe(bad, tmp_path)
+    assert not probed, f"格式非法的 digest 不得触发文件系统探测: {probed}"

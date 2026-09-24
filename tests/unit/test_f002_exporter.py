@@ -189,3 +189,33 @@ def test_usable_baseline_is_none_when_no_usable_version(monkeypatch, tmp_path):
         lambda *_a, **_k: (_ for _ in ()).throw(ManifestIntegrityError("清单内文件缺失")),
     )
     assert mf.usable_baseline(tmp_path, "ohlcv_1m", allow_fallback=True) == (None, None)
+
+
+def test_export_wiring_passes_allow_fallback_only_for_full_mode(monkeypatch, tmp_path):
+    """回归（检视第 2 轮 N2）：接线 `allow_fallback=(mode == "full")` 必须有锁。
+
+    变异验证：把 `exporter._export_one` 的实参改成恒 `True`（或删掉实参回落到"总是回退"）
+    后本用例必红——否则增量模式会恢复 R1-001（Critical）的「整版回退当继承基线 → 静默丢
+    中间版本分区」。此前两条回归只调 `usable_baseline` 本体，锁不住这处传参。
+    """
+    from alphamill.data_bridge import exporter, registry
+
+    recorded: list[dict] = []
+
+    def _baseline(_root, _dataset, **kwargs):
+        recorded.append(kwargs)
+        return None, None
+
+    class _Stop(Exception):
+        pass
+
+    monkeypatch.setattr(mf, "usable_baseline", _baseline)
+    monkeypatch.setattr(exporter.reconcile, "begin_snapshot_tx", lambda _conn: (0, None))
+    monkeypatch.setattr(exporter, "_resolve_window", lambda *a, **k: (_ for _ in ()).throw(_Stop()))
+    spec = registry.require_dataset("ohlcv_1m")
+
+    for mode, expected in (("incremental", False), ("full", True)):
+        recorded.clear()
+        with pytest.raises(_Stop):
+            exporter._export_one(None, spec, mode, None, tmp_path, lambda _payload: None, 0.0)
+        assert recorded == [{"allow_fallback": expected}], f"{mode} 的 allow_fallback 接线不对"
