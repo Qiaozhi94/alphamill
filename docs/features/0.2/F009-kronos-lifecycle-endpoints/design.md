@@ -167,6 +167,9 @@ desired=stopped  → 直接走 F004 既有兜底信号路径，不触碰 _load_p
   | 模型资产缺失 / 加载抛错（`restore`） | `E_UNAVAILABLE`（`desired` 回落 `stopped`） |
   | 显存探测超时 / 失败（`status`） | **成功响应** + `vram_readable=false`，status 不得超过服务端 deadline |
   | 显存读数两级探测皆不可得（`status`） | **成功响应** + `vram_readable=false` + `vram_bytes=null` |
+  | **状态查询本身抛错**（`status`；代码检视 R2-002 补） | **成功响应** + `model_loaded=false` + `device=unknown` + 读数不可得——status 没有可用失败码（契约只给 `E_UNSUPPORTED_VERSION`），漏成 500 会被客户端读成"端点不存在"并转入回落探测 |
+  | **未预期异常**（`stop`/`restore`；代码检视 R2-002 补） | wire 层按端点映射为 `E_UNLOAD_FAILED`/`E_UNAVAILABLE`；控制器侧先按事实把 `desired` 收敛到稳定态（`_converge_after_failure`，读不到状态时取 fail-closed 一侧，绝不声称已卸载） |
+  | **卸载成功但随后读数失败**（`stop`；代码检视 R2-001） | 仍是**成功**响应 `{state: stopped, vram_bytes: null}`——卸载不可逆，"报告失败"不等于"卸载失败" |
 
 - **重启与恢复**：进程重启由 F004 既有 lifespan（预检 + eager load）决定初始态，`desired` 初始为 `running`。停机意图不持久化（见 §3）。
 - **启动失败 vs 运行期失败**（检视 R1-010）：**两件事，处置不同**。启动期预检失败 → 进程非零退出（F004 既有行为，不改）；运行期 `restore` 失败 → 进程存活、`state=stopped`、返回 `E_UNAVAILABLE`。控制面的"任何状态下可达"只承诺进程活着以后。

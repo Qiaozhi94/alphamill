@@ -33,6 +33,11 @@ dev = [
   # 集成测试顶层 import（F004-Q006）：原先靠 ccxt 传递安装，显式声明并纳入
   # check_dep_pins 范围校验。
   "requests>=2.32,<3",
+  # FastAPI TestClient 的传输层（F009 控制面单元测试顶层 import fastapi.testclient）。
+  # fastapi 只在 `standard`/`all` extra 下才带 httpx，本仓装的是裸 fastapi——本地早已
+  # 因别的包装着它而全绿，CI 干净环境却在收集期 ImportError（F009 代码检视收口时实测：
+  # 两个 Python 版本同时红）。显式声明并纳入 check_dep_pins 范围校验。
+  "httpx>=0.28,<1",
   "ruff>=0.16,<0.17",
 ]
 
