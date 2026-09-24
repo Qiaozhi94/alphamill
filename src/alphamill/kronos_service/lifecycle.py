@@ -166,19 +166,25 @@ class LifecycleController:
         return self._run_action("restore", RUNNING, self._config.restore_timeout_s)
 
     def _run_action(self, action: str, desired: str, timeout_s: float) -> dict:
-        """受理 → 置 desired → 后台执行 → 按 deadline 等待（design §5）。"""
+        """受理 → 置 desired → 后台执行 → 按 deadline 等待（design §5）。
+
+        受理判定（单飞）排在显存探测**之前**：FR-006 要求冲突动作"立即"返回
+        `E_BUSY`，而探测可能卡到 `KRONOS_VRAM_PROBE_TIMEOUT_S`（FR-007 明说要防的
+        情形）。被拒的动作不该触碰设备，否则编排的重试节奏被探测延迟带偏。
+        """
         started = self._clock()
-        device = self._signal.status().device
-        vram_before = self._vram_reading(device)
+        model_status = self._signal.status()
 
         with self._meta_lock:
             if self._operation is not None:
                 raise LifecycleError(E_BUSY)  # 不排队、不叠加
             operation = Operation(uuid.uuid4().hex[:8], action, _now_iso())
-            previous_desired = self._desired
-            state_before = self._state(previous_desired, bool(self._signal.status().loaded))
+            state_before = self._state(self._desired, bool(model_status.loaded))
             self._desired = desired
             self._operation = operation
+
+        # 已受理之后才读基线显存：这一步只服务日志行，不参与受理判定。
+        vram_before = self._vram_reading(getattr(model_status, "device", "") or "")
 
         worker = self._stop_worker if action == "stop" else self._restore_worker
         future = self._executor.submit(

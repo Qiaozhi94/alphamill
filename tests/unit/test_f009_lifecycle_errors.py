@@ -176,14 +176,16 @@ class _RaisingAfterUnload(FakeSignal):
     `status().device` 与显存探测在 try 之外，那里抛的异常原本会漏成 HTTP 500。
     """
 
-    def __init__(self, *, fail_after: int = 2):
+    def __init__(self):
         super().__init__()
-        self._calls = 0
-        self._fail_after = fail_after
+        self._broken = False
+
+    def unload(self) -> None:
+        super().unload()
+        self._broken = True  # 卸载成功，但此后查询设备状态就会抛错
 
     def status(self):
-        self._calls += 1
-        if self._calls > self._fail_after:
+        if self._broken:
             raise RuntimeError("driver query failed")
         return type("S", (), {"loaded": self.loaded, "device": self.device})()
 
@@ -233,3 +235,42 @@ def test_unexpected_restore_failure_maps_to_unavailable() -> None:
     assert resp.json() == {"error": lifecycle.E_UNAVAILABLE}
     after = controller.status()
     assert after["state"] == "stopped" and after["operation"] is None
+
+
+def test_busy_is_immediate_and_does_not_touch_the_device() -> None:
+    """R1-002：`E_BUSY` 必须立即返回，受理失败的路径不得先做显存探测。
+
+    FR-006 写的是"立即返回 E_BUSY"。探测卡住正是 FR-007 明说要防的情形
+    （`KRONOS_VRAM_PROBE_TIMEOUT_S` 就是为它设的），若判忙排在探测之后，
+    冲突动作会被拖到 probe_timeout 才拿到拒绝——编排的单飞重试节奏随之失真。
+    """
+    from alphamill.kronos_service import vram
+
+    signal = FakeSignal(device="cuda:0")
+    signal.unload_delay = 0.5
+    controller = lifecycle.LifecycleController(
+        signal,
+        LifecycleConfig(probe_mode="nvidia_smi", probe_timeout_s=2.0, stop_timeout_s=5.0),
+    )
+    probes: list[float] = []
+
+    def _stalling_probe(**kwargs):
+        probes.append(kwargs["budget_s"])
+        time.sleep(min(kwargs["probe_timeout_s"], kwargs["budget_s"]))  # 探测卡住到超时
+        return vram.VramReading(used_bytes=None, readable=False, source="unavailable")
+
+    worker = threading.Thread(target=controller.stop)
+    worker.start()
+    time.sleep(0.15)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(vram, "probe", _stalling_probe)
+        probes.clear()
+        started = time.monotonic()
+        with pytest.raises(lifecycle.LifecycleError) as excinfo:
+            controller.restore()
+        elapsed = time.monotonic() - started
+    worker.join(timeout=10)
+
+    assert excinfo.value.code == lifecycle.E_BUSY
+    assert probes == [], "被拒的动作不得触碰设备"
+    assert elapsed < 0.2, f"E_BUSY 被探测拖慢到 {elapsed:.2f}s"
