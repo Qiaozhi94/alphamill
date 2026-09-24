@@ -34,19 +34,25 @@ import requests
 from alphamill.kronos_service.kronos_real import ERR_CPU_WHEEL, ERR_NO_CUDA_DEVICE
 
 ROOT = Path(__file__).resolve().parents[2]
-# compose 的项目名缺省取自 compose 文件所在目录（deployment），**所有 worktree 共用**，
-# 于是生成的镜像名 `deployment-kronos-signal-real:latest` 会被并行会话互相覆盖——F010
-# T015 的证据事后无法复现就是这个机制（代码检视 R1-001）。用 worktree 目录名做项目名。
-COMPOSE_PROJECT = f"alphamill-{ROOT.name.removeprefix('alphamill-')}"
-COMPOSE_BASE = [
+COMPOSE_BASE = ["docker", "compose", "-f", "deployment/docker-compose.yml"]
+COMPOSE_CPU = [*COMPOSE_BASE, "--profile", "kronos-real"]
+
+# 只给「产镜像、不碰容器」的 CPU 构建用带 worktree 后缀的项目名：compose 项目名缺省取自
+# compose 文件所在目录（deployment），所有 worktree 共用，生成的镜像名会被并行会话互相
+# 覆盖（R1-001）。但**不能**把它套到整个 COMPOSE_BASE 上——那会让 rm/up 走另一个项目，
+# 与运营容器 quant-kronos-signal-real 重名冲突，还会新建一套空的 TimescaleDB 卷
+# （R2-001，第 1 轮修复引入）。
+COMPOSE_PROJECT_BUILD = f"alphamill-{ROOT.name.removeprefix('alphamill-')}"
+COMPOSE_CPU_BUILD = [
     "docker",
     "compose",
     "-p",
-    COMPOSE_PROJECT,
+    COMPOSE_PROJECT_BUILD,
     "-f",
     "deployment/docker-compose.yml",
+    "--profile",
+    "kronos-real",
 ]
-COMPOSE_CPU = [*COMPOSE_BASE, "--profile", "kronos-real"]
 COMPOSE_GPU = [
     *COMPOSE_BASE,
     "-f",
@@ -312,7 +318,9 @@ def _cpu_image() -> str:
             pytest.skip(f"KRONOS_CPU_IMAGE={pinned} 在本机不存在")
         return pinned
 
-    built = _run([*COMPOSE_CPU, "build", "kronos-signal-real"], timeout=3600, env=_build_env())
+    built = _run(
+        [*COMPOSE_CPU_BUILD, "build", "kronos-signal-real"], timeout=3600, env=_build_env()
+    )
     if built.returncode != 0:
         tail = built.stderr[-400:]
         if "registry-1.docker.io" in tail or "failed to resolve source metadata" in tail:
@@ -321,7 +329,7 @@ def _cpu_image() -> str:
                 "当前代码的镜像，旧镜像不算。网络恢复后重跑，或以 KRONOS_CPU_IMAGE 指定。"
             )
         pytest.fail(f"CPU real 镜像构建失败: {tail}")
-    return _compose_image(COMPOSE_CPU, "kronos-signal-real")
+    return _compose_image(COMPOSE_CPU_BUILD, "kronos-signal-real")
 
 
 @pytest.mark.parametrize(

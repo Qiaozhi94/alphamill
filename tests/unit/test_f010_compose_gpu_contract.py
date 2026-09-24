@@ -220,3 +220,29 @@ def test_out_of_scope_override_keys_fail_the_gate(old: str, new: str) -> None:
     mutated = _mutate(GPU_OVERRIDE_PATH.read_text(encoding="utf-8"), old, new)
     with pytest.raises(AssertionError):
         assert_gpu_override_contract(mutated)
+
+
+def test_integration_suite_scopes_project_name_to_image_build_only() -> None:
+    """R2-001：`-p <项目名>` 只许用在「产镜像」的命令上，不许套到碰容器的命令上。
+
+    第 1 轮为解决镜像名被并行会话覆盖（R1-001）而给整个 COMPOSE_BASE 加了 `-p`，结果
+    非复用路径的 rm/up 走到另一个 compose 项目：与运营容器 `quant-kronos-signal-real`
+    重名冲突，还会新建一套空的 TimescaleDB 卷（DB 依赖被一起拉起）。这条门禁把
+    「项目名只服务构建」固化下来。
+    """
+    suite = (ROOT / "tests/integration/test_f010_gpu_runtime.py").read_text(encoding="utf-8")
+    base = re.search(r"(?m)^COMPOSE_BASE = (.+)$", suite)
+    assert base and '"-p"' not in base.group(1), "COMPOSE_BASE 不得带 -p（会污染容器路径）"
+
+    gpu_block = suite[suite.index("COMPOSE_GPU = [") : suite.index("REAL_CONTAINER")]
+    assert '"-p"' not in gpu_block, "GPU 路径（rm/up/build）不得带 -p"
+
+    build_block = suite[suite.index("COMPOSE_CPU_BUILD = [") : suite.index("REAL_CONTAINER")]
+    assert '"-p"' in build_block, "CPU 镜像构建应带 -p，避免镜像名被并行 worktree 覆盖"
+
+    # 带 -p 的命令列表只允许出现在 build 上下文里
+    for line in suite.splitlines():
+        if "COMPOSE_CPU_BUILD" in line and "=" not in line:
+            assert "build" in line or "_compose_image" in line, (
+                f"带 -p 的项目名只许用于构建/解析镜像名，实际出现在: {line.strip()}"
+            )
