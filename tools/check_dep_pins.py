@@ -99,8 +99,84 @@ def check(
     return failures
 
 
+#: import 名 → 发行包名（两者不同的才列）。
+IMPORT_TO_DISTRIBUTION = {
+    "yaml": "pyyaml",
+    "dateutil": "python-dateutil",
+    "dotenv": "python-dotenv",
+    "psycopg2": "psycopg2-binary",
+}
+
+#: 「import 了 A，但 A 的这条用法还需要 B 而 B 不是 A 的必装依赖」——这类间接需求 AST 看
+#: 不见，必须显式登记。httpx 就是这么漏的：测试 `from fastapi.testclient import TestClient`，
+#: 而 httpx 只在 fastapi 的 standard/all extra 里，本地由别的包带上、CI 干净环境 ImportError。
+INDIRECT_REQUIREMENTS = {
+    ("fastapi.testclient", "httpx"),
+    ("starlette.testclient", "httpx"),
+}
+
+#: 测试层允许直接 import 而无需声明的：标准库之外的本仓自有包与门禁工具。
+#: 同目录模块（conftest、_f009_fakes、f001_backfill_config…）另行按文件存在性判定——
+#: pytest 的 prepend 导入模式会把测试文件所在目录放进 sys.path，它们不是第三方包。
+LOCAL_TOP_LEVEL = {"alphamill", "tools", "tests"}
+
+
+def _sibling_modules(root: pathlib.Path) -> set[str]:
+    """测试树内可被同目录导入的模块名（含 tools/ 下的门禁脚本，它们由 pythonpath 提供）。"""
+    names: set[str] = set()
+    for path in list((root / "tests").rglob("*.py")) + list((root / "tools").glob("*.py")):
+        names.add(path.stem)
+    return names
+
+
+def check_test_imports_declared(root: pathlib.Path = ROOT) -> list[str]:
+    """测试层的第三方顶层 import 必须在 pyproject 里声明（runtime 或 dev extras）。
+
+    动机：本仓已两次被同一模式咬——httpx（F009 收口 266c9d6）与 pyyaml（F010 R2-002）
+    都由别的包传递安装，本地全绿而 CI 干净环境在收集期 ImportError。只校验"已声明的
+    版本在范围内"对"未声明"一无所知，所以按元规则把这条检查落进门禁。
+    """
+    import ast
+
+    declared = set(declared_pins(root))
+    siblings = _sibling_modules(root)
+    failures: list[str] = []
+    for path in sorted((root / "tests").rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        for module, needed in sorted(INDIRECT_REQUIREMENTS):
+            if module in source and needed not in declared:
+                failures.append(
+                    f"{path.relative_to(root)}: 用到 {module} 需要 {needed!r}，"
+                    "但它未在 pyproject 声明（该依赖是间接的，AST 看不见）"
+                )
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as exc:  # pragma: no cover - 语法错误由 ruff 负责
+            failures.append(f"{path.relative_to(root)}: 无法解析（{exc}）")
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name.split(".")[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module.split(".")[0]] if node.module and node.level == 0 else []
+            else:
+                continue
+            for name in names:
+                if name in LOCAL_TOP_LEVEL or name in sys.stdlib_module_names:
+                    continue
+                if name in siblings:  # 测试树/门禁脚本内的模块，不是第三方包
+                    continue
+                dist = IMPORT_TO_DISTRIBUTION.get(name, name)
+                if dist not in declared:
+                    failures.append(
+                        f"{path.relative_to(root)}: import {name} 对应的发行包 {dist!r} "
+                        "未在 pyproject 声明（CI 干净环境会在收集期 ImportError）"
+                    )
+    return sorted(set(failures))
+
+
 def main() -> int:
-    failures = check()
+    failures = check() + check_test_imports_declared()
     if not failures:
         print("check_dep_pins: 全部依赖版本在声明范围内（runtime + dev）")
         return 0
