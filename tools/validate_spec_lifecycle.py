@@ -183,17 +183,48 @@ def discover_features(root: pathlib.Path) -> tuple[dict, list[str]]:
     return feats, errors
 
 
+# 仓库内真实产物的扩展名白名单（末段扩展名不在其中的 backtick 不算路径引用）。
+FILE_EXTENSIONS = frozenset(
+    {
+        "py",
+        "md",
+        "ps1",
+        "sh",
+        "json",
+        "jsonl",
+        "yml",
+        "yaml",
+        "toml",
+        "cfg",
+        "ini",
+        "csv",
+        "tsv",
+        "txt",
+        "sql",
+        "parquet",
+        "lock",
+    }
+)
+
+
 def looks_like_test_path(token: str) -> bool:
     """AC 正文里只有形如「仓库内文件路径」的 backtick 才算 tests/验收证据引用。
 
     接受 `tests/unit/x.py`、`deployment/verify.ps1`、`tests/fixtures/f007/README.md` 这类真实文件；
     拒绝标识符与取值（`promotion_verdict`、`E_INPUT_INVALID`、`[0,30)`、`universe_at(T)`、`DR-005`）
     以及 URL——否则所有进入 code-reviewing 的规格都会报一堆假「路径不存在」。判据：非 URL、含 `/`、
-    且最后一段带扩展名。
+    且最后一段的扩展名在白名单内。
+
+    扩展名必须白名单化，不能只看「末段有点」：F003 AC-010 的 `/health.device=cpu` 满足「有点」，
+    被判成「绝对路径」判红，而那句原文又被 `check_doc_consistency` 钉死——两条门禁互相打架，
+    唯一出路是收紧本判据（2026-09-26）。
     """
     if token.startswith("http") or "/" not in token:
         return False
-    return "." in token.rsplit("/", 1)[-1]
+    last = token.rsplit("/", 1)[-1]
+    if "." not in last:
+        return False
+    return last.rsplit(".", 1)[-1].lower() in FILE_EXTENSIONS
 
 
 def check_feature(feat: dict, root: pathlib.Path, errors: list[str]):
