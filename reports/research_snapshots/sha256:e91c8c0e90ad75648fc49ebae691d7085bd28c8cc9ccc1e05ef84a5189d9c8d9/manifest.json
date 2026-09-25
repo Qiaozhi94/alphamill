@@ -1,0 +1,38 @@
+{
+ "schema_version": 1,
+ "snapshot_id": "sha256:e91c8c0e90ad75648fc49ebae691d7085bd28c8cc9ccc1e05ef84a5189d9c8d9",
+ "cutoff_time": "2026-09-10T00:00:00Z",
+ "members": {
+  "derivatives_funding_rates": {
+   "dataset": "derivatives_funding_rates",
+   "data_version": "v2026.09.24-r2",
+   "value_digest": "sha256:dc17bf46d73bb274c43917b47e93fb20c61219bb8721348440f1f895d088d33b",
+   "as_of_fidelity": "bitemporal",
+   "event_time_min": "2024-09-10T00:00:00Z",
+   "event_time_max": "2026-09-10T08:00:00.007000Z"
+  },
+  "ohlcv_1m": {
+   "dataset": "ohlcv_1m",
+   "data_version": "v2026.09.24",
+   "value_digest": "sha256:db51e846812b4fd22e049a1a766f3084de4e1f242c960a84b104c9d6ac12b5b5",
+   "as_of_fidelity": "event_time_only",
+   "event_time_min": "2024-09-10T00:00:00Z",
+   "event_time_max": "2026-09-23T23:59:00Z"
+  }
+ },
+ "symbol_map_digest": "sha256:fd6c495c55cf89da8712830700dd20922dbe90d53ed0e09488f7c9abc1718369",
+ "universe_digest": "sha256:d001fa0ab5dbaaf041db752eedcf15399d0c1bf8579e77b2bf7061df30c9268e",
+ "calendar_digest": "sha256:4c4d37b731e85b19627eb3fa83ec2309416bb4462804e50644814a03f6e1b8c6",
+ "universe_calendar_digest": "sha256:c83a16eb22af36b9286775e52bae6cc5f1a6ceb3a11cad0178c152527084338e",
+ "provenance": {
+  "created_at": "2026-09-25T11:20:54.559210Z",
+  "artifact_path": "reports/research_snapshots/sha256:e91c8c0e90ad75648fc49ebae691d7085bd28c8cc9ccc1e05ef84a5189d9c8d9/manifest.json",
+  "member_manifest_paths": {
+   "derivatives_funding_rates": "lake/_manifests/derivatives_funding_rates/v2026.09.24-r2.json",
+   "ohlcv_1m": "lake/_manifests/ohlcv_1m/v2026.09.24.json"
+  },
+  "symbol_map_path": "lake/_metadata/symbol_maps/sha256:fd6c495c55cf89da8712830700dd20922dbe90d53ed0e09488f7c9abc1718369.csv",
+  "universe_path": "lake/_metadata/universes/sha256:d001fa0ab5dbaaf041db752eedcf15399d0c1bf8579e77b2bf7061df30c9268e.json",
+  "calendar_path": "reports/research_snapshots/_inputs/universe_calendars/sha256:4c4d37b731e85b19627eb3fa83ec2309416bb4462804e50644814a03f6e1b8c6.json"
+ }
+}
