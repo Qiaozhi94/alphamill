@@ -5,7 +5,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 
 | Feature | 版本 | 状态 | 链接 |
 |---|---|---|---|
-| F003-alphagen-vendor | 0.2 | developing | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
+| F003-alphagen-vendor | 0.2 | code-reviewing | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
 | F011-export-universe-binding | 0.2 | doc-reviewing | [spec](docs/features/0.2/F011-export-universe-binding/spec.md) |
 
 > **F009 已收口（2026-09-24，done）**：控制面三端点已在 main 上，交付记录见
@@ -45,6 +45,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 | Feature | 需求 | 里程碑窗口 | 编号状态 | 关键约束 |
 |---|---|---|---|---|
 | 研究控制台 | FR8.1/8.2/8.4 | M2 前（评测台落地后立项） | F005（ADR-0005 预留） | 只读；渲染对象仅限研究版本态产物（含谱系 F005；台账只读视图为 F005.1 增量，组合只读视图随 M3 规划）；实时 PnL 不进控制台；版本归属 0.2 |
+| F003 后续：AlphaGen 后端接入 CLI `--generator` | `AC-006` 在真实挖掘产出上的验收载体 | M2 内（F003 收口后立项） | 编号待分配 | CLI 现只接受 `--generator manual`，该后端从固定假设集出候选、不读宇宙面板；T035 实测换宇宙后 proposed/registered 与拒绝计数逐项相同，故「宇宙扩容 → 候选质量差异」在 CLI 路径上结构性不可观测。接入须同时定 quota 语义与 run.json 字段，属新功能面，不塞进 F003 取证任务 |
 | F008 后续：门禁/台账改用**数据命名空间**的上市时间 | FR-004 `AC-006`、`FR-005` `valid_from` 语义 | 待排（F008 收口后单独评审） | 待分配 | 现状：`exchange_snapshot.py` 从**永续**市场取 `onboardDate` 作 `listed_at`，却被门禁窗口与 `valid_from` 用于**现货**数据命名空间；实测 BANK/ONDO/PUMP/TUT 现货晚于永续 7.5–213.6 天，按现语义被隔离（owner 2026-09-24 裁决：本轮接受隔离，本项单独评审）。修法须在发现阶段记录现货首根 K 线时间、门禁窗口与 `valid_from` 都用它；**需重新冻结宇宙（新 digest）**，故不属 F008 收口范围。证据：`reports/f008/执行机取证-T020-T023.md` §7 |
 | F008 后续：采集清单由台账驱动（准入即采集） | FR-001/FR-005 与 `collector` 的联动 | 待排 | 待分配 | 现状：`deployment/.env` 的 `SYMBOLS` 是**静态清单**，采集器每轮只取最近 `FETCH_LIMIT=5` 根、无追赶逻辑；准入新 pair 后必须人工改 env + `--force-recreate` 采集容器，并另跑追赶回填，否则序列在冻结窗口终点断档（owner 2026-09-24 裁决：收口时按手动两步执行，本项列为后续候选）。修法：采集器按 `universe_membership` 的 `universe_at(now)` 派生清单并自带追赶。证据：`reports/f008/执行机取证-T020-T023.md` §4、§11 |
 | F008 后续：发现口径去 ticker 启发式（杠杆代币误判） | FR-001、`AC-001` | 待排（需重新冻结宇宙） | 待分配 | 现状：`discover.py` 用「`UP`/`DOWN`/`BULL`/`BEAR` 后缀 + 前缀长度」判杠杆代币，实测把交易所元数据为 COIN 的 `SYRUP/USDT`（90/90 根日线、上线 503 天）误判为 `leveraged_token` 排除——本次成交额 5.10M 未进前 40 故实际影响 0，但同类真实标的若排名进前 40 会被静默丢掉。修法：判据改为交易所元数据的 `underlyingType`/`contractType`（或口径里的显式名单）；**改口径会改变 `universe_id`，须重新冻结宇宙**。证据：`docs/reviews/RETROSPECTIVE.md` 循环 21 · R1-017） |

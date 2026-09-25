@@ -309,6 +309,11 @@ def test_path_shaped_tokens_are_treated_as_tests(token: str) -> None:
         "0.90~0.99",
         "universe_at(T)",
         "https://example.com/tests/unit/x.py",
+        # 端点取值：F003 AC-010 的 `/health.device=cpu` 曾被当成「绝对路径」判红，
+        # 逼着规格改措辞——而那句原文被 check_doc_consistency 钉死，两条门禁互相打架。
+        "/health.device=cpu",
+        "/lifecycle/status",
+        "state=transitional",
     ],
 )
 def test_identifier_and_url_backticks_are_not_tests(token: str) -> None:

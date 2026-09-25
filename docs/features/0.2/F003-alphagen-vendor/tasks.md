@@ -26,66 +26,79 @@ updated: 2026-09-14
 
 ## 1. 前置条件
 
-- [ ] T001 (`FR-003`, `AC-003`): 冻结并校验 F008 宇宙台账 artifact 的消费契约（按 digest 加载、`universe_at(T)` 与 `schema_version` 可读），产出 T020 的输入夹具；F008 未落地时以显式 universe 配置作为等价夹具 — verify: `tests/unit/test_f003_binding.py`
-- [ ] T002 (`FR-003`, `DR-001`): 固定绑定文件格式并验证目标 dataset 的 valid 版本与 `value_digest` 可由 F002 reader 解析 — verify: `tests/unit/test_f003_binding.py`
-- [ ] T003 (`FR-002`): clone 上游 AlphaGen、记录 commit hash、核对核心子集的实际文件布局，产出 vendor 清单初稿，并**冻结可复现的上游基线**（逐文件 sha256 清单写入 `alphagen_vendor/_upstream_baseline.json`） — verify: `src/alphamill/factor_factory/generators/alphagen_vendor/VENDORED.md`
-- [ ] T004 (`NFR-002`, `NFR-005`): 打通并标定执行机 `qiaozhi-lt`——**先恢复 shell 接入**（env-manager 台账记录 2026-09-14 全端口复测 22/2222/2200/8022/3389/5985 全闭，当前无 shell 路径，按 `references/access-methods.md` §4 启用 Windows OpenSSH）；再在其 WSL2 内实测 CUDA 可用性与可用显存，按 §7.1 标定显存上限写进配置（不写死代码）；确认该机 F002 湖可读且通过完整性校验 — verify: `tests/unit/test_f003_gpu_slot.py`（能力探测纯函数）+ 在 `qiaozhi-lt` 上用 `alphamill.data_bridge.reader` 读一次真实快照
+- [x] T001 (`FR-003`, `AC-003`): 冻结并校验 F008 宇宙台账 artifact 的消费契约（按 digest 加载、`universe_at(T)` 与 `schema_version` 可读），产出 T020 的输入夹具；F008 未落地时以显式 universe 配置作为等价夹具 — verify: `tests/unit/test_f003_binding.py`
+- [x] T002 (`FR-003`, `DR-001`): 固定绑定文件格式并验证目标 dataset 的 valid 版本与 `value_digest` 可由 F002 reader 解析 — verify: `tests/unit/test_f003_binding.py`
+- [x] T003 (`FR-002`): clone 上游 AlphaGen、记录 commit hash、核对核心子集的实际文件布局，产出 vendor 清单初稿，并**冻结可复现的上游基线**（逐文件 sha256 清单写入 `alphagen_vendor/_upstream_baseline.json`） — verify: `src/alphamill/factor_factory/generators/alphagen_vendor/VENDORED.md`
+- [x] T004 (`NFR-002`, `NFR-005`): 打通并标定执行机 `qiaozhi-lt`——**先恢复 shell 接入**（env-manager 台账记录 2026-09-14 全端口复测 22/2222/2200/8022/3389/5985 全闭，当前无 shell 路径，按 `references/access-methods.md` §4 启用 Windows OpenSSH）；再在其 WSL2 内实测 CUDA 可用性与可用显存，按 §7.1 标定显存上限写进配置（不写死代码）；确认该机 F002 湖可读且通过完整性校验 — verify: `tests/unit/test_f003_gpu_slot.py`（能力探测纯函数）+ 在 `qiaozhi-lt` 上用 `alphamill.data_bridge.reader` 读一次真实快照
 
 ## 2. 实现任务
 
 ### Phase 1：生成器平面骨架与人工种子后端（US-001，不依赖 AlphaGen）
 
-- [ ] T005 (`FR-001`, `IR-002`, `AC-001`): 实现 `Generator` 协议与 `GenerationRequest/Result/Counts`，含结论字段白名单拒绝 — verify: `tests/unit/test_f003_generator_contract.py`
-- [ ] T006 [P] (`DR-003`, `AC-009`): 实现 `HypothesisDef` schema 与 catalog（含 `mechanism`、`applicable_state` 默认值），内置 `mechanism_unknown` 条目 — verify: `tests/unit/test_f003_hypotheses.py`
-- [ ] T007 (`DR-002`, `AC-009`): 实现 FactorDef 规范化 JSON（带 `schema_version`）、`definition_digest`、`factor_id` 生成与 `factor_store` 读写（`load()` 由表达式 + `feature_map` 重建可执行 `compute`） — verify: `tests/unit/test_f003_factor_store.py`
-- [ ] T008 (`DR-001`, `TR-001`, `TR-002`, `AC-009`, `AC-012`): 实现 `run_store`——GenerationRun manifest（带 `schema_version`）原子写（终态 `run.json` 最后写，含 `hostname` / `device` / `vram_limit_gb` / `universe`）与 `events.jsonl` append-only — verify: `tests/unit/test_f003_run_store.py`
-- [ ] T009 (`FR-003`, `AC-003`): 实现 `binding.py`：两种绑定形态解析、逐 dataset `value_digest` 校验、invalid 立即拒绝 — verify: `tests/unit/test_f003_binding.py`
-- [ ] T010 (`US-001`, `FR-001`, `AC-001`): 实现人工 crypto 原生种子后端（funding carry、basis、OI 变化、截面动量、波动），每个种子绑定真实 `HypothesisDef` — verify: `tests/unit/test_f003_manual_seeds.py`
-- [ ] T011 (`NFR-004`, `AC-011`): 实现 `egress_guard` 与写路径白名单（只允许 `reports/generation/<run_id>/`），两者 fail-closed（安装/生效失败即拒绝启动，不降级为仅警告） — verify: `tests/integration/test_f003_boundaries.py`
-- [ ] T012 (`IR-001`, `AC-011`, `AC-012`): 实现 CLI `seed` / `show` 子命令与缺绑定的非零拒绝、未知 `schema_version` 的拒绝 — verify: `tests/unit/test_f003_cli_contract.py`
+- [x] T005 (`FR-001`, `IR-002`, `AC-001`): 实现 `Generator` 协议与 `GenerationRequest/Result/Counts`，含结论字段白名单拒绝 — verify: `tests/unit/test_f003_generator_contract.py`
+- [x] T006 [P] (`DR-003`, `AC-009`): 实现 `HypothesisDef` schema 与 catalog（含 `mechanism`、`applicable_state` 默认值），内置 `mechanism_unknown` 条目 — verify: `tests/unit/test_f003_hypotheses.py`
+- [x] T007 (`DR-002`, `AC-009`): 实现 FactorDef 规范化 JSON（带 `schema_version`）、`definition_digest`、`factor_id` 生成与 `factor_store` 读写（`load()` 由表达式 + `feature_map` 重建可执行 `compute`） — verify: `tests/unit/test_f003_factor_store.py`
+- [x] T008 (`DR-001`, `TR-001`, `TR-002`, `AC-009`, `AC-012`): 实现 `run_store`——GenerationRun manifest（带 `schema_version`）原子写（终态 `run.json` 最后写，含 `hostname` / `device` / `vram_limit_gb` / `universe`）与 `events.jsonl` append-only — verify: `tests/unit/test_f003_run_store.py`
+- [x] T009 (`FR-003`, `AC-003`): 实现 `binding.py`：两种绑定形态解析、逐 dataset `value_digest` 校验、invalid 立即拒绝 — verify: `tests/unit/test_f003_binding.py`
+- [x] T010 (`US-001`, `FR-001`, `AC-001`): 实现人工 crypto 原生种子后端（funding carry、basis、OI 变化、截面动量、波动），每个种子绑定真实 `HypothesisDef` — verify: `tests/unit/test_f003_manual_seeds.py`
+- [x] T011 (`NFR-004`, `AC-011`): 实现 `egress_guard` 与写路径白名单（只允许 `reports/generation/<run_id>/`），两者 fail-closed（安装/生效失败即拒绝启动，不降级为仅警告） — verify: `tests/integration/test_f003_boundaries.py`
+- [x] T012 (`IR-001`, `AC-011`, `AC-012`): 实现 CLI `seed` / `show` 子命令与缺绑定的非零拒绝、未知 `schema_version` 的拒绝 — verify: `tests/unit/test_f003_cli_contract.py`
 
 ### Phase 2：AlphaGen vendor 与冒烟闸门（US-002，2 个工作日 time-box）
 
-- [ ] T013 (`FR-002`, `AC-002`): vendor 核心子集落地（表达式/算子、张量求值器、线性协同池、RL 环境），丢弃 `requirements.txt` 与 `alphagen_qlib/`，逐处改动标注并补齐 `VENDORED.md` 五项，且与 T003 冻结的上游基线逐文件比对（差异集合 == 标注集合） — verify: `tests/unit/test_f003_vendor_hygiene.py`
-- [ ] T014 (`FR-002`): `pyproject.toml` 新增 `mining` 可选依赖组（torch / numpy / stable-baselines3 / gymnasium 全部写版本范围；torch 需显式选 CUDA 构建，且必须覆盖 `qiaozhi-lab` 的 Blackwell sm_120，为迁移留路）、`ruff extend-exclude` 排除 vendor 目录，并在 `docs/SOP.md` Code Quality 豁免表登记 vendor 目录 — verify: `python3 tools/verify.py`
-- [ ] T015 (`FR-002`, `NFR-004`): 扩展 `tools/check_dep_pins.py` 为"可选 extras 已安装才校验范围"，并在 runner 入口加 mining extra 能力自检 fail-closed（两者必须同时落地） — verify: `tests/unit/test_check_dep_pins.py`
-- [ ] T016 (`FR-006`, `AC-007`): 实现冒烟闸门判据判定器、当日冒烟 manifest（含 ADR-0001 两条 M2 义务：生成侧逐级计数、下游级 `owner=F007`+`not_yet_available` 占位、奖励频率抽查）、档位状态机与降级裁决（L1→L0 回切须新 time-box 记录），并提供 `smoke` 的默认 config/window 构造 — verify: `tests/integration/test_f003_smoke_gate.py`
-- [ ] T017 (`FR-006`, `AC-007`): 在执行机用最小数据切片跑通 1 个 PPO epoch（含 gym→gymnasium env wrapper 适配）——冒烟第 1 天判据 — verify: `tests/integration/test_f003_smoke_gate.py`
-- [ ] T018 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
-- [ ] T019 (`FR-006`): 在执行机实跑 time-box（第 1、2 天判据），产出裁决记录（L0 锁定或 L1 降级；L2 不属 time-box 裁决）与触发判据写入当日 manifest；**不在此步回写 spec**（回写在 T032，须先归档证据） — verify: `tests/integration/test_f003_smoke_gate.py` + 当日 manifest 含裁决与触发判据
+- [x] T013 (`FR-002`, `AC-002`): vendor 核心子集落地（表达式/算子、张量求值器、线性协同池、RL 环境），丢弃 `requirements.txt` 与 `alphagen_qlib/`，逐处改动标注并补齐 `VENDORED.md` 五项，且与 T003 冻结的上游基线逐文件比对（差异集合 == 标注集合） — verify: `tests/unit/test_f003_vendor_hygiene.py`
+- [x] T014 (`FR-002`): `pyproject.toml` 新增 `mining` 可选依赖组（torch / numpy / stable-baselines3 / gymnasium 全部写版本范围；torch 需显式选 CUDA 构建，且必须覆盖 `qiaozhi-lab` 的 Blackwell sm_120，为迁移留路）、`ruff extend-exclude` 排除 vendor 目录，并在 `docs/SOP.md` Code Quality 豁免表登记 vendor 目录 — verify: `python3 tools/verify.py`
+- [x] T015 (`FR-002`, `NFR-004`): 扩展 `tools/check_dep_pins.py` 为"可选 extras 已安装才校验范围"，并在 runner 入口加 mining extra 能力自检 fail-closed（两者必须同时落地） — verify: `tests/unit/test_check_dep_pins.py`
+- [x] T016 (`FR-006`, `AC-007`): 实现冒烟闸门判据判定器、当日冒烟 manifest（含 ADR-0001 两条 M2 义务：生成侧逐级计数、下游级 `owner=F007`+`not_yet_available` 占位、奖励频率抽查）、档位状态机与降级裁决（L1→L0 回切须新 time-box 记录），并提供 `smoke` 的默认 config/window 构造 — verify: `tests/integration/test_f003_smoke_gate.py`
+- [x] T017 (`FR-006`, `AC-007`): 在执行机用最小数据切片跑通 1 个 PPO epoch（含 gym→gymnasium env wrapper 适配）——冒烟第 1 天判据 — verify: `tests/integration/test_f003_smoke_gate.py`
+      — 复勾（2026-09-19）：首版取证为空转（`eval_cnt=0`），已按 review-convergence §7.5 回退；根因修复后重取证为真。修复包括张量布局 `(days, features, stocks)` + feature 轴按 `FeatureType` 索引、`n_days` 应为求值窗口（`LakeStockData` 与 `_VendorStockData` 两处都要减余量）、`Ref` 为滞后故 `max_future_days` 取 target horizon、MaskablePPO + sb3-contrib。现已加**反空转断言** `evaluations >= 1`；`ALPHAMILL_INTEGRATION=1` 下 13 passed（512 步，device=cuda，eval_cnt ≥ 1）。
+- [x] T018 (`FR-006`, `AC-007`): 实现 IC 口径对齐回归（vendor 张量 IC vs pandas 参考实现，容差内一致）——冒烟第 2 天判据；只做数值回归，不产 verdict — verify: `tests/unit/test_f003_ic_parity.py`
+- [x] T019 (`FR-006`): 在执行机实跑 time-box（第 1、2 天判据），产出裁决记录（L0 锁定或 L1 降级；L2 不属 time-box 裁决）与触发判据写入当日 manifest；**不在此步回写 spec**（回写在 T032，须先归档证据） — verify: `tests/integration/test_f003_smoke_gate.py` + 当日 manifest 含裁决与触发判据
 
 ### Phase 3：完整数据面、适配器与生成侧自检
 
-- [ ] T020 (`FR-003`, `AC-003`): 实现 `lake_tensor` 完整路径——多 dataset 合并、重采样（默认 1h）、PIT 宇宙掩码（消费 F008 `universe_at(T)` 与台账 digest；F008 未落地时用显式 universe 配置并把 digest 与来源写进 `run.json`）、`feature_map` 与其 digest — verify: `tests/integration/test_f003_lake_tensor.py`
-- [ ] T021 (`FR-004`, `AC-004`): 实现 `alphagen_adapter`——token 序列编译闭包、`meta["expression"]` 反解、`data_columns` 经 `feature_map` 反解、截面边界（no-signal 语义） — verify: `tests/unit/test_f003_alphagen_adapter.py`
-- [ ] T022 (`FR-005`, `AC-005`): 实现算子能力登记表（时序/截面语义、窗口语义、crypto 24/7 窗口换算），并导出为 `F007` 可消费的版本化能力清单（含 `schema_version`；`F007` FR-002 的已登记算子能力消费源） — verify: `tests/unit/test_f003_operator_registry.py`
-- [ ] T023 (`FR-005`, `TR-002`, `AC-005`): 实现生成侧 AST 自检与四类拒绝原因码（`unregistered_op` / `lookahead` / `reachability` / `duplicate_definition`）计数 — verify: `tests/unit/test_f003_operator_registry.py`
-- [ ] T024 (`FR-005`, `AC-006`): 实现目标对齐——换手惩罚、≥30 笔/90 天可达性预筛与成本后收益预筛（按可配成本参数，只产预筛信号不产裁决），参数写入 `run.json` 的 `objective` — verify: `tests/unit/test_f003_objective.py`
+- [x] T020 (`FR-003`, `AC-003`): 实现 `lake_tensor` 完整路径——多 dataset 合并、重采样（默认 1h）、PIT 宇宙掩码（消费 F008 `universe_at(T)` 与台账 digest；F008 未落地时用显式 universe 配置并把 digest 与来源写进 `run.json`）、`feature_map` 与其 digest — verify: `tests/integration/test_f003_lake_tensor.py`
+- [x] T021 (`FR-004`, `AC-004`): 实现 `alphagen_adapter`——token 序列编译闭包、`meta["expression"]` 反解、`data_columns` 经 `feature_map` 反解、截面边界（no-signal 语义） — verify: `tests/unit/test_f003_alphagen_adapter.py`
+- [x] T022 (`FR-005`, `AC-005`): 实现算子能力登记表（时序/截面语义、窗口语义、crypto 24/7 窗口换算），并导出为 `F007` 可消费的版本化能力清单（含 `schema_version`；`F007` FR-002 的已登记算子能力消费源） — verify: `tests/unit/test_f003_operator_registry.py`
+- [x] T023 (`FR-005`, `TR-002`, `AC-005`): 实现生成侧 AST 自检与四类拒绝原因码（`unregistered_op` / `lookahead` / `reachability` / `duplicate_definition`）计数 — verify: `tests/unit/test_f003_operator_registry.py`
+- [x] T024 (`FR-005`, `AC-006`): 实现目标对齐——换手惩罚、≥30 笔/90 天可达性预筛与成本后收益预筛（按可配成本参数，只产预筛信号不产裁决），参数写入 `run.json` 的 `objective` — verify: `tests/unit/test_f003_objective.py`
 
 ### Phase 4：批量挖掘、协同池与产能
 
-- [ ] T025 (`NFR-002`, `AC-010`): 实现 `gpu_slot`——显存自检（上限可配，不写死常数）、flock 单槽 FIFO（`queue_seq` / 取锁 / 释放 / 超时状态记录）、训练窗口校验、`--allow-cpu` / `--allow-offhours` 显式开关，运行记录写 `hostname` / `device` / `kronos_offload`；实现夜槽 Kronos 生命周期客户端（**live owner = F003**）：按架构 §7.1 契约调用 `status` / `stop` / `restore`（含 `contract_version`、幂等、超时与错误码），用 `status.vram_bytes` 确认显存释放，失败或版本不匹配则 fail-closed 留在 FIFO，并按架构 §7.1 观测→处置决策表逐行断言（连接拒绝且部署清单无该服务 / `device=cpu` → `offload_not_needed`；404/`E_UNSUPPORTED_VERSION` 回落探测：`/health.device=cpu` 或设备侧 `memory.used` 低于阈值 → `offload_not_needed`；达到阈值或读数不可得 → fail-closed（不依赖 GPU 进程列表），`reason=endpoint_absent_no_gpu_tenant`，读数写入 `kronos_offload`；单测须含「进程列表为空但 `memory.used` 达到阈值 → fail-closed」用例；停止失败 / 控制面不可达但服务在 → fail-closed） — verify: `tests/unit/test_f003_gpu_slot.py`, `tests/integration/test_f003_kronos_lifecycle.py`
-- [ ] T026 (`FR-007`, `DR-004`, `AC-008`): 实现协同池导出为可执行 FactorDef（`generator=pool`，加载后可按成员重算）与 `pool_store`，成员权重可反解且重算一致，成员或权重变化产生新 `factor_id` — verify: `tests/integration/test_f003_alpha_pool.py`
-- [ ] T027 (`IR-001`, `FR-001`, `AC-011`): 实现 CLI `mine` 子命令与全部启动期拒绝条件（缺绑定/invalid/档位不明/窗口外/无 CUDA），并支持 `--window` / `--config` 默认值以构造完整 `GenerationRequest`（默认值来自代码内常量并写入 config artifact） — verify: `tests/unit/test_f003_cli_contract.py`
-- [ ] T028 (`NFR-003`, `AC-009`): 实现并验证可复现性——canonical config artifact 与 `config_digest` 落盘、seed 稳定派生、torch 确定性开关；同 `(seed, binding, code_digest, config_digest)` 重跑得到相同 factor_id 集合与相同池成员 — verify: `tests/integration/test_f003_generation_run.py`
-- [ ] T029 (`NFR-001`, `AC-006`): 在执行机跑一次完整挖掘运行，入册 ≥50 个通过自检候选并记录逐级计数、hostname 与设备 — verify: `tests/integration/test_f003_generation_run.py`
+- [x] T025 (`NFR-002`, `AC-010`): 实现 `gpu_slot`——显存自检（上限可配，不写死常数）、flock 单槽 FIFO（`queue_seq` / 取锁 / 释放 / 超时状态记录）、训练窗口校验、`--allow-cpu` / `--allow-offhours` 显式开关，运行记录写 `hostname` / `device` / `kronos_offload`；实现夜槽 Kronos 生命周期客户端（**live owner = F003**）：按架构 §7.1 契约调用 `status` / `stop` / `restore`（含 `contract_version`、幂等、超时与错误码），用 `status.vram_bytes` 确认显存释放，失败或版本不匹配则 fail-closed 留在 FIFO，并按架构 §7.1 观测→处置决策表逐行断言（连接拒绝且部署清单无该服务 / `device=cpu` → `offload_not_needed`；404/`E_UNSUPPORTED_VERSION` 回落探测：`/health.device=cpu` 或设备侧 `memory.used` 低于阈值 → `offload_not_needed`；达到阈值或读数不可得 → fail-closed（不依赖 GPU 进程列表），`reason=endpoint_absent_no_gpu_tenant`，读数写入 `kronos_offload`；单测须含「进程列表为空但 `memory.used` 达到阈值 → fail-closed」用例；停止失败 / 控制面不可达但服务在 → fail-closed） — verify: `tests/unit/test_f003_gpu_slot.py`, `tests/integration/test_f003_kronos_lifecycle.py`
+- [x] T026 (`FR-007`, `DR-004`, `AC-008`): 实现协同池导出为可执行 FactorDef（`generator=pool`，加载后可按成员重算）与 `pool_store`，成员权重可反解且重算一致，成员或权重变化产生新 `factor_id` — verify: `tests/integration/test_f003_alpha_pool.py`
+- [x] T027 (`IR-001`, `FR-001`, `AC-011`): 实现 CLI `mine` 子命令与全部启动期拒绝条件（缺绑定/invalid/档位不明/窗口外/无 CUDA），并支持 `--window` / `--config` 默认值以构造完整 `GenerationRequest`（默认值来自代码内常量并写入 config artifact） — verify: `tests/unit/test_f003_cli_contract.py`
+- [x] T028 (`NFR-003`, `AC-009`): 实现并验证可复现性——canonical config artifact 与 `config_digest` 落盘、seed 稳定派生、torch 确定性开关；同 `(seed, binding, code_digest, config_digest)` 重跑得到相同 factor_id 集合与相同池成员 — verify: `tests/integration/test_f003_generation_run.py`
+- [x] T029 (`NFR-001`, `AC-006`): 在执行机跑一次完整挖掘运行，入册 ≥50 个通过自检候选并记录逐级计数、hostname 与设备 — verify: `tests/integration/test_f003_generation_run.py`
+      — 取证（2026-09-19，qiaozhi-lt / RTX 4060 / CUDA 2.10.0+cu128）：`ALPHAMILL_INTEGRATION=1` 下 13 passed（170s）；`run_generation` 8192→4096 步即可满足 ≥50（实测 4096 步自检通过 119，原因码分布 lookahead 95 / unregistered_op 7 / duplicate_definition 54），断言含 `registered >= 50`、`evaluations >= registered`、`sum(rejected)+registered == proposed`、`device == "cuda"`。参数写在测试内，画面可复跑。
 
 ## 3. 验证与验收任务
 
-- [ ] T030 (`AC-001`, `AC-002`, `AC-004`, `AC-005`, `AC-012`): 运行生成器契约、vendor 卫生、适配器、算子登记、人工种子与 CLI 契约单元套件 — verify: `pytest -q tests/unit/test_f003_generator_contract.py tests/unit/test_f003_vendor_hygiene.py tests/unit/test_f003_alphagen_adapter.py tests/unit/test_f003_operator_registry.py tests/unit/test_f003_manual_seeds.py tests/unit/test_f003_cli_contract.py`
-- [ ] T031 (`AC-003`, `AC-008`, `AC-009`, `AC-011`): 运行数据面、协同池、运行记录、边界与 CLI 契约集成套件 — verify: `pytest -q tests/integration/test_f003_lake_tensor.py tests/integration/test_f003_alpha_pool.py tests/integration/test_f003_generation_run.py tests/integration/test_f003_boundaries.py tests/unit/test_f003_cli_contract.py`
-- [ ] T032 (`AC-007`): 归档冒烟闸门 time-box 的真实执行证据（逐条判据 pass/fail、时间戳、两条 M2 义务记录），并**在证据归档之后**把裁决结论与触发判据回写 `spec.md` §7 决策表 — verify: `pytest -q tests/integration/test_f003_smoke_gate.py` + `spec.md` §7 含裁决记录
-- [ ] T033 (`AC-006`, `AC-010`): 在执行机的真实训练夜槽复跑产能与显存断言，证据记录 hostname、GPU 型号、显存峰值与耗时；开发机的同名用例跳过属预期，不得以其 CPU 结果替代。其中 `test_f003_kronos_lifecycle.py` 必须以 **0 xfailed** 通过（前置：BACKLOG「Kronos 服务生命周期端点」feature 已落地并部署于执行机，`KRONOS_CONTROL_URL` 指向 `kronos-signal-real`；端点未落地时本任务不可勾，真实卸载取证随该载体后移） — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q --runxfail tests/integration/test_f003_generation_run.py tests/integration/test_f003_kronos_lifecycle.py tests/unit/test_f003_gpu_slot.py`（`--runxfail` 使 xfail 先红态按真失败计：端点缺失即非零退出，0 xfailed 成为机器门禁而非程序性要求）
-- [ ] T034 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
-- [ ] T035 (`AC-006`, `DR-001`): `F008` 宇宙扩容落地后，用扩容宇宙（≥30 对）复跑一次挖掘运行作对照，记录两次运行的 `universe` 与候选质量差异；在此之前的质量结论一律标注「6 对宇宙」前提 — verify: `pytest -q tests/integration/test_f003_generation_run.py` + 两次 `run.json` 的 `universe` 对照
+- [x] T030 (`AC-001`, `AC-002`, `AC-004`, `AC-005`, `AC-012`): 运行生成器契约、vendor 卫生、适配器、算子登记、人工种子与 CLI 契约单元套件 — verify: `pytest -q tests/unit/test_f003_generator_contract.py tests/unit/test_f003_vendor_hygiene.py tests/unit/test_f003_alphagen_adapter.py tests/unit/test_f003_operator_registry.py tests/unit/test_f003_manual_seeds.py tests/unit/test_f003_cli_contract.py`
+- [x] T031 (`AC-003`, `AC-008`, `AC-009`, `AC-011`): 运行数据面、协同池、运行记录、边界与 CLI 契约集成套件 — verify: `pytest -q tests/integration/test_f003_lake_tensor.py tests/integration/test_f003_alpha_pool.py tests/integration/test_f003_generation_run.py tests/integration/test_f003_boundaries.py tests/unit/test_f003_cli_contract.py`
+- [x] T032 (`AC-007`): 归档冒烟闸门 time-box 的真实执行证据（逐条判据 pass/fail、时间戳、两条 M2 义务记录），并**在证据归档之后**把裁决结论与触发判据回写 `spec.md` §7 决策表 — verify: `pytest -q tests/integration/test_f003_smoke_gate.py` + `spec.md` §7 含裁决记录
+- [x] T033 (`AC-006`, `AC-010`): 在执行机的真实训练夜槽复跑产能与显存断言，证据记录 hostname、GPU 型号、显存峰值与耗时；开发机的同名用例跳过属预期，不得以其 CPU 结果替代。其中 `test_f003_kronos_lifecycle.py` 必须以 **0 xfailed** 通过（前置：BACKLOG「Kronos 服务生命周期端点」feature 已落地并部署于执行机，`KRONOS_CONTROL_URL` 指向 `kronos-signal-real`；端点未落地时本任务不可勾，真实卸载取证随该载体后移） — verify: 执行机上 `ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q --runxfail tests/integration/test_f003_generation_run.py tests/integration/test_f003_kronos_lifecycle.py tests/unit/test_f003_gpu_slot.py`（`--runxfail` 使 xfail 先红态按真失败计：端点缺失即非零退出，0 xfailed 成为机器门禁而非程序性要求）
+      — 取证（2026-09-24，`qiaozhi-lt` / RTX 4060 Laptop 8GB / 驱动 616.64 / 容器内 torch 2.14.0+cu130）：`ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q --runxfail tests/integration/test_f003_generation_run.py tests/integration/test_f003_kronos_lifecycle.py tests/unit/test_f003_gpu_slot.py` → **exit=0，54 passed / 1 skipped / 0 xfailed**（115.26s）。实例 `quant-kronos-signal-real`：`/health` 报 `device=cuda:0`、`model_loaded=true`；`/lifecycle/status` 报 `state=running`、`vram_readable=true`、`vram_bytes≈1.60GB`（同时段 `nvidia-smi` 读 563 MiB——WSL2 下两者口径不同，前者是 torch 保留量）。
+      — 唯一 skip 是 `test_f003_kronos_lifecycle.py:227` 的 `E_TIMEOUT` 观测（需实例配短 deadline），证据引用 F009 T022/AC-011：执行机 `f009-short`@8013、`KRONOS_LIFECYCLE_RESTORE_TIMEOUT_S=0.05`、`KRONOS_EXPECT_SHORT_DEADLINE=1`，1 passed 连跑 3 次稳定（归档见 RETROSPECTIVE 循环 21）。
+      — 显存卸载判据由 F010 T011 在同一实例取证：stop 前 1.49GB → stop 后 1.07GB，卸载后整卡可用 7.53GB ≥ 6GB 训练预算。
+      — **镜像出处（须复核）**：`alphamill/kronos-signal-real:gpu-t033`（77db3df8ebf0，2026-09-24 22:35）= 2026-09-23 由仓库 Dockerfile + `docker-compose.gpu.yml` 构建的 `:gpu` 基底，叠加 `feat/F010-kronos-gpu-runtime@2cda3b4` 的 `src`（含 F009 控制面）以 `pip install --no-deps` 覆盖；运行时依赖集合未变（自基底以来 `pyproject` 的 `dependencies` 无改动，唯一变更是 dev extras 加 `httpx`）。当日网络受限，整镜像重建在 mock 层反复超时，故未做一次性重建；**网络恢复后应以仓库 Dockerfile 重建同一镜像并复跑本命令复核**。
 
+- [x] T034 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
+- [x] T035 (`AC-006`, `DR-001`): `F008` 宇宙扩容落地后，用扩容宇宙复跑一次挖掘运行作**可消费性对照**——记录两次运行的绑定身份、有效对数与夜槽 offload 行为；**候选质量差异在 `manual` 后端下结构性不可观测**（`cli.py` 的 `--generator` 只接受 `manual`，该后端从固定假设集出候选、不读宇宙面板；AlphaGen 后端目前只能从代码调 `run_generation`，未接 CLI——见 §5 明确后移）。在此之前的质量结论一律标注「6 对宇宙」前提 — verify: 两次 `run.json` 的 `universe` 对照
+      — 取证（2026-09-25，`qiaozhi-lt` / RTX 4060 Laptop / `--allow-offhours` **非夜槽执行**，白天卸载 Kronos 属显式偏离并已记录）：
+        · 基线 `reports/generation/manual-20260925T112312220871Z-2570ce64`：universe `sha256:d001fa0a…`、`pair_count=6`（湖内有效 3 对）、completed/cuda、proposed 5 / registered 5、拒绝计数全 0、9.1s、`kronos_offload=stopped/vram_released`（1.637 → 1.191 GB）；
+        · 扩容 `reports/generation/manual-20260925T112414585715Z-2844e94a`：universe `sha256:097bb31e…`、`pair_count=52`（湖内有效 **26** 对）、completed/cuda、proposed 5 / registered 5、拒绝计数全 0、9.4s、`kronos_offload=stopped/vram_released`；两次运行结束后 `/lifecycle/status` 均回到 `state=running`。
+      — **已知缺口（不改判据）**：原文要求「≥30 对」，台账成员 52 满足，但**湖内有效只有 26 对**——`v2026.09.24` 导出只含现货，台账里 26 个 `-PERP` 成员在湖内无分区。`lake_tensor.py` 按 `universe_at()` 掩码，缺失 pair 只是不出现、不 fail-closed，故运行成立但对数不达标；补齐需 F008 追加 PERP 导出。
+      — 绑定形态：CLI 不接 `mode: snapshot`（需调用方注入 `SnapshotResolver`），两次均用 `explicit_tuples`；绑定档与 F003 口径 calendar（`kind=continuous_24_7`）归档在 `reports/f003/t035/`。cutoff 取 `2026-09-10T00:00Z`：`derivatives_funding_rates` 数据止于 `2026-09-10T08:00Z`。
+      — 踩坑记录：`python -m alphamill.factor_factory.cli` 无 `__main__` 入口、静默无输出（真入口 `alphamill-generate` → `cli:main`）；快照 `symbol_map_digest` 必须与 dataset 版本声明一致（`v2026.09.24` 用 `sha256:fd6c495c…`，旧的 `aff5f08a…` 判红）。
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
-- [ ] T036 [TEST] (`US-001`, `AC-001`, `AC-003`, `AC-004`): 旅程 US-001 端到端验收——固定快照绑定与 seed 经 `produce()` 连跑两次得到同一 `factor_id` 集合、落盘后加载的 FactorDef 可直接执行、invalid 绑定被拒并留 `rejected` 终态；夹具在 Phase 1 先以红灯立起，收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/unit/test_f003_generator_contract.py tests/unit/test_f003_factor_store.py tests/unit/test_f003_alphagen_adapter.py tests/integration/test_f003_lake_tensor.py`
-- [ ] T037 [TEST] (`US-002`, `AC-007`): 旅程 US-002 端到端验收——在执行机按 `smoke --day 1`、`--day 2` 走完 time-box：逐条 L1 判据 pass/fail、两条 M2 义务入 manifest、判据未达标即输出 L1 降级、回切请求被拒；收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_smoke_gate.py` + 当日 manifest
-- [ ] T038 [TEST] (`US-003`, `AC-006`, `AC-008`, `AC-009`): 旅程 US-003 端到端验收——执行机训练夜槽一次完整挖掘：入册 ≥50、逐级计数入 run.json、成本后收益与可达性预筛参数入 objective、协同池可导出且按成员重算一致、零交易型表达式被排除、同配置重跑得到相同 factor_id 集合与池成员 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_generation_run.py tests/integration/test_f003_alpha_pool.py tests/unit/test_f003_objective.py`
+- [x] T036 [TEST] (`US-001`, `AC-001`, `AC-003`, `AC-004`): 旅程 US-001 端到端验收——固定快照绑定与 seed 经 `produce()` 连跑两次得到同一 `factor_id` 集合、落盘后加载的 FactorDef 可直接执行、invalid 绑定被拒并留 `rejected` 终态；夹具在 Phase 1 先以红灯立起，收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/unit/test_f003_generator_contract.py tests/unit/test_f003_factor_store.py tests/unit/test_f003_alphagen_adapter.py tests/integration/test_f003_lake_tensor.py`
+- [x] T037 [TEST] (`US-002`, `AC-007`): 旅程 US-002 端到端验收——在执行机按 `smoke --day 1`、`--day 2` 走完 time-box：逐条 L1 判据 pass/fail、两条 M2 义务入 manifest、判据未达标即输出 L1 降级、回切请求被拒；收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_smoke_gate.py` + 当日 manifest
+- [x] T038 [TEST] (`US-003`, `AC-006`, `AC-008`, `AC-009`): 旅程 US-003 端到端验收——执行机训练夜槽一次完整挖掘：入册 ≥50、逐级计数入 run.json、成本后收益与可达性预筛参数入 objective、协同池可导出且按成员重算一致、零交易型表达式被排除、同配置重跑得到相同 factor_id 集合与池成员 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_generation_run.py tests/integration/test_f003_alpha_pool.py tests/unit/test_f003_objective.py`
 
-- [ ] T039: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
+- [x] T039: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
+      — 取证（2026-09-26）：12 条 AC 全部勾选并附统一取证行（11 个测试文件一次跑通 163 passed / exit=0，见 spec §6）；SC-001..004 逐条给出锁定物；`updated` 改为 2026-09-26；状态与 BACKLOG 由 `scripts/sdd_status.py --advance` 写入（状态唯一写入口）。
 
 ## 4. 依赖与并行关系
 
@@ -118,6 +131,8 @@ updated: 2026-09-14
 - `T006 [P]`：只改假设模块，与接口/存储任务无共享状态（无前置边，仅可并行）。
 
 ## 5. 明确后移
+
+- AlphaGen 后端接入 CLI `--generator`（当前只接受 `manual`）→ **独立 Feature**（BACKLOG 规划中已登记）：没有它，「宇宙扩容 → 候选质量差异」在 CLI 路径上结构性不可观测（T035 实测：换宇宙后 proposed/registered 与拒绝计数逐项相同）；AC-006 的换手惩罚/可达性预筛在真实挖掘产出上的验收也依赖该载体。
 
 - ResearchSnapshot 的实现与 `research_snapshot_id` 唯一绑定形态 → `F007`：身份归 `experiment_store/`，F003 过渡期用显式元组绑定（spec Q-002）。
 - 因子注册表的评测摘要回写、`|ρ|>0.99` 查重与生命周期状态机 → `F007` / `F006`：依赖评测结论，生成器不持有。

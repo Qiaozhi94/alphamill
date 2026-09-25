@@ -52,6 +52,9 @@ deployment/.env
 # Kronos 上游克隆（pin 记录见 vendor/VENDORED.md）与模型权重（migration-plan §三：不进 git）
 vendor/Kronos/
 models/
+# ...例外：AlphaGen vendor 的 alphagen/models/ 是上游源码（线性协同池），不是模型权重；
+# 裸 models/ 规则会把它整目录吞掉，必须显式放回（见 alphagen_vendor/VENDORED.md）。
+!src/alphamill/factor_factory/generators/alphagen_vendor/alphagen/models/
 deployment/backups/
 
 !.gitkeep
@@ -61,6 +64,9 @@ freqtrade/user_data/tradesv3.sqlite*
 
 # F002 Parquet 湖（分区数据 + manifest + symbol-map artifact，NAS 备份，不进 git）
 lake/
+
+# F003 生成运行产物（run.json/因子/checkpoint，体积大；只入库 curated 摘要）
+reports/generation/
 reports/backfill/*.log
 # 逐片进度日志（stderr，体积大且可重跑复现）：入库只留逐片摘要 *.log.json 与 run.json
 reports/backfill/*.log.err
