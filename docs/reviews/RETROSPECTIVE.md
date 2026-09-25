@@ -1053,3 +1053,11 @@ report_type: code-review · feature: F008 · status: closed · rounds: 1（full-
 - **裁决分布**：accepted 27 / partial 0 / rejected 0。**建议命中率**：27 条中修复方案与建议实质一致 26 条；唯一偏离是 R1-001——建议"回退来源写入 manifest + 守卫以最新已发布版本为参照"，实际选择更窄的解法（**增量模式直接拒绝回退**），理由是这样连"回退留痕"都不需要，语义面更小。
 - **成本观察（供下轮采样参考）**：两条最高价值项（Critical + High）都落在**上一轮"实测驱动的修复"的邻域**（T023 的 `usable_baseline` 回退与准入过滤收窄）。教训：**修复密集区应作为下一轮检视的优先采样区**，而不是"刚修过、应该没问题"的免检区。
 - **并行检视的实际形态**：5 片只读 + 1 片测试覆盖并行扫描，再由 4 个修复代理分头落地；跨代理的文件冲突（同一测试文件、同一报错文案）出现了两次，靠"派活时按文件切分 + 报告里显式声明并发面"化解。教训：**并行检视要按文件边界派活**，共享文件（CLI/测试聚合文件）要么独占、要么约定最小 literal edit。
+
+## 循环 22：F011 导出清单绑定当前宇宙版本 需求设计文档检视
+
+report_type: doc-review · feature: F011 · status: open · rounds: 0（作者自评，不计）→ 1（full-scan，独立检视）→ 2（待，diff-only）
+
+- **第 0 轮（补记，D11）**：`0a32530`（2026-09-25）是作者在同一会话内对三件套的自查修订（D1 `export_admitted` 形参命名冲突→`bound_universe`、D2「逐字节一致」不可测→可观察等价、D3 `dropped_by_universe` 定义补齐），当时的 `CURRENT-doc-F011.md` 自评档 `readiness: PASS` 被当作收敛证据推进到 `ready-for-development`/`developing`；`e2385d1` 以「不构成独立检视」撤回流转、状态纠正为 `doc-reviewing`。该轮没有留下独立检视档，本段为其唯一留痕。
+- **第 1 轮**：2026-09-26，基线 `origin/feat/F011-export-universe-binding @ a745027`（三件套内容与 `main @ e2385d1` 相同，仅 frontmatter 状态不同），11 条（4 High / 6 Medium / 1 Low）；修复在 `docs/F011-export-universe-binding` 分支。完整 issue 表于本循环闭环时原样追加。
+- **过程教训（第 0 轮）**：自评档一旦带 `stop_condition_met: true` 就会被状态机当成收敛证据；第 1 轮 4 条 High 全部出在「设计声明没对照真实代码」（`spec-vs-code-unverified` / `cross-feature-contract-drift`），恰是自评最容易跳过的一步。
