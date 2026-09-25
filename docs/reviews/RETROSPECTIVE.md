@@ -1056,6 +1056,8 @@ report_type: code-review · feature: F008 · status: closed · rounds: 1（full-
 
 ## 循环 22：F003 AlphaGen vendor 与可插拔生成器平面 实现代码检视
 
+report_type: code-review · feature: F003 · status: closed · rounds: 1（full-scan）→ 2（diff-only） · 基线 `b78f3a9` → 修复终态 `0f13d9c`
+
 - report_type: code-review
 - 周期：2026-09-20（2 轮；第 1 轮全量扫描，第 2 轮 diff-only 复核）
 - 状态：闭环（stop_condition_met: true）
