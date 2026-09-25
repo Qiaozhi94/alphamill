@@ -182,13 +182,13 @@ Step 1 of 6 done. Now examining the two target chapters' full contents and the r
 <type>file</type>
 <content>
 1: # Chapter 25: Live Trading Systems
-2:
+2: 
 3: The transition from profitable backtest to live execution is where most algorithmic trading projects fail. Not because the strategy lacks edge, but because the production system diverges from the research environment in subtle ways that erode returns. This chapter demonstrates how a unified framework eliminates that divergence by running identical strategy code in backtest, paper, and live modes.
-4:
+4: 
 5: ## Learning Objectives
-6:
+6: 
 7: After completing this chapter, you will be able to:
-8:
+8: 
 9: 1. Explain why technical divergence between research and production is a primary failure mode, and how a unified framework reduces that risk
 10: 2. Design a dual-m
 …[truncated]
@@ -202,9 +202,9 @@ Step 1 of 6 done. Now examining the two target chapters' full contents and the r
 <type>file</type>
 <content>
 1: # Chapter 26: MLOps and Governance
-2:
+2: 
 3: A model has cleared every backtest, the deployment verification of Chapter 25 has taken the system live, and real capital is now flowing through it. Keeping it working — and failing safely when it cannot — is the next problem. Every deployed model decays: regimes shift, competitors discover similar signals, and the relationships the model learned gradually erode. The difference between a profitable trading operation and a capital-destroying one often comes down to how quickly that decay is detected and how safely the system responds.
-4:
+4: 
 5: This chapter builds the post-deployment infrastructure that separates production-grade systems from research
 …[truncated]
   ```
@@ -436,7 +436,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Runtime Safety Showcase: Stale Data, Kill Switch, Reconciliation, Health
 18: #
@@ -470,7 +470,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # SafeBroker Risk Controls Demo
 18: #
@@ -516,14 +516,14 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 <path>/home/georg/projects/ml4t-zh/25_live_trading/10_safety_risk_demo.py</path>
 <type>file</type>
 <content>
-240:
+240: 
 241:     def __init__(self, initial_cash: float = 100_000.0):
 242:         self._cash = initial_cash
 243:         self._positions: dict[str, Position] = {}
 244:         self._pending_orders: list[Order] = []
 245:         self._connected = False
 246:         self._order_counter = 0
-247:
+247: 
 248:     async def submit_order_async(
 249:         self,
 250:         asset: str,
@@ -635,7 +635,7 @@ Found 60 match(es) in 7 file(s)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Circuit Breakers for Trading Systems
 18: #
@@ -665,13 +665,13 @@ Step 5 of 6: extracting the readiness/rollout/drift mechanisms. Reading the crit
 <type>file</type>
 <content>
 180:     return breaker.state
-181:
-182:
+181: 
+182: 
 183: # %% [markdown]
 184: # The abstract base class now delegates the mechanics to helper functions and
 185: # keeps only the public interface shared across breaker types.
-186:
-187:
+186: 
+187: 
 188: # %%
 189: class CircuitBreaker(ABC):
 190:     def __init__(
@@ -705,12 +705,12 @@ Step 5 of 6: extracting the readiness/rollout/drift mechanisms. Reading the crit
 427:     position_agreement.append(
 428:         len(incumbent_assets & candidate_assets) / len(incumbent_assets | candidate_assets)
 429:     )
-430:
-431:
+430: 
+431: 
 432: # %% [markdown]
 433: # The shadow summary contains only hypothetical returns. No allocation or capital path is computed.
-434:
-435:
+434: 
+435: 
 436: # %%
 437: shadow_stats = pd.DataFram
 …[truncated]
@@ -744,11 +744,11 @@ Step 5 of 6 (continued): drift metrics, verification gates, and the monitoring f
 <content>
 300: validate_feature_data(current_features, FEATURE_COLUMNS)
 301: validate_feature_data(reference_features, FEATURE_COLUMNS)
-302:
+302: 
 303: print(f"Reference feature rows: {reference_features.height:,}")
 304: print(f"Current feature rows:   {current_features.height:,}")
-305:
-306:
+305: 
+306: 
 307: # %% [markdown]
 308: # ## 3. Feature and prediction drift diagnostics
 309: #
@@ -756,8 +756,8 @@ Step 5 of 6 (continued): drift metrics, verification gates, and the monitoring f
 311: # recent 63 trading days inside the holdout. PSI flags material shifts, while
 312: # the K-S test checks whether the two samples plausibly come from the same
 313: # distribution.
-314:
-315:
+314: 
+315: 
 316: # %%
 317: def compute_psi(
 318:     ref
@@ -773,19 +773,19 @@ Step 5 of 6 (continued): drift metrics, verification gates, and the monitoring f
 <content>
 90: # If the infrastructure cannot coexist in a single environment, the chapter's unified-framework claim has
 91: # already broken down before any strategy logic runs.
-92:
+92: 
 93: # %% [markdown]
 94: # ## 1. Define Test Strategy
 95: #
 96: # The strategy is intentionally deterministic so any mismatch between backtest and live outputs is a
 97: # technical bug, not a statistical fluctuation.
-98:
-99:
+98: 
+99: 
 100: # %%
 101: @dataclass
 102: class VerificationResult:
 103:     """Result of a single verification test."""
-104:
+104: 
 105:     test_name: str
 106:     passed: bool
 107:     expected: Any
@@ -844,7 +844,7 @@ Step 6 of 6: reading the deployment-loop run record contract, verification gate,
 595:     f"intended={len(intended_basket)} / attempted={len(attempted_basket)} / "
 596:     f"accepted={len(accepted_basket)} / failed={len(failed_basket)}"
 597: )
-598:
+598: 
 599: # %%
 600: exec_summary = pl.DataFrame(
 601:     [
@@ -865,12 +865,12 @@ Step 6 of 6: reading the deployment-loop run record contract, verification gate,
 <type>file</type>
 <content>
 815:     ]
-816:
-817:
+816: 
+817: 
 818: # %% [markdown]
 819: # The release gate composes both result groups and fails closed when either replay was skipped.
-820:
-821:
+820: 
+821: 
 822: # %%
 823: def run_verification_tests() -> list[VerificationResult]:
 824:     """Run the complete parity contract."""
@@ -879,12 +879,12 @@ Step 6 of 6: reading the deployment-loop run record contract, verification gate,
 827:     return pipeline_results(backtest_strategy, live_strategy) + execution_results(
 828:         backtest_strategy, live_strategy
 829:     )
-830:
-831:
+830: 
+831: 
 832: # %% [markdown]
 833: # The human-readable report shows every check, including skipped and intentionally different stages.
-834:
-835:
+834: 
+835: 
 836: # %%
 837: pri
 …[truncated]
@@ -925,13 +925,13 @@ Reading the operational checklist and governance lifecycle sections, plus the RE
 <type>file</type>
 <content>
 483: ## 25.7 Operational readiness
-484:
+484: 
 485: A system that passes all verification tests can still fail in production due to operational gaps. This section covers the pre-launch requirements and ongoing practices that separate reliable trading from catastrophic surprises.
-486:
+486: 
 487: ### Preflight checklist
-488:
+488: 
 489: Operational readiness begins with a startup gate, not with the first signal. Before the strategy is allowed to trade, several checks need to pass:
-490:
+490: 
 491: 1. The **runtime environment** must demonstrate that the container or server is healthy, network paths to the broker are open, data feeds are current, and that supporting services, such as databases and monitoring, are ava
 …[truncated]
   ```
@@ -989,18 +989,18 @@ Filling final gaps: order state machine states, full `ml4t.live` API surface, an
 69: # compliance: skip cell_size - one Enum definition with three property helpers
 70: class OrderState(Enum):
 71:     """All possible order states in the lifecycle."""
-72:
+72: 
 73:     # Initial states
 74:     PENDING_NEW = auto()  # Order submitted, awaiting broker acknowledgment
 75:     NEW = auto()  # Order acknowledged by broker
-76:
+76: 
 77:     # Active states
 78:     ACCEPTED = auto()  # Order accepted by exchange
 79:     PARTIALLY_FILLED = auto()  # Some quantity executed
-80:
+80: 
 81:     # Modification states
 82:     PENDING_CANCEL = auto()  # Cancel request submitted
-83:
+83: 
 84:     # Terminal states (no further transitions)
 85:     FILLED = auto()  # Fully executed
 86:     C
@@ -1038,13 +1038,13 @@ Found 43 match(es) in 12 file(s)
 <type>file</type>
 <content>
 1: """Everything that must be true before an expensive model run starts.
-2:
+2: 
 3: A canonical model run costs hours. Discovering afterwards that it recorded no runtime, or that
 4: the same configuration would have resolved to a different identity on another code path, means
 5: paying for it twice. This script states those conditions as executable checks and exits non-zero
 6: if any of them fails, so "we verified the preconditions" is something you can see rather than
 7: something someone remembers to do.
-8:
+8: 
 9: The substantive checks run a real reduced population end to end in a throwaway workspace and then
 10: interrogate what it wrote. A check that reads the source and concludes the code looks rig
 …[truncated]
@@ -1100,13 +1100,13 @@ Final reads: failure taxonomy, breaker recovery protocol, README workflow loop, 
 <type>file</type>
 <content>
 30: Technical failures are *verification problems*. *Chapter 25* addressed these: reconciliation between backtest and live systems should catch pipeline divergence. When a live system produces different outputs for identical inputs, the cause is a bug to fix.
-31:
+31: 
 32: ### Statistical failure caused by performance decay
-33:
+33: 
 34: *Statistical* failure occurs when the system works exactly as designed (the same inputs produce the same outputs), but the outputs no longer predict returns. The implementation is correct; the model has decayed.
-35:
+35: 
 36: Four mechanisms cause statistical decay:
-37:
+37: 
 38: - *Overfitting*: The model learned patterns from the training data that do not generalize to ne
 …[truncated]
   ```
@@ -1119,13 +1119,13 @@ Final reads: failure taxonomy, breaker recovery protocol, README workflow loop, 
 <type>file</type>
 <content>
 320: ## 26.5 Circuit breakers and safety
-321:
+321: 
 322: Monitoring and safe updates address gradual decay. Circuit breakers address sudden failure: when something goes catastrophically wrong, and speed matters more than nuance. These are your automated safety nets: simple, hard-coded rules that protect capital when sophisticated systems fail.
-323:
+323: 
 324: ### Multi-level protection
-325:
+325: 
 326: Defense in depth: multiple independent safety layers, each catching different failure modes. The circuit breaker architecture implements four hierarchical levels:
-327:
+327: 
 328: - *Per-trade* (individual order validation)
 329: - *Per-strategy* (exposure limits for a single strategy)
 330: - *Portfolio* (aggreg
@@ -1141,11 +1141,11 @@ Final reads: failure taxonomy, breaker recovery protocol, README workflow loop, 
 <content>
 20: machine to a running notebook, prerequisites included. The short version is under
 21: [Quick Start](#quick-start) below.
-22:
+22: 
 23: <!-- offerings:next start -->
 24: > **Next free session:** [How to Be Productive with Coding Agents, Beyond Code](https://maven.com/p/efe730), a 30-minute live session on **Wednesday, September 30, 2026, 11:00 AM ET / 15:00 UTC**. [All courses, workshops, and free lessons](https://ml4trading.io/courses/?utm_source=github&utm_medium=readme&utm_campaign=ml4t3e&utm_content=offerings).
 25: <!-- offerings:next end -->
-26:
+26: 
 27: <p align="center">
 28:   <a href="https://amzn.to/4eigy2F"><img src="assets/cover.png" width="45%" alt="Machine Learning for Trading, 3rd Edition"></a>
 29: </p>
@@ -1200,21 +1200,21 @@ One final pass: breaker recovery protocol and the A/B / staged-rollout gate code
 <path>/home/georg/projects/ml4t-zh/26_mlops_governance/chapter_26.md</path>
 <type>file</type>
 <content>
-390:
+390: 
 391: ### Recovery procedures
-392:
+392: 
 393: Tripping a circuit breaker is the beginning, not the end. You need clear recovery protocols, grouped as the immediate response, investigating the problem, and resuming trade.
-394:
+394: 
 395: **Immediate actions**:
-396:
+396: 
 397: 1. **Acknowledge the alert**, using PagerDuty, Slack, or whichever platform you use.
 398: 2. **Assess the situation**: What triggered the breaker? What’s the current exposure?
 399: 3. **Secure the position**: If you are partially exposed, decide whether to close or hedge.
-400:
+400: 
 401: **Diagnostic questions**:
-402:
+402: 
 403: - Was this a technical failure (data feed, execution system) or model failure (wrong predictions)?
-404: - Is
+404: - Is 
 …[truncated]
   ```
   </details>

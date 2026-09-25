@@ -197,17 +197,17 @@ drwxr-xr-x 42 georg georg  4096 Sep 12 01:44 ..
 <type>file</type>
 <content>
 1: # Shared utilities
-2:
+2: 
 3: Library code imported across every chapter and case study. Notebooks run from the
 4: repository root, so `import utils` and `from utils.x import y` resolve with no
 5: installation. This is code you **import**, not run — for command-line tools, see
 6: [`scripts/`](../scripts).
-7:
+7: 
 8: **Configuration and paths.** `config.py` loads and validates the paths and settings
 9: in `.env` (and sorts out CUDA library paths); `paths.py` holds the chapter registry
 10: and resolves chapter, case-study, and output directories so notebooks never hard-code
 11: a location.
-12:
+12: 
 13: **Figures.** `style.py` defines the ML4T color palette and the matplotlib / Plotly
 14: defaults that give every fig
 …[truncated]
@@ -221,16 +221,16 @@ drwxr-xr-x 42 georg georg  4096 Sep 12 01:44 ..
 <type>file</type>
 <content>
 1: from __future__ import annotations
-2:
+2: 
 3: from dataclasses import dataclass, field, replace
 4: from datetime import UTC, datetime
 5: from typing import Any
-6:
+6: 
 7: from case_studies.utils.artifact_digest import value_digest
 8: from case_studies.utils.registry.specs import canonical_json, canonical_value, compute_hash
 9: from utils.cv_splits import generate_cv_splits
-10:
-11:
+10: 
+11: 
 12: def _normalize_boundary(value: Any) -> str:
 13:     raw = value.isoformat() if hasattr(value, "isoformat") else str(value)
 14:     try:
@@ -250,18 +250,18 @@ drwxr-xr-x 42 georg georg  4096 Sep 12 01:44 ..
 <type>file</type>
 <content>
 1: from __future__ import annotations
-2:
+2: 
 3: from collections.abc import Mapping, Sequence
 4: from copy import deepcopy
 5: from datetime import time as dt_time
 6: from typing import Any
-7:
+7: 
 8: import pandas as pd
 9: import polars as pl
-10:
+10: 
 11: _FOLD_FIELDS = ("fold", "train_start", "train_end", "val_start", "val_end")
-12:
-13:
+12: 
+13: 
 14: def _validation_folds(validation_spec: Mapping[str, Any]) -> list[dict[str, Any]]:
 15:     computation = validation_spec.get("computation")
 16:     if not isinstance(computation, dict):
@@ -279,7 +279,7 @@ drwxr-xr-x 42 georg georg  4096 Sep 12 01:44 ..
 <type>file</type>
 <content>
 1: from __future__ import annotations
-2:
+2: 
 3: import json
 4: import re
 5: import sqlite3
@@ -288,9 +288,9 @@ drwxr-xr-x 42 georg georg  4096 Sep 12 01:44 ..
 8: from dataclasses import asdict, dataclass
 9: from datetime import date, datetime, timedelta
 10: from typing import TYPE_CHECKING, Any, Literal
-11:
+11: 
 12: import polars as pl
-13:
+13: 
 14: from case_studies.utils.artifact_digest import value_digest
 15: from case_studies.utils.backtest_loaders import (
 16:     get_backtest_config,
@@ -324,20 +324,20 @@ Now the CV core, reproducibility, and the process-is-edge / strategy-definition 
 <type>file</type>
 <content>
 1: """Cross-validation split generation for case study pipelines.
-2:
+2: 
 3: Reads the ``evaluation`` section from ``setup.yaml`` and generates
 4: walk-forward date boundaries by delegating to ml4t-diagnostic's
 5: ``WalkForwardCV``. This is the single source of truth for CV splits
 6: used by all case studies (Ch11+).
-7:
+7: 
 8: Usage:
 9:     from utils.cv_splits import generate_cv_splits, load_evaluation_config, make_walk_forward_config
-10:
+10: 
 11:     # Date-boundary splits
 12:     splits = generate_cv_splits(dataset, case_study_id="etfs", label_buffer="21D")
 13:     for split in splits:
 14:         train_mask = (df[date_col] >= split["train_start"]) & (df[date_col] <= split["train_end"])
-15:         val_mask
+15:         val_mask   
 …[truncated]
   ```
   </details>
@@ -349,27 +349,27 @@ Now the CV core, reproducibility, and the process-is-edge / strategy-definition 
 <type>file</type>
 <content>
 1: """Centralized configuration using python-dotenv.
-2:
+2: 
 3: This module loads all configuration from the .env file in the repository root.
 4: It provides explicit, fail-fast configuration with clear error messages.
-5:
+5: 
 6: Configuration priority:
 7: 1. .env file (ONLY source - no fallbacks)
 8: 2. Validation ensures paths exist or provides clear instructions
-9:
+9: 
 10: Usage:
 11:     from utils import ML4T_PATH, ML4T_DATA_PATH, REPO_ROOT
 12: """
-13:
+13: 
 14: import os
 15: from pathlib import Path
-16:
+16: 
 17: from dotenv import load_dotenv
-18:
+18: 
 19: # Find repository root (where .env lives)
 20: REPO_ROOT = Path(__file__).parent.parent.resolve()
 21: ENV_FILE = REPO_ROOT / ".env"
-22:
+22: 
 23: # Auto-create .env from .env.exa
 …[truncated]
   ```
@@ -382,22 +382,22 @@ Now the CV core, reproducibility, and the process-is-edge / strategy-definition 
 <type>file</type>
 <content>
 1: """One-call seed initialization for reproducible notebook runs.
-2:
+2: 
 3: Notebooks that produce any random output should call ``set_global_seeds()``
 4: in their preamble, between imports and the first computation. Monte Carlo
 5: demos that *want* per-run variability should still call it, with the seed
 6: declared in their parameters cell so readers can change it explicitly.
 7: """
-8:
+8: 
 9: from __future__ import annotations
-10:
+10: 
 11: import os
 12: import random
-13:
-14:
+13: 
+14: 
 15: def set_global_seeds(seed: int = 42) -> None:
 16:     """Seed Python ``random``, NumPy, Torch (CPU+CUDA), and ``PYTHONHASHSEED``.
-17:
+17: 
 18:     Polars and pandas operations that need a seed accept it per-call
 19:     (e.g. ``df.
 …[truncated]
@@ -411,11 +411,11 @@ Now the CV core, reproducibility, and the process-is-edge / strategy-definition 
 <type>file</type>
 <content>
 1: # Chapter 1: The Process Is Your Edge
-2:
+2: 
 3: The chapter establishes the chapter's central claim: in trading, durable performance depends less on picking a sophisticated model than on maintaining a disciplined research process that can survive changing markets, noisy signals, and real-world frictions. It gives readers a usable vocabulary for market change, shows why recent shocks exposed fragile assumptions, and reframes ML for trading as an adaptation problem rather than a model-selection contest.
-4:
+4: 
 5: ## Learning Objectives
-6:
+6: 
 7: * Distinguish structural breaks, regimes, data drift, concept drift, and online detection, and explain why static trading models degrade in changing markets
 
 …[truncated]
@@ -429,11 +429,11 @@ Now the CV core, reproducibility, and the process-is-edge / strategy-definition 
 <type>file</type>
 <content>
 1: # Chapter 6: Strategy Research Framework
-2:
+2: 
 3: The chapter establishes the chapter's core claim: a trading strategy is not just a signal or model, but an executable decision process that has to be defined at decision time and evaluated as if it were live. It distinguishes the live trading loop from the research loop and shows why disciplined iteration matters if historical testing is supposed to say anything about future behavior. The case studies make the workflow concrete across asset classes, cadences, and market structures, so readers see early that the same research logic must survive very different implementation environments.
-4:
+4: 
 5: ## Learning Objectives
-6:
+6: 
 7: * Place a strat
 …[truncated]
   ```
@@ -458,11 +458,11 @@ Now the labels, multiple-testing, signal evaluation, causal checks, and run-log/
 <type>file</type>
 <content>
 1: # Chapter 7: Defining the Learning Task
-2:
+2: 
 3: The chapter shows that feature research starts long before modeling. It turns raw but validated market data into stable, protocol-safe inputs by enforcing train-only fitting, disciplined outlier handling, explicit representation choices, and visible missing-data rules. The payoff is not cosmetic cleanliness but comparability, auditability, and protection against leakage that would otherwise make later signal evaluation meaningless.
-4:
+4: 
 5: ## Learning Objectives
-6:
+6: 
 7: * Build split-aware preprocessing pipelines that produce stable, auditable inputs for label and feature computation.
 8: * Define execution-consistent labels, including
 …[truncated]
@@ -489,7 +489,7 @@ Now the labels, multiple-testing, signal evaluation, causal checks, and run-log/
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown] tags=[]
 17: # # Multiple Testing and Selection Bias
 18: #
@@ -525,10 +525,10 @@ Now the labels, multiple-testing, signal evaluation, causal checks, and run-log/
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # **Docker image**: `ml4t`
-18:
+18: 
 19: # %% [markdown]
 20: # # Label Engineering Methods
 21: #
@@ -549,11 +549,11 @@ Now the labels, multiple-testing, signal evaluation, causal checks, and run-log/
 <type>file</type>
 <content>
 1: # Case Studies
-2:
+2: 
 3: Nine case studies thread through Chapters 6-20, applying the same ML4T workflow to different asset classes, frequencies, and trading constraints. Each case study defines a universe, builds labels and features, trains models from linear baselines through deep learning, and evaluates strategies through backtesting, portfolio construction, cost analysis, and risk management.
-4:
+4: 
 5: ## Overview
-6:
+6: 
 7: | # | Case Study | Asset Class | Frequency | Universe | Primary Label |
 8: |---|------------|-------------|-----------|----------|---------------|
 9: | 1 | [ETFs](etfs/) | Multi-asset ETFs | Daily | 100 ETFs | fwd_ret_21d |
@@ -569,17 +569,17 @@ Now the labels, multiple-testing, signal evaluation, causal checks, and run-log/
 <type>file</type>
 <content>
 1: # The Run Log
-2:
+2: 
 3: Every model training run, prediction set, causal-effect estimate, and backtest in
 4: the case studies is recorded in a per-case-study **run log**. The run log is a
 5: fully-deterministic experiment archive: each entry is content-addressed by a hash
 6: of its complete configuration, every artifact it points to is reproducible from
 7: that configuration, and nothing is anonymous or re-derivable only by re-running
 8: the pipeline.
-9:
+9: 
 10: The run log lives at `case_studies/{case_study}/run_log/` and consists of three
 11: things:
-12:
+12: 
 13: 1. A SQLite index (`registry.db`) that catalogs every run.
 14: 2. Filesystem subdirectories holding the artifacts each run produced
 15:    (`
@@ -635,22 +635,22 @@ Found 67 match(es) in 1 file(s)
 <type>file</type>
 <content>
 1: # Chapter 5: Strategy Definition - Codebase Analysis
-2:
+2: 
 3: **Generated**: 2026-01-25
 4: **Analysis Type**: Deep Architecture & Pattern Review
-5:
+5: 
 6: ---
-7:
+7: 
 8: ## Executive Summary
-9:
+9: 
 10: Chapter 5 is a **mature, well-architected** educational codebase demonstrating strategy pre-specification. The code quality is high with consistent patterns, strong documentation, and proper separation of concerns. The architecture follows a **hypothesis-driven exploration** pattern rather than a production trading system pattern.
-11:
+11: 
 12: **Overall Quality**: ★★★★☆ (4/5) - Publication-ready with minor improvements possible
-13:
+13: 
 14: ---
-15:
+15: 
 16: ## Architecture Overview
-17:
+17: 
 18: ```
 19: 06_stra
 …[truncated]
@@ -677,7 +677,7 @@ Found 67 match(es) in 1 file(s)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Factor-Based Regime Detection
 18: #
@@ -700,9 +700,9 @@ Found 67 match(es) in 1 file(s)
 <type>file</type>
 <content>
 1: """Specification and hashing helpers for the experiment registry."""
-2:
+2: 
 3: from __future__ import annotations
-4:
+4: 
 5: import copy
 6: import hashlib
 7: import json
@@ -713,14 +713,14 @@ Found 67 match(es) in 1 file(s)
 12: from enum import Enum
 13: from pathlib import Path
 14: from typing import Any
-15:
+15: 
 16: logger = logging.getLogger(__name__)
-17:
+17: 
 18: # Default seed — must match utils.modeling.RANDOM_SEED.
 19: # Duplicated here to avoid importing the full modeling stack (torch, etc.)
 20: # into a lightweight registry module.
 21: DEFAULT_SEED = 42
-22:
+22: 
 23: # Required fields in every training spec.  ``seed`` is enforced so that
 24: # two run
 …[truncated]
@@ -759,7 +759,7 @@ Now configuration schema, signal feasibility screens, causal checks, and the hol
 <content>
 1: strategy_id: etfs
 2: setup_version: v1
-3:
+3: 
 4: universe:
 5:   assets:
 6:     - ACWI
@@ -876,13 +876,13 @@ Found 9 match(es) in 1 file(s)
 <type>file</type>
 <content>
 1: """Everything that must be true before an expensive model run starts.
-2:
+2: 
 3: A canonical model run costs hours. Discovering afterwards that it recorded no runtime, or that
 4: the same configuration would have resolved to a different identity on another code path, means
 5: paying for it twice. This script states those conditions as executable checks and exits non-zero
 6: if any of them fails, so "we verified the preconditions" is something you can see rather than
 7: something someone remembers to do.
-8:
+8: 
 9: The substantive checks run a real reduced population end to end in a throwaway workspace and then
 10: interrogate what it wrote. A check that reads the source and concludes the code looks rig
 …[truncated]
@@ -945,7 +945,7 @@ Found 50 match(es) in 1 file(s)
   364: # | 0.02 – 0.04 | Detectable on 5–10 year samples with the dispersions seen in published studies; net P&L is a separate cost question. |
   467: # Examine returns by signal quantile to assess **monotonicity** (do higher signal
   468: # values lead to higher returns?) and **spread** (what's the return difference
-  527: # Spread
+  527: # Spread 
 …[truncated]
   ```
   </details>
@@ -957,7 +957,7 @@ Found 50 match(es) in 1 file(s)
 <type>file</type>
 <content>
 1: """Gate: feature-selection notebooks must scope development analysis pre-holdout.
-2:
+2: 
 3: Feature selection, robustness sweeps, and feature evaluation are development
 4: decisions; the sealed holdout (``case_studies/etfs/config/setup.yaml`` ->
 5: ``evaluation.holdout_start``) must not inform them (the rule taught in
@@ -966,10 +966,10 @@ Found 50 match(es) in 1 file(s)
 8: notebook sources instead: each must read the holdout boundary from
 9: ``setup.yaml`` and apply the holdout filter *before* its first IC computation.
 10: """
-11:
+11: 
 12: from __future__ import annotations
-13:
-14: import
+13: 
+14: import 
 …[truncated]
   ```
   </details>
@@ -982,7 +982,7 @@ Found 17 match(es) in 1 file(s)
 /home/georg/projects/ml4t-zh/06_strategy_definition/chapter_06.md
   14: - **Keep search countable and recoverable** using automatic run logging and a simple trial taxonomy.
   46: 3. **Evaluate under a time-series protocol**. Compare candidates using time-aware validation and reserve a holdout test set for confirmation once the pipeline is stable. This is where we prevent leakage and selection bias from dominating conclusions.
-  364: - **Features look backward**: A 20-day momentum feature uses data from the past 20 days. If training *follows* validation (as in k-fold or combinatorial schemes; see Combinatorial methods and path dependence below), a training observation immediately after the validation period computes features using prices from the validation
+  364: - **Features look backward**: A 20-day momentum feature uses data from the past 20 days. If training *follows* validation (as in k-fold or combinatorial schemes; see Combinatorial methods and path dependence below), a training observation immediately after the validation period computes features using prices from the validation 
 …[truncated]
   ```
   </details>
@@ -1016,7 +1016,7 @@ Final pieces: workspace tiers, run-log registration API, notebook sync/provenanc
 <type>file</type>
 <content>
 1: from __future__ import annotations
-2:
+2: 
 3: import hashlib
 4: import json
 5: import os
@@ -1027,12 +1027,12 @@ Final pieces: workspace tiers, run-log registration API, notebook sync/provenanc
 10: from datetime import UTC, datetime
 11: from pathlib import Path
 12: from typing import TYPE_CHECKING
-13:
+13: 
 14: from scripts.create_experiment import create_experiment
 15: from utils.paths import REPO_ROOT
-16:
+16: 
 17: from .contracts import ExecutionTier
-18:
+18: 
 19: if TYPE_CHECKING:
 20:     from .catalog import BacktestCatalog, PredictionCatalog
 21:     from .causal import CausalRequest
@@ -1106,12 +1106,12 @@ Found 28 match(es) in 1 file(s)
 <type>file</type>
 <content>
 1: """Sync paired Jupyter notebooks (.ipynb) from their Jupytext .py sources.
-2:
+2: 
 3: The repository stores notebooks in Jupytext percent format: the `.py` file is
 4: the source of truth, the `.ipynb` is a generated artifact. If a reviewer opens
 5: an `.ipynb` and finds it out of date relative to the `.py`, they can run this
 6: script to regenerate every `.ipynb` from its paired `.py`.
-7:
+7: 
 8: Usage (from the repo root):
 9:     uv run python scripts/sync_notebooks.py            # forward sync (.py → .ipynb)
 10:     uv run python scripts/sync_notebooks.py --check    # report drift only
@@ -1173,7 +1173,7 @@ One more batch to pin the trading-protocol spec and idea-feasibility taxonomy.
 <type>file</type>
 <content>
 1: from __future__ import annotations
-2:
+2: 
 3: import json
 4: import math
 5: import os
@@ -1183,9 +1183,9 @@ One more batch to pin the trading-protocol spec and idea-feasibility taxonomy.
 9: from importlib.util import find_spec
 10: from pathlib import Path
 11: from typing import TYPE_CHECKING, Any, Literal
-12:
+12: 
 13: import polars as pl
-14:
+14: 
 15: from case_studies.utils.artifact_digest import value_digest
 16: from case_studies.utils.registry.specs import (
 17:     IDENTITY_VERSION,
@@ -1194,10 +1194,10 @@ One more batch to pin the trading-protocol spec and idea-feasibility taxonomy.
 20:     compute_hash,
 21: )
 22: from case_studies.utils.registry.store import _open_registry, _utc_now
-23:
+23: 
 24: if TYPE_CHECKING:
 25:     from .workspace import Study
-26:
+26: 
 27: from .resul
 …[truncated]
   ```

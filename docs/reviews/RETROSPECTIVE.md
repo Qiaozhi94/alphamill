@@ -960,7 +960,51 @@ report_type: code-review · feature: F009 · status: closed · rounds: 1（full-
 - **合入前 rebase 抓到的漂移**（未编号，收口时修复）：检视期间 `origin/main` 落入 `9e12512`（F003 T033 只依赖 F009、不依赖 F010），F010 spec/tasks 里七处"解除 F003 T033 前置"随即失真；rebase 后同一收口提交改写。教训：并行会话下，闭环前的 `fetch + rebase` 不是机械步骤，要重新扫一遍被检文档对上游的引用。
 - **事实更正（2026-09-21，收口后）**：R1-001 的 compose 实测与 R2 的合并语义实测都在**执行机 `qiaozhi-lt`** 上完成，检视档与 spec/design 曾误写为"开发机"——检视方从未核对 `hostname`，而是按 CLAUDE.md 的机器分工默认自己在开发机。同一次核对还发现：执行机 docker 未装 nvidia 容器运行时（Runtimes 仅 `runc`），这才是 `could not select device driver "nvidia"` 在执行机出现的原因，也是 F010 T002 ① 的真实阻塞点。教训：取证记录的机器名必须来自 `hostname` 输出，不能来自对环境的假设（SOP §3 本就要求记录取证机器）。
 
-## 循环 20：F008 宇宙扩容与 point-in-time 宇宙台账 实现代码检视
+## 循环 20：F010 Kronos GPU 推理基座 代码检视
+
+report_type: code-review · feature: F010 · status: closed · rounds: 1（full-scan）→ 2（diff-only）→ 3（diff-only，封顶轮）→ 收口核对 · 收口 CI: 36034315951 绿（PR #6，py3.11 + py3.13）
+
+- 日期：2026-09-24～25 | 基线：`54f0f14`（F010 `code-reviewing`）→ 终基线 `bb0adf6`（分支 `feat/F010-kronos-gpu-runtime`）
+- 检视人：Claude Opus 5.5（独立会话，只检视不修复）| 取证机器：`qiaozhi-lt`（执行机，按 `hostname` 核对）
+- 范围：`kronos_real.py` 严格设备分支、Dockerfile 构建参数化、`docker-compose.gpu.yml`、F004 契约迁移、F010 单元与执行机集成用例、F009 先红态解除、架构 §7.1 / integration.md 文档
+- 结论：共 17 条（1 高 / 7 中 / 9 低），全部关闭。其中 7 条是修复带进来的：第 2 轮在 9 条修复里查出 5 条，第 3 轮在 6 条修复里查出 2 条。产品代码第 1 轮就没有正确性缺陷；问题几乎都在门禁、测试夹具和证据账上
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| R2-001 | 集成用例整体加 `-p` 后，非复用路径与运营容器重名并会新建空 TimescaleDB 卷 | 高 | 正确性 | 根因 | 修复引入 | fixed | `-p` 只用于 CPU 镜像 build | 仅 `COMPOSE_CPU_BUILD` 带 `-p`，`COMPOSE_BASE`/`COMPOSE_GPU` 回默认项目；文本门禁锁定 | tests/unit/test_f010_compose_gpu_contract.py::test_integration_suite_scopes_project_name_to_image_build_only | 2 | 3 | fix-path-not-exercised |
+| R1-001 | AC-004 执行机层 CPU wheel 分支证据 spec/tasks 互相矛盾，且无可复现载体 | 中 | 测试覆盖 | 根因 | 流程缺陷 | fixed | 当前 HEAD 构建 CPU 镜像重跑，统一回写；镜像标签区分分支 | `alphamill/kronos-signal-real:cpu-f010`（既有 CPU 镜像 + 当前代码，registry 不可达时的做法）重取 exit=3/文案证据，spec/tasks 统一 | tests/integration/test_f010_gpu_runtime.py::test_explicit_cuda_without_cuda_fails_visible[cpu-image] | 1 | 2 | marked-done-with-skipped-evidence |
+| R1-002 | GPU override 契约门禁是黑名单，`network_mode: host` 等 6 类越界写法全过 | 中 | 测试覆盖 | 根因 | 原始编码 | fixed | 改白名单 + 补变异 | 第 2 轮正则白名单（partial）→ 第 3 轮 `yaml.safe_load` 语义白名单（服务/build/environment/deploy/healthcheck 各层） | tests/unit/test_f010_compose_gpu_contract.py::test_out_of_scope_override_keys_fail_the_gate | 1 | 3 | denylist-gate |
+| R1-003 | 夜槽旅程用例 stop 后断言失败会把执行机运营实例留在 stopped | 中 | 正确性 | 根因 | 原始编码 | fixed | try/finally 无条件 restore | finally 无条件 restore、不吞原异常 | tests/integration/test_f010_gpu_runtime.py::test_night_slot_journey | 1 | 2 | test-mutates-live-state |
+| R1-004 | 清华 PyPI 镜像硬编码进 GPU override（单机网络绕行固化为契约） | 中 | 正确性 | 根因 | 原始编码 | fixed | 引用 `${TORCH_EXTRA_INDEX_URL:-}` | override 引用变量缺省空；断言禁止具体镜像地址 | tests/unit/test_f010_build_args_contract.py::test_gpu_override_passes_only_the_index_args | 1 | 2 | host-specific-workaround-in-contract |
+| R2-002 | 白名单靠缩进正则取键，flow 写法 / `healthcheck.disable` / `deploy.replicas` 可绕过 | 中 | 测试覆盖 | 根因 | 修复引入 | fixed | `yaml.safe_load` 后键白名单 + 显式声明 pyyaml | 同建议；pyyaml 入 dev extras（与 httpx `266c9d6` 同坑） | tests/unit/test_f010_compose_gpu_contract.py::test_yaml_level_evasions_fail_the_gate | 2 | 3 | denylist-gate |
+| R2-003 | 修复改了 `.env.example`，违反 spec NFR-001 默认面红线 | 中 | 正确性 | 根因 | 修复引入 | fixed | 撤回或改 spec | 撤回 4 行 + 门禁锁 `.env.example` 不含 GPU 配置 | tests/unit/test_f010_compose_gpu_contract.py::test_feature_does_not_touch_default_env_example | 2 | 3 | spec-red-line-drift |
+| R3-001 | 修复轮顺带改 `check_dep_pins`，越出 F010 范围且对 F003（numpy）/F008（factor_factory）误报 | 中 | 正确性 | 根因 | 修复引入 | fixed | 从 F010 revert，main 单独立项 | `43bdb69` 撤回 `8dc7d4c`；动机与两类误报前置条件登记进 BACKLOG 规划队列 | —（撤回；检视方核对 `tools/` 与 `cd7435f` 零差异） | 3 | 收口 | cross-feature-contract-drift |
+| R1-005 | 显式 `KRONOS_DEVICE=cuda:1` 被悄悄解析成 `cuda:0` | 低 | 正确性 | 根因 | 原始编码 | fixed | 显式只收 cpu/cuda/cuda:0 | 同建议 | tests/unit/test_f010_device_strict.py::test_explicit_device_index_other_than_zero_is_rejected | 1 | 2 | — |
+| R1-006 | 加载失败/卸载后 `_device` 残留旧值，`/health` 报 cuda:0 + model_loaded=false | 低 | 正确性 | 根因 | 原始编码 | fixed | spec 注明语义，或失败置回 cpu | spec §5 注明"最近一次加载设备"——置回 cpu 会让 F009 显存探测谎报 0 | tests/unit/test_f010_device_strict.py::test_device_keeps_last_loaded_value_after_unload | 1 | 2 | — |
+| R1-007 | AC-004 集成"未重启"与"/health 不可达"为空断言 | 低 | 测试覆盖 | 根因 | 原始编码 | fixed | `-d` 后轮询，或删并注明 | 第 2 轮后台起 + 首轮探测（partial）→ 第 3 轮删 restart 断言、存活期每轮探 /health | tests/integration/test_f010_gpu_runtime.py::test_explicit_cuda_without_cuda_fails_visible | 1 | 3 | vacuous-assertion |
+| R1-008 | hostnet builder 创建方法未入文档；mock stage 的 pip 改动未记 | 低 | 质量 | 根因 | 契约漂移 | fixed | 补命令与 design 记录 | integration.md §七补 `buildx create`；design §4 记两层 pip | —（文档） | 1 | 2 | — |
+| R1-009 | 架构 §7.1 并列两套显存读数，口径未说明 | 低 | 质量 | 根因 | 原始编码 | fixed | 加口径说明 | §7.1 写明宿主 nvidia-smi 与容器 mem_get_info 两口径，常驻预算以前者对照 | —（文档） | 1 | 2 | — |
+| R2-004 | 显式 `--restart=no` 让"未重启"仍恒真；/health 只在启动瞬间探一次 | 低 | 测试覆盖 | 根因 | 修复引入 | fixed | 删 restarts 断言、每轮探 | 同建议，证据行记整条探测序列 | tests/integration/test_f010_gpu_runtime.py::test_explicit_cuda_without_cuda_fails_visible | 2 | 3 | vacuous-assertion |
+| R2-005 | 旅程用例 stop 调用在 try 之外 | 低 | 正确性 | 根因 | 修复引入 | fixed | try 前移 | 同建议 | tests/integration/test_f010_gpu_runtime.py::test_night_slot_journey | 2 | 3 | — |
+| R2-006 | 修复提交 3 条 finding 合一 | 低 | 质量 | 根因 | 流程缺陷 | fixed | 一 finding 一 commit | 第 3 轮起按 finding 拆（R2-004/005 同函数合一，理由成立） | — | 2 | 3 | — |
+| R3-002 | healthcheck 白名单无变异锁（删规则仍全绿）；`assert True or …` 仍过门禁 | 低 | 测试覆盖 | 根因 | 修复引入 | fixed | `healthcheck.test` 等值断言 + 收窄 `pytest.raises` | 改为解析 assert 条件结构（两项 and、禁 or 短路与恒真项）+ 两条变异；检视方变异：删白名单规则 / 删 or 检查 / 删整段各判红 | tests/unit/test_f010_compose_gpu_contract.py::test_short_circuited_healthcheck_fails_the_gate、::test_healthcheck_whitelist_rule_is_covered_by_a_mutation | 3 | 收口 | red-for-wrong-reason |
+
+- 收口备注：`gh` 默认走本机代理 127.0.0.1:7897 时超时，去掉 *_proxy 环境变量直连 GitHub API 可用。
+
+**裁决记录**：#1 R1-002 partial（第 2 轮，剩余→R2-002，第 3 轮关闭）；#2 R1-007 partial（第 2 轮，剩余→R2-004，第 3 轮关闭；首轮建议里的 `--restart=no` 本身有缺陷）。
+
+**模式性教训**
+
+- **修复带进来的问题占 7/17（41%），比协议预估的每轮 20-30% 高**。而且层级在往上走：第 2 轮有 1 条 High（R2-001）、第 3 轮出现跨 feature 的门禁改动（R3-001）。两条的共同点是修复范围超出了 finding 本身：R1-001 只要求补证据，修复顺手"根治镜像名冲突"，改了整个 compose 项目名；R2-002 只要求声明 pyyaml，修复顺手改了全仓依赖门禁。教训：**修复只改 finding 指向的那一处**，想根治的部分另开条目。
+- **`fix-path-not-exercised`（R2-001）**：新加的 `-p` 路径在修复轮一次都没真跑过，修复轮的执行机证据全部走的是复用在跑实例和手动指定镜像这两条路径。改了哪条路径，证据就得走那条路径。检视方用 `docker compose --dry-run` 加查容器标签，成本不到 1 分钟就能暴露问题。
+- **`denylist-gate` 与 `red-for-wrong-reason` 同源（R1-002 → R2-002 → R3-002）**：门禁先后三次被绕过——黑名单、缩进正则、子串匹配，每修一次只堵住已经报出来的那几种写法。第 3 轮用变异确认过、真正收敛的做法是：按语义解析，再对每条规则各做一次"删掉这条规则测试必须变红"。只证明"构造的坏样本判红"不够，还要证明判红的原因就是这条规则。
+- **`vacuous-assertion` 出现两次（R1-007、R2-004）**，第二次是检视方自己的建议（`--restart=no`）造成的。检视建议也要过一遍"这条断言会不会恒真"。
+- **证据时效**：本机 CPU 镜像名被所有 worktree 共用，已被 F009 会话覆盖，导致 T015 的证据事后无法复现（R1-001）。执行机证据要记下镜像 id 和构建来源，否则并行会话下无从追溯。
+- **origin 分布**：原始编码 7、修复引入 7、流程缺陷 2、契约漂移 1。**存活轮数**最长的是 R1-002、R1-007（第 1 轮→第 3 轮）。没有触发不收敛升级协议。
+- **裁决分布**：accepted 17 / partial 2（均已转载体关闭）/ rejected 0。**建议命中率** 14/17。三条有偏离：R1-001 建议从头构建镜像，实际是在既有 CPU 镜像上换代码（registry 不可达）；R1-007 首轮建议本身有缺陷；R3-002 建议等值断言，实际改为解析条件结构，效果相当。
+- **遗留（Low，不单列）**：`test_yaml_level_evasions_fail_the_gate` 的 `pytest.raises((AssertionError, Exception))` 没有收窄，会吞掉门禁自身的 TypeError/KeyError；healthcheck 结构检查仍拦不住在 assert 之前插入 `os._exit(0)` 这类蓄意改写。门禁的定位是防误改，不防蓄意绕过。
+
+## 循环 21：F008 宇宙扩容与 point-in-time 宇宙台账 实现代码检视
 
 report_type: code-review · feature: F008 · status: closed · rounds: 1（full-scan，5 片并行）→ 2（diff-only 复核） · 收口 CI: 见收口提交
 
