@@ -2,8 +2,8 @@
 kind: feature
 id: F011
 version: "0.2"
-status: ready-for-development
-branch: docs/F011-export-universe-binding
+status: developing
+branch: feat/F011-export-universe-binding
 gate_version: 1
 related_features: [F002, F008]
 topics: [data-bridge, universe, export, contract]
