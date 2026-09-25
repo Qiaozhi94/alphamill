@@ -2,7 +2,8 @@
 kind: feature
 id: F008
 version: "0.2"
-status: code-reviewing
+status: done
+status_evidence: merge 9e0bc05 + CI 36124046003 绿
 branch: feat/F008-universe-expansion
 gate_version: 1
 related_features: [F001, F002, F003, F007]
