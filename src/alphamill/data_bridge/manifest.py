@@ -17,6 +17,7 @@ from __future__ import annotations
 import errno
 import hashlib
 import json
+import logging
 import os
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -35,6 +36,9 @@ from alphamill.data_bridge.manifest_validation import (
     validate_manifest_shape as _validate_manifest_shape,
 )
 from alphamill.data_bridge.registry import DatasetSpec, require_dataset
+
+logger = logging.getLogger(__name__)
+_REFUSE_FALLBACK = "增量模式不允许回退基线 {0}@{1}（会丢中间版本分区），请修复或改用 --mode full"
 
 SOURCE_TAG = "timescaledb@alphamill"
 
@@ -309,3 +313,38 @@ def publish_manifest(root: Path, manifest: dict[str, Any]) -> Path:
     finally:
         tmp.unlink(missing_ok=True)
     return final
+
+
+def usable_baseline(
+    root: Path, dataset: str, *, allow_fallback: bool = False
+) -> tuple[str | None, dict[str, Any] | None]:
+    """取最新**可用**基线：`status=valid` 且清单内文件齐备。
+
+    损坏版本（分区文件缺失/大小或 sha256 不符、或清单自身读不出）不能当继承来源：一次损坏会
+    让此后所有导出都跑不动（2026-09-24 实测 `ohlcv_1m@v2026.09.21` 缺 12 个 09-18/19 分区
+    文件，导出中断、缺失分区永无机会重建）；损坏版本对直读它的消费方仍 fail-closed。
+
+    `allow_fallback` **只允许全量模式打开**（检视 R1-001，Critical）：回退是整版回退，增量把它当
+    继承基线会丢中间版本独有的分区（文件在盘、不再被引用），而 `guard_full_shrink` 只在全量生效
+    ——静默数据链损失。全量从库重算全窗口故安全；增量遇损坏的最新 valid 版本必须**拒绝启动**。
+    """
+    for version in reversed(list_versions(root, dataset)):
+        try:
+            manifest = load_manifest(root, dataset, version)
+        except (VersionNotFoundError, ManifestIntegrityError) as exc:
+            logger.warning("基线 %s@%s 的 manifest 读不出（%s）", dataset, version, exc)
+            if not allow_fallback:
+                raise ManifestIntegrityError(_REFUSE_FALLBACK.format(dataset, version)) from exc
+            continue
+        if manifest["status"] != "valid":
+            continue
+        try:
+            validate_manifest_integrity(root, manifest)
+            verify_value_digest(require_dataset(dataset), manifest)
+        except (ManifestIntegrityError, ValueError) as exc:
+            logger.warning("基线 %s@%s 校验未通过（%s）", dataset, version, exc)
+            if not allow_fallback:
+                raise ManifestIntegrityError(_REFUSE_FALLBACK.format(dataset, version)) from exc
+            continue
+        return version, manifest
+    return None, None

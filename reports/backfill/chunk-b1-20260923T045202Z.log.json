@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "run_id": "6d85a249e8fe-b1-20260922T150054Z",
+  "universe_id": "sha256:6d85a249e8fe509518443afb3407d0ed6ea736260c570c8f860676e0c466a709",
+  "batch": 1,
+  "window": {
+    "start": "2024-09-10T00:00:00Z",
+    "end": "2026-09-10T15:52:00Z"
+  },
+  "rate_limit": {
+    "base_backoff_seconds": 1.0,
+    "max_backoff_seconds": 60.0,
+    "max_retries": 8,
+    "min_interval_seconds": 0.5
+  },
+  "hostname": "qiaozhi-lt",
+  "started_at": "2026-09-22T15:00:54.663885Z",
+  "finished_at": "2026-09-23T05:22:03.026440Z",
+  "pairs": [
+    {
+      "db_symbol": "AAVE/USDT",
+      "lake_pair": "AAVE-USDT",
+      "rank": 20,
+      "status": "completed",
+      "rows": 1052152,
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
+    },
+    {
+      "db_symbol": "ACE/USDT",
+      "lake_pair": "ACE-USDT",
+      "rank": 26,
+      "status": "completed",
+      "rows": 1052152,
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
+    },
+    {
+      "db_symbol": "ADA/USDT",
+      "lake_pair": "ADA-USDT",
+      "rank": 14,
+      "status": "completed",
+      "rows": 1052152,
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
+    },
+    {
+      "db_symbol": "ARB/USDT",
+      "lake_pair": "ARB-USDT",
+      "rank": 24,
+      "status": "deferred",
+      "rows": 214000,
+      "last_cursor": "2025-02-05T14:40:00Z",
+      "error": "ARB/USDT 时间片到点，断点 2025-02-05T14:40:00+00:00",
+      "error_class": null
+    },
+    {
+      "db_symbol": "AVAX/USDT",
+      "lake_pair": "AVAX-USDT",
+      "rank": 23,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "BANK/USDT",
+      "lake_pair": "BANK-USDT",
+      "rank": 9,
+      "status": "deferred",
+      "rows": 7700,
+      "last_cursor": "2025-11-18T22:20:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "BCH/USDT",
+      "lake_pair": "BCH-USDT",
+      "rank": 27,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "BNB/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "BNB-USDT",
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "ledger_rows": 0,
+      "note": "already_complete",
+      "rank": 7,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "BTC/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "BTC-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "ledger_rows": 1052152,
+      "note": "already_complete",
+      "rank": 1,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "DEXE/USDT",
+      "lake_pair": "DEXE-USDT",
+      "rank": 25,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-12-24T11:30:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "DOGE/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "DOGE-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "ledger_rows": 1052152,
+      "note": "already_complete",
+      "rank": 6,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "ENA/USDT",
+      "lake_pair": "ENA-USDT",
+      "rank": 11,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "ETH/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "ETH-USDT",
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "ledger_rows": 0,
+      "note": "already_complete",
+      "rank": 2,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "FIL/USDT",
+      "lake_pair": "FIL-USDT",
+      "rank": 29,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "LINK/USDT",
+      "lake_pair": "LINK-USDT",
+      "rank": 18,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "LSK/USDT",
+      "lake_pair": "LSK-USDT",
+      "rank": 19,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "NEAR/USDT",
+      "lake_pair": "NEAR-USDT",
+      "rank": 10,
+      "status": "deferred",
+      "rows": 34300,
+      "last_cursor": "2024-10-03T19:40:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "ONDO/USDT",
+      "lake_pair": "ONDO-USDT",
+      "rank": 28,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "PEPE/USDT",
+      "lake_pair": "PEPE-USDT",
+      "rank": 8,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "PUMP/USDT",
+      "lake_pair": "PUMP-USDT",
+      "rank": 17,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2025-07-10T07:30:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "SOL/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "SOL-USDT",
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "ledger_rows": 0,
+      "note": "already_complete",
+      "rank": 3,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "SUI/USDT",
+      "lake_pair": "SUI-USDT",
+      "rank": 12,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "TAO/USDT",
+      "lake_pair": "TAO-USDT",
+      "rank": 22,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "TRUMP/USDT",
+      "lake_pair": "TRUMP-USDT",
+      "rank": 16,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2025-01-18T13:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "TUT/USDT",
+      "lake_pair": "TUT-USDT",
+      "rank": 21,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2025-03-20T09:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "UNI/USDT",
+      "lake_pair": "UNI-USDT",
+      "rank": 13,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "WLD/USDT",
+      "lake_pair": "WLD-USDT",
+      "rank": 15,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "XLM/USDT",
+      "lake_pair": "XLM-USDT",
+      "rank": 30,
+      "status": "deferred",
+      "rows": 0,
+      "last_cursor": "2024-09-10T00:00:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    },
+    {
+      "db_symbol": "XRP/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "XRP-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "ledger_rows": 1052152,
+      "note": "already_complete",
+      "rank": 5,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "ZEC/USDT",
+      "lake_pair": "ZEC-USDT",
+      "rank": 4,
+      "status": "deferred",
+      "rows": 658870,
+      "last_cursor": "2025-12-11T13:10:00Z",
+      "error": "deadline reached before start",
+      "error_class": null
+    }
+  ]
+}

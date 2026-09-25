@@ -1,8 +1,7 @@
 """分区文件层操作：单元格发现、`.rN` 写入、空单元格判定、质量标记（design §3）。
 
-本模块只做「源行集 → 湖分区文件」的机械转换与窗口内的网格判定；导出编排
-（事务、基线继承、manifest 合成与发布）在 exporter.py。分区写入永不覆盖：
-内容变化写 `.rN+1`，序号由盘上现有最大值推导，孤儿文件不阻塞重跑。
+只做「源行集 → 湖分区文件」的机械转换与窗口网格判定（导出编排在 exporter.py）；分区写入永不覆盖：
+内容变化写 `.rN+1`，序号取盘上最大值，孤儿文件不阻塞重跑。
 """
 
 from __future__ import annotations
@@ -68,8 +67,15 @@ def dim_logical_key(dim: Dim, day: str) -> dict[str, str]:
     return key
 
 
-def lake_pairs_map(conn, market_type: str | None = None) -> dict[tuple[str, str, str], str]:
-    """(exchange, market_type, db_symbol) → lake pair；按三元键保留市场语义。"""
+def lake_pairs_map(
+    conn,
+    market_type: str | None = None,
+    admitted: set[str] | None = None,
+) -> dict[tuple[str, str, str], str]:
+    """(exchange, market_type, db_symbol) → lake pair；按三元键保留市场语义。
+
+    `admitted`（F008 FR-006）：只保留集合内映射；`None` 保持现行为，且必须与
+    `produce_partitions(admitted=...)` 的单元格剔除成对使用。"""
     seen: dict[str, tuple[str, str, str]] = {}
     out: dict[tuple[str, str, str], str] = {}
     for row in symbol_map._rows_from_conn(conn):
@@ -81,6 +87,8 @@ def lake_pairs_map(conn, market_type: str | None = None) -> dict[tuple[str, str,
             raise SymbolCollisionError(
                 f"lake_pair 碰撞: {lake_pair!r}（{seen[lake_pair]} 与 {key}）"
             )
+        if admitted is not None and lake_pair not in admitted:
+            continue
         seen[lake_pair] = key
         out[key] = lake_pair
     return out
@@ -221,9 +229,20 @@ def produce_partitions(
     end: dt.date,
     baseline_partitions: list[dict[str, Any]],
     lake_pairs: dict[tuple[str, str, str], str],
+    admitted: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[bool]]:
-    """导出窗口内全部单元格 → (produced 条目, 产出逻辑键, 是否新写文件)。"""
+    """导出窗口内全部单元格 → (produced 条目, 产出逻辑键, 是否新写文件)。
+    `admitted`（F008 FR-006）：未准入单元格在映射 `lake_pair` **之前**剔除；`None` 保持现行为。
+    过滤只作用于 **pair 分区**的 dataset：非 pair 分区者（`signals_log`）单元格是 `(date,)`，
+    取 `cell[1]` 会越界（2026-09-24 真实导出实测 `IndexError`，整轮中断）→ 保持原行为。
+    """
     cells = discover_cells(conn, spec, start, end)
+    if admitted is not None and registry.pair_partitioned(spec):
+        cells = {
+            cell: count
+            for cell, count in cells.items()
+            if lake_pairs.get((cell[0], spec.market_type, cell[1])) in admitted
+        }
     baseline_by_key = {mf.canonical_key(p["logical_partition_key"]): p for p in baseline_partitions}
     produced: list[dict[str, Any]] = []
     produced_keys: list[dict[str, str]] = []
@@ -260,11 +279,10 @@ def empty_cell_keys(
 ) -> list[dict[str, str]]:
     """本轮空单元格（本该有分区却没有）的完整逻辑键。
 
-    - full：每个有数据的维度只在自己「首个数据日 ~ 末个数据日」的活跃跨度内
-      判缺——跨度外的日期不属于「本该有」，否则新 pair 的历史之前全是空洞；
-    - incremental：**基线维度 ∪ 本轮维度** × 窗口日期判缺（spec 边界场景：
-      「导出窗口内某 pair 无新数据 → 跳过该分区且 manifest 记录 skipped」）。
-      基线 skipped 键的继承/移除由 manifest.synthesize_skipped 负责。
+    - full：只在维度「首个数据日 ~ 末个数据日」的活跃跨度内判缺（跨度外不属于「本该
+      有」，否则新 pair 的历史之前全是空洞）；
+    - incremental：**基线维度 ∪ 本轮维度** × 窗口日期判缺（spec 边界场景）；基线 skipped
+      键的继承/移除由 `manifest.synthesize_skipped` 负责。
     """
     present_by_dim: dict[Dim, set[str]] = defaultdict(set)
     for key in present_keys:
@@ -307,8 +325,8 @@ def remove_staging(root: Path, dataset: str) -> None:
 def cleanup_orphans(root: Path) -> int:
     """全量模式回收：staging 与无任何 manifest 引用的孤儿 `.rN`（design §3 回收边界）。
 
-    invalid manifest 及其引用 `.rN` 作为完整失败审计证据一并保留，不得只删分区
-    使 manifest 的 partitions/sha256 失效。
+    invalid manifest 及其引用 `.rN` 作为完整失败审计证据一并保留——不得只删分区使
+    manifest 的 partitions/sha256 失效。
     """
     import shutil
 

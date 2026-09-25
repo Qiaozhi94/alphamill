@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "exchange": "binance",
+  "market_type": "perp",
+  "quote_currency": "USDT",
+  "turnover_lookback_days": 90,
+  "turnover_rank_top_n": 40,
+  "min_listed_days": 180,
+  "exclude_rules": [
+    "stablecoin_pair",
+    "leveraged_token",
+    "index_basket",
+    "tokenized_tradfi",
+    "tokenized_commodity"
+  ]
+}

@@ -1,0 +1,6 @@
+refreshing continuous aggregates for 2024-09-10T00:00:00+00:00..2026-09-10T15:52:00+00:00
+2026-09-24 20:09:05,234 INFO refreshing aggregate=ohlcv_5m start=2024-09-10 00:00:00+00:00 end=2026-09-10 15:57:00+00:00
+2026-09-24 20:09:05,248 INFO refreshing aggregate=ohlcv_15m start=2024-09-10 00:00:00+00:00 end=2026-09-10 16:07:00+00:00
+2026-09-24 20:09:05,252 INFO refreshing aggregate=ohlcv_1h start=2024-09-10 00:00:00+00:00 end=2026-09-10 16:52:00+00:00
+2026-09-24 20:09:05,256 INFO refreshing aggregate=ohlcv_4h start=2024-09-10 00:00:00+00:00 end=2026-09-10 19:52:00+00:00
+2026-09-24 20:09:05,260 INFO refreshing aggregate=ohlcv_1d start=2024-09-10 00:00:00+00:00 end=2026-09-11 15:52:00+00:00

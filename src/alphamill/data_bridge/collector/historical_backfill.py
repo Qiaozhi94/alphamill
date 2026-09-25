@@ -1,27 +1,48 @@
+"""F001 历史回填：可被编排调用（T011），同时保留容器内的脚本入口。
+
+拆分为三层：
+
+- **环境层**：`main()` 从环境变量读窗口/交易对（supervisor 沿用 `python -m` 同款调用）；
+- **编排层**：`run_backfill()` 逐 pair 执行、失败隔离、逐 pair 回调，供 `universe.backfill_runner`
+  在共享限速预算下驱动；
+- **抓取层**：`fetch_symbol()` 单 pair 断点续跑抓取（幂等 upsert、缺口即 stalled 而不是快进）。
+
+限速：`limiter` 为空时沿用 F001 的内建退避（`FETCH_RETRIES`）；传入 `RateLimiter` 时
+退避与节奏由限速器统一负责（pair 间共享预算），本模块不再自己 sleep。
+"""
+
 import logging
 import os
 import time
 from datetime import UTC, datetime, timedelta
 
-try:  # Support both package imports and the legacy standalone container entrypoint.
-    from .backfill_boundaries import (
-        delisting_end_for,
-        listing_start_for,
-        parse_unavailable_symbols,
-    )
-    from .db_writer import db_connect, normalize_ohlcv_rows, upsert_ohlcv
-    from .symbol_manager import parse_symbols
-except ImportError:  # pragma: no cover - exercised only by direct script execution.
-    from backfill_boundaries import delisting_end_for, listing_start_for, parse_unavailable_symbols
-    from db_writer import db_connect, normalize_ohlcv_rows, upsert_ohlcv
-    from symbol_manager import parse_symbols
+from alphamill.data_bridge.errors import mark_attempts
 
+from .backfill_boundaries import (
+    delisting_end_for,
+    listing_start_for,
+    parse_unavailable_symbols,
+)
+from .backfill_progress import (
+    TIMEFRAME,
+    load_progress,
+    save_progress,
+)
+from .db_writer import normalize_ohlcv_rows, upsert_ohlcv
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-TIMEFRAME = "1m"
 TIMEFRAME_MS = 60_000
-DEFAULT_DAYS = int(os.getenv("BACKFILL_DAYS", "1"))
 FETCH_LIMIT = int(os.getenv("BACKFILL_FETCH_LIMIT", "100"))
+
+#: 连续聚合的桶宽：刷新窗口至少要覆盖两个桶，否则 TimescaleDB 拒绝
+#: （`refresh window too small`）。
+AGGREGATE_BUCKETS = {
+    "ohlcv_5m": timedelta(minutes=5),
+    "ohlcv_15m": timedelta(minutes=15),
+    "ohlcv_1h": timedelta(hours=1),
+    "ohlcv_4h": timedelta(hours=4),
+    "ohlcv_1d": timedelta(days=1),
+}
 
 
 def retry_count(value: str | int) -> int:
@@ -34,7 +55,6 @@ REFRESH_AGGREGATES = os.getenv("BACKFILL_REFRESH_AGGREGATES", "true").lower() in
     "true",
     "yes",
 }
-RESUME_BACKFILL = os.getenv("BACKFILL_RESUME", "true").lower() in {"1", "true", "yes"}
 LISTING_STARTS = os.getenv("BACKFILL_SYMBOL_LISTING_STARTS", "")
 DELISTING_ENDS = os.getenv("BACKFILL_SYMBOL_DELISTING_ENDS", "")
 UNAVAILABLE_SYMBOLS = parse_unavailable_symbols(os.getenv("BACKFILL_UNAVAILABLE_SYMBOLS", ""))
@@ -45,154 +65,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger("historical-backfill")
 
-
-def csv_env(name: str, default: str = "") -> list[str]:
-    value = os.getenv(name, default)
-    return [item.strip() for item in value.split(",") if item.strip()]
-
-
-def parse_utc(value: str) -> datetime:
-    normalized = value.strip().replace("Z", "+00:00")
-    parsed = datetime.fromisoformat(normalized)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+STATUS_COMPLETED = "completed"
+STATUS_FAILED = "failed"
+STATUS_UNAVAILABLE = "unavailable"
+STATUS_DEFERRED = "deferred"
 
 
-def date_range() -> tuple[datetime, datetime]:
-    end = parse_utc(os.getenv("BACKFILL_END")) if os.getenv("BACKFILL_END") else datetime.now(UTC)
-    start = (
-        parse_utc(os.getenv("BACKFILL_START"))
-        if os.getenv("BACKFILL_START")
-        else end - timedelta(days=DEFAULT_DAYS)
-    )
-    start = start.replace(second=0, microsecond=0)
-    end = end.replace(second=0, microsecond=0)
-    if start >= end:
-        raise ValueError("BACKFILL_START must be before BACKFILL_END")
-    return start, end
-
-
-def build_exchange(exchange_id: str):
-    import ccxt
-
-    exchange_class = getattr(ccxt, exchange_id)
-    config = {
-        "enableRateLimit": True,
-        "timeout": 30_000,
-    }
-    api_key = os.getenv(f"{exchange_id.upper()}_API_KEY", "")
-    secret = os.getenv(f"{exchange_id.upper()}_SECRET", "")
-    password = os.getenv(f"{exchange_id.upper()}_PASSPHRASE", "")
-    if api_key and secret:
-        config["apiKey"] = api_key
-        config["secret"] = secret
-    if password:
-        config["password"] = password
-    # 本机 DNS 对部分交易所域名存在污染时，经内网代理出网（默认关闭，不影响直连行为）。
-    exchange_proxy = os.getenv(f"{exchange_id.upper()}_HTTPS_PROXY", "")
-    if exchange_proxy:
-        config["httpsProxy"] = exchange_proxy
-    return exchange_class(config)
-
-
-def ensure_progress_table(conn):
-    with conn.cursor() as cur:
-        cur.execute("SELECT to_regclass('public.backfill_progress')")
-        if cur.fetchone()[0] is None:
-            raise RuntimeError("backfill_progress is missing; initialize db/init.sql first")
-    conn.commit()
-
-
-def load_progress(
-    conn, exchange_id: str, symbol: str, start: datetime, end: datetime
-) -> tuple[datetime, int]:
-    if not RESUME_BACKFILL:
-        return start, 0
-
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT next_since, rows_upserted
-            FROM backfill_progress
-            WHERE exchange = %s
-              AND symbol = %s
-              AND timeframe = %s
-              AND target_start = %s
-              AND target_end = %s
-              AND status NOT IN ('complete', 'unavailable')
-            """,
-            (exchange_id, symbol, TIMEFRAME, start, end),
-        )
-        row = cur.fetchone()
-
-    if not row:
-        return start, 0
-
-    next_since, rows_upserted = row
-    next_since = max(next_since.astimezone(UTC), start)
-    logger.info(
-        "resuming backfill exchange=%s symbol=%s next_since=%s rows_upserted=%s",
-        exchange_id,
-        symbol,
-        next_since,
-        rows_upserted,
-    )
-    return next_since, int(rows_upserted or 0)
-
-
-def save_progress(
-    conn,
-    exchange_id: str,
-    symbol: str,
-    start: datetime,
-    end: datetime,
-    next_since: datetime,
-    status: str,
-    rows_upserted: int,
-    last_error: str | None = None,
-):
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO backfill_progress (
-                exchange, symbol, timeframe, target_start, target_end,
-                next_since, status, rows_upserted, last_error, updated_at,
-                completed_at
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(),
-                    CASE WHEN %s IN ('complete', 'unavailable') THEN NOW() ELSE NULL END)
-            ON CONFLICT (exchange, symbol, timeframe, target_start, target_end)
-            DO UPDATE SET
-                next_since = EXCLUDED.next_since,
-                status = EXCLUDED.status,
-                rows_upserted = EXCLUDED.rows_upserted,
-                last_error = EXCLUDED.last_error,
-                updated_at = NOW(),
-                completed_at = CASE
-                    WHEN EXCLUDED.status IN ('complete', 'unavailable') THEN NOW()
-                    ELSE backfill_progress.completed_at
-                END
-            """,
-            (
-                exchange_id,
-                symbol,
-                TIMEFRAME,
-                start,
-                end,
-                next_since,
-                status,
-                rows_upserted,
-                last_error,
-                status,
-            ),
-        )
-    conn.commit()
+class BackfillDeadlineReached(Exception):
+    """分段时间片到点：保存断点后停下，**不算失败**（下一片从 next_since 继续）。"""
 
 
 def fetch_symbol(
-    exchange_id: str, exchange, conn, symbol: str, start: datetime, end: datetime
+    exchange_id: str,
+    exchange,
+    conn,
+    symbol: str,
+    start: datetime,
+    end: datetime,
+    *,
+    limiter=None,
+    should_stop=None,
 ) -> int:
+    """抓取单个 pair 的窗口；返回本次累计 upsert 行数（幂等，可续跑）。
+
+    `should_stop` 为时间片判据：到点即把当前断点写成 `running` 并抛
+    `BackfillDeadlineReached`，让长跑可以按 ~30 分钟一片循环执行（单片失败只损失一片）。
+    """
     if symbol in UNAVAILABLE_SYMBOLS:
         save_progress(
             conn,
@@ -229,17 +127,30 @@ def fetch_symbol(
 
     since_ms = int(resume_start.timestamp() * 1000)
     end_ms = int(availability_end.timestamp() * 1000)
+    attempts = 1 if limiter is not None else FETCH_RETRIES
 
     while since_ms < end_ms:
+        if should_stop is not None and should_stop():
+            cursor = datetime.fromtimestamp(since_ms / 1000, tz=UTC)
+            save_progress(
+                conn,
+                exchange_id,
+                symbol,
+                start,
+                end,
+                cursor,
+                "running",
+                total,
+                "deferred to next chunk",
+            )
+            raise BackfillDeadlineReached(f"{symbol} 时间片到点，断点 {cursor.isoformat()}")
         rows = None
-        for attempt in range(1, FETCH_RETRIES + 1):
+        for attempt in range(1, attempts + 1):
             try:
-                rows = exchange.fetch_ohlcv(
-                    symbol, timeframe=TIMEFRAME, since=since_ms, limit=FETCH_LIMIT
-                )
+                rows = _fetch_once(limiter, exchange, symbol, since_ms)
                 break
             except Exception as exc:
-                if attempt >= FETCH_RETRIES:
+                if attempt >= attempts:
                     save_progress(
                         conn,
                         exchange_id,
@@ -251,6 +162,8 @@ def fetch_symbol(
                         total,
                         str(exc),
                     )
+                    # 退避重试的次数只有这里看得到；编排层据此落 backfill.failed.retries
+                    mark_attempts(exc, attempt)
                     raise
                 sleep_for = min(2**attempt, 10)
                 logger.warning(
@@ -258,7 +171,7 @@ def fetch_symbol(
                     exchange_id,
                     symbol,
                     attempt,
-                    FETCH_RETRIES,
+                    attempts,
                     sleep_for,
                 )
                 time.sleep(sleep_for)
@@ -317,7 +230,8 @@ def fetch_symbol(
             total,
             availability_end.isoformat(),
         )
-        time.sleep(exchange.rateLimit / 1000 if exchange.rateLimit else 0.2)
+        if limiter is None:
+            time.sleep(exchange.rateLimit / 1000 if exchange.rateLimit else 0.2)
 
     completion_note = (
         "completed at configured delisting boundary" if availability_end < end else None
@@ -326,70 +240,58 @@ def fetch_symbol(
     return total
 
 
+def _fetch_once(limiter, exchange, symbol: str, since_ms: int):
+    if limiter is not None:
+        return limiter.call(
+            exchange.fetch_ohlcv,
+            symbol,
+            timeframe=TIMEFRAME,
+            since=since_ms,
+            limit=FETCH_LIMIT,
+        )
+    return exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, since=since_ms, limit=FETCH_LIMIT)
+
+
 def refresh_aggregates(conn, start: datetime, end: datetime):
     if not REFRESH_AGGREGATES:
         return
 
     aggregates = ["ohlcv_5m", "ohlcv_15m", "ohlcv_1h", "ohlcv_4h", "ohlcv_1d"]
+    # 调用方可能刚跑过只读查询（如编排层收尾的 `current_cursor`），psycopg2 会把事务留着开着，
+    # 此时切 autocommit 会报 `set_session cannot be used inside a transaction`（2026-09-23 实测：
+    # `python -m ...historical_backfill` 写完缺口后刷聚合必炸）。先收尾事务再切。
+    if not conn.autocommit:
+        conn.commit()
     previous_autocommit = conn.autocommit
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
             for aggregate in aggregates:
-                logger.info("refreshing aggregate=%s start=%s end=%s", aggregate, start, end)
+                # 刷新窗口必须覆盖该聚合至少两个桶，否则 TimescaleDB 报
+                # `refresh window too small`——缺口补齐这类分钟级窗口必然短于 1d 桶
+                # （2026-09-23 实测：06:00→06:51 刷 ohlcv_1d 失败）。
+                window_start = min(start, end - 2 * AGGREGATE_BUCKETS[aggregate])
+                # 末端还要再外扩一个桶：`refresh_continuous_aggregate` 不物化**跨越窗口终点**
+                # 的那个不完整桶，而门禁的一致性检查按 `bucket >= start AND bucket < end`
+                # 计数——数据正好停在窗口终点的 pair 因此恒判 `aggregate_mismatch`
+                # （2026-09-24 实测：24 个新 pair 全缺窗口最后一天的日桶，末端外扩一天后即物化）。
+                window_end = end + AGGREGATE_BUCKETS[aggregate]
+                logger.info(
+                    "refreshing aggregate=%s start=%s end=%s", aggregate, window_start, window_end
+                )
                 cur.execute(
-                    "CALL refresh_continuous_aggregate(%s, %s, %s)", (aggregate, start, end)
+                    "CALL refresh_continuous_aggregate(%s, %s, %s)",
+                    (aggregate, window_start, window_end),
                 )
     finally:
         conn.autocommit = previous_autocommit
 
 
 def main() -> int:
-    exchanges = csv_env("EXCHANGES", "binance")
-    symbols = parse_symbols(os.getenv("SYMBOLS"))
-    start, end = date_range()
-    logger.info(
-        "starting historical backfill exchanges=%s symbols=%s start=%s end=%s",
-        exchanges,
-        symbols,
-        start,
-        end,
-    )
+    """环境层入口（`python -m alphamill.data_bridge.collector.historical_backfill`）。"""
+    from .backfill_cli import run_from_env
 
-    conn = db_connect()
-    try:
-        ensure_progress_table(conn)
-        grand_total = 0
-        failed = False
-        for exchange_id in exchanges:
-            exchange = build_exchange(exchange_id)
-            try:
-                for symbol in symbols:
-                    try:
-                        total = fetch_symbol(exchange_id, exchange, conn, symbol, start, end)
-                        grand_total += total
-                        logger.info(
-                            "symbol complete exchange=%s symbol=%s rows_upserted=%s",
-                            exchange_id,
-                            symbol,
-                            total,
-                        )
-                    except Exception:
-                        logger.exception("symbol failed exchange=%s symbol=%s", exchange_id, symbol)
-                        conn.rollback()
-                        failed = True
-            finally:
-                close = getattr(exchange, "close", None)
-                if callable(close):
-                    close()
-        if failed:
-            logger.error("backfill stopped with failed symbols; aggregates were not refreshed")
-            return 1
-        refresh_aggregates(conn, start, end)
-        logger.info("backfill complete rows_upserted=%s", grand_total)
-        return 0
-    finally:
-        conn.close()
+    return run_from_env()
 
 
 if __name__ == "__main__":

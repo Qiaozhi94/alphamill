@@ -1,0 +1,40 @@
+refreshing continuous aggregates for 2024-09-10T00:00:00+00:00..2026-09-10T15:52:00+00:00
+2026-09-24 15:26:39,767 INFO refreshing aggregate=ohlcv_5m start=2024-09-10 00:00:00+00:00 end=2026-09-10 15:57:00+00:00
+2026-09-24 15:26:39,784 INFO refreshing aggregate=ohlcv_15m start=2024-09-10 00:00:00+00:00 end=2026-09-10 16:07:00+00:00
+2026-09-24 15:26:39,788 INFO refreshing aggregate=ohlcv_1h start=2024-09-10 00:00:00+00:00 end=2026-09-10 16:52:00+00:00
+2026-09-24 15:26:39,793 INFO refreshing aggregate=ohlcv_4h start=2024-09-10 00:00:00+00:00 end=2026-09-10 19:52:00+00:00
+2026-09-24 15:26:39,797 INFO refreshing aggregate=ohlcv_1d start=2024-09-10 00:00:00+00:00 end=2026-09-11 15:52:00+00:00
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/georg/projects/alphamill-universe/src/alphamill/data_bridge/universe/__main__.py", line 11, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/home/georg/projects/alphamill-universe/src/alphamill/data_bridge/universe/cli.py", line 144, in main
+    return handlers[args.command](args)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/georg/projects/alphamill-universe/src/alphamill/data_bridge/universe/cli.py", line 253, in _gate
+    outcomes = gate_and_admit(
+        conn,
+    ...<4 lines>...
+        lake_root=lake_root,
+    )
+  File "/home/georg/projects/alphamill-universe/src/alphamill/data_bridge/universe/admission.py", line 136, in gate_and_admit
+    admit_pair(
+    ~~~~~~~~~~^
+        conn,
+        ^^^^^
+    ...<5 lines>...
+        start=window_start,
+        ^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/georg/projects/alphamill-universe/src/alphamill/data_bridge/universe/admission.py", line 86, in admit_pair
+    append_membership(conn, _membership_rows(result, valid_from, definition.universe_id))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/georg/projects/alphamill-universe/src/alphamill/data_bridge/universe/membership.py", line 72, in append_membership
+    cur.execute(_INSERT_SQL, values)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.RaiseException: universe_membership 追加序非法：BTC-USDT 已存在 valid_from >= 2019-09-08 17:55:00+00 的记录（区间不得重叠、不得回填历史）
+CONTEXT:  PL/pgSQL function universe_membership_require_increasing() line 8 at RAISE
+

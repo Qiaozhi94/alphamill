@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -86,14 +86,9 @@ def _lake(tmp_path: Path) -> tuple[Path, str, str]:
     universe_digest = publish_universe(
         [
             UniverseMember(
-                exchange="binance",
-                market_type="perp",
-                db_symbol="BTC/USDT",
                 lake_pair="BTC-USDT-PERP",
-                valid_from="2026-08-01T00:00:00Z",
-                valid_to="",
-                reason="listed",
-                universe_id="uni-1",
+                valid_from=datetime(2026, 8, 1, tzinfo=UTC),
+                valid_to=None,
             )
         ],
         root,

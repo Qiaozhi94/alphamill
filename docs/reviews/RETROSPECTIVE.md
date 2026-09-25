@@ -1003,3 +1003,53 @@ report_type: code-review · feature: F010 · status: closed · rounds: 1（full-
 - **origin 分布**：原始编码 7、修复引入 7、流程缺陷 2、契约漂移 1。**存活轮数**最长的是 R1-002、R1-007（第 1 轮→第 3 轮）。没有触发不收敛升级协议。
 - **裁决分布**：accepted 17 / partial 2（均已转载体关闭）/ rejected 0。**建议命中率** 14/17。三条有偏离：R1-001 建议从头构建镜像，实际是在既有 CPU 镜像上换代码（registry 不可达）；R1-007 首轮建议本身有缺陷；R3-002 建议等值断言，实际改为解析条件结构，效果相当。
 - **遗留（Low，不单列）**：`test_yaml_level_evasions_fail_the_gate` 的 `pytest.raises((AssertionError, Exception))` 没有收窄，会吞掉门禁自身的 TypeError/KeyError；healthcheck 结构检查仍拦不住在 assert 之前插入 `os._exit(0)` 这类蓄意改写。门禁的定位是防误改，不防蓄意绕过。
+
+## 循环 21：F008 宇宙扩容与 point-in-time 宇宙台账 实现代码检视
+
+report_type: code-review · feature: F008 · status: closed · rounds: 1（full-scan，5 片并行）→ 2（diff-only 复核） · 收口 CI: 见收口提交
+
+- 日期：2026-09-25 | 基线：`b456f3c`（F008 `code-reviewing`，分支 `feat/F008-universe-expansion`）→ 修复终态见收口提交
+- 检视人：Claude（同会话内先实现后检视，按 skill §8 显式切换视角；正确性通道按模块切 4 片并行只读扫描，测试覆盖通道单独一片并做 DB-free 内存变异）| 裁决：owner（7 条 Medium/Low 转为 tracked 后续项）
+- 范围：`data_bridge/universe/**`（23 个新模块）、`collector/**` 回填编排重构、导出面（`exporter`/`manifest`/`partitions`）、F007 只读消费面迁移（`evaluation/universe_ledger.py`）、`db/migrations/005`、`scripts/f008-*.sh`
+- 结论：27 条（1 Critical / 7 High / 7 Medium / 12 Low 计入 8 组）。Critical 与 High **全部当轮修复并锁定**；7 组 Medium/Low 转为 `tracked`（载体：`BACKLOG.md`「规划中」三行新增项 + `tasks.md` §4 既有登记），不计入收敛统计。
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| R1-001 | `usable_baseline` 整版回退被增量模式当继承基线 → 静默数据链损失 | Critical | correctness | 根因 | 修复引入 | fixed | 继承基线不得因回退降级（强制 full／显式确认），回退来源入 manifest | `allow_fallback` 只允许全量模式打开；增量遇损坏的最新 valid 版本拒绝启动并给出处置 | `test_f002_exporter.py::test_usable_baseline_refuses_fallback_in_incremental_mode` | 1 | 1 | `coarse-fallback-semantics` |
+| R1-002 | 清单自身不可读时逃出 `usable_baseline`（捕获列表窄于契约） | Medium | correctness | 根因 | 原始编码 | fixed | 捕获清单不可读一并处理 | 捕获 `(VersionNotFoundError, ManifestIntegrityError)`，按模式回退或拒绝 | `test_f002_exporter.py::test_usable_baseline_falls_back_when_newest_version_is_corrupt` | 1 | 1 | `narrow-exception-catch` |
+| R1-003 | 跨周期对账是 exchange 级作用域（相消掩盖 / 连带误伤） | High | correctness | 根因 | 原始编码 | fixed | 两侧加 `symbol` 过滤，作用域＝被检 pair | 两侧 `exchange + symbol` 同参；批量回归用例 | `test_f008_quality_gate.py::test_batch_gate_isolates_the_broken_pair` | 1 | 1 | `check-scope-wider-than-decision` |
+| R1-004 | 准入过滤把质量标记映射一起收窄 → 导出 FATAL | High | correctness | 根因 | 修复引入 | fixed | `quality_flags` 用未过滤映射 | 质量标记用未收窄映射；导出侧本地收窄 | `test_f008_export_integration.py::test_universe_filter_tolerates_flags_of_excluded_pairs` | 1 | 1 | `partial-symmetric-fix` |
+| R1-005 | 未准入 pair 的日期被判成空单元格写进 `skipped` | Low | correctness | 根因 | 修复引入 | fixed | 把准入集合传进 `empty_cell_keys` | `_admitted_only` 同时用于 `empty_cell_keys` 与 `synthesize_skipped` | `test_f008_export_integration.py::test_incremental_universe_filter_does_not_mark_excluded_pairs_skipped` | 1 | 1 | `exclusion-recorded-as-gap` |
+| R1-006 | 分片启动器读同名 `FETCH_LIMIT`（`.env` 的采集器值 5） | High | correctness | 根因 | 原始编码 | fixed | 与分片脚本对齐用独立命名空间 | 改读 `BACKFILL_FETCH_LIMIT`（取值在 `source .env` 之后） | `test_script_runtime_contracts.py::test_f008_backfill_launcher_ignores_collector_fetch_limit` | 1 | 1 | `partial-symmetric-fix` |
+| R1-007 | `_emit` 载荷违反已冻结事件契约（接线即中断整轮回填） | High | correctness | 根因 | 原始编码 | fixed | 严格命中 `PAYLOAD_FIELDS` | 补 `elapsed`、去 `hostname/status/error`、`retries` 取真实尝试数 | `test_f008_backfill_events.py::test_emitted_payloads_pass_event_contract` | 1 | 1 | `event-contract-drift` |
+| R1-008 | 事件平面生产路径无写入方（AC-010 由自证测试兜底） | High | correctness | 根因 | 流程缺陷 | fixed | CLI 接真 sink + `admit_pair` 发成员事件 | CLI 回填接 `event_sink`；`admit_pair` 发 `line=tradability/admission` | `test_f008_backfill.py::test_backfill_events_land_in_store_and_are_queryable` | 1 | 1 | `test-simulates-itself` |
+| R1-009 | `--resume-run-id` 不校验目标集合/窗口 → 静默 no-op 报成功 | High | correctness | 根因 | 原始编码 | fixed | 续跑前校验一致性，不一致拒绝 | 校验 `universe_id`/窗口/目标集合 | `test_f008_backfill.py::test_resume_rejects_mismatched_window_or_batch` | 1 | 1 | `resume-without-target-validation` |
+| R1-010 | AC-012 的磁盘余量与 gate 非零退出两项无牙（变异存活） | High | test-coverage | 根因 | 原始编码 | fixed | 补真实断言，不许替身 | `capacity` 真单测（`free=` 注入）+ gate 非 ACTIVE 非零退出 | `test_f008_capacity.py::test_require_headroom_rejects_shortfall_by_one_byte_or_more` | 1 | 1 | `stubbed-out-sut` |
+| R1-011 | 四类门禁 fixture 全是单 pair，批量掩盖/连坐无锁 | High | test-coverage | 根因 | 原始编码 | fixed | 双 pair fixture 锁批量语义 | 批量双 pair 用例（坏 pair 隔离、干净 pair ACTIVE） | `test_f008_quality_gate.py::test_batch_gate_isolates_the_broken_pair` | 1 | 1 | `single-record-fixture` |
+| R1-012 | 非法时间戳抛裸 `ValueError` → exit 1 + traceback | Medium | correctness | 根因 | 原始编码 | fixed | `parse_moment` 转 `WindowError` | 一处收口，`E_UNIVERSE_WINDOW`/2 | `test_f008_cli_contract.py::test_backfill_rejects_malformed_window_timestamp` | 1 | 1 | `error-code-escape` |
+| R1-013 | AC-014 从未跨实现验证（F007 自产自读） | Medium | test-coverage | 根因 | 契约漂移 | fixed | 把 F008 产物交给 F007 装载 | 契约用例 + stdlib 独立复算 + 字面 canonical 文档 | `test_f007_upstream_contracts.py::test_f008_publisher_digest_is_loadable_by_f007` | 1 | 1 | `cross-module-digest-untested` |
+| R1-014 | `BackfillRun.schema_version` 零断言、`load_run` 不校验版本 | Medium | test-coverage | 根因 | 原始编码 | fixed | 断言版本 + 载入校验 | `load_run` 拒绝版本不符记录 | `test_f008_backfill.py::test_run_record_carries_schema_version` | 1 | 1 | `schema-field-unasserted` |
+| R1-015 | `gate --pairs` 对「候选但被排除」静默空跑 exit 0（fail-open） | Medium | correctness | 根因 | 原始编码 | fixed | 校验改对 `selected`；空判定集判红 | `_selected` 对 `definition.selected` 校验 | `test_f008_cli_contract.py::test_gate_rejects_pairs_excluded_from_selection` | 1 | 1 | `fail-open-empty-selection` |
+| R1-016 | 「落选」不移出导出清单（导出集合不绑定当前宇宙版本） | Medium | correctness | 根因 | 契约漂移 | tracked | 导出入口带当前 `universe_id`，与 `selected` 求交 | — | — | 1 | — | `derived-set-missing-scope` |
+| R1-017 | 杠杆代币后缀启发式误判正常标的（SYRUP 实测命中） | Medium | correctness | 根因 | 原始编码 | tracked | 改判据为交易所元数据（`underlyingType`） | — | — | 1 | — | `ticker-heuristic-false-positive` |
+| R1-018 | `valid_from` 唯一性不是 DB 约束（TOCTOU），重复行不可删 | Medium | correctness | 根因 | 原始编码 | tracked | 加 `UNIQUE (lake_pair, valid_from)` | — | — | 1 | — | `check-then-act-without-constraint` |
+| R1-019 | AC-008 只有源码文本扫描，真实触发器只测 UPDATE | Low | test-coverage | 症状 | 流程缺陷 | fixed | 补 DELETE 库侧断言 | journeys 补 DELETE 被触发器拒绝 | `test_f008_journeys.py::test_us004_membership_delete_is_rejected_by_trigger` | 1 | 1 | `static-source-proxy` |
+| R1-020 | 两处不会红的断言（假连接恒等 + journey 放量被 `**0` 抹平） | Low | test-coverage | 根因 | 原始编码 | fixed | 让断言真的能红 | 假游标区分两侧计数并断言 mismatch；fixture 真实 ×10 | `test_f008_quality_gate_window.py::test_aggregate_check_reports_mismatch_when_counts_differ` | 1 | 1 | `vacuous-assertion` |
+| R1-021 | `xfail(strict=True)` 体内断言与 fixture 不符且从未执行 | Low | test-coverage | 根因 | 流程缺陷 | tracked | 摘标记时同步核对期望值 | — | — | 1 | — | `xfail-body-never-run` |
+| R1-022 | 缺失 digest 报 `E_UNIVERSE_ARTIFACT` 而非 `E_UNIVERSE_NOT_FOUND` | Low | correctness | 根因 | 契约漂移 | fixed | 读前判存在性，缺失报 NOT_FOUND | `load_artifact` 显式 `is_file()` 判定 | `test_f008_artifact.py::test_load_missing_artifact_fails_closed` | 1 | 1 | `error-code-contract-drift` |
+| R1-023 | 消费面 digest 只查前缀（路径成分可越出 artifact 目录） | Low | correctness | 根因 | 原始编码 | fixed | 严格 `<64 hex>` 校验 | 本地独立实现该校验 | `test_f007_upstream_contracts.py::test_load_universe_rejects_malformed_digest_before_io` | 1 | 1 | `weak-input-validation` |
+| R1-024 | `seed_initial_members` 只写单一命名空间且从未执行 | Low | correctness | 根因 | 原始编码 | tracked | 对 spot/perp 各写一行并给显式入口 | — | — | 1 | — | `asymmetric-invariant-implementation` |
+| R1-025 | `delisting_end` 是死参数：退市 pair 按满窗口判缺失 | Low | correctness | 根因 | 原始编码 | tracked | 透传到 `gate_pairs`/`gate_and_admit` | — | — | 1 | — | `dead-parameter` |
+| R1-026 | `members_at` 与区间并集在「已闭合 delisted 行」上不一致 | Low | correctness | 根因 | 原始编码 | tracked | 先选最后状态再判其 `valid_to` | — | — | 1 | — | `two-implementations-diverge` |
+| R1-027 | `run.json` 截断式原地覆盖写，中断即损坏断点记录 | Low | correctness | 根因 | 原始编码 | fixed | 同目录临时文件 + `os.replace` | 原子替换；`load_run` 对损坏/版本不符报明确错误 | `test_f008_run_record.py::test_interrupted_run_record_write_keeps_previous_document` | 1 | 1 | `non-atomic-runtime-record` |
+**模式性教训**
+
+- **`partial-symmetric-fix` 出现两次（R1-004、R1-006）**：同一处共享语义只修了一半——准入过滤收窄了 `produce_partitions` 的映射却漏了同一份映射的 `quality_flags` 消费方；分片脚本改了 `BACKFILL_FETCH_LIMIT` 却漏了启动器（`.env` 里同名的采集器值把它压成 5）。教训：**改一处共享语义（收窄映射、同名变量）前先列出它的全部消费方**，否则"修好了"只是修好了被看见的那条路径。
+- **`check-scope-wider-than-decision`（R1-003）与 `fail-open-empty-selection`（R1-015）是同一枚硬币**：判定范围比判定对象宽（exchange 级对账 vs pair 级结论）会同时带来误伤与相消掩盖；而 `all([])` 恒真让"什么都没跑"退出 0。教训：**门禁的 scope 必须与它声称的作用域同宽**，且"空输入"必须有自己的判红路径——`all(空)` 不是判据。
+- **唯一的 Critical 来自 `fix-regression`（R1-001）**：为了消除"一次损坏让此后所有导出跑不动"的死锁引入整版回退，却在增量模式上打开了静默的数据链损失（回退版当继承基线 → 新清单丢中间版本分区，而收缩守卫只在全量生效）。教训：**回退/降级类修复必须先逐条调用路径回答"这个降级在语义上是否等价安全"**，只在能重算的来源（全量）上放行。
+- **`test-simulates-itself`（R1-008）+ `vacuous-assertion`（R1-020）+ `stubbed-out-sut`（R1-010）**：事件平面的测试自注入 sink 并断言自造载荷，"事件从未落盘"因此活过了整个开发期；假游标对任何计数查询都回 `(7,)`，`match` 断言在任何实现下都真；把被测函数本身猴补成抛异常，于是删掉真实校验仍全绿。教训：**"写出去了"必须经真实出口再读回；"能判红"必须做一次变异证明**——本轮 3 条 High 完全靠变异存活才被定性。
+- **`error-code-escape` / `error-code-contract-drift`（R1-012、R1-022）**：契约登记的九类启动期拒绝里，两类在真实输入上拿不到登记的码（语法非法时间戳抛裸 `ValueError` → exit 1 被脚本当可重试故障；缺失 artifact 报内容类错误）。教训：**"有分支"不等于"可区分"**，登记的码要逐条真跑一遍。
+- **`origin` 分布**：original-coding 17、fix-regression 4、spec-drift 3、process-gap 3。**存活轮数**：27 条全部 `first_seen_round=1` 当轮关闭（无跨轮项，未触发不收敛升级协议）。
+- **裁决分布**：accepted 27 / partial 0 / rejected 0。**建议命中率**：27 条中修复方案与建议实质一致 26 条；唯一偏离是 R1-001——建议"回退来源写入 manifest + 守卫以最新已发布版本为参照"，实际选择更窄的解法（**增量模式直接拒绝回退**），理由是这样连"回退留痕"都不需要，语义面更小。
+- **成本观察（供下轮采样参考）**：两条最高价值项（Critical + High）都落在**上一轮"实测驱动的修复"的邻域**（T023 的 `usable_baseline` 回退与准入过滤收窄）。教训：**修复密集区应作为下一轮检视的优先采样区**，而不是"刚修过、应该没问题"的免检区。
+- **并行检视的实际形态**：5 片只读 + 1 片测试覆盖并行扫描，再由 4 个修复代理分头落地；跨代理的文件冲突（同一测试文件、同一报错文案）出现了两次，靠"派活时按文件切分 + 报告里显式声明并发面"化解。教训：**并行检视要按文件边界派活**，共享文件（CLI/测试聚合文件）要么独占、要么约定最小 literal edit。

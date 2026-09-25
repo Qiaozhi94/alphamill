@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "measured_at": "2026-09-24T19:08:03Z",
+  "hostname": "qiaozhi-lt",
+  "admitted_pairs": 35,
+  "lake_bytes": 1017434162,
+  "lake_partition_files": 30028,
+  "export_mode": "full",
+  "export_seconds": 860,
+  "nas_backup_seconds": 8356,
+  "nas_file_count": 30028,
+  "extrapolated": {
+    "rows": 36808333.33333333,
+    "export_seconds": 1330.0,
+    "nas_files": 51467.5
+  },
+  "baseline": {
+    "pairs": 6,
+    "rows": 6310000,
+    "export_seconds": 228.0,
+    "nas_files": 8823,
+    "source": "NFR-005 的 F002 6 对基线（spec/design 同源）"
+  },
+  "rows": 36794805,
+  "dataset_export_seconds": 839.82,
+  "data_version": "v2026.09.24",
+  "baseline_version": "v2026.09.18",
+  "revision_diff": 21168,
+  "pre_export": {
+    "lake_bytes": 272420638,
+    "lake_partition_files": 8860
+  },
+  "allow_shrink": false,
+  "shrink_confirmed": false,
+  "nas": {
+    "host": "100.78.41.62",
+    "path": "/volume1/alphamill-backups",
+    "total_bytes": 1977609840,
+    "transport": "tailscale DERP(sfo) 中继，RTT≈460ms（执行机不在家网，LAN 10.31.0.254 不可达）"
+  },
+  "notes": "口径：全量导出 = `python -m alphamill.data_bridge.exporter --mode full --universe-filter`（F008 worktree，`ALPHAMILL_LAKE_DIR` 指向生产湖），耗时取整轮墙钟（含 symbol_map 发布）；未使用 `--allow-shrink`，manifest `shrink_confirmed=false`。数据集级 ohlcv_1m 耗时见 dataset_export_seconds。文件数按湖内 *.parquet 计。NAS 备份为 `deployment/backup-nas.sh`（pg_dump + reports/lake 分块校验传输）走 tailnet 中继的实测墙钟；NAS 文件数按 /volume1/alphamill-backups/lake 下 *.parquet 计。"
+}

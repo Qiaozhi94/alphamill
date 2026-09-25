@@ -1,10 +1,12 @@
 """historical_backfill review regression tests."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from psycopg2 import InterfaceError
 
 from alphamill.data_bridge.collector import historical_backfill as backfill
+from alphamill.data_bridge.collector.backfill_progress import ensure_progress_table
 
 
 class _Exchange:
@@ -129,6 +131,137 @@ def test_delisting_boundary_stops_before_exchange_empty_batch(monkeypatch) -> No
 
 def test_progress_schema_is_required_from_init_sql() -> None:
     with pytest.raises(RuntimeError, match="backfill_progress is missing"):
-        backfill.ensure_progress_table(_SchemaConnection(None))
+        ensure_progress_table(_SchemaConnection(None))
 
-    backfill.ensure_progress_table(_SchemaConnection("backfill_progress"))
+    ensure_progress_table(_SchemaConnection("backfill_progress"))
+
+
+def test_env_entrypoint_imports_after_orchestrator_split() -> None:
+    """环境层必须能导入：`python -m ...historical_backfill` 是 F001 缺口补齐的入口。
+
+    回归（2026-09-23）：编排层拆到 `backfill_orchestrator` 后，`backfill_cli` 仍从
+    `historical_backfill` 导入 `run_backfill`，`main()` 里的延迟导入于是必炸——
+    `deployment/f001-backfill-supervisor.sh` 一调就 ImportError，且没有测试覆盖。
+    """
+    from alphamill.data_bridge.collector import backfill_cli, backfill_orchestrator
+
+    assert callable(backfill_cli.run_from_env)
+    assert backfill_cli.run_backfill is backfill_orchestrator.run_backfill
+
+
+def test_env_entrypoint_passes_window_and_symbols(monkeypatch) -> None:
+    """环境层：窗口与 symbols 解析后原样交给编排层，成功后刷新连续聚合。"""
+    from alphamill.data_bridge.collector import backfill_cli
+
+    seen: dict = {}
+
+    class _Outcome:
+        status = "completed"
+        rows = 7
+
+    class _Conn:
+        def close(self):
+            seen["closed"] = True
+
+    def _run_backfill(**kwargs):
+        seen.update(kwargs)
+        return [_Outcome()]
+
+    monkeypatch.setenv("EXCHANGES", "binance")
+    monkeypatch.setenv("SYMBOLS", "BTC/USDT")
+    monkeypatch.setenv("BACKFILL_START", "2024-09-10T00:00:00Z")
+    monkeypatch.setenv("BACKFILL_END", "2024-09-11T00:00:00Z")
+    monkeypatch.setattr(backfill_cli, "db_connect", _Conn)
+    monkeypatch.setattr(backfill_cli, "run_backfill", _run_backfill)
+
+    def _refresh(_conn, start, end):
+        seen["refreshed"] = (start, end)
+
+    monkeypatch.setattr(backfill_cli, "refresh_aggregates", _refresh)
+
+    assert backfill_cli.run_from_env() == 0
+    assert seen["symbols"] == ["BTC/USDT"]
+    assert seen["start"].isoformat() == "2024-09-10T00:00:00+00:00"
+    assert seen["end"].isoformat() == "2024-09-11T00:00:00+00:00"
+    assert "refreshed" in seen
+    assert seen["closed"] is True
+
+
+def test_refresh_aggregates_ends_open_transaction_first(monkeypatch) -> None:
+    """回归（2026-09-23）：连接上残留只读事务时，切 autocommit 前必须先收尾。
+
+    psycopg2 对「事务开着就 set_session」直接抛 `ProgrammingError`，而调用方
+    （`run_from_env` 写完缺口后）手上正是一个刚做完只读查询的连接。
+    """
+
+    class _Cursor:
+        def __init__(self, calls):
+            self.calls = calls
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def execute(self, sql, params=None):
+            self.calls.append(("execute", sql, params))
+
+    class _Conn:
+        autocommit = False
+
+        def __init__(self):
+            self.calls = []
+
+        def cursor(self):
+            return _Cursor(self.calls)
+
+        def commit(self):
+            self.calls.append(("commit",))
+
+    conn = _Conn()
+    monkeypatch.setattr(backfill, "REFRESH_AGGREGATES", True)
+
+    end = datetime(2024, 9, 11, tzinfo=UTC)
+    backfill.refresh_aggregates(conn, datetime(2024, 9, 10, tzinfo=UTC), end)
+
+    assert conn.calls[0] == ("commit",)
+    calls = {c[2][0]: c[2] for c in conn.calls if c[0] == "execute"}
+    assert list(calls) == ["ohlcv_5m", "ohlcv_15m", "ohlcv_1h", "ohlcv_4h", "ohlcv_1d"]
+    # 窗口短于两个桶时必须放宽，否则 TimescaleDB 报 `refresh window too small`
+    assert calls["ohlcv_1d"][1] == end - timedelta(days=2)
+    assert calls["ohlcv_5m"][1] == datetime(2024, 9, 10, tzinfo=UTC)
+    # 末端必须外扩一个桶，否则跨越窗口终点的不完整桶不被物化（门禁恒判 aggregate_mismatch）
+    assert calls["ohlcv_1d"][2] == end + timedelta(days=1)
+    assert calls["ohlcv_5m"][2] == end + timedelta(minutes=5)
+    assert conn.autocommit is False  # 恢复原值
+
+
+def test_connection_lost_aborts_instead_of_marking_pairs_failed(monkeypatch) -> None:
+    """回归（2026-09-23）：库连接断了要中止本轮，而不是把余下 pair 逐个判 failed。
+
+    实测场景：同机另一路工作重建了 timescaledb 容器 → `_run_one` 的异常处理里
+    `conn.rollback()` 抛 `InterfaceError: connection already closed`，整轮崩掉；
+    若不中止，余下每个 pair 都会"失败"，既丢证据又误导。
+    """
+    from alphamill.data_bridge.collector import backfill_orchestrator as orch
+
+    class _DeadConn:
+        def rollback(self):
+            raise InterfaceError("connection already closed")
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("server closed the connection unexpectedly")
+
+    monkeypatch.setattr(orch, "fetch_symbol", _boom)
+
+    with pytest.raises(orch.BackfillConnectionLost, match="库连接不可用"):
+        orch._run_one(
+            exchange_id="binance",
+            exchange=object(),
+            conn=_DeadConn(),
+            symbol="LINK/USDT",
+            start=datetime(2024, 9, 10, tzinfo=UTC),
+            end=datetime(2024, 9, 11, tzinfo=UTC),
+            limiter=None,
+        )

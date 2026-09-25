@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "run_id": "6d85a249e8fe-b2-20260924T081842Z",
+  "universe_id": "sha256:6d85a249e8fe509518443afb3407d0ed6ea736260c570c8f860676e0c466a709",
+  "batch": 2,
+  "window": {
+    "start": "2024-09-10T00:00:00Z",
+    "end": "2026-09-10T15:52:00Z"
+  },
+  "rate_limit": {
+    "base_backoff_seconds": 1.0,
+    "max_backoff_seconds": 60.0,
+    "max_retries": 8,
+    "min_interval_seconds": 0.2
+  },
+  "hostname": "qiaozhi-lt",
+  "started_at": "2026-09-24T08:18:42.618725Z",
+  "finished_at": "2026-09-24T12:09:04.370596Z",
+  "pairs": [
+    {
+      "db_symbol": "COTI/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "COTI-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "rank": 34,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "DASH/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "DASH-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "rank": 36,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "DOT/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "DOT-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "rank": 35,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "HEI/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "HEI-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "rank": 40,
+      "rows": 826972,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "LTC/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "LTC-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "rank": 31,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "ONG/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "ONG-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "rank": 33,
+      "rows": 1052152,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "PENGU/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "PENGU-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "rank": 38,
+      "rows": 910057,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "PROM/USDT",
+      "error": null,
+      "error_class": null,
+      "lake_pair": "PROM-USDT",
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "rank": 39,
+      "rows": 868522,
+      "status": "completed"
+    },
+    {
+      "db_symbol": "SHIB/USDT",
+      "lake_pair": "SHIB-USDT",
+      "rank": 37,
+      "status": "completed",
+      "rows": 1052152,
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
+    },
+    {
+      "db_symbol": "SYN/USDT",
+      "lake_pair": "SYN-USDT",
+      "rank": 32,
+      "status": "completed",
+      "rows": 1052152,
+      "last_cursor": "2026-09-10T15:52:00Z",
+      "error": null,
+      "error_class": null
+    }
+  ]
+}

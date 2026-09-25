@@ -210,3 +210,38 @@ def pytest_addoption(parser) -> None:
 def f007_snapshot_id(request) -> str | None:
     value = request.config.getoption("--snapshot")
     return str(value) if value else None
+
+
+# ---------------------------------------------------------------- F008 宇宙扩容
+
+F008_TABLES = ("universe_membership", "universe_quality_verdicts")
+
+
+@pytest.fixture()
+def f008_conn(f002_db, tmp_path, monkeypatch):
+    """F008 集成库连接：在 F002 scratch 库上叠加 005 迁移，并按用例清场。
+
+    追加语义的两张表不能用 DELETE（触发器会拒），清场一律用 TRUNCATE。
+
+    同时把**事件目录**改道到 `tmp_path`（`ALPHAMILL_EVENTS_DIR`）：准入/回填的生产接线会
+    真写事件（`TR-001`/`TR-002`），不设这个环境变量就会落进仓库默认根
+    `<repo>/reports/universe/events/`——测试产物混进仓库既污染工作区、又会被误读成生产证据。
+    需要断言落盘内容的用例照常用 `events.read_events(...)` 读回（目录由环境变量给出），
+    或显式传 `events_dir=`；**不要**为了让测试不落盘而改接线代码。
+    """
+    monkeypatch.setenv("ALPHAMILL_EVENTS_DIR", str(tmp_path / "events"))
+    conn = psycopg2.connect(**f002_db)
+    migration = REPO / "db" / "migrations" / "005_universe_membership.sql"
+    with conn.cursor() as cur:
+        cur.execute(migration.read_text(encoding="utf-8"))
+    conn.commit()
+    with conn.cursor() as cur:
+        cur.execute(f"TRUNCATE {', '.join(F008_TABLES)}")
+        cur.execute("DELETE FROM ohlcv_1m")
+        cur.execute("DELETE FROM backfill_progress")
+        cur.execute("DROP TABLE IF EXISTS f008_scratch_ohlcv")
+    conn.commit()
+    try:
+        yield conn
+    finally:
+        conn.close()
