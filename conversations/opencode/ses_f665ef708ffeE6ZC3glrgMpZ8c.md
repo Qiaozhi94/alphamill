@@ -336,7 +336,7 @@ Found 68 match(es) in 33 file(s)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Correcting a Sharpe ratio for the search that found it
 18: #
@@ -401,7 +401,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Charging a strategy for the class it was chosen from
 18: #
@@ -435,7 +435,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # How much do you actually know from a Sharpe ratio?
 18: #
@@ -455,17 +455,17 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 <type>file</type>
 <content>
 1: """Load internal validation helpers from the sibling ml4t-backtest repository."""
-2:
+2: 
 3: from __future__ import annotations
-4:
+4: 
 5: import importlib
 6: import importlib.util
 7: from functools import cache
 8: from pathlib import Path
-9:
+9: 
 10: from ml4t.backtest import __file__ as ml4t_backtest_init
-11:
-12:
+11: 
+12: 
 13: def resolve_backtest_repo() -> Path:
 14:     """Resolve the sibling ml4t-backtest repository root."""
 15:     package_path = Path(ml4t_backtest_init).resolve()
@@ -535,22 +535,22 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 <type>file</type>
 <content>
 1: """Standardized backtest result format shared by all framework adapters."""
-2:
+2: 
 3: from dataclasses import dataclass, field
-4:
+4: 
 5: import pandas as pd
-6:
-7:
+6: 
+7: 
 8: @dataclass
 9: class BacktestResult:
 10:     """Standardized result from any backtesting framework."""
-11:
+11: 
 12:     framework: str
 13:     equity_curve: pd.Series  # DatetimeIndex -> portfolio value
 14:     trades: pd.DataFrame  # (timestamp, asset, side, quantity, price, commission)
 15:     positions: pd.DataFrame  # (timestamp, asset, quantity, value) or empty
 16:     metrics: dict = field(default_factory=dict)
-17:
+17: 
 18:     @property
 19:     def final_value(self) -> float:
 20:         return float(self.equity_curve
@@ -565,25 +565,25 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 <type>file</type>
 <content>
 1: """Shared signal-to-weight conversion for Chapter 16 validation.
-2:
+2: 
 3: Converts ML prediction artifacts into a target-weight time series that all
 4: three frameworks (ml4t-backtest, VectorBT, Backtrader) consume identically.
-5:
+5: 
 6: This eliminates signal-generation differences and isolates execution-engine parity.
 7: """
-8:
+8: 
 9: import sqlite3
 10: from pathlib import Path
-11:
+11: 
 12: import numpy as np
 13: import pandas as pd
 14: import polars as pl
-15:
+15: 
 16: from utils import ML4T_DATA_PATH
 17: from utils.paths import get_case_study_dir
-18:
+18: 
 19: REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-20:
+20: 
 21: COST_BPS: dict[str, float] = {
 22:     "etfs": 10,
 23:     "crypto
@@ -613,7 +613,7 @@ Also check `~/.cache/uv` indexes.
 
 Let me also look at other repo locations: maybe `/home/georg/projects/ml4t-libraries` etc.
 
-Let me run parallel:
+Let me run parallel: 
 1. find ml4t dirs under /home/georg (bounded depth 6)
 2. grep deflated_sharpe_ratio across /home/georg/.cache/uv (files_with_matches)
 3. read 20_strategy_synthesis/03_signal_quality.py, 02_feature_evaluation.py, 06_cost_survival.py, holdout.py
@@ -661,7 +661,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Signal Evidence: Is the Chosen Signal Trustworthy?
 18: #
@@ -694,7 +694,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Friction Survival: Where the Edge Dies
 18: #
@@ -714,21 +714,21 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 <type>file</type>
 <content>
 1: """Holdout prediction and backtest generation for case studies.
-2:
+2: 
 3: Provides the core logic for out-of-sample validation: select the best
 4: model from the validation registry, retrain on all pre-holdout data,
 5: generate predictions on the holdout window, and backtest.
-6:
+6: 
 7: Usage::
-8:
+8: 
 9:     from holdout import generate_holdout
-10:
+10: 
 11:     result = generate_holdout("etfs")
 12:     print(f"Holdout Sharpe: {result['holdout_sharpe']:.3f}")
 13: """
-14:
+14: 
 15: from __future__ import annotations
-16:
+16: 
 17: import contextlib
 18: import gc
 19: import json
@@ -804,7 +804,7 @@ Found 40 match(es) in 40 file(s)
 <type>file</type>
 <content>
 1: """Backtest performance uncertainty: block bootstrap, HAC SE, PSR/DSR, paired comparisons.
-2:
+2: 
 3: Operates on the daily out-of-sample strategy return series persisted at
 4: ``run_log/backtest/{hash}/daily_returns.parquet``. Series-level CIs are computed
 5: via stationary block bootstrap; Sharpe SE uses the López de Prado (2025) closed
@@ -812,7 +812,7 @@ Found 40 match(es) in 40 file(s)
 7: Newey-West HAC. Selection bias across K variants uses the library's
 8: :func:`deflated_sharpe_ratio`. Challenger-vs-baseline uncertainty uses paired
 9: stationary block bootstrap on daily-return differences.
-10:
+10: 
 11: All bootstraps share a single seed so the same call is
 …[truncated]
   ```
@@ -825,7 +825,7 @@ Found 40 match(es) in 40 file(s)
 <type>file</type>
 <content>
 1: """Compute-and-register the per-case-study ``cohort_metrics`` selection-bias table.
-2:
+2: 
 3: This is the in-repo home of the cohort selection-bias producer that the
 4: strategy-analysis notebook (``NN_strategy_analysis.py``) runs so a reader who
 5: never touches Chapter 20 still lands a populated ``cohort_metrics`` table. It
@@ -833,10 +833,10 @@ Found 40 match(es) in 40 file(s)
 7: post-engine-rerun backfill); the only change is that the per-cohort write goes
 8: through :func:`case_studies.utils.registry.register_cohort_metrics` instead of
 9: an inline upsert.
-10:
+10: 
 11: For each case study the table carries, per cohort:
-12:
-13: * Raw-K, MP-K, ER-K DSR (with
+12: 
+13: * Raw-K, MP-K, ER-K DSR (with 
 …[truncated]
   ```
   </details>
@@ -875,14 +875,14 @@ Now the remaining uncertainty.py PBO block plus the Fundamental Law / FDR notebo
 1272:     if fold_returns_by_hash is not None:
 1273:         try:
 1274:             from ml4t.diagnostic.evaluation.stats import compute_pbo
-1275:
+1275: 
 1276:             fold_names = [n for n in names if n in fold_returns_by_hash]
 1277:             if len(fold_names) >= 2:
 1278:                 fold_sharpes = np.array(
 1279:                     [fold_returns_by_hash[n] for n in fold_names], dtype=np.float64
 1280:                 ).T  # (n_folds, K)
 1281:                 n_folds = fold_sharpes.shape[0]
-1282:                 if
+1282:                 if 
 …[truncated]
   ```
   </details>
@@ -907,7 +907,7 @@ Now the remaining uncertainty.py PBO block plus the Fundamental Law / FDR notebo
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Translation to Strategy: The Central Conversion Story
 18: #
@@ -940,7 +940,7 @@ Now the remaining uncertainty.py PBO block plus the Fundamental Law / FDR notebo
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown] tags=[]
 17: # # Multiple Testing and Selection Bias
 18: #
@@ -1065,17 +1065,17 @@ Found 120 match(es) in 10 file(s)
 <type>file</type>
 <content>
 1: """ml4t-backtest adapter for backtesting validation.
-2:
+2: 
 3: Takes pre-computed target weights and runs them through ml4t-backtest's Engine
 4: with TargetWeightExecutor, returning a standardized BacktestResult.
-5:
+5: 
 6: Supports multiple modes to match different framework behaviors:
 7: - "backtrader": Integer shares, next-bar open fills, commission headroom (matches BT exactly)
 8: - "vectorbt": Fractional shares, same-bar close fills (matches VBT)
 9: - "lean": Verified LEAN execution/account semantics with case-study cost assumptions
 10: - "default": Library defaults (next-bar open, fractional shares)
 11: """
-12:
+12: 
 13: import math
 14: from datetime import datetime
 …[truncated]
@@ -1156,7 +1156,7 @@ Now the FDR triage, regime decay, conformal sizing, and the complete ml4t-diagno
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Feature Evaluation Across Case Studies
 18: #
@@ -1189,7 +1189,7 @@ Now the FDR triage, regime decay, conformal sizing, and the complete ml4t-diagno
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Risk Overlays and Stability Across Regimes
 18: #
@@ -1268,7 +1268,7 @@ Found 24 match(es) in 5 file(s)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Conformal Prediction Position Sizing: Two Case Studies
 18: #
@@ -1301,7 +1301,7 @@ Found 24 match(es) in 5 file(s)
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Value at Risk and Conditional Value at Risk
 18: # **Docker image**: `ml4t`
@@ -1320,7 +1320,7 @@ Found 24 match(es) in 5 file(s)
 <type>file</type>
 <content>
 1: """Shared transaction cost analysis for Ch18 notebooks and case study costs.py.
-2:
+2: 
 3: Provides:
 4: - corwin_schultz_spread(): High-low spread estimator (Corwin & Schultz 2012)
 5: - roll_spread(): Serial covariance spread estimator (Roll 1984)
@@ -1331,7 +1331,7 @@ Found 24 match(es) in 5 file(s)
 10: - estimate_capacity(): Max AUM given impact coefficient and alpha
 11: - breakeven_alpha(): Required gross alpha given turnover and costs
 12: - get_fee_schedule(): Codified exchange fee schedules
-13:
+13: 
 14:
 …[truncated]
   ```
@@ -1416,7 +1416,7 @@ from ml4t.backtest.execution.rebalance
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Backtesting First Principles: From Returns to Portfolio Simulation
 18: #
@@ -1576,7 +1576,7 @@ Found the Fundamental Law / IC-Sharpe machinery in `backtest_explorer.py`. Readi
 <type>file</type>
 <content>
 840:         best_per_stage = df.sort("sharpe", descending=True).group_by("stage").first()
-841:
+841: 
 842:         # Sort by pipeline order
 843:         return (
 844:             best_per_stage.with_columns(
@@ -1585,11 +1585,11 @@ Found the Fundamental Law / IC-Sharpe machinery in `backtest_explorer.py`. Readi
 847:             .sort("_order")
 848:             .drop("_order")
 849:         )
-850:
+850: 
 851:     # -----------------------------------------------------------------
 852:     # deflated_sharpe: DSR from registry data
 853:     # -----------------------------------------------------------------
-854:
+854: 
 855:     def deflated_sharpe(
 856:         self,
 857:         stage: str = "s
@@ -1610,11 +1610,11 @@ Found the Fundamental Law / IC-Sharpe machinery in `backtest_explorer.py`. Readi
 1375:         top_n: int = 10,
 1376:     ) -> pl.DataFrame:
 1377:         """Join prediction IC per fold with backtest Sharpe per fold.
-1378:
+1378: 
 1379:         This enables the empirical fundamental law test: plotting IC
 1380:         against realized Sharpe at the fold level to see whether
 1381:         better predictions produce better portfolio returns.
-1382:
+1382: 
 1383:         Parameters
 1384:         ----------
 1385:         stage : str

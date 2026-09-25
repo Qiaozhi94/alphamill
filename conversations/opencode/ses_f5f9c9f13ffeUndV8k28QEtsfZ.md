@@ -132,18 +132,18 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 8: created: 2026-09-12
 9: updated: 2026-09-12
 10: ---
-11:
+11: 
 12: # F004：Kronos 真实推理运行时 - 设计
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Tasks: `tasks.md`
-15:
+15: 
 16: ## 0. 输入与约束
-17:
+17: 
 18: - **行为契约**：`spec.md`（FR-001 / NFR-001）
 19: - **上游 Contract**：F001 冻结的 Kronos HTTP API（`GET /health`、`GET /predict/{symbol:path}`、`POST /predict_batch`），零改动
 20: - **执行环境**：与 F001 收口态一致（WSL2 + docker-ce；本机无独立显卡，CPU 推理实测 3.4–7.2s/次）
 21: - **实现约束**：`vendor/Kronos`（pin `67b630e`）与 `models/`（391MB + 16MB）不入库，由 F001 既有流程获取
-22:
+22: 
 23: ## 1. 技术概要
 …[truncated]
   ```
@@ -210,20 +210,20 @@ The report is at docs/reviews/CURRENT-doc.md. Let me read it.
 10: created: 2026-09-12
 11: updated: 2026-09-12
 12: ---
-13:
+13: 
 14: # F004：Kronos 真实推理运行时（编排内可复现）
-15:
+15: 
 16: > Owner: Georg | Target: v0.2.x
-17:
+17: 
 18: ## 0. 来源与意图
-19:
+19: 
 20: - **PRD 来源**：`docs/alphamill-prd.md` FR3（信号生产）与 M1 运行基座
 21: - **架构来源**：`docs/alphamill-architecture.md` §七（部署拓扑）
 22: - **上游来源**：F001 AC-006（真实推理证据，当前靠仓外手工实例）、F002 检视 F002-Q001（容器化不在数据桥契约内，需独立载体）
 23: - **功能类型**：backend / infra
 24: - **规格模式**：lite
 25: - **变更类型**：ADDED
-26: - **一句话意图**：把 Kronos 真实模型推理纳入 `deployment/` 编排（可选
+26: - **一句话意图**：把 Kronos 真实模型推理纳入 `deployment/` 编排（可选 
 …[truncated]
   ```
   </details>
@@ -244,24 +244,24 @@ The report is at docs/reviews/CURRENT-doc.md. Let me read it.
 8: created: 2026-09-12
 9: updated: 2026-09-12
 10: ---
-11:
+11: 
 12: # F004：Kronos 真实推理运行时 - 任务
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Design: `design.md`
-15:
+15: 
 16: ## 0. 来源与执行规则
-17:
+17: 
 18: - 行为与验收真相源：`spec.md`；技术方案与边界：`design.md`。
 19: - 每项任务只描述一个可验证动作，并引用合法的 US/需求/AC ID。
 20: - 完成且验证后立即把 `[ ]` 改为 `[x]`，不得最后统一补勾。
-21:
+21: 
 22: ## 1. 前置条件
-23:
+23: 
 24: - F001 已 done：薄壳、`vendor/Kronos` pin 与 `models/` 权重流程成立，AC-006 已有手工命令形态的实测证据。
 25: - spec §8 Q-001（是否阻塞 F002 done）未关闭前，本 feature 不进入 `ready-for-development`。
-26:
+26: 
 27: ## 2. 实现任务
-28:
+28: 
 
 …[truncated]
   ```
@@ -323,9 +323,9 @@ I think Option B is right for a lite infra feature, and the review explicitly al
 
 Hmm, but wait. Maybe I should consult the user? The review says "最短修复路径是先裁决真实 profile 只服务 AC-006，还是同时成为运营信号源" — this is a product decision. The skill says when there's ambiguity with 2x effort difference, ask. But the skill also says as fixer I can accept or reject findings. Since the review itself offers "或删除该范围承诺" as an acceptable fix, I can choose the narrow path without user input. That's within the reviewer's stated acceptable fixes.
 
-Actually, let me think about what's best for the project. F004's goal is "编排内可复现的验收" for AC-006. Making it also the operational signal source is bigger: Freqtrade routing, snapshot service routing, failover between mock/real... That's clearly a separate feature. The narrow fix:
+Actually, let me think about what's best for the project. F004's goal is "编排内可复现的验收" for AC-006. Making it also the operational signal source is bigger: Freqtrade routing, snapshot service routing, failover between mock/real... That's clearly a separate feature. The narrow fix: 
 - spec §0.意图: remove "并让 F002 导出的 signals_log 能承载真实信号而非 placeholder" → replace with something honest like "为 signals_log 的真实化提供唯一真实信号源（消费者路由切换不在本 feature 范围）"
-- spec §7 decision table: "F004 落地后 signals_log 内容自动升级，无需 F002 返工" → fix this claim.
+- spec §7 decision table: "F004 落地后 signals_log 内容自动升级，无需 F002 返工" → fix this claim. 
 - Also add to §5 maybe? No, §5 is "生命周期与不变量" not applicable.
 - Add a clear "后移" note: consumer routing → separate feature/eval. In spec §3 范围外 maybe: "Freqtrade 与 runtime snapshot 的消费者路由切换（仍指向 mock :8001；真实源切换另立评估）".
 
@@ -465,12 +465,12 @@ test_f002_e
 <type>file</type>
 <content>
 1: # AlphaMill
-2:
+2: 
 3: AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，贯通数据治理 → 假设与因子 →
 4: 证据评测 → 组合与策略 → Freqtrade 执行 → 监控归因与复盘（中文别名：淘沙）。
-5:
+5: 
 6: ## 当前结构
-7:
+7: 
 8: - `docs/alphamill-prd.md`：正式 PRD（产品真相源），产品判断以此为准。
 9: - `docs/alphamill-architecture.md`：四平面架构与接口契约（架构真相源），随实现迭代。
 10: - `docs/alphamill-research-factor-mining.md`：因子挖掘/ML 选型调研证据（决策已提炼至 ADR-0001）。
@@ -494,23 +494,23 @@ test_f002_e
 4: created: 2026-09-06
 5: updated: 2026-09-07
 6: ---
-7:
+7: 
 8: # 开发流程（AlphaMill）
-9:
+9: 
 10: 本文是项目的**原则入口与质量门**唯一真源：汇总「项目不可违反原则」的短摘要与各自
 11: 唯一拥有者链接，规定开发纪律、验证流程、状态转换与复核协议。
-12:
+12: 
 13: ## 0. 项目不可违反原则（入口）
-14:
+14: 
 15: 以下原则是**阻断性**的：违反其中任何一条的规格/实现不得进入实现或收口阶段。规范
 16: 正文在各自的唯一拥有者中，本文只给摘要与入口。**每条原则的规范正文只放一个唯一
 17: 拥有者**，本文只写短摘要与链接，不重复 PRD、architecture、decisions 的完整定义。
-18:
+18: 
 19: | # | 原则 | 短摘要 | 规范正文唯一拥有者 |
 20: |---|---|---|---|
 21: | 1 | 可追溯规格优先 | 功能必须先有已评审规格；实现/测试/实验/结论必须引用需求编号；未写入规格的行为不视为承诺 | 本文 + `docs/features/README.md` |
 22: | 2 | 证据门不降级 | 候选按样本功效分级并经过留出与最终确认；效率提升不得来自放宽门禁 | `docs/decisions/0003-validation-gate-non-degradation.md` |
-23: | 3 | 无前视一等公民 | 因子定义过 AST 纯度门 + 独立逐 K
+23: | 3 | 无前视一等公民 | 因子定义过 AST 纯度门 + 独立逐 K 
 …[truncated]
   ```
   </details>
@@ -613,14 +613,14 @@ Let me batch these.
 <type>file</type>
 <content>
 1: FROM python:3.11-slim
-2:
+2: 
 3: WORKDIR /app
 4: ENV PYTHONUNBUFFERED=1
-5:
+5: 
 6: COPY pyproject.toml README.md ./
 7: COPY src ./src
 8: RUN pip install --no-cache-dir .
-9:
+9: 
 10: EXPOSE 8001
 11: CMD ["uvicorn", "alphamill.kronos_service.server:app", "--host", "0.0.0.0", "--port", "8001"]
 
@@ -637,10 +637,10 @@ Let me batch these.
 <content>
 1: import os
 2: from datetime import datetime
-3:
+3: 
 4: from fastapi import FastAPI, HTTPException, Query
 5: from pydantic import BaseModel
-6:
+6: 
 7: try:  # Package import is used by the host service; fallback keeps the legacy CLI usable.
 8:     from .db_adapter import healthcheck, latest_ohlcv
 9:     from .generator import generate_placeholder_signal
@@ -649,10 +649,10 @@ Let me batch these.
 12:     from db_adapter import healthcheck, latest_ohlcv
 13:     from generator import generate_placeholder_signal
 14:     from kronos_real import real_signal
-15:
-16:
+15: 
+16: 
 17: class PredictResponse(BaseModel):
-18:
+18:     
 …[truncated]
   ```
   </details>
@@ -668,15 +668,15 @@ Let me batch these.
 3: import time
 4: from dataclasses import dataclass
 5: from pathlib import Path
-6:
+6: 
 7: import pandas as pd
-8:
+8: 
 9: try:  # Package import is used by the host service; fallback keeps the legacy CLI usable.
 10:     from .generator import clamp
 11: except ImportError:  # pragma: no cover - direct script compatibility only.
 12:     from generator import clamp
-13:
-14:
+13: 
+14: 
 15: @dataclass
 16: class ModelStatus:
 17:     enabled: bool
@@ -686,8 +686,8 @@ Let me batch these.
 21:     tokenizer: str
 22:     device: str
 23:     error: str | None = None
-24:
-25:
+24: 
+25: 
 26: class KronosRealSignal:
 27:     def __init__(self):
 28:         self.enabled
@@ -702,14 +702,14 @@ Let me batch these.
 <type>file</type>
 <content>
 1: """F001 Kronos 推理冒烟：AC-002（编排内契约）+ AC-006（真实推理证据）。
-2:
+2: 
 3: AC-002 —— 编排内常绿：`/health` 200，`/predict` 返回结构合法的信号，且 `source`
 4: 与 `/health` 的 `model_enabled` **一致**（mock→placeholder，real→kronos）。声明真实
 5: 模型却回 placeholder 一律判红，不是放水的降级判据。
-6:
+6: 
 7: AC-006 —— 真实推理证据：需要 391MB 权重与 vendor clone，不在默认编排内，因此由独立
 8: 命令验证（前置条件见 spec §7 / vendor/VENDORED.md）：
-9:
+9: 
 10:     set -a; . ./deployment/.env; set +a   # DB_HOST 默认是 compose 服务名，宿主上不可解析
 11:     DB_HOST=127.0.0.1 KRONOS_USE_REAL_MODEL=true KRONOS_REPO_PATH=vendor/Kronos \
 12:       .venv/bin/python -m uvicorn alphamill.kronos_service.server:app --port 8002 &
@@ -727,7 +727,7 @@ Let me batch these.
 <content>
 1: [Unit]
 2: Description=AlphaMill dry-run runtime snapshot (freqtrade API -> TimescaleDB)
-3:
+3: 
 4: [Service]
 5: Type=oneshot
 6: WorkingDirectory=%h/projects/alphamill
@@ -799,13 +799,13 @@ Let me batch. PRD is 309 lines — read fully. Architecture 577 lines — grep �
 10: created: 2026-09-06
 11: updated: 2026-09-12
 12: ---
-13:
+13: 
 14: # F001：quant-crypto 资产清算迁移
-15:
+15: 
 16: > Owner: Georg | Target: v0.1.0
-17:
+17: 
 18: ## 0. 来源与意图
-19:
+19: 
 20: - **PRD 来源**：`docs/alphamill-prd.md` §1.2 决策 4（复用成熟基础设施）与里程碑 M0
 21: - **架构来源**：`docs/alphamill-architecture.md` §五（资产清算迁移表）、§七（部署拓扑）
 22: - **系统设计 / Research / Contract 来源**：`docs/features/0.1/F001-quant-crypto-migration/migration-plan.md`（迁移清单与验收）
@@ -822,30 +822,30 @@ Let me batch. PRD is 309 lines — read fully. Architecture 577 lines — grep �
 <type>file</type>
 <content>
 1: # AlphaMill — 产品需求文档（PRD）
-2:
+2: 
 3: > 版本：v0.1 | 日期：2026-09-13 | 状态：草案
-4:
+4: 
 5: ## 一、背景与问题定义
-6:
+6: 
 7: ### 1.1 quant-crypto 复盘
-8:
+8: 
 9: 上一代项目 quant-crypto 已建成可复用的数据、推理、执行、风控与监控基础设施：631 万行
 10: 1m OHLCV、衍生品特征、Kronos 信号缓存、Freqtrade dry-run、风险保护、90 天留出门和信号
 11: 质量监控。最终状态为 `blocked_no_paper_candidate`：所有候选均未通过最终留出。
-12:
+12: 
 13: 这次失败暴露的不是单点工具缺失，而是研究到交易之间没有形成可持续运转的闭环：
-14:
+14: 
 15: - 假设主要靠人工提出，5 周只覆盖 3 个信号族，探索速度慢；
 16: - 因子生成、成本评估、统计验证与策略构建的优化目标不完全一致；
 17: - 数据、实验、信号和交易结果之间缺少统一谱系，复现与重定价成本高；
 18: - 失败结果没有结构化回流为下一轮假设，研究循环无法积累；
 19: - 研究 PASS、组合纳入、部署和线上衰减之间缺少完整生命周期管理。
-20:
+20: 
 21: AlphaMill 要解决的不是“多生成一些公式”，而是把 **Alpha 的发现、证伪、部署和运营**
 22: 做成一条可信、可复现、可持续学习的生产管线。
-23:
+23: 
 24: ### 1.2 项目决策
-25:
+25: 
 26: 1. **以 AI 因子工厂为核心引擎**：程序化、RL、人工与 LLM 共同生产带来
 …[truncated]
   ```
@@ -879,15 +879,15 @@ Actually, let me just read architecture fully (577 lines) — it's the source fo
 <type>file</type>
 <content>
 1: # AlphaMill — 系统架构设计
-2:
+2: 
 3: > 版本：v0.1 | 日期：2026-09-13 | 配套：[alphamill-prd.md](./alphamill-prd.md)
-4:
+4: 
 5: ---
-6:
+6: 
 7: ## 〇、存储三件套分工（TimescaleDB / Parquet / DuckDB）
-8:
+8: 
 9: **不是三选一的竞品，是流水线上的三段**：Parquet 是文件格式（箱子），DuckDB 是查询引擎（开箱的手），TimescaleDB 是数据库服务（实时柜台）。
-10:
+10: 
 11: | | TimescaleDB | Parquet 湖 | DuckDB |
 12: |---|---|---|---|
 13: | 本质 | PG 时序扩展（数据库服务） | 列式文件格式（无服务） | 进程内 OLAP 查询引擎 |
@@ -895,7 +895,7 @@ Actually, let me just read architecture fully (577 lines) — it's the source fo
 15: | 擅长 | 实时最新值、连续聚合、Grafana 直连 | 大范围列扫描、快照不可变=可复现 | 直接对 Parquet 跑 SQL |
 16: | 复现性 | ❌ 数据会被回补/修订 | ✅ 同一 data_version 永远同结果 | 无关（读的人） |
 17: | 角色 | **联机运营库** | **研究快照**（封存账本） | **取数入口**（会计的手） |
-18:
+18: 
 19: ```text
 20: CCXT 采集 ──写入──▶ TimescaleDB（联机运营库，随时改）
 21
@@ -921,13 +921,13 @@ Actually, let me just read architecture fully (577 lines) — it's the source fo
 10: created: 2026-09-12
 11: updated: 2026-09-14
 12: ---
-13:
+13: 
 14: # F002：数据桥——Parquet 湖导出与 DuckDB 研究取数层
-15:
+15: 
 16: > Owner: Georg | Target: v0.2.0
-17:
+17: 
 18: ## 0. 来源与意图
-19:
+19: 
 20: - **PRD 来源**:`docs/alphamill-prd.md` FR1.2(不可变快照)、FR1.3(研究只读边界)、FR1.4(双口径与时间语义)、FR1.6(灾备,湖部分);里程碑 M1
 21: - **架构来源**:`docs/alphamill-architecture.md` §〇(存储三件套分工)、§四 data_bridge(质量门·对账·manifest)、§4.4(Parquet 湖 manifest 契约)
 22: - **系统设计 / Research / Contract 来源**:`docs/alphamill-integration.md` §一(TimescaleDB → Parquet 湖,导出设计/修订政策/
@@ -1097,28 +1097,28 @@ test_backup_nas_contract.p
 <content>
 1: #!/usr/bin/env python3
 2: """本地统一验证入口（公开验证唯一入口）。
-3:
+3: 
 4: 按固定顺序运行：规格生命周期校验 → 文档相对链接检查 → dev 依赖 pin 范围检查
 5: → 密钥模式扫描 → pytest → ruff check → ruff format check。任一步失败即记录，
 6: 全部跑完后汇总返回非零（不短路）。
-7:
+7: 
 8: 各底层命令仍可单独用于定位，但 README、SOP 与 CLAUDE 不再各自维护完整命令清单，
 9: 统一指向本入口。
-10:
+10: 
 11: 用法：
 12:     python3 tools/verify.py
 13: 退出码 0 表示全部通过；非 0 时打印失败步骤。
 14: """
-15:
+15: 
 16: from __future__ import annotations
-17:
+17: 
 18: import pathlib
 19: import subprocess
 20: import sys
-21:
+21: 
 22: ROOT = pathlib.Path(__file__).resolve().parent.parent
-23:
-24:
+23: 
+24: 
 25: def _run(cmd: list[str], label: str) -> bool:
 26:     print(f"\n== {label} ==")
 27:     proc = subprocess.run(cmd, cwd=ROOT)
@@ -1144,28 +1144,28 @@ test_backup_nas_contract.p
 8: created: YYYY-MM-DD
 9: updated: YYYY-MM-DD
 10: ---
-11:
+11: 
 12: # Fxxx：功能名称 - 任务
-13:
+13: 
 14: > Owner: TBD | Spec: `spec.md` | Design: `design.md`
-15:
+15: 
 16: ## 0. 来源与执行规则
-17:
+17: 
 18: - 行为与验收真相源：`spec.md`。
 19: - 技术方案与边界：`design.md`。
 20: - 每项任务只描述一个可验证动作，并引用合法的 US/需求/AC ID。
 21: - 完成且验证后立即把 `[ ]` 改为 `[x]`，不得最后统一补勾。
 22: - `[P]` 只用于修改不同文件、没有显式前置依赖且不会争用同一状态的任务。
 23: - 实现中若任务顺序或契约失效，先修订三件套，再继续编码。
-24:
+24: 
 25: 统一任务格式：
-26:
+26: 
 27: ```markdown
 28: - [ ] T001 [P] (`US-001`, `FR-001`, `AC-001`): <一个可验证动作> — verify: `path/to/test.ts`
 29: ```
-30:
+30: 
 31: ## 1. 前置条件
-32:
+32: 
 33: - [ ] T001 (`DQ-001`): 关闭所有阻塞性 spec/de
 …[truncated]
   ```
@@ -1227,18 +1227,18 @@ tqdm=
 <type>file</type>
 <content>
 1: """F001 dry-run compose/import contract regression tests."""
-2:
+2: 
 3: from pathlib import Path
-4:
+4: 
 5: ROOT = Path(__file__).resolve().parents[2]
-6:
-7:
+6: 
+7: 
 8: def test_freqtrade_service_mounts_repo_strategy_dependencies() -> None:
 9:     compose = (ROOT / "deployment/docker-compose.yml").read_text(encoding="utf-8")
 10:     strategy = (ROOT / "freqtrade/user_data/strategies/KronosFusionStrategy.py").read_text(
 11:         encoding="utf-8"
 12:     )
-13:
+13: 
 14:     assert "  freqtrade:" in compose
 15:     assert '      - "8080:8080"' in compose
 16:     assert "HTTP_PROXY: ${BINANCE_HTTPS_PROXY:-}" in compose
@@ -1255,21 +1255,21 @@ tqdm=
 <type>file</type>
 <content>
 1: name: CI
-2:
+2: 
 3: on:
 4:   push:
 5:     branches: [main]
 6:   pull_request:
-7:
+7: 
 8: # 同一分支的新提交取消仍在跑的旧任务，避免排队浪费。
 9: concurrency:
 10:   group: ${{ github.workflow }}-${{ github.ref }}
 11:   cancel-in-progress: true
-12:
+12: 
 13: # 供应链加固：本工作流只读仓库，不需要写权限。
 14: permissions:
 15:   contents: read
-16:
+16: 
 17: jobs:
 18:   # 步骤清单的唯一真源是 tools/verify.py：CI 只调用它，不复制各步骤
 19:   # （生命周期 / 文档链接 / 依赖 pin / pytest / ruff 全部由 verify.py 提供）。
@@ -1282,7 +1282,7 @@ tqdm=
 26:         # 下限锁 requires-python；上限跟随，用于尽早发现新版本行为差异。
 27:         python-version: ["3.11", "3.13"]
 28:     steps:
-29:       -
+29:       - 
 …[truncated]
   ```
   </details>
@@ -1318,7 +1318,7 @@ Let me design the test strategy in the design doc:
   - Dockerfile has two targets; default target = mock/base without torch; real target installs torch/einops/safetensors/huggingface_hub/tqdm pinned; compose default service uses default target; real service uses real target + profiles + :ro mounts + env + port mapping.
 - `tests/integration/test_f004_real_profile.py` (container, execution machine):
   - compose config with profile lists real service; default config doesn't.
-  - `docker compose -f deployment/docker-compose.yml --profile kronos-real up -d kronos-signal-real` → wait healthy → /predict source=kronos; identity: container = compose service (docker compose ps -q) and env/mounts asserted via `docker inspect`;
+  - `docker compose -f deployment/docker-compose.yml --profile kronos-real up -d kronos-signal-real` → wait healthy → /predict source=kronos; identity: container = compose service (docker compose ps -q) and env/mounts asserted via `docker inspect`; 
   - missing-asset path: `docker compose run --rm -e KRONOS_MODEL_PATH=...bogus... kronos-signal-real` exits non-zero with missing path in logs.
   - default image no torch: `docker compose build kronos-signal && docker run --rm ... python -c "import torch"` fails.
 - F001 smoke stays HTTP contract only (AC-002), and F001 AC-006 evidence command? The F001 spec §6 writeback (T004) will change the AC-006 command to compose form. And F004's AC-001 = compose profile instance returns kronos + default unchanged.
@@ -1340,7 +1340,7 @@ D002 fix details. The design must specify the thin-shell changes:
 1. **Startup preflight (fail-closed)**: when KRONOS_USE_REAL_MODEL=true, at process startup (FastAPI lifespan / module init):
    - required env/dirs exist: KRONOS_REPO_PATH (vendor clone), model dir (config.json + safetensors), tokenizer dir; verify required files present.
    - Missing → log clear error with missing paths → exit non-zero (process exit, container restarts? `restart: unless-stopped` would loop... hmm. If restart policy is unless-stopped and startup fails, docker will restart-loop. That's "启动即失败" but with restart loop. Should the compose service have `restart: "no"`? For the real service, better: `restart: unless-stopped` shows a crash loop as visible failure. Hmm, "容器启动即非零退出并打印缺失路径，不退回 mock". A crash loop satisfies visibility (docker ps shows restarting). But typically you'd prefer clean exit + no restart for config errors. The design can say `restart: "no"` for the real service so missing assets exit visibly without a loop. Actually let me keep it simple: specify `restart: "no"` (or absence of restart) so a failed preflight exits non-zero and stays exited for inspection. Let me note that in design.
-
+   
 2. **Eager load + readiness**: after preflight, load model/tokenizer once during startup (so /health reflects loaded state and /predict doesn't do first-call load). Decide: should startup fail if model load fails (fail-closed)? Yes — spec says missing weights/vendor → startup fails. If weights exist but torch errors, also fail startup (real mode). Hmm — but F001 /health contract has `model_error` field and `model_available`/`degraded` semantics... Currently /health returns status=degraded if enabled but not available. For real profile, do we want the process to exit on load failure or serve degraded /health? spec §7 says "权重或 vendor 缺失 → 容器启动即失败"; model load error is the same category ("缺资产"). I'd specify: real mode preflight failure (paths/deps/load) → startup non-zero exit; /health served only after successful eager load. That's fail-closed. But wait — does that break ACO-002 semantics ("model_enabled true but not available → degraded")? That's for mock-mode container with real model env accidentally enabled... hmm, actually the /health degraded path exists for the host use case. For the real compose service we can still define: preflight passes but load errors → exit non-zero. The /health degraded status remains for any running instance that somehow lost availability — but with eager load, once loaded, it stays loaded. Hmm, but eager-load failure exit makes "degraded" unreachable in real mode. That's fine; /health's fields stay for contract compatibility.
 
    Alternatively: keep /health serving with model_error after a failed load, and make the container healthcheck fail → container marked unhealthy. But spec explicitly promises process non-zero exit for missing assets. Simplest consistent: startup preflight + eager load; any failure → log + exit non-zero. /health then always shows loaded=true in real mode.
@@ -1365,7 +1365,7 @@ D003 fix: commands with `-f deployment/docker-compose.yml` everywhere; data prec
 Also design §5 commands: `docker compose -f deployment/docker-compose.yml --profile kronos-real up -d kronos-signal-real`.
 
 D006 fix: design §0 执行环境: "与 F001 收口态一致" → change to: "集成与容器验收在执行机 `qiaozhi-lt`（Win11+WSL2，RTX 4060 Laptop 8GB；本 feature 不做 GPU 直通，容器验收 `device=cpu`，CPU 推理实测 3.4–7.2s/次）；开发机 `qiaozhi-gp`/`gp-wsl` 只跑静态编排断言与单元门禁（SOP §3、架构 §7.1）"。
-And design §8/ tasks T003: "验收证据记录 hostname（qiaozhi-lt）与 device=cpu". Also spec AC-001? AC-001 is tests: test file. The AC text should maybe mention evidence recorded on execution machine with hostname/device. Let me update spec AC-001 and/or §7 测试策略: "容器集成验收在执行机取，证据记录 hostname 与 device=cpu".
+And design §8/ tasks T003: "验收证据记录 hostname（qiaozhi-lt）与 device=cpu". Also spec AC-001? AC-001 is tests: test file. The AC text should maybe mention evidence recorded on execution machine with hostname/device. Let me update spec AC-001 and/or §7 测试策略: "容器集成验收在执行机取，证据记录 hostname 与 device=cpu". 
 
 Hmm wait, careful: D006 says "design 仍以'本机无独显'作为集成环境，tasks 未记录 hostname/device". Fix both design and tasks. Also spec's "执行环境" maybe. The spec §0 输入与约束 is in design; spec has non-goal about GPU. Let me update:
 - design §0 bullet: rewrite执行环境.
@@ -1373,7 +1373,7 @@ Hmm wait, careful: D006 says "design 仍以'本机无独显'作为集成环境�
 - tasks T003 verify: add evidence requirement (hostname + device) — maybe as separate task? The reviewer said "tasks 未记录 hostname/device; 与 SOP 的执行机取证硬规则冲突". I'll add to T003: "验收证据记录取证机 hostname 与 device=cpu" and maybe a T0xx "集成验收在 qiaozhi-lt 执行并记录 hostname/device; 开发机只跑静态与单元门禁". Better as explicit acceptance task.
 
 D009 fix: spec §0 PRD 来源: "FR3（信号生产）与 M1 运行基座" → correct. What's right? Let me think:
-- M0 exit: "回填完整性校验、Kronos /health、采集、dry-run、监控和恢复演练全绿" — F004's Kronos runtime is M0-adjacent but M0 is done. The real runtime in orchestration serves M1's data base (signals_log real content) and eventually FR3 evaluation input (Kronos as first factor).
+- M0 exit: "回填完整性校验、Kronos /health、采集、dry-run、监控和恢复演练全绿" — F004's Kronos runtime is M0-adjacent but M0 is done. The real runtime in orchestration serves M1's data base (signals_log real content) and eventually FR3 evaluation input (Kronos as first factor). 
 - FR1.2: snapshot includes Kronos signals → the signals_log dataset. F004 makes the Kronos signal source real.
 - FR5 runtime chain? Per suggested fix: "M0、FR1.2 与相关 FR5 运行链". Which FR5 clause relates? FR5.1 versioned signal contract? Hmm, F004's product: signals from Kronos service → written to DB signals_log → exported to lake by F002 (FR1.2) → evaluated (FR3) → eventually deployed via signal_cache (FR5). The direct PRD support is M0 (runtime baseline) + FR1.2 (snapshot includes Kronos signals). FR5 — maybe "FR5.3 Freqtrade 适配"? Not really. But the reviewer explicitly suggests including FR5. Hmm. Wait, maybe they mean the F001 dry-run chain? Freqtrade consumes Kronos signals from mock :8001 in default. Actually the "运行链" (Freqtrade) is currently mock-driven. F004's real instance could serve dry-run in the future. The review phrasing: "把来源改为直接支持该能力的 M0、FR1.2 与相关 FR5 运行链，并说明 F004 与 FR3 的关系仅是为评测提供 Kronos 信号输入".
 
@@ -1415,7 +1415,7 @@ But wait — there's a subtlety: T003 (start profile & confirm) now needs the ne
 
 Phase 1：薄壳与镜像
 - T001: 薄壳改造 — startup preflight + eager load + inference lock, keep HTTP contract — verify: new unit tests `tests/unit/test_f004_kronos_startup.py` etc.
-- T002: Dockerfile multi-stage targets (mock default / real with pinned torch etc.) — verify: `tests/unit/test_f004_compose_profile_contract.py` (static)
+- T002: Dockerfile multi-stage targets (mock default / real with pinned torch etc.) — verify: `tests/unit/test_f004_compose_profile_contract.py` (static) 
 - T003: compose real service with profile/mounts/port/env — verify: same static test...
 - T004 [P]: 静态门禁测试 (compose profile contract + Dockerfile targets) — actually the tests should be written... hmm, who writes tests: separate task. Let me shape:
 
@@ -1444,7 +1444,7 @@ Hmm, "必须写目标 Feature/版本" — "v0.2 后续 feature（待立项）" g
 
 Wait, actually, should I create a tracked task in tasks.md (per review-convergence §4: "没有条目 → 先在 tasks.md 建条目(必须含验收标准 AC)，再标 tracked")? Hmm — that rule is for findings that are "上游任务还没执行" product gaps. D001's resolution options: wire or delete. If I delete the promise and defer routing, is the deferred routing a tracked task? The review's suggested fix option B says "删除'自动升级 signals_log'的范围承诺" — not necessarily create a task. But the review-convergence skill says deferred items need a carrier. §5 明确后移 is the tasks.md carrier for "移交给其它 Feature/版本". But it says "只能放明确移交给其它 Feature/版本的内容，必须写目标 Feature/版本". If the routing isn't assigned to a feature, is it allowed? Hmm. Options:
 1. Put in §5 with "v0.2 后续（未立项）" — weak on "must write target".
-2. Ask the user/owner to decide whether to open a follow-up feature.
+2. Ask the user/owner to decide whether to open a follow-up feature. 
 3. Actually reconsider: maybe the right call is Option A-lite: keep real instance available AND actually switch the snapshot consumer? No...
 
 Hmm hold on. Let me reconsider D001 once more. Let me re-read the snapshot script to see exactly what it does with 8001/8002, because the script's default is 8002 and the service overrides to 8001. If the intended runtime topology (arch §7) is "Kronos 常驻推理" on the execution machine serving dry-run, and compose mock currently serves 8001... The F004 real profile publishes 8002. The snapshot service could be re-pointed to 8002 IF the real profile runs persistently on the execution machine. Actually maybe that's the real end goal: on the execution machine, run the real profile permanently (it's the "Kronos 常驻推理" from arch §7!), and then the snapshot consumer should indeed point to it. But then the mock default and real co-existence... The design says 8002 coexists with 8001 mock to avoid one replacing the other. For the execution machine's production-ish setup, they'd run the real profile and could repoint the service to 8002. But that's an operational choice, not automatic. "F004 落地后 signals_log 内容自动升级" — if the operator switches the service URL manually, it upgrades. But "自动" is false.
@@ -1465,7 +1465,7 @@ But wait, there's still the question: does Option B leave the F004 spec's "一�
 
 Actually — wait. Let me re-read D001's suggested fix once more: "明确 profile 启用时 Freqtrade 与 runtime snapshot 的路由切换，并以 signals_log.source=kronos 的端到端断言验收；否则删除'自动升级 signals_log'的范围承诺。" — "删除承诺" is in F004 spec. The F002 sentence is a consequence. The review didn't list F002 as a finding (it's `done`). In the FIX-log I can note: "F002 spec §6 的'内容自动升级'表述不再成立，因 F002 已 done、不在本轮受检产物内，建议随下一轮复核或 F002 勘误处理"— but that's exactly the "没有载体的 deferred item" problem the skill warns about. Better: also fix F002's sentence since it's now known-false, OR add a tracked item. Hmm. The skill says: "检视文件是过程稿...真正落进 git 的是闭环后检视人提交的最后总结". Doc edits go into git.
 
-Let me think about the blast radius: F002 spec is done; its §6 claim "F004 落地后内容自动升级，F002 无需返工" is factually wrong under option B. The F002 "已知限制" paragraph's purpose is to warn that signals_log content isn't research-usable. Fixing the last sentence to say "F004 落地后真实实例在编排内可用；要使其进入 signals_log 需另行切换消费者路由" preserves the warning and removes the false auto-upgrade. This is a factual correction of a cross-feature claim; both docs get consistent. I think it's justified and within the spirit of fixing D001's root issue (the claim exists in two places; if I only fix one, the project still carries the false claim).
+Let me think about the blast radius: F002 spec is done; its §6 claim "F004 落地后内容自动升级，F002 无需返工" is factually wrong under option B. The F002 "已知限制" paragraph's purpose is to warn that signals_log content isn't research-usable. Fixing the last sentence to say "F004 落地后真实实例在编排内可用；要使其进入 signals_log 需另行切换消费者路由" preserves the warning and removes the false auto-upgrade. This is a factual correction of a cross-feature claim; both docs get consistent. I think it's justified and within the spirit of fixing D001's root issue (the claim exists in two places; if I only fix one, the project still carries the false claim). 
 
 But hold on — the review scope says "受检产物:F004 三件套" and "相邻契约:F001 AC-006、F002 signals_log..." — adjacent contracts were consulted for evidence but not reviewed. If I edit F002 spec, Round 2 (diff-only) will see it and can check. I'd rather fix it and note it in FIX-log as a consequential edit required by D001. Actually, you know what? Let me keep this minimal but correct: I will fix the F002 sentence too, because leaving a known-false contract sentence is itself a defect I'm now aware of, and the skill's "根因修复" principle says don't leave the root unaddressed. I'll note it clearly in FIX-log as part of D001's fix (cross-file consequence).
 
@@ -1493,11 +1493,11 @@ Let me batch reads:
 3:     [string]$Exchange = $(if ($env:KRONOS_SIGNAL_EXCHANGE) { $env:KRONOS_SIGNAL_EXCHANGE } else { "binance" }),
 4:     [string[]]$Symbols = @("BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT")
 5: )
-6:
+6: 
 7: $ErrorActionPreference = "Stop"
 8: $projectRoot = Split-Path -Parent $PSScriptRoot
 9: Set-Location $projectRoot
-10:
+10: 
 11: function ConvertTo-SqlLiteral {
 12:     param([AllowNull()]$Value)
 13:     if ($null -eq $Value) {
@@ -1505,7 +1505,7 @@ Let me batch reads:
 15:     }
 16:     return "'" + "$Value".Replace("'", "''") + "'"
 17: }
-18:
+18: 
 19: function ConvertTo-SqlNumber {
 20:     param([AllowNull()]$Value)
 21
@@ -1521,25 +1521,25 @@ Let me batch reads:
 <content>
 1: #!/usr/bin/env python3
 2: """规格生命周期校验（骨架版，node flavor 的 check-feature-gates.mjs 的 Python 对应）。
-3:
+3: 
 4: 校验 docs/features/<version>/Fddd-*/ 三件套：
 5:   - 三件套齐全、frontmatter 合法、ID 唯一、status/gate_version 合法
 6:   - spec.md 是状态唯一真相源（design/tasks 不得声明独立 status）
 7:   - gate v1：固定章节结构、Q/DQ 关闭、AC 引用第 4 节真实需求、
 8:     review/done 的 tests 路径真实存在
 9:   - BACKLOG.md 与所有非 done Feature 双向集合一致
-10:
+10: 
 11: 纯函数 + CLI 分离，只用标准库；参考项目在此基础上抽了共享 spec_validation 模块
 12: 并补了变异测试。用法：python tools/validate_spec_lifecycle.py
 13: 退出码 0 = 全部通过；1 = 存在违规。
 14: """
-15:
+15: 
 16: from __future__ import annotations
-17:
+17: 
 18: import pathlib
 19: import re
 20: import sys
-21:
+21: 
 22: ROOT = pathlib.Path(__file__).resolve().parent.parent
 23: ALLO
 …[truncated]
@@ -1653,17 +1653,17 @@ dev = [
 <type>file</type>
 <content>
 1: # BACKLOG —— 活跃 Feature 索引
-2:
+2: 
 3: 本文件只列 `status != done` 的 Feature，是 `docs/features/<version>/Fxxx-*/spec.md`
 4: frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独立状态真相源）。
-5:
+5: 
 6: | Feature | 版本 | 状态 | 链接 |
 7: |---|---|---|---|
 8: | F003-alphagen-vendor | 0.2 | draft | [spec](docs/features/0.2/F003-alphagen-vendor/spec.md) |
 9: | F004-kronos-inference-runtime | 0.2 | draft | [spec](docs/features/0.2/F004-kronos-inference-runtime/spec.md) |
 10: | F007-evaluation-gates | 0.2 | draft | [spec](docs/features/0.2/F007-evaluation-gates/spec.md) |
 11: | F008-universe-expansion | 0.2 | draft | [spec](docs/features/0.2/F008-universe-expansion/spec.md) |
-12:
+12: 
 13: > 规则：feature 状态变更（spec frontmatter）时必须同步本表；`done` 的 Feature 移出本表
 …[truncated]
   ```
@@ -1685,22 +1685,22 @@ dev = [
 8: created: 2026-09-12
 9: updated: 2026-09-14
 10: ---
-11:
+11: 
 12: # F002:数据桥——Parquet 湖导出与 DuckDB 研究取数层 - 任务
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Design: `design.md`
-15:
+15: 
 16: ## 0. 来源与执行规则
-17:
+17: 
 18: - 行为与验收真相源:`spec.md`。
 19: - 技术方案与边界:`design.md`。
 20: - 每项任务只描述一个可验证动作,并引用合法的 US/需求/AC ID。
 21: - 完成且验证后立即把 `[ ]` 改为 `[x]`,不得最后统一补勾。
 22: - `[P]` 只用于修改不同文件、没有显式前置依赖且不会争用同一状态的任务。
 23: - 实现中若任务顺序或契约失效,先修订三件套,再继续编码。
-24:
+24: 
 25: ## 1. 前置条件
-26:
+26: 
 27: - F001 已 done:TimescaleDB 数据就绪(631 万行 binance)、`lake/` 目录位与 NAS 通道已预留、调度先例(backup/snapshot timer)
 …[truncated]
   ```
@@ -1756,7 +1756,7 @@ Now D004 test strategy — design §8 table needs rows:
 
 And spec §7 测试策略 updated accordingly; AC-001 tests field should reference... AC format: tests: one or more paths. I can list two paths: `tests/unit/test_f004_compose_profile_contract.py`、`tests/integration/test_f004_real_profile.py`. The gate regex extracts backticked paths; multiple OK (F002 AC-015 lists two paths separated by 、). Good.
 
-D006 fix:
+D006 fix: 
 - design §0: execution environment rewrite.
 - design §8: note execution machine + evidence fields.
 - tasks: T for evidence machine + T003 updated to record hostname/device.
@@ -1868,7 +1868,7 @@ RETROSPECTIVE.md
 
 Actually, more important: the skill says exactly what FIX-log should contain. Let me also check whether there's an existing FIX-log (no — docs/reviews only has CURRENT-doc.md and RETROSPECTIVE.md). I'll create FIX-log.md.
 
-Let me check the latest cycle entries (F002 code review) to see how doc-fix rounds were committed and whether they used branches. From git log: "16d8733 docs(f002): 检视循环 10 收口——证据指针勘正、T021 跟踪与复盘回写", "ad09ff4 fix(F002): close review findings and harden data bridge", etc. — direct commits on main. So committing per-finding docs fixes on main is the established convention.
+Let me check the latest cycle entries (F002 code review) to see how doc-fix rounds were committed and whether they used branches. From git log: "16d8733 docs(f002): 检视循环 10 收口——证据指针勘正、T021 跟踪与复盘回写", "ad09ff4 fix(F002): close review findings and harden data bridge", etc. — direct commits on main. So committing per-finding docs fixes on main is the established convention. 
 
 Let me check the tail of RETROSPECTIVE for cycle 10 (F002) to see reporting style, and also look for any F004 mention. Let me grep for F004 in RETROSPECTIVE.
 
@@ -1901,7 +1901,7 @@ Alternatively — even simpler — could I mark it tracked per the skill §4: "�
 
 Wait, actually, hold on. Let me reconsider whether deleting the signals_log claim satisfies D001 as "fixed". The reviewer's suggested alternative: "否则删除'自动升级 signals_log'的范围承诺". If I delete it, then the spec's one-liner/intent loses "让 F002 导出的 signals_log 能承载真实信号" — D001 fixed. ✓.
 
-But there's a nuance: the F004 spec §2 US-001 "以便 AC-006 与 signals_log 的内容有效性不依赖任何仓外手工步骤" — with the claim removed, US-001 must be adjusted. And "为什么是这个优先级: 但 F002 的 signals_log dataset 要有研究价值就需要它" — that's actually still true-ish ("要研究价值就需要真实信号源") but not automatically. I'll rephrase to avoid the auto-upgrade implication: "F002 的 signals_log 要有研究价值需要真实信号源；F004 提供该信号源（消费者接线另计）".
+But there's a nuance: the F004 spec §2 US-001 "以便 AC-006 与 signals_log 的内容有效性不依赖任何仓外手工步骤" — with the claim removed, US-001 must be adjusted. And "为什么是这个优先级: 但 F002 的 signals_log dataset 要有研究价值就需要它" — that's actually still true-ish ("要研究价值就需要真实信号源") but not automatically. I'll rephrase to avoid the auto-upgrade implication: "F002 的 signals_log 要有研究价值需要真实信号源；F004 提供该信号源（消费者接线另计）". 
 
 OK. Now the detailed edit plan. Files to edit:
 1. `docs/features/0.2/F004-kronos-inference-runtime/spec.md`
@@ -2021,11 +2021,11 @@ Current bullets:
 **§1 技术概要**:
 Rewrite para: "给 `kronos-service.Dockerfile` 拆出 `mock`（现默认）与 `real` 两个构建目标；real 目标安装 torch CPU wheel（`--index-url https://download.pytorch.org/whl/cpu`，pin `torch==2.14.0`）与推理最小依赖（einops/safetensors/huggingface_hub/tqdm，版本见 §2）；compose 用 `profiles: [kronos-real]` 挂 `kronos-signal-real`，默认 `up` 不启用、不构建该服务。薄壳做最小改造：real 模式启动预检 + eager load + 推理锁。"
 
-- 影响面 bullets:
+- 影响面 bullets: 
   - 后端 / API：无契约变更；`kronos_service` 薄壳最小改造（启动预检/eager load/推理锁，HTTP 契约不变）
   - 文档/配置: keep + 命令统一 `-f deployment/docker-compose.yml`
-
-**§2 架构与模块边界**:
+  
+**§2 架构与模块边界**: 
 - "沿用 F001 的 `src/alphamill/kronos_service/`，不新增 Python 模块。差异只在镜像层与挂载" → "沿用 `src/alphamill/kronos_service/`，不新增模块；差异=镜像层与挂载 + 薄壳三处最小改造（启动预检、eager load、进程级推理锁，见 §5）。容器内路径与环境变量（D008）：
 ```
 | 项 | 值 |
@@ -2191,7 +2191,7 @@ Now, the FIX-log content. Round 1:
 ## Round 1 · 2026-09-14
 - findings: F004-D001..D010
 - commits: D001 <hash>, D002 <hash>, ...
-- regression_tests: doc diffs + `python3 tools/verify.py` ...
+- regression_tests: doc diffs + `python3 tools/verify.py` ... 
 ```
 Hmm, for doc review the skill says regression evidence = "文档被改+链接/格式检查通过". Also "检视意见固化为门禁失败测试后才允许关闭:先让测试红(复现 finding),修复后变绿" — for docs, the门禁 is verify.py (links/lifecycle). Can I make a failing gate for each doc finding? Not directly. But I can add meaningful gate tests where the finding is structural:
 - D004/D007: the new static compose contract test — will be added in implementation (future), can't add now (no code). In the doc round, the deliverable is the doc change only. Right? Hmm. Wait — should the fix round for a doc review also add gate tests now? The review's closure evidence for doc-review is "文档被改+链接/格式检查通过". The tests listed in design/tasks are commitments for the implementation round. So no new tests now. Good.
@@ -2201,7 +2201,7 @@ One more check: the FIX-log must be written by the fixer; I'm the fixer. The rev
 
 RETROSPECTIVE update happens at closure (reviewer), not now. ✓.
 
-Also commit discipline: one finding per commit. 10 findings → 10 commits? Some findings touch same file sections; skill says one finding one commit — but F004-D001+D009 both edit spec §0... They're different lines; separate commits are possible but sequential edits to the same file make per-finding commits mechanical. The skill says batch fix without per-finding commits loses bisect; I'll do one commit per finding, ordered D001..D010. That's 10 commits. Hmm, plus maybe a final docs/reviews not-committed (gitignored). Since FIX-log is gitignored, no commit for it.
+Also commit discipline: one finding per commit. 10 findings → 10 commits? Some findings touch same file sections; skill says one finding one commit — but F004-D001+D009 both edit spec §0... They're different lines; separate commits are possible but sequential edits to the same file make per-finding commits mechanical. The skill says batch fix without per-finding commits loses bisect; I'll do one commit per finding, ordered D001..D010. That's 10 commits. Hmm, plus maybe a final docs/reviews not-committed (gitignored). Since FIX-log is gitignored, no commit for it. 
 
 Wait, but should I commit at all? Let me re-examine. Earlier thought: user asked to follow the skill; skill mandates commits. The system prompt says never commit unless explicitly requested. The user's message: "请作为修复者严格按照skill要求审视每个问题并修复" — "as the fixer, strictly follow the skill requirements to examine each issue and fix". The skill's fixer duties include: FIX-log with `commits:` evidence and per-finding commits; also round-end full gate. I'll treat this as authorization. Also the repo's whole review protocol (past cycles) committed fixes on main. And the FIX-log template requires commit hashes — "证据三件套...缺一视同未修复". So yes, commit.
 
@@ -2258,7 +2258,7 @@ Also US-001 story change (above).
 Now — action plan for edits. Because several findings touch the same file, I'll implement them sequentially per finding, committing after each finding's edits, so each commit maps to a finding. Let me plan the commit order and per-commit diffs:
 
 Commit order (one per finding, ordered to minimize conflicts):
-1. D001 — spec.md (§0 intent, §2 US-001, §3 范围外, §7 依赖/决策表) + F002 spec sentence.
+1. D001 — spec.md (§0 intent, §2 US-001, §3 范围外, §7 依赖/决策表) + F002 spec sentence. 
 2. D009 — spec.md §0 PRD source line. (separate commit; edit same file after D001)
 3. D002 — spec.md §4 FR-001 + scenario + §5 invariants; design.md §2/§5/§7/§8/§9; tasks.md T001/T002 + DAG. Hmm — D002 spans spec too (invariants). But D002's suggested fix says "在 design/tasks 中加入..." — spec support edits are natural. OK.
 4. D003 — spec.md §2 独立测试 + §7 依赖 env; design §5 command; tasks commands. Hmm, overlaps with D002/doc positions. Fine, sequential.
@@ -2794,7 +2794,7 @@ Let me create the todo list. The task list should reflect the 10 findings + fina
 8. D008 fix: mount contract (commit)
 9. D009 fix: PRD sources (commit)
 10. D010 fix: tasks DAG/split (commit)
-11. Run verify.py + commit any residual?
+11. Run verify.py + commit any residual? 
 12. Write FIX-log Round 1.
 
 Hmm, wait. There's overlap in content: D002 tasks T001/T002, D004 tasks T005/T006, D005 tasks T003, D006 tasks T008, D007 tasks T003/T005, D010 tasks restructure. If I edit tasks.md incrementally in finding order, by the time I get to D010 the file might already be fully restructured — leaving D010 commit with little. Alternatively I could restructure tasks.md fully at D010 stage and have earlier commits only touch spec/design, with tasks changes all in the D010 commit (as the "shared file region" merge precedent: "D034+D037 因共用 tasks.md 编号编辑面合并为一 commit，检视人追认"). Hmm, but then D002/D004/D005/D006/D007 fixes' task-side changes are in the D010 commit, which is flagged as D010's. The FIX-log can note: tasks.md restructure (D010) incorporates the task additions for D002/D004/D005/D006/D007 in one commit due to shared file. That matches the precedent and keeps commits meaningful.
@@ -2814,7 +2814,7 @@ Actually, one more consideration before editing: the CURRENT-doc.md review says 
 
 Let me now write the todos and begin.
 
-Also: should I remove the "updated:" frontmatter dates? I'll bump spec/design/tasks `updated: 2026-09-14` and F002 spec stays 2026-09-14 (already).
+Also: should I remove the "updated:" frontmatter dates? I'll bump spec/design/tasks `updated: 2026-09-14` and F002 spec stays 2026-09-14 (already). 
 
 Let me carefully produce each edit. Start with D001.
 
@@ -2837,12 +2837,12 @@ Order: D001 then D009 (both spec §0, sequential). Or D009 first then D001? Eith
 
 Hmm, one question: is citing FR5 right? Let me scan FR5 again: "FR5 部署与交易执行" — FR5.1 版本化信号契约 (feather cache), FR5.3 Freqtrade 适配. Hmm, honestly the Kronos service feeds Freqtrade in F001 (KRONOS_SIGNAL_URL). But F004 explicitly doesn't rewire consumers. Is citing FR5 misleading? The review suggested "相关 FR5 运行链". I'll phrase it as "FR5（运行链：信号服务的运行时载体）" — hmm, is the Kronos service part of FR5's runtime chain? In F001, Freqtrade consumes Kronos signal URL (live inference for strategy!) — actually looking at KronosFusionStrategy and KRONOS_SIGNAL_URL: freqtrade calls the Kronos service for signals at decision time. That IS the FR5.3 execution chain. So yes, the Kronos service is a runtime dependency of the execution chain; F004 improves its real-runtime capability. And under the current scope, consumers aren't switched — but the "运行时载体" citation remains defensible. Keep, with the mention that F004 only provides the runtime (routing out of scope).
 
-**D003 edits:**
+**D003 edits:** 
 - spec §2 独立测试: new text with `-f` command + preconditions + evidence machine note? Wait, evidence machine is D006. Ugh — same line gets touched by D003 (command+data) and D006 (evidence machine). Sequence: D003 edits now; D006 edits later. OK.
   D003 text: "新 clone + 权重就位 + DB 已迁移且目标 exchange/symbol 有 ≥30 根已闭合 1m K 线后，`docker compose -f deployment/docker-compose.yml --profile kronos-real up -d` 再跑 AC-006 命令全绿。"
   D006 appends: "；容器集成验收在执行机 qiaozhi-lt 取证并记录 hostname/device=cpu，开发机只跑静态与单元门禁（§7）." — wait, I planned this in US-001 during D006. OK.
 - spec §2 验收场景 1 command: `docker compose -f deployment/docker-compose.yml --profile kronos-real up -d`.
-- spec §3 边界场景: add data-insufficiency bullet (D003? D002 added it? I planned "数据不足" bullet under 边界场景 — assign to D003).
+- spec §3 边界场景: add data-insufficiency bullet (D003? D002 added it? I planned "数据不足" bullet under 边界场景 — assign to D003). 
 - spec §7 依赖: add environment pref with ≥30 candles + docker build capability? D003 edit.
 - spec §7 测试策略: F004 integration test description... that's D004. Hmm, D003's fix: "统一使用 docker compose -f deployment/docker-compose.yml，并声明数据库迁移完成且目标 exchange/symbol 至少有 30 根已闭合 1m K 线，补齐新 clone 的数据准备步骤或收窄场景。" So D003 touches: §2 独立测试, §2 scenario command, §3 边界场景 (data), §7 依赖 (preconditions), maybe §1 问题? No.
 - design §0 输入与约束: add data precondition bullet? I planned to include in implementation constraints: "；`/predict` 数据前置为目标 exchange/symbol 至少 30 根已闭合 1m K 线". D003.
@@ -3179,7 +3179,7 @@ Add data bullet: "- 数据不足：目标 exchange/symbol 少于 30 根已闭合
 
 - 上游：F001（薄壳、权重流程、AC-006 命令）；
 - 下游（非本 feature 承诺）：...
-- 外部/环境依赖: ?
+- 外部/环境依赖: ? 
 ```
 Wait the original had:
 "- 上游：F001（薄壳、权重流程、AC-006 命令）；
@@ -3701,7 +3701,7 @@ Add:
 design §9 add decision row:
 "| 依赖 pin 取宿主 AC-006 实测版本 | torch 2.14.0（CPU index）+ einops 0.8.2 / safetensors 0.8.0 / huggingface_hub 1.31.0 / tqdm 4.70.0 | 与已实测通过的宿主环境一致；上游 requirements 仅参考 | 容器内真实权重加载验证通过后锁定 |"
 
-Also design §7? maybe not needed. tasks T003 deferred to D010 (will mention deps).
+Also design §7? maybe not needed. tasks T003 deferred to D010 (will mention deps). 
 
 Also check spec §1 问题 mentions... no deps. spec §7 依赖 mentions "执行机 docker-ce 可构建 torch CPU 镜像" — fine.
 
@@ -4038,18 +4038,18 @@ Also commit D008 after verifying.
 <type>file</type>
 <content>
 23: ## 1. 技术概要与影响面
-24:
+24: 
 25: 给 `kronos-service.Dockerfile` 拆出 `mock`（保持现状、不含 torch）与 `real` 两个构建目标；compose 两个服务各自显式声明 target，`kronos-signal-real` 用 `profiles: [kronos-real]`，默认 `up` 不启用也不构建该服务。薄壳做三处最小改造：real 模式启动预检、模型 eager load 与进程级推理锁（§5）。
-26:
+26: 
 27: - 后端 / API：无变更（同一份 `kronos_service`）
 28: - 存储 / Migration：无
 29: - Event / Evidence：F001 AC-006 的复跑命令改为 compose 形态
 30: - 文档 / 配置：F001 spec §6 命令回写；`vendor/VENDORED.md` 补容器内路径说明
-31:
+31: 
 32: ## 2. 架构与模块边界
-33:
+33: 
 34: 沿用 F001 的 `src/alphamill/kronos_service/`，不新增模块；差异=镜像层与挂载 + 薄壳三处最小改造（启动预检、eager load、推理锁，见 §5）。real 服务的容器挂载、环境变量与端口契约：
-35:
+35: 
 36: | 项 | real 服务契约 |
 37: |---|---|
 38: | 构建目标 | `target: real`，`profiles: [kronos-real]
@@ -4104,7 +4104,7 @@ Let me restructure tasks more cleanly:
 - T002: 推理锁，verify: same unit file
 - T003: Dockerfile targets + deps，verify: static test file (new)
 - T004: compose service，verify: same static file + config commands
-- T005: 静态门禁补齐变异验证（default no torch etc.）→ this is part of T003/T004's tests...
+- T005: 静态门禁补齐变异验证（default no torch etc.）→ this is part of T003/T004's tests... 
 
 Hmm. Maybe better: make test creation explicit tasks per finding area:
 - T005 (`AC-001`): 静态编排门禁定稿 + 变异验证 (verify: static test + mutation record)
@@ -4248,13 +4248,13 @@ All 10 findings have commits. Now the round-end full gate + a coherence read of 
 10: created: 2026-09-12
 11: updated: 2026-09-14
 12: ---
-13:
+13: 
 14: # F004：Kronos 真实推理运行时（编排内可复现）
-15:
+15: 
 16: > Owner: Georg | Target: v0.2.x
-17:
+17: 
 18: ## 0. 来源与意图
-19:
+19: 
 20: - **PRD 来源**：`docs/alphamill-prd.md` M0（自包含运行基线：Kronos 服务在编排内健康）、FR1.2（`signals_log` 进入不可变快照）与 FR5（运行链：信号服务的运行时载体）；FR3（证据评测与验证）仅为下游关系——F004 为评测提供可复现的真实 Kronos 信号源，不实现评测本身
 21: - **架构来源**：`docs/alphamill-architecture.md` §七（部署拓扑）、§7.1（机器边界）
 22: - **上游来源**：F001 AC-006（真实推理证据，当前靠仓外手工实例）、F002 检视 F002-Q001（容器化不在数据桥契约内，需独立载体）
@@ -4270,17 +4270,17 @@ All 10 findings have commits. Now the round-end full gate + a coherence read of 
 <type>file</type>
 <content>
 65: ## 6. UI 与可观测性
-66:
+66: 
 67: 无新 UI；`/health` 的 `model_enabled`/`device`/`model_error` 已足以判别实例形态。
-68:
+68: 
 69: ## 7. 失败、恢复、安全与兼容
-70:
+70: 
 71: - 权重、分词器或 vendor 缺失/加载失败 → **启动期**即非零退出并打印缺失路径，**不退回 mock**（退回会让 AC-006 假绿）；`restart: "no"` 使失败态保持可见；
 72: - 资产只读：`vendor/Kronos` 与 `models/` 以 `:ro` 挂载，容器不写宿主资产；
 73: - 镜像体积：real 目标（torch CPU wheel 约 200MB）仅在启用 profile 时构建；默认镜像（mock 目标）不含 torch，默认编排行为不变（NFR-001）。
-74:
+74: 
 75: ## 8. 测试策略与验收映射
-76:
+76: 
 77: | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 78: |---|---|---|---|
 79: | `AC-001` | 静态契约（unit，CI 常绿） | `tests/unit/test_f004_compose_profile_contract.py` | Dockerfile 有 mock/real 目标且 real 锁定依赖 pin；real 服务 profiles/只读挂载/端口/环境正确；默认 compose 配置不含 real 服务 |
@@ -4359,13 +4359,13 @@ Let me read design 1-22.
 8: created: 2026-09-12
 9: updated: 2026-09-12
 10: ---
-11:
+11: 
 12: # F004：Kronos 真实推理运行时 - 设计
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Tasks: `tasks.md`
-15:
+15: 
 16: ## 0. 输入与约束
-17:
+17: 
 18: - **行为契约**：`spec.md`（FR-001 / NFR-001）
 19: - **上游 Contract**：F001 冻结的 Kronos HTTP API（`GET /health`、`GET /predict/{symbol:path}`、`POST /predict_batch`），零改动
 20: - **执行环境**：容器集成与验收在执行机 `qiaozhi-lt`（Win11 + WSL2 + docker-ce，RTX 4060 Laptop 8GB）取证，证据记录 hostname 与 `device=cpu`（本 feature 不做 GPU 直通；CPU 推理实测 3.4–7.2s/次）；开发机 `qiaozhi-gp`/`gp-ws
@@ -4470,7 +4470,7 @@ s                                                                        [100%]
 =========================== short test summary info ============================
 SKIPPED [1] tests/integration/test_f001_kronos_smoke.py:86: AC-006 需真实模型实例：设 KRONOS_REQUIRE_REAL_MODEL=1 并把 KRONOS_BASE_URL 指向真实实例（命令见本文件 docstring / spec §6 AC-006）
 SKIPPED [1] tests/integration/test_f002_schedule_backup.py:84: 未设置 ALPHAMILL_REAL_LAKE_DIR（本用例仅在有真实湖时运行）
-215
+215 
 …[truncated]
   ```
   </details>
@@ -4592,7 +4592,7 @@ One more check: is there anything in CURRENT-doc.md findings I haven't addressed
 - D009 ✓
 - D010 ✓ (complete DAG; T006 split into T009 evidence writeback / T011 status; final gate unified python3 tools/verify.py)
 
-All addressed.
+All addressed. 
 
 Now — one more consideration per skill §4: "回答完根因问题后,再答一道分类题:这是产品缺陷,还是'上游任务还没执行'?" Some findings (D002/D003/D004) are "implementation not yet done" — but they're design doc gaps (the design didn't plan the implementation path), which is exactly what doc review must fix before implementation. Fixed via docs, not tracked tasks. Good — no tracked items needed. The routing deferral is a scope decision with tasks §5 carrier.
 
@@ -4730,7 +4730,7 @@ Incremental: 0 f
     "content": "F004-D005: torch CPU wheel 版本与最小依赖 pin - 283f052",
     "status": "completed",
     "priority": "high"
-
+ 
 …[truncated]
   ```
   </details>
@@ -4891,7 +4891,7 @@ Where in spec: §7 测试策略 container bullet could add "并断言 /health �
 **D012 fixes:**
 1. design §1 影响面 bullet: "- 后端 / API：无变更（同一份 `kronos_service`）" → "- 后端 / API：HTTP 契约无变更；薄壳增加启动钩子改动（`server.py` 调用预检/eager load，`kronos_real.py` 实现，见 §5）"
    Wait — design §1 currently says "后端 / API：无变更（同一份 kronos_service）" — let me check current design line 27: "- 后端 / API：无变更（同一份 `kronos_service`）". Yes.
-2. tasks T001: explicitly list `server.py` 启动钩子: "T001 (`FR-001`): `kronos_real.py` 实现启动预检与 eager load，并在 `server.py` 启动钩子中调用（real 模式）..."
+2. tasks T001: explicitly list `server.py` 启动钩子: "T001 (`FR-001`): `kronos_real.py` 实现启动预检与 eager load，并在 `server.py` 启动钩子中调用（real 模式）..." 
 3. VENDORED.md writeback task: add to tasks. Where? design §1 影响面 says "文档 / 配置：F001 spec §6 命令回写；`vendor/VENDORED.md` 补容器内路径说明"。So add a task in Phase 3 or with T007: e.g. T007 becomes F001 writeback; add T008 as VENDORED.md update? That would renumber subsequent tasks. Alternatively fold into T007: "回写 F001 spec §6 ... 并更新 `vendor/VENDORED.md` 容器内路径说明". Hmm, one task = one verifiable action; two doc writebacks in one task is okay-ish but reviewer asked "为 VENDORED.md 回写增加任务" (add a task). Let me add a separate task T008 `(FR-001)`: "更新 `vendor/VENDORED.md`：补容器内路径（/app/vendor/Kronos、/app/models/...）与 real profile 说明" — verify: `python3 tools/verify.py`? The VENDORED.md is not in docs/ scanned by check_doc_links? check_doc_links scans docs/** + README/CLAUDE. vendor/VENDORED.md not scanned. Hmm, verify: "vendor/VENDORED.md 含容器内路径说明（人工核对）" — tasks verify needs a command/test. Maybe verify: `python3 tools/verify.py`（文档门）+ 人工核对。Hmm. Let me look at how F001 tasks referenced VENDORED... F001 T-task? There might be precedent. Not critical; I'll use `python3 tools/verify.py` plus explicit content check. Actually, better: since it's a doc file not covered by gates, the verify could be `grep -q "/app/vendor/Kronos" vendor/VENDORED.md`? A shell grep is a runnable command. Let me phrase: verify: `grep -n "app/vendor/Kronos" vendor/VENDORED.md`（含容器路径段）. Hmm, per tasks template verify is "测试/命令" — a grep command is acceptable.
 
 Wait — but where does VENDORED.md live? `vendor/VENDORED.md` (seen earlier). And is vendor/ tracked? Vendor Kronos clone is local-only, but VENDORED.md itself was committed (it appeared in the repo listing and its content shows pins). Let me verify it's tracked: `git ls-files vendor/VENDORED.md`. It appeared in vendor listing earlier; likely tracked. I'll check.
@@ -5043,7 +5043,7 @@ def connect():
         )
 
     try:
-
+      
 …[truncated]
   ```
   </details>
@@ -5052,7 +5052,7 @@ def connect():
 
 - **tool**: `edit({"filePath": "/home/georg/projects/alphamill/docs/features/0.2/F004-kronos-inference-runtime/design.md", "oldString": "| KRONOS_USE_REAL_MODEL / KRONOS_DEVICE | `true` / `cpu` |\n| 端口 | host `8002` → container `8001`（mock 保持 host `8001`，互不顶替） |", "newString": "| KRONOS_USE_REAL_MODEL / KRONOS_DEVICE | `true` / `cpu` |\n| DB 环境（同 mock 服务） | `DB_HOST: timescaledb`、`DB_PORT: 5432`、`DB_USER`/`DB_PASSWORD`/`DB_NAME`（`${DB_*:-...}` 默认值与 compose 其余服务一致） |\n| 服务依赖 | `depends_on: timescaledb: {condition:
 …[truncated])`
-- **tool**: `edit({"filePath": "/home/georg/projects/alphamill/docs/features/0.2/F004-kronos-inference-runtime/design.md", "oldString": "| `AC-001` | 静态契约（unit，CI 常绿） | `tests/unit/test_f004_compose_profile_contract.py` | Dockerfile 有 mock/real 目标且 real 锁定依赖 pin；real 服务 profiles/只读挂载/端口/环境正确；默认 compose 配置不含 real 服务 |\n| `AC-001` | 容器集成（执行机） | `tests/integration/test_f004_real_profile.py` | compose 拉起后容器身份成立（compose 托管 + real 目标 + 只读挂载 + 8002:8001）且 `/predict source=kronos`；默认镜像 `import torch` 判红 |", "newString":
+- **tool**: `edit({"filePath": "/home/georg/projects/alphamill/docs/features/0.2/F004-kronos-inference-runtime/design.md", "oldString": "| `AC-001` | 静态契约（unit，CI 常绿） | `tests/unit/test_f004_compose_profile_contract.py` | Dockerfile 有 mock/real 目标且 real 锁定依赖 pin；real 服务 profiles/只读挂载/端口/环境正确；默认 compose 配置不含 real 服务 |\n| `AC-001` | 容器集成（执行机） | `tests/integration/test_f004_real_profile.py` | compose 拉起后容器身份成立（compose 托管 + real 目标 + 只读挂载 + 8002:8001）且 `/predict source=kronos`；默认镜像 `import torch` 判红 |", "newString": 
 …[truncated])`
 
 
@@ -5147,7 +5147,7 @@ design §8 rows update:
 
 spec §7 container bullet: add "运行链（compose→模型→TimescaleDB→HTTP）成立——`/health` 的 `database` 可达、`/predict` 返回 `source=kronos`；". Current bullet: "**容器集成（执行机）**：`tests/integration/test_f004_real_profile.py`——构建 real 目标并拉起 profile，校验容器身份（compose 托管 + real 目标 + 只读挂载 + 8002:8001）与 `source=kronos`；缺资产场景非零退出；默认镜像 `import torch` 判红；开关语义..." → change "与 `source=kronos`" to "与完整运行链（模型 + DB）：`/health` 的 `database` 可达且 `/predict` 返回 `source=kronos`；".
 
-spec AC-001: currently "...（容器身份、只读挂载、8002:8001 成立），model_enabled=true 且 /predict 返回 source=kronos；不带该 profile..." → "...（容器身份、只读挂载、8002:8001、DB 运行链成立），model_enabled=true、/health 的 database 可达且 /predict 返回 source=kronos；不带该 profile...".
+spec AC-001: currently "...（容器身份、只读挂载、8002:8001 成立），model_enabled=true 且 /predict 返回 source=kronos；不带该 profile..." → "...（容器身份、只读挂载、8002:8001、DB 运行链成立），model_enabled=true、/health 的 database 可达且 /predict 返回 source=kronos；不带该 profile...". 
 
 Hmm, is "DB 运行链成立" + "/health database 可达" redundant? Just say: "（容器身份、只读挂载、8002:8001 成立），且完整运行链（模型 + TimescaleDB）可用：model_enabled=true、/health 的 database 可达、/predict 返回 source=kronos；". OK.
 
@@ -5413,21 +5413,21 @@ Now write tasks.md fully and commit D013.
 8: created: 2026-09-12
 9: updated: 2026-09-14
 10: ---
-11:
+11: 
 12: # F004：Kronos 真实推理运行时 - 任务
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Design: `design.md`
-15:
+15: 
 16: ## 0. 来源与执行规则
-17:
+17: 
 18: - 行为与验收真相源：`spec.md`；技术方案与边界：`design.md`。
 19: - 每项任务只描述一个可验证动作，并引用合法的 US/需求/AC ID。
 20: - 完成且验证后立即把 `[ ]` 改为 `[x]`，不得最后统一补勾。
 21: - `[P]` 只用于修改不同文件、没有显式前置依赖且不会争用同一状态的任务。
 22: - 集成与容器验收只在执行机 `qiaozhi-lt` 采集，证据记录 hostname 与 `device=cpu`；开发机只跑静态与单元门禁（SOP §3）。
-23:
+23: 
 24: ## 1. 前置条件
-25:
+25: 
 26: - F001 已 done：薄壳、`vendor/Kronos` pin 与 `models/` 权重流
 …[truncated]
   ```
@@ -5610,12 +5610,12 @@ The reviewer has annotated the FIX-log. Reading the current state before appendi
 <type>file</type>
 <content>
 1: # FIX-log —— F004 设计文档检视修复方声明（本地过程稿，不进 git）
-2:
+2: 
 3: > 本文件由修复方独占写权，append-only；检视方对修复条目的独立核对结果以
 4: > `[review-r<N>]` 批注形式追加在对应条目下方。修复方对 `CURRENT-doc.md` 零写入。
-5:
+5: 
 6: ## Round 1 · 2026-09-14
-7:
+7: 
 8: - **基线**：`main` @ `bc314f0`（修复前）→ `main` @ `6e06ca7`（修复后，12 个提交）
 9: - **受检产物**：`docs/features/0.2/F004-kronos-inference-runtime/{spec,design,tasks}.md`；
 10:   相邻契约连带勘正：`docs/features/0.2/F002-data-bridge/spec.md`（D001 的跨文件后果）
@@ -5831,7 +5831,7 @@ drwxr-xr-x 7 georg georg  4096 Sep 15 00:24 ..
 -rw-r--r-- 1 georg georg 93031 Sep 14 21:48 RETROSPECTIVE.md
 
 
-Incremental: 0 files updated, 0 nodes,
+Incremental: 0 files updated, 0 nodes, 
 …[truncated]
   ```
   </details>
@@ -5911,14 +5911,14 @@ So two options:
 
 Which do I pick? Let me think about what's most honest and simple:
 
-Option (b):
+Option (b): 
 - T008 (VENDORED.md) — no 实测 dependency; can run after T006 (or earlier).
 - T007 (F001 §6 writeback) — should be after T009 (since it documents the proven command).
 - Then T010 (spec §6 F004 evidence writeback) — evidence from T009; can depend on T009; does T010 need T007 done? Not strictly, but sequencing for clean acceptance: T009 → T007 → T010? Hmm, or T007 after T010?
 
 Order options for the tail: T006 → [T008] ; T006 → T009 → T007 → T010 → T011 → T012? Or T009 → T010 → T007?
 
-Wait — T010 is F004 spec §6 evidence writeback (commands, outputs, hostname/device). T007 is F001 spec §6 writeback. Both are doc writebacks after T009. T011 = quality gate; T012 = status/BACKLOG. A clean chain:
+Wait — T010 is F004 spec §6 evidence writeback (commands, outputs, hostname/device). T007 is F001 spec §6 writeback. Both are doc writebacks after T009. T011 = quality gate; T012 = status/BACKLOG. A clean chain: 
 - `T006 -> T008` (VENDORED paths after contracts frozen)
 - `T006 -> T009` (execution machine acceptance)
 - `T009 -> T007` (F001 writeback requires proven compose form)
@@ -5955,7 +5955,7 @@ But wait — is T008 → T010 or not? If I make T010 depend on T007/T008... For 
 
 Actually, let me reconsider Option (a) more carefully, since the reviewer listed it first:
 (a) `T006 -> T007/T008/T009` (all three parallel after T006), `T007/T008/T009 -> T010 -> T011 -> T012`.
-- T007 (F001 writeback) no longer "以实测为前提" — reviewer says "或删除错误的实测前提". So we'd delete the premise. But then T007 can be written before the compose form has ever run. Is that OK? The writeback documents a command form that the design has fixed and that T006's test will exercise. Hmm, writing it before running is practice-risky (command could need adjustments after first real run — e.g., DB_HOST nuances like F001's manual command needed DB env). Actually that's exactly the kind of thing that goes wrong: the compose form might need tweaks (e.g., `--profile` + service name, healthcheck waits). Writing F001's spec §6 with an unproven command is how you get "documented command not runnable" (pattern D046 from the retrospective!). So option (b) — writeback after 实测 — is safer and more honest.
+- T007 (F001 writeback) no longer "以实测为前提" — reviewer says "或删除错误的实测前提". So we'd delete the premise. But then T007 can be written before the compose form has ever run. Is that OK? The writeback documents a command form that the design has fixed and that T006's test will exercise. Hmm, writing it before running is practice-risky (command could need adjustments after first real run — e.g., DB_HOST nuances like F001's manual command needed DB env). Actually that's exactly the kind of thing that goes wrong: the compose form might need tweaks (e.g., `--profile` + service name, healthcheck waits). Writing F001's spec §6 with an unproven command is how you get "documented command not runnable" (pattern D046 from the retrospective!). So option (b) — writeback after 实测 — is safer and more honest. 
 
 Hmm, but wait: is T009 itself "the acceptance run" that must succeed for T007? Yes. So T007 after T009. That contradicts reviewer option (a)'s "delete the premise" but matches their option (b) "把需实测通过的回写移至 T009 后". I'll go with a hybrid:
 
@@ -5996,9 +5996,9 @@ But hold on — there's still a subtlety: T009's verify command runs BOTH F001 s
 
 Also T010 (F004 spec §6 evidence) after T009. ✓.
 
-Now — should I also update task descriptions? T007 description says "回写 F001 spec §6 的 AC-006 复跑命令为 compose 形态，并保留手工形态" — no premise stated in the description; premise only in §4. T008 description fine. T009 fine. T010 fine. The reviewer's D014 also says "T007/T008 排在执行机实测 T009 之前，却写成'...前提'" — that's §4 only. So only §4 needs fixing? Also "后续链的'实测 → 证据回写'摘要也与任务编号不匹配" — fix the summary line. So it's a §4-only edit.
+Now — should I also update task descriptions? T007 description says "回写 F001 spec §6 的 AC-006 复跑命令为 compose 形态，并保留手工形态" — no premise stated in the description; premise only in §4. T008 description fine. T009 fine. T010 fine. The reviewer's D014 also says "T007/T008 排在执行机实测 T009 之前，却写成'...前提'" — that's §4 only. So only §4 needs fixing? Also "后续链的'实测 → 证据回写'摘要也与任务编号不匹配" — fix the summary line. So it's a §4-only edit. 
 
-Wait, let me double check whether there might also be an issue in §3 task order: T007/T008 are in §3 "验证与验收任务" section positioned before T009-T012. The tasks are numbered = execution order (the file rules say "编号=执行顺序" from D010 fix... actually §0 says "每项任务只描述一个可验证动作" and the round-1 D010 fix was "把 T004 -> T005 -> 验收证据回写 -> 状态/BACKLOG 同步串成完整 DAG" — numbering should reflect execution order per template). Hmm! If T007 executes after T009, then the NUMBERING is out of order (T007 before T009 numerically). Does that matter? tasks.md §0 (template) says "Task IDs 必须全文件连续且唯一" but not necessarily monotonic in execution order? The features/README says "任务统一为 ... 按什么顺序做" and F001 precedent: "全量重编号使编号=执行顺序" (from RETROSPECTIVE D037 fix: "全量重编号使编号=执行顺序(R2-01 插入后延至 T022 仍保持)"). So the project convention IS: numbering = execution order!
+Wait, let me double check whether there might also be an issue in §3 task order: T007/T008 are in §3 "验证与验收任务" section positioned before T009-T012. The tasks are numbered = execution order (the file rules say "编号=执行顺序" from D010 fix... actually §0 says "每项任务只描述一个可验证动作" and the round-1 D010 fix was "把 T004 -> T005 -> 验收证据回写 -> 状态/BACKLOG 同步串成完整 DAG" — numbering should reflect execution order per template). Hmm! If T007 executes after T009, then the NUMBERING is out of order (T007 before T009 numerically). Does that matter? tasks.md §0 (template) says "Task IDs 必须全文件连续且唯一" but not necessarily monotonic in execution order? The features/README says "任务统一为 ... 按什么顺序做" and F001 precedent: "全量重编号使编号=执行顺序" (from RETROSPECTIVE D037 fix: "全量重编号使编号=执行顺序(R2-01 插入后延至 T022 仍保持)"). So the project convention IS: numbering = execution order! 
 
 So if T007 executes after T009, I should RENUMBER so execution order = numeric order. Let me reorder everything cleanly:
 
@@ -6042,7 +6042,7 @@ Renumbered execution order:
   11. T011 质量门（原 T011）
   12. T012 状态/BACKLOG（原 T012）
 
-That keeps 12 tasks and makes numbering monotonic with execution: T007 (VENDORED) before T008 (实测); T009/T010 after 实测.
+That keeps 12 tasks and makes numbering monotonic with execution: T007 (VENDORED) before T008 (实测); T009/T010 after 实测. 
 
 Hmm, but wait: is VENDORED.md writeback truly independent of 实测? Yes. Put it right after T006 as T007. Then T008 = 实测, T009 = F001 回写, T010 = F004 证据回写, T011 = gate, T012 = status.
 
@@ -6052,7 +6052,7 @@ Hmm, hmm. But there's yet another consideration: is it correct that F001 writeba
 
 And D014's suggested fix (b) "把需实测通过的回写移至 T009 后" — in the NEW numbering, "实测" is T008 and writebacks are T009-T010, i.e., after. ✓. And suggested fix (a) shape `T006 -> T007/T008/T009` isn't used, but (b) is offered as an alternative. The reviewer's convergence condition: "任务编号、依赖箭头和括号内阶段摘要一致". So renumbering to match execution order + correct DAG + accurate summary satisfies it.
 
-Wait, actually — let me reconsider. Is renumbering really needed? The reviewer's D014 title: "文档回写任务声称依赖实测通过但排在实测任务之前" — the core issue is the order/premise contradiction. If I just fix §4 (T007/T008 after T006, T007/T008 → T010...), the numbering has T007-T008 (writebacks) before T009 (实测) — wait no, if I keep numbers and put T007/T008 after T009 in the DAG, then numbering contradicts execution order again (T007 executes after T009). The project convention says numbering=execution order (D037 lesson). Also tasks are executed "严格按 tasks.md 里的顺序逐项实现" (SOP workflow Step 2: "严格按 tasks.md 里的顺序逐项执行"). So the tasks list order matters: T007/T008 appear before T009 in the file. If T007/T008 must run after T009, the file order is wrong unless renumbered/reordered.
+Wait, actually — let me reconsider. Is renumbering really needed? The reviewer's D014 title: "文档回写任务声称依赖实测通过但排在实测任务之前" — the core issue is the order/premise contradiction. If I just fix §4 (T007/T008 after T006, T007/T008 → T010...), the numbering has T007-T008 (writebacks) before T009 (实测) — wait no, if I keep numbers and put T007/T008 after T009 in the DAG, then numbering contradicts execution order again (T007 executes after T009). The project convention says numbering=execution order (D037 lesson). Also tasks are executed "严格按 tasks.md 里的顺序逐项实现" (SOP workflow Step 2: "严格按 tasks.md 里的顺序逐项执行"). So the tasks list order matters: T007/T008 appear before T009 in the file. If T007/T008 must run after T009, the file order is wrong unless renumbered/reordered. 
 
 Therefore: reorder + renumber so that file order = execution order: ... T006 (容器测试) → T007 (VENDORED 回写) → T008 (执行机实测) → T009 (F001 回写) → T010 (F004 证据回写) → T011 (门禁) → T012 (状态).
 
@@ -6065,7 +6065,7 @@ Option Y: T006 → T007 VENDORED 回写 → T008 实测 → T009 F001 回写 →
 
 Both keep numbering=order. In option X, all writebacks are post-实测 (simple claim: "全部回写以实测通过或契约成立为前提"— hmm VENDORED doesn't need 实测). In option Y, VENDORED before 实测 (premise: contract frozen), then 实测, then two post-实测 writebacks.
 
-The DAG edges differ slightly. Reviewer's convergence check: "依赖箭头和括号内阶段摘要一致". Let me pick option X? Hmm wait, but X makes VENDORED wait for 实测 — harmless but implies a premise we don't need; if I don't declare that edge, then numbering X still has VENDORED after 实测 in execution order... The file order IS the execution order (per SOP "严格按顺序执行"), so if it's listed after 实测 it executes after. That's fine, no premise issue as long as §4 doesn't claim it.
+The DAG edges differ slightly. Reviewer's convergence check: "依赖箭头和括号内阶段摘要一致". Let me pick option X? Hmm wait, but X makes VENDORED wait for 实测 — harmless but implies a premise we don't need; if I don't declare that edge, then numbering X still has VENDORED after 实测 in execution order... The file order IS the execution order (per SOP "严格按顺序执行"), so if it's listed after 实测 it executes after. That's fine, no premise issue as long as §4 doesn't claim it. 
 
 Hmm, actually, simpler idea: keep VENDORED where it was (immediately after container test, before 实测) → Option Y. Then DAG:
 - T006 → T007 (VENDORED, premise: 编排契约成立)
@@ -6218,7 +6218,7 @@ Plan edits:
    - T010 证据回写
    - T011 门禁
    - T012 状态
-
+   
    New:
    - T007 VENDORED (§2 Phase 3)
    - T008 实测 (formerly T009)
@@ -6226,7 +6226,7 @@ Plan edits:
    - T010 证据回写 (unchanged number)
    - T011 门禁 (unchanged)
    - T012 状态 (unchanged)
-
+   
    So only T007/T008/T009 numbers shuffle among themselves. Edits:
    - §2 Phase 3: append "T007 VENDORED" line; (Phase 3 title maybe keep "门禁补全与文档回写" — now accurate since T007 is doc writeback in Phase 3 ✓).
    - §3: remove old T007 and T008 lines; change old T009 line prefix to T008; add T009 F001 writeback line after T008 line; keep T010/T011/T012.
@@ -6245,16 +6245,16 @@ Round 3: D011–D013 all verified `fixed`; one new finding **D014** — tasks §
 <path>/home/georg/projects/alphamill/docs/features/0.2/F004-kronos-inference-runtime/tasks.md</path>
 <type>file</type>
 <content>
-29:
+29: 
 30: ## 2. 实现任务
-31:
+31: 
 32: ### Phase 1：薄壳运行时改造
-33:
+33: 
 34: - [ ] T001 (`FR-001`): 先红后绿——新增 `tests/unit/test_f004_kronos_runtime_contract.py::test_real_mode_preflight_fails_closed_without_assets`（fake 目录注入，先失败）；实现 `kronos_real.py` 启动预检与 eager load，并由 `server.py` 启动钩子在 real 模式调用：校验 `KRONOS_REPO_PATH`、模型与分词器目录及必需文件（`config.json`、权重文件），任一缺失或加载失败即打印缺失路径并非零退出，不退回 mock — verify: 该用例由红转绿
 35: - [ ] T002 (`FR-001`): 先红后绿——新增同文件 `::test_predictor_loads_once_and_inference_serializes`（先失败）；实现进程级推理锁：模型加载至多一次、推理互斥（含并发首请求同时到达的场景） — verify: 该用例由红转绿
-36:
+36: 
 37: ### Phase 2：镜像与编排
-38:
+38: 
 39: - [ ] T003 (`FR-001`, `NFR-001`): 先红后绿——新增 `tests/unit/test_f004_compose_profile_contract.py::test
 …[truncated]
   ```
@@ -6374,7 +6374,7 @@ Wait — but when I read lines 29-68 earlier, it showed:
 51: - [ ] T009 ...
 ```
 
-Hmm! So in the current file, T007 and T008 are in §2 Phase 3, and §3 has T009-T012. I misread earlier — when I wrote the file in Round 2, I had put T007/T008 in §2 Phase 3 ("Phase 3：门禁补全与文档回写") — yes! Looking at my Round 2 write:
+Hmm! So in the current file, T007 and T008 are in §2 Phase 3, and §3 has T009-T012. I misread earlier — when I wrote the file in Round 2, I had put T007/T008 in §2 Phase 3 ("Phase 3：门禁补全与文档回写") — yes! Looking at my Round 2 write: 
 
 ```
 ### Phase 3：门禁补全与文档回写
@@ -6439,18 +6439,18 @@ Desired (numbering = execution order):
 Option: Keep T007=VENDORED (swap semantics) or renumber?
 
 Simplest minimal renumber that satisfies D014:
-- T007 = VENDORED 回写（不依赖实测）— renumber old T008 → T007?
+- T007 = VENDORED 回写（不依赖实测）— renumber old T008 → T007? 
 - T008 = F001 回写（实测后）?
 - But 实测 is T009 — F001 writeback at T008 would still be before 实测 T009 numerically. Ugh.
 
 So to have execution order = numbering: 实测 must come before the F001 writeback. Current numbers: T007 (F001), T008 (VENDORED), T009 (实测). Options:
 
-Option A:
+Option A: 
 - T007 = VENDORED (old T008 content), no 实测 dependency.
 - T008 = 实测 (old T009).
 - T009 = F001 writeback (old T007).
 - T010/T011/T012 unchanged.
-File order in §2/§3: §2 Phase 3: T005, T006, T007(VENDORED). §3: T008(实测), T009(F001 writeback), T010, T011, T012.
+File order in §2/§3: §2 Phase 3: T005, T006, T007(VENDORED). §3: T008(实测), T009(F001 writeback), T010, T011, T012. 
 
 That's exactly what I intended in edits 1/2 — but edit 1/2 oldStrings assumed T007/T008 in §3 whereas they're in §2. Let me redo:
 
@@ -6461,7 +6461,7 @@ Edit 1: In §2 Phase 3 — replace the two lines T007 (F001) and T008 (VENDORED)
 Edit A: replace §2 lines 46-47 (T007 F001, T008 VENDORED) with single line T007 VENDORED.
 Edit B: replace §3 T009 line with T008 实测 line + T009 F001 line.
 
-Then edit #3 (DAG) needs correction: I wrote "T006 -> T007：VENDORED..." and "T006 -> T008：执行机实测..." and "T008 -> T009/T010" — under the new numbering: T007=VENDORED ✓ (matches my DAG text!), T008=实测 ✓, T009=F001 ✓, T010=证据 ✓. So my edit #3 DAG text is actually CORRECT for the target numbering! Let me verify:
+Then edit #3 (DAG) needs correction: I wrote "T006 -> T007：VENDORED..." and "T006 -> T008：执行机实测..." and "T008 -> T009/T010" — under the new numbering: T007=VENDORED ✓ (matches my DAG text!), T008=实测 ✓, T009=F001 ✓, T010=证据 ✓. So my edit #3 DAG text is actually CORRECT for the target numbering! Let me verify: 
 - "`T006 -> T007`：VENDORED.md 容器路径回写以编排与薄壳契约定稿为前提（不依赖实测）。" ✓ (T007=VENDORED)
 - "`T006 -> T008`：执行机实测以容器集成测试定稿为前提..." ✓ (T008=实测)
 - "`T008 -> T009/T010`：F001 命令回写与 F004 验收证据回写都以执行机实测通过为前提" ✓ (T009=F001回写, T010=证据回写)
@@ -6543,22 +6543,22 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 8: created: 2026-09-12
 9: updated: 2026-09-15
 10: ---
-11:
+11: 
 12: # F004：Kronos 真实推理运行时 - 任务
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Design: `design.md`
-15:
+15: 
 16: ## 0. 来源与执行规则
-17:
+17: 
 18: - 行为与验收真相源：`spec.md`；技术方案与边界：`design.md`。
 19: - 每项任务只描述一个可验证动作，并引用合法的 US/需求/AC ID。
 20: - 完成且验证后立即把 `[ ]` 改为 `[x]`，不得最后统一补勾。
 21: - `[P]` 只用于修改不同文件、没有显式前置依赖且不会争用同一状态的任务。
 22: - 集成与容器验收只在执行机 `qiaozhi-lt` 采集，证据记录 hostname 与 `device=cpu`；开发机只跑静态与单元门禁（SOP §3）。
 23: - 实现任务遵循先红后绿：任务内的契约测试必须先失败（复现缺口）再随实现转绿，不得先实现后补测试。
-24:
+24: 
 25: ## 1. 前置条件
-26:
+26: 
 27
 …[truncated]
   ```
@@ -6587,7 +6587,7 @@ Numbering = execution order: 1,2 (phase1), 3,4 (phase2), 5,6,7 (phase3), 8,9,10,
 
 Hmm wait, one subtle check: T007 (VENDORED) is now BEFORE T008 (实测) in file order, and DAG says T006 -> T007 (no 实测 premise) — consistent.
 
-One more check on the reviewer's convergence condition: "任务编号、依赖箭头和括号内阶段摘要一致，且统一门禁继续全绿。" — the parenthetical summaries in §4 bullets:
+One more check on the reviewer's convergence condition: "任务编号、依赖箭头和括号内阶段摘要一致，且统一门禁继续全绿。" — the parenthetical summaries in §4 bullets: 
 - "（预检/加载 → 锁；各自测试在同一任务内先红后绿）" matches T001→T002 ✓
 - "（其依赖闭包已含全部实现与门禁任务）" — T008's dependency closure via T006 → T005 → ... → T001 ✓
 - "（不依赖实测）" T007 ✓
@@ -6597,7 +6597,7 @@ Now, one thing I should double-check: the §2 Phase 3 title "门禁补全与文�
 
 Also, Phase 3 heading "门禁补全与文档回写" — good.
 
-Wait, also should I double check the D014 fix against the reviewer's suggested options once more:
+Wait, also should I double check the D014 fix against the reviewer's suggested options once more: 
 - Suggested: "将 T006 后的文档准备与 T009 执行机实测并行，T010 同时依赖 T007/T008/T009；或把需实测通过的回写移至 T009 后。"
 - I did: VENDORED (T007) parallel to 实测 (T008); F001 回写 (T009) after 实测. This is a mix: VENDORED parallel (option a partially) and F001 writeback after 实测 (option b). Both reviewer-sanctioned. The DAG now: T007 ∥ T008; T009/T010 after T008; T011 after T007/T009/T010. ✓.
 

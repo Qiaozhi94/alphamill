@@ -4,6 +4,8 @@
 无 SOP 所述的「安全校验降级声明」出口）。
 """
 
+import contextlib
+
 
 class DataBridgeError(Exception):
     """数据桥异常基类。"""
@@ -47,3 +49,28 @@ class SymbolNotFoundError(DataBridgeError):
 
 class ReconcileFailedError(DataBridgeError):
     """导出后与源库对账不一致；对应 data_version 已标记 invalid。"""
+
+
+def mark_attempts(exc: BaseException, attempts: int) -> None:
+    """把**真实尝试次数**（首次 + 退避重试）挂到异常上，供编排层落 `backfill.failed.retries`。
+
+    重试发生在 `RateLimiter.call` 内部，异常抛出时已看不到次数；不标注就只能填 `None`
+    或假 0（F008 TR-002 的 retries 因此失义）。两条规则：
+
+    - **首个标注者为准**（已标注则不覆盖）：`RateLimiter.call` 数的是真实请求次数，
+      比 F001 抓取层外层的重试循环更贴近事实，外层不得把它改小；
+    - 异常实现带 `__slots__` 挂不上时放弃标注，编排层回落缺省 1——观测手段不得改变
+      失败路径本身。
+    """
+    if getattr(exc, "attempts", None) is not None:
+        return
+    with contextlib.suppress(AttributeError):  # pragma: no cover - 带 __slots__ 的异常挂不上
+        exc.attempts = attempts  # type: ignore[attr-defined]
+
+
+def attempts_of(exc: BaseException) -> int:
+    """读回 `mark_attempts` 标注的尝试次数；无标注或类型异常一律回落 1。"""
+    value = getattr(exc, "attempts", 1)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return 1
+    return value

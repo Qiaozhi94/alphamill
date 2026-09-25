@@ -307,26 +307,26 @@ Key finding: skills live in external repo `github.com/ml4t/skills`. Now let me r
 <type>file</type>
 <content>
 1: """Data schemas for the multi-agent forecasting pipeline.
-2:
+2: 
 3: Plain dataclasses — no Pydantic dependency — so the teaching code stays
 4: transparent and inspectable.
 5: """
-6:
+6: 
 7: from __future__ import annotations
-8:
+8: 
 9: import json
 10: from dataclasses import asdict, dataclass, field
 11: from enum import Enum, StrEnum
 12: from uuid import uuid4
-13:
+13: 
 14: # ---------------------------------------------------------------------------
 15: # Enums
 16: # ---------------------------------------------------------------------------
-17:
-18:
+17: 
+18: 
 19: class Sentiment(StrEnum):
 20:     """Agent sentiment towards YES outcome."""
-21:
+21: 
 22:     STRONGLY_BULLISH = "strongly_bullish"
 23:     BULLIS
 …[truncated]
@@ -340,13 +340,13 @@ Key finding: skills live in external repo `github.com/ml4t/skills`. Now let me r
 <type>file</type>
 <content>
 1: """Search provider abstraction and tool execution framework.
-2:
+2: 
 3: Providers: Tavily (real web search), Mock (deterministic CI fallback).
 4: No disk cache — teaching code stays transparent.
 5: """
-6:
+6: 
 7: from __future__ import annotations
-8:
+8: 
 9: import os
 10: import time
 11: import warnings
@@ -355,9 +355,9 @@ Key finding: skills live in external repo `github.com/ml4t/skills`. Now let me r
 14: from email.utils import parsedate_to_datetime
 15: from typing import Any, Protocol, runtime_checkable
 16: from urllib.parse import urlparse
-17:
+17: 
 18: from agent_schemas import SearchResult
-19:
+19: 
 20: # ---------------------------------------------------------------------------
 21: # Protocol
 22: # --
@@ -382,18 +382,18 @@ Excellent detail. Now the research agent, specialists, pipeline, and operator.
 <type>file</type>
 <content>
 1: """Research agent class and supporting utilities.
-2:
+2: 
 3: Built step-by-step in NB04; downstream notebooks (NB06–NB08) import from here
 4: rather than rebuilding the agent inline each time.
 5: """
-6:
+6: 
 7: from __future__ import annotations
-8:
+8: 
 9: import json
 10: import math
 11: import re
 12: from datetime import date
-13:
+13: 
 14: from agent_providers import ChatMessage, LLMClient, TokenUsage
 15: from agent_schemas import (
 16:     AgentForecastArtifact,
@@ -404,7 +404,7 @@ Excellent detail. Now the research agent, specialists, pipeline, and operator.
 21:     Sentiment,
 22: )
 23: from agent_tools import SearchClient, ToolExecutor, format_search_results
-24:
+24: 
 25: # -----------------------------
 …[truncated]
   ```
@@ -417,22 +417,22 @@ Excellent detail. Now the research agent, specialists, pipeline, and operator.
 <type>file</type>
 <content>
 1: """Specialist agent classes for the multi-agent forecasting pipeline.
-2:
+2: 
 3: `DebateAgent` and `SupervisorAgent` are built step-by-step in NB07 and NB08
 4: respectively; this module mirrors those classes for downstream notebooks
 5: (NB10 framework comparison) that need to reuse the full pipeline.
-6:
+6: 
 7: Each class is functionally identical to the inline version in its teaching
 8: notebook. Prompts live here as module-level constants so all three frameworks
 9: in NB10 can route the same text through their orchestrators.
 10: """
-11:
+11: 
 12: from __future__ import annotations
-13:
+13: 
 14: from datetime import date
-15:
+15: 
 16: from agent_providers import ChatMessage
-17: from agent_research
+17: from agent_research 
 …[truncated]
   ```
   </details>
@@ -444,22 +444,22 @@ Excellent detail. Now the research agent, specialists, pipeline, and operator.
 <type>file</type>
 <content>
 1: """Aggregation math, calibration, and evaluation functions.
-2:
+2: 
 3: Pure math only — no agent classes. Each agent class is built step-by-step in
 4: its teaching notebook (NB04 ResearchAgent, NB07 DebateAgent, NB08 SupervisorAgent
 5: and AIAForecaster) and mirrored in a helper module for downstream reuse:
 6: ``agent_research`` for ResearchAgent and ``agent_specialists`` for DebateAgent
 7: and SupervisorAgent.
 8: """
-9:
+9: 
 10: from __future__ import annotations
-11:
+11: 
 12: import math
 13: from collections.abc import Sequence
 14: from dataclasses import dataclass
-15:
+15: 
 16: from agent_schemas import AggregationResult
-17:
+17: 
 18: # ---------------------------------------------------------------
 …[truncated]
   ```
@@ -483,7 +483,7 @@ Now the operator (skills tools) and observability, plus RAG/KG core modules.
 <type>file</type>
 <content>
 1: """ML4T Research Operator — one autonomous iteration on a real case study.
-2:
+2: 
 3: A thin orchestrator (~600 lines) that loads case-study context, hands an LLM a
 4: small set of general-purpose tools (registry SQL, file I/O, bash, parquet I/O,
 5: skill discovery), and asks it to execute the §20.9 "what's next?" suggestion
@@ -491,7 +491,7 @@ Now the operator (skills tools) and observability, plus RAG/KG core modules.
 7: library stack; the discipline lives in the standalone skills repo at
 8: `~/ml4t/skills`. The operator imports neither — both are reached through the
 9: generic tool surface and discovered at run time.
-10:
+10: 
 11: Sandbox: writes are confined to `ML4T_OUTPUT_DIR=$SANDBOX` so the pr
 …[truncated]
   ```
@@ -504,15 +504,15 @@ Now the operator (skills tools) and observability, plus RAG/KG core modules.
 <type>file</type>
 <content>
 1: """Agent observability: full-trace capture, persistence, and replay.
-2:
+2: 
 3: Autonomous agents are only trustworthy if you can see what they did. This
 4: module gives the forecasting notebooks a single, auditable record of every
 5: run: the question, every prompt an agent received, every raw model response,
 6: every search query and the documents it returned, and the structured forecast
 7: that came out the other end.
-8:
+8: 
 9: Three pieces, each independent:
-10:
+10: 
 11: 1. ``TracingLLMClient`` wraps *any* ``LLMClient`` and records every call —
 12:    the exact messages sent in and the raw text returned — without changing a
 13:    line of agent logic. Because every agent in the cha
@@ -565,7 +565,7 @@ Now RAG/KG components and data engineering. Let me grep for key symbols across t
 /home/georg/projects/ml4t-zh/23_knowledge_graphs/03_graph_rag_qa.py:158:# (`collect(h)[0]` after `ORDER BY h.quarter DESC`). This is the point-in-time
 /home/georg/projects/ml4t-zh/23_knowledge_graphs/03_graph_rag_qa.py:160:# cutoff, not the cross-product of every historical filing the institution made
 /home/georg/projects/ml4t-zh/23_knowledge_graphs/03_graph_rag_qa.py:168:  AND h.quarter <= $cutoff_date
-/home/georg/projects/ml4t-zh/23_knowledge_graphs/03_graph_rag_qa.py:189:  AND
+/home/georg/projects/ml4t-zh/23_knowledge_graphs/03_graph_rag_qa.py:189:  AND 
 …[truncated]
   ```
   </details>
@@ -644,10 +644,10 @@ Libraries are pip deps (not vendored). Let me read the library ecosystem noteboo
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %%
 17: """The ml4t Library Ecosystem - unified data, feature, and diagnostic libraries for Chapters 7-12."""
-18:
+18: 
 19: # %% [markdown]
 20: # # The ml4t Library Ecosystem
 21: #
@@ -679,7 +679,7 @@ Libraries are pip deps (not vendored). Let me read the library ecosystem noteboo
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Point-in-Time (PIT) Data Validation
 18: #
@@ -784,11 +784,11 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
   <details><summary>tool output</summary>
 
   ```text
-GitHub - ml4t/skills: Agent skills for Machine Learning for Algorithmic Trading: leakage-safe quant ML, backtesting, validation, and autonomous research workflows. · GitHub
+GitHub - ml4t/skills: Agent skills for Machine Learning for Algorithmic Trading: leakage-safe quant ML, backtesting, validation, and autonomous research workflows. · GitHub                                             
 
-[Skip to content](#start-of-content)
+[Skip to content](#start-of-content)     
 
-
+            
 
 ## Navigation Menu
 
@@ -799,16 +799,16 @@ GitHub - ml4t/skills: Agent skills for Machine Learning for Algorithmic Trading:
 Appearance settings
 
 -   Platform
-
+    
     -   AI CODE CREATION
-
+        
         -   [GitHub CopilotWrite better code with AI](https://github.com/features/copilot)
         -   [GitHub Copilot appDirect agents from issue to merge](https://github.com/features/ai/github-app)
         -   [MCP RegistryIntegrate external tools](https://github.com/mcp)
-
+        
     -   DEVELOPER WORKFLOWS
-
-        -   [ActionsAutomate any
+        
+        -   [ActionsAutomate any 
 …[truncated]
   ```
   </details>
@@ -885,7 +885,7 @@ Autonomous agents need defense in depth: policy enforcement before tool executio
 
 ## The Problem
 
-Financial agents read adversarial documents,
+Financial agents read adversarial documents, 
 …[truncated]
   ```
   </details>
@@ -910,7 +910,7 @@ Financial agents read adversarial documents,
 12: #     language: python
 13: #     name: python3
 14: # ---
-15:
+15: 
 16: # %% [markdown]
 17: # # Storage Benchmark: Database Engines
 18: #
@@ -1008,15 +1008,15 @@ Found 112 match(es) in 112 file(s)
 962: # mechanism behind the positive bias in §6: dropping them from the universe removes the weaker
 963: # half of the distribution. The terminal-return scenarios then adjust the estimate at the
 964: # margin — they do not create it.
-965:
+965: 
 966: # %% [markdown] tags=[]
 967: # ## 9. Detecting bias in your own data
 968: #
 969: # Two cheap tests. The first catches a universe filtered to today's constituents; the second
 970: # catches the pattern this panel shows, where exits are recorded but only for part of the history.
-971:
-972:
-973: # %%
+971: 
+972: 
+973: # %% 
 …[truncated]
   ```
   </details>
@@ -1029,7 +1029,7 @@ Found 112 match(es) in 112 file(s)
 <content>
 55: from datetime import datetime
 56: from pathlib import Path
-57:
+57: 
 58: import numpy as np
 59: import plotly.graph_objects as go
 60: import polars as pl
@@ -1047,12 +1047,12 @@ Found 112 match(es) in 112 file(s)
 72:     VolumeSpikeConfig,
 73: )
 74: from ml4t.data.validation import OHLCVValidator
-75:
+75: 
 76: from data import load_us_equities
 77: from utils.paths import get_output_dir
 78: from utils.style import COLORS
-79:
-80: #
+79: 
+80: # 
 …[truncated]
   ```
   </details>
@@ -1130,7 +1130,7 @@ Now the alternative-bar implementations, KG/RAG component names, and Warden clas
 38:# - Load extracted triples into Neo4j using efficient batch UNWIND queries
 41:# **Book Reference**: Chapter 23, Section 23.2 (Constructing Financial Knowledge Graphs)
 44:# Requires a live Neo4j instance. Cache regeneration additionally requires an RTX-class GPU.
-97:# Automatically detect GPU and
+97:# Automatically detect GPU and 
 …[truncated]
   ```
   </details>
@@ -1168,22 +1168,22 @@ Now the alternative-bar implementations, KG/RAG component names, and Warden clas
 441: #
 442: # Section 24.9 describes the **Warden proxy**: a filter that sits between the
 443: # agent and external tools, enforcing policies on every tool call.
-444:
-445:
+444: 
+445: 
 446: # %%
 447: class WardenPolicy(NamedTuple):
 448:     """A single policy rule for the Warden: (name, check_fn) pair."""
-449:
+449: 
 450:     name: str
 451:     check: Callable[[str, dict], tuple[bool, str]]
-452:
-453:
+452: 
+453: 
 454: # %% [markdown]
 455: # ### Warden proxy
 456: #
 457: # Sits between the agent and the ToolExecutor, blocking calls that violate any policy.
-458:
-459:
+458: 
+459: 
 460: # %%
 461: class Warden:
 462:     """Proxy that enforces policies on tool calls before ex
@@ -1298,7 +1298,7 @@ Then I'll write the report.
 71:"""Framework comparison: same four-phase pipeline in native, CrewAI, LangGraph."""
 98:# the notebook reloads the saved native + LangGraph traces named below, makes no
 106:    "langgraph": "10_framework_comparison_20260609T151202Z_c8cba3007562.json",
-120:#
+120:# 
 …[truncated]
   ```
   </details>

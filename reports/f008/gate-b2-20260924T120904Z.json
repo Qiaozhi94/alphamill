@@ -1,0 +1,112 @@
+[
+  {
+    "db_symbol": "LTC/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:097bb31ebc71e977ca345860d8710a64ae8cf3e289df9eaec6bd2812d8f60eeb"
+  },
+  {
+    "db_symbol": "SYN/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:1755d412aa0a3273f603200063f4448c7333794bbb57a2a9c8beb4f80692e74a"
+  },
+  {
+    "db_symbol": "ONG/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:cbd6a7aac0e6cc42c2b67eeb69216cdceb35303d8e136ef52c6eb78c5249f8e7"
+  },
+  {
+    "db_symbol": "COTI/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:b8502f6f6568c58f58793939097f94db943affe1a5af41b5df923844669a985c"
+  },
+  {
+    "db_symbol": "DOT/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:1450959ad675bf9f6a19ce08c9463a0f512c524c0cb10d05f5e2d73ed57c0417"
+  },
+  {
+    "db_symbol": "DASH/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:e3e188f09a984d1d2a6e4d924b64699e405df65a909f5cbbbdee308113b8e4df"
+  },
+  {
+    "db_symbol": "SHIB/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:73f7413fab6083e3ff0a2d1db23f7edec5b663a5b5c3553a9f31df00de461dbb"
+  },
+  {
+    "db_symbol": "PENGU/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:5b9a6f2a25b5bd20ebd6812e0b9a9d57a0beb55fa561c531acd3fcb82f9d7bac"
+  },
+  {
+    "db_symbol": "PROM/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:d1f8bb6315080e44d55a978436286fcb218e99a0ce2fb07a063d8551bd2409ac"
+  },
+  {
+    "db_symbol": "HEI/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:05651fe0bc70726ad1a1ea05e447438509b4b9f0cf7071af7376419b5416b543"
+  }
+]

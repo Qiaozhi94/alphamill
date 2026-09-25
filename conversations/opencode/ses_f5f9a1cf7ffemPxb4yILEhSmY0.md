@@ -94,18 +94,18 @@ I detect evaluation/analysis intent — you want a design review of the project'
 8: created: 2026-09-12
 9: updated: 2026-09-12
 10: ---
-11:
+11: 
 12: # F004：Kronos 真实推理运行时 - 设计
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Tasks: `tasks.md`
-15:
+15: 
 16: ## 0. 输入与约束
-17:
+17: 
 18: - **行为契约**：`spec.md`（FR-001 / NFR-001）
 19: - **上游 Contract**：F001 冻结的 Kronos HTTP API（`GET /health`、`GET /predict/{symbol:path}`、`POST /predict_batch`），零改动
 20: - **执行环境**：与 F001 收口态一致（WSL2 + docker-ce；本机无独立显卡，CPU 推理实测 3.4–7.2s/次）
 21: - **实现约束**：`vendor/Kronos`（pin `67b630e`）与 `models/`（391MB + 16MB）不入库，由 F001 既有流程获取
-22:
+22: 
 23: ## 1. 技术概要
 …[truncated]
   ```
@@ -118,12 +118,12 @@ I detect evaluation/analysis intent — you want a design review of the project'
 <type>file</type>
 <content>
 1: # AlphaMill
-2:
+2: 
 3: AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，贯通数据治理 → 假设与因子 →
 4: 证据评测 → 组合与策略 → Freqtrade 执行 → 监控归因与复盘（中文别名：淘沙）。
-5:
+5: 
 6: ## 当前结构
-7:
+7: 
 8: - `docs/alphamill-prd.md`：正式 PRD（产品真相源），产品判断以此为准。
 9: - `docs/alphamill-architecture.md`：四平面架构与接口契约（架构真相源），随实现迭代。
 10: - `docs/alphamill-research-factor-mining.md`：因子挖掘/ML 选型调研证据（决策已提炼至 ADR-0001）。
@@ -253,21 +253,21 @@ Let me read them all in parallel. Also I should read ADR-0005 (presentation & ob
 4: created: 2026-09-13
 5: updated: 2026-09-13
 6: ---
-7:
+7: 
 8: # AlphaMill Console — UI 交互设计稿说明
-9:
+9: 
 10: 配套文件：[`index.html`](./index.html) + [`styles.css`](./styles.css) + [`app.js`](./app.js)。
 11: 浏览器直接打开 `index.html` 即可评审，支持 `#factors`、`#detail`、`#strategy` 等 hash 深链直达单页。
-12:
+12: 
 13: ## 定位
-14:
+14: 
 15: - 这是 **终局自建版**设计稿：按 ADR-0005 的自建前端路线绘制，不代表 Grafana/FreqUI 过渡形态；
 16: - 开发可后置（F005 立项后实施），但信息架构与数据契约以本稿为准；
 17: - **全部数字为占位假数据**，仅用于传达布局与信息密度，不表征任何真实回测/运营结果；
 18: - UI 内不承载设计元注释，全部说明集中在本文档（设计稿即最终交付形态）。
-19:
+19: 
 20: ## 设计方向：简洁高效
-21:
+21: 
 22: - 浅色中性底（`#f6f7f8`）+ 白色卡片 + 细边框，无渐变、无重阴影、无装饰性纹理；
 23: - **单强调色**（蓝 `#2563eb`）用于导航选中、主按钮、图表主线；语义色只保留两类：
 24:   绿 `#1580
@@ -290,7 +290,7 @@ Let me read them all in parallel. Also I should read ADR-0005 (presentation & ob
 7: <link rel="stylesheet" href="styles.css">
 8: </head>
 9: <body>
-10:
+10: 
 11: <header>
 12:   <div class="brand">AlphaMill <span>淘沙</span></div>
 13:   <div class="top-cell">环境 <b>DRY-RUN</b></div>
@@ -298,7 +298,7 @@ Let me read them all in parallel. Also I should read ADR-0005 (presentation & ob
 15:   <div class="top-cell">成本模型 <b class="mono">cm-v1</b></div>
 16:   <div class="top-cell" style="margin-left:auto; border-right:none;">UTC <b id="clock">--:--:--</b></div>
 17: </header>
-18:
+18: 
 19: <nav id="nav">
 20:   <div class="nav-item act
 …[truncated]
@@ -321,9 +321,9 @@ Now the key file — app.js (contains the pipeline animation with 7 nodes) and s
 <content>
 1: /* AlphaMill Console 设计稿 — 交互与假数据渲染
 2:    全部数字为占位假数据；生产实现中每个渲染函数对应一个只读 API 端点（ADR-0005）。 */
-3:
+3: 
 4: "use strict";
-5:
+5: 
 6: /* ── 工具 ─────────────────────────────── */
 7: function mulberry32(seed) {
 8:   return function () {
@@ -333,7 +333,7 @@ Now the key file — app.js (contains the pipeline animation with 7 nodes) and s
 12:     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 13:   };
 14: }
-15:
+15: 
 16: function series(seed, n, drift, vol, base) {
 17:   const rnd = mulberry32(seed);
 18:   const out = [];
@@ -417,30 +417,30 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 <type>file</type>
 <content>
 1: # AlphaMill — 产品需求文档（PRD）
-2:
+2: 
 3: > 版本：v0.1 | 日期：2026-09-13 | 状态：草案
-4:
+4: 
 5: ## 一、背景与问题定义
-6:
+6: 
 7: ### 1.1 quant-crypto 复盘
-8:
+8: 
 9: 上一代项目 quant-crypto 已建成可复用的数据、推理、执行、风控与监控基础设施：631 万行
 10: 1m OHLCV、衍生品特征、Kronos 信号缓存、Freqtrade dry-run、风险保护、90 天留出门和信号
 11: 质量监控。最终状态为 `blocked_no_paper_candidate`：所有候选均未通过最终留出。
-12:
+12: 
 13: 这次失败暴露的不是单点工具缺失，而是研究到交易之间没有形成可持续运转的闭环：
-14:
+14: 
 15: - 假设主要靠人工提出，5 周只覆盖 3 个信号族，探索速度慢；
 16: - 因子生成、成本评估、统计验证与策略构建的优化目标不完全一致；
 17: - 数据、实验、信号和交易结果之间缺少统一谱系，复现与重定价成本高；
 18: - 失败结果没有结构化回流为下一轮假设，研究循环无法积累；
 19: - 研究 PASS、组合纳入、部署和线上衰减之间缺少完整生命周期管理。
-20:
+20: 
 21: AlphaMill 要解决的不是“多生成一些公式”，而是把 **Alpha 的发现、证伪、部署和运营**
 22: 做成一条可信、可复现、可持续学习的生产管线。
-23:
+23: 
 24: ### 1.2 项目决策
-25:
+25: 
 26: 1. **以 AI 因子工厂为核心引擎**：程序化、RL、人工与 LLM 共同生产带来
 …[truncated]
   ```
@@ -475,8 +475,8 @@ Issues I can spot:
    - OVERVIEW_FLOW: 生成 128, 评测 89, 选择期 47, 组合 12, 验证 17, 上线 5, 监控 18.
    - But STAGES (factory pipeline distribution) says: 提案 214, 评测中 89, 选择期 47, 留出验证 12, 最终确认 5, Champion 2, Challenger 3, 监控 18, 衰减 41, 停用 96.
    - And the factory cards say: 本周产出 128 候选, 初筛存活 47, 组合验证中 12 (留出验证 90 天 · 其中最终确认 5), 在跑与监控 2 Champion, Challenger 3, 监控 18, 有效独立数 23.
-
-   So there are **inconsistencies**: 组合 12 vs 组合验证中 12; 验证 17 vs (留出验证 12 + 最终确认 5 = 17); 上线 5 vs (Champion 2 + Challenger 3 = 5); 监控 18 vs 监控 18. OK so 验证 = 12+5 = 17, 上线 = 2+3 = 5. These are consistent actually (sums). But semantically weird: "上线" shows 5 (champion+challenger) — but 监控 18 includes champions? The mockup says 监控中因子 18, but STAGES says 监控 18. Hmm, Champion 2 + Challenger 3 = 5 mounted, and 监控 18. But 上线 = "已挂载因子" labeled 5, extra "PM-007 · PM-009 dry-run".
+   
+   So there are **inconsistencies**: 组合 12 vs 组合验证中 12; 验证 17 vs (留出验证 12 + 最终确认 5 = 17); 上线 5 vs (Champion 2 + Challenger 3 = 5); 监控 18 vs 监控 18. OK so 验证 = 12+5 = 17, 上线 = 2+3 = 5. These are consistent actually (sums). But semantically weird: "上线" shows 5 (champion+challenger) — but 监控 18 includes champions? The mockup says 监控中因子 18, but STAGES says 监控 18. Hmm, Champion 2 + Challenger 3 = 5 mounted, and 监控 18. But 上线 = "已挂载因子" labeled 5, extra "PM-007 · PM-009 dry-run". 
 
    Wait, but in the factory card: "在跑与监控 2 Champion · Challenger 3 · 监控 18 · 有效独立数 23". So 在跑与监控 total: 2+3+18 = 23? That's a coincidence with 有效独立数 23 — actually it looks like they're conflating "监控" count with "有效独立数". That's a metrics mixing problem. 有效独立数 is the number of effective independent candidates (OOS PnL clustering), not the count of monitored factors. Actually in the mockup, both are 23 — suspicious.
 
@@ -486,7 +486,7 @@ Issues I can spot:
    - 组合 12 "组合验证中" with extra "边际贡献评估 + 冻结" — but 组合 stage should be "构建并冻结 PortfolioDef", and 12 with "组合验证中"... The factory card says "组合验证中 12 · 留出验证 90 天 · 其中最终确认 5" — this is confusing: 组合验证 in portfolio world, but the card mixes 留出验证 90 天 into 组合验证中.
    - 验证 17 "留出 + 最终确认" — should be reported separately (留出 12 / 最终确认 5).
    - 上线 5 "已挂载因子" — but the stage between 最终确认 and 监控 in FR5.2 is 部署前复核 (pre-deployment review), then 挂载 dry-run. And lifecycle states champion/challenger. The mockup "上线" = 5 (2 champion + 3 challenger); but then 监控 18 — what are these 18? If we have 2 champions and 3 challengers mounted, what does 监控 18 mean vs 衰减 41, 停用 96? In STAGES, 监控 18, 衰减 41, 停用 96 are separate bars. But OVERVIEW_FLOW 监控 = "监控中因子" 18 with extra "PnL +6.42% · 衰减 41 · 停用 96".
-
+   
    Then the flow of the animation: particles flow from 生成 through to 监控, and 淘汰粒子 fall from stages 1,2,3,4,6 (FALL_FROM = [1, 2, 3, 4, 6] — 评测, 选择期, 组合, 验证, 监控). Note: no rejections from 生成 (fine) and 上线 (fine—probably), but also what about 监控 → 衰减/停用? Decayed particles fall to evidence pool from 监控 (m=6 with amber color). OK.
 
    But wait — there's a subtle issue: the fall from 验证 (m=4) and 组合 (m=3) counts as "淘汰" — however rejections at 留出门 aren't exactly "淘汰" in evidence-library terms... Actually the README says "证据库托盘（评测/选择期/组合/验证/监控的淘汰粒子均落入——对齐架构生命周期图「所有拒绝点进证据库 X」）". Let me check the architecture's lifecycle diagram for "所有拒绝点进证据库" to verify.
@@ -527,15 +527,15 @@ Now the architecture doc (lifecycle, evidence library, metrics) and ADR-0005:
 <type>file</type>
 <content>
 1: # AlphaMill — 系统架构设计
-2:
+2: 
 3: > 版本：v0.1 | 日期：2026-09-13 | 配套：[alphamill-prd.md](./alphamill-prd.md)
-4:
+4: 
 5: ---
-6:
+6: 
 7: ## 〇、存储三件套分工（TimescaleDB / Parquet / DuckDB）
-8:
+8: 
 9: **不是三选一的竞品，是流水线上的三段**：Parquet 是文件格式（箱子），DuckDB 是查询引擎（开箱的手），TimescaleDB 是数据库服务（实时柜台）。
-10:
+10: 
 11: | | TimescaleDB | Parquet 湖 | DuckDB |
 12: |---|---|---|---|
 13: | 本质 | PG 时序扩展（数据库服务） | 列式文件格式（无服务） | 进程内 OLAP 查询引擎 |
@@ -543,7 +543,7 @@ Now the architecture doc (lifecycle, evidence library, metrics) and ADR-0005:
 15: | 擅长 | 实时最新值、连续聚合、Grafana 直连 | 大范围列扫描、快照不可变=可复现 | 直接对 Parquet 跑 SQL |
 16: | 复现性 | ❌ 数据会被回补/修订 | ✅ 同一 data_version 永远同结果 | 无关（读的人） |
 17: | 角色 | **联机运营库** | **研究快照**（封存账本） | **取数入口**（会计的手） |
-18:
+18: 
 19: ```text
 20: CCXT 采集 ──写入──▶ TimescaleDB（联机运营库，随时改）
 21
@@ -569,18 +569,18 @@ Now ADR-0005 and the styles for layout analysis:
 <type>file</type>
 <content>
 1: # ADR-0005：呈现与观测架构 —— 真相源/投影/展示三分与自建前端路线
-2:
+2: 
 3: - 日期：2026-09-13
 4: - 状态：Accepted
 5: - 决策人：Georg
 6: - 背景：呈现层长期路线；PRD FR8 / FR6.1 / FR6.4 / FR7.2 / FR7.4；架构文档 §〇 / §七
-7:
+7: 
 8: ## 背景
-9:
+9: 
 10: 当前呈现面三件：Grafana（`quant-overview` 平台观测 + `dryrun-monitoring` 策略运营，F001
 11: 迁入并验收有数）、FreqUI（Freqtrade 镜像自带，`api_server` 已启用）、CLI（`tools/verify.py`
 12: 门禁与操作）。三个结构性问题随里程碑逼近：
-13:
+13: 
 14: 1. **研究证据没有承载面**：评测台（FR3）落地后 M2 出口要求周产能 ≥100 候选，版本化报告
 15:    靠文件浏览不可持续；架构文档 §五 原计划的「Grafana 实验台账看板」与版本态产物形态
 16:    （文件 + 谱系图 + 逐因子下钻）不匹配。
@@ -601,7 +601,7 @@ Now ADR-0005 and the styles for layout analysis:
 1: /* ALPHAMILL Console — 简洁高效设计系统
 2:    浅色中性底 + 单强调色；语义色仅用于收益(绿/红)与告警(琥珀)；
 3:    口径不进前端，UI 不承载任何设计元注释（见 README.md）。 */
-4:
+4: 
 5: :root {
 6:   --bg: #f6f7f8;
 7:   --panel: #ffffff;
@@ -622,7 +622,7 @@ Now ADR-0005 and the styles for layout analysis:
 22:   --amber-bg: #fffbeb;
 23:   --radius: 8px;
 24:   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-25:   --font: -apple-system, "Segoe UI", "PingFang SC", "Hiragino
+25:   --font: -apple-system, "Segoe UI", "PingFang SC", "Hiragino 
 …[truncated]
   ```
   </details>
@@ -704,13 +704,13 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 10: created: 2026-09-13
 11: updated: 2026-09-13
 12: ---
-13:
+13: 
 14: # F007：统一评测台与证据门禁
-15:
+15: 
 16: > Owner: Georg | Target: v0.2.x
-17:
+17: 
 18: ## 0. 来源与意图
-19:
+19: 
 20: - **PRD 来源**：`docs/alphamill-prd.md` FR3、FR7.1~FR7.5、M1
 21: - **架构来源**：`docs/alphamill-architecture.md` §2.1、§4.0、§4.2、§4.5
 22: - **上游 Contract 来源**：F002 `(dataset, DataVersion, value_digest)`；F004/Kronos 与人工因子产出的 `FactorDef`
@@ -733,13 +733,13 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 
 Let me now think about this as a systematic design review. I should probably also consult the Oracle? The instruction says for complex architecture design → Oracle. This is an evaluation task, not implementation. I could consider firing Oracle to review, but I have enough context to formulate the analysis myself. Actually, per my system prompt, for high-quality reasoning I could consult Oracle. But this is a design-review analysis task where the key input is project-internal docs I've already read thoroughly. The Oracle would need to read many docs. Hmm. Let me consider: the user asked for a deep review with suggestions. This is my core competency area (design critique). I think I can do this directly — but it's also a substantial analysis where a second opinion from Oracle could help. Let me think about whether to fire Oracle.
 
-Actually, per my instructions: "Complex architecture design" → consult Oracle. This is not architecture design, it's a UI design review focused on information architecture. I've read all relevant materials (PRD, architecture, ADRs, mockup code). I can synthesize the review myself. The user wants my analysis now. Firing Oracle would add latency for marginal benefit since Oracle doesn't have the full context that I have gathered; I'd need to give it the full mockup + PRD excerpt. Hmm, it could still be valuable — a design review from a different angle. But let me keep it simple: the user asked me to analyze; I'll do the analysis. I can offer to use Oracle for verification if needed. Actually, let me reconsider — the instruction says "Work, delegate, verify, ship" and "Oracle - WHEN to Consult: Complex architecture design". This is design review, borderline. Given the user asked for "深入分析" (deep analysis), and this involves reconciling the mockup with PRD/architecture/ADRs — I have all the facts. I'll do it myself.
+Actually, per my instructions: "Complex architecture design" → consult Oracle. This is not architecture design, it's a UI design review focused on information architecture. I've read all relevant materials (PRD, architecture, ADRs, mockup code). I can synthesize the review myself. The user wants my analysis now. Firing Oracle would add latency for marginal benefit since Oracle doesn't have the full context that I have gathered; I'd need to give it the full mockup + PRD excerpt. Hmm, it could still be valuable — a design review from a different angle. But let me keep it simple: the user asked me to analyze; I'll do the analysis. I can offer to use Oracle for verification if needed. Actually, let me reconsider — the instruction says "Work, delegate, verify, ship" and "Oracle - WHEN to Consult: Complex architecture design". This is design review, borderline. Given the user asked for "深入分析" (deep analysis), and this involves reconciling the mockup with PRD/architecture/ADRs — I have all the facts. I'll do it myself. 
 
 Wait, but there's a strong bias in my system prompt to delegate. For analysis tasks like this, though, the value is in the synthesis which I've already done the reading for. Subagents wouldn't have my accumulated context unless I pass huge prompts. The pragmatic approach: do the analysis well. The user wants a review outcome, not code.
 
 Let me check the mockup in a browser to see it visually? I could take a screenshot with Playwright to assess the layout properly. The user asks about "大布局层面" (big layout level). Visual inspection would help. Let me check if playwright is available. Actually, the skill mentions playwright MCP for browser tasks. Let me try to open the mockup and take screenshots — that would ground my layout review. Let me check if the playwright MCP tool is available via skill_mcp.
 
-The available tools include `skill_mcp` with playwright — "MUST USE for any browser-related tasks. Browser automation via Playwright MCP". Let me check if I can use it. The skill list includes `/playwright` builtin. I can load it. But wait, the skill_mcp tool requires mcp_name. Let me see if playwright MCP is actually available. Let me first try loading the playwright skill or check MCP servers.
+The available tools include `skill_mcp` with playwright — "MUST USE for any browser-related tasks. Browser automation via Playwright MCP". Let me check if I can use it. The skill list includes `/playwright` builtin. I can load it. But wait, the skill_mcp tool requires mcp_name. Let me see if playwright MCP is actually available. Let me first try loading the playwright skill or check MCP servers. 
 
 Actually let me think about whether visual review is needed. The user selected the design and asked about layout suggestions + the 7 nodes. I have the code, so I know exactly the layout: header (brand + env + data_version + cost_model + UTC clock), left nav (4 items: 总览/监控/因子/设置), main with views. The overview = pipeline animation card + 3 cards (策略执行/信号与数据/昨夜产出). The visual inspection could reveal issues like the pipeline overflowing, but I can reason from the code.
 
@@ -948,8 +948,8 @@ Global layout:
 Overview page (the focus):
 - view-head: 总览 + sub.
 - One card with padding `6px 8px 0` containing `#flow-anim` SVG: viewBox 1200x268, `width:100%; height:268` — wait, the svg is created as `'<svg width="100%" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">'` and preserveAspectRatio default (xMidYMid meet). Width 100%, so the SVG scales to container width and preserves aspect ratio. Container width = 1400 - 2*28 padding? Wait view padding 24px 28px; card inside; card padding 6px 8px. So card inner width ~1400-56-2(border)-16 = ~1326px. SVG viewBox 1200 wide → scales up slightly (1.105x), height stays 268 (fixed attribute height=268? Actually `height="268"` with width 100% — the SVG will be 268px tall, and viewBox content scaled with preserveAspectRatio meet — since container ratio (1326/268=4.95) vs viewBox ratio (1200/268=4.48), "meet" scales content to fit height... hmm, meet means scale to fit entirely: scale = min(1326/1200=1.105, 268/268=1) = 1. So content renders at 1x scale, centered horizontally with extra ~63px margins each side. OK fine.
-
-  Nodes: N=7, x from 70 to 1130. Y=112. Numbers at y=56 (Y-56), labels y=80 (Y-32), name at y=148 (Y+36)?? wait: name at Y-56 = 56, number at Y-32 = 80, label at Y+36 = 148, extra at Y+52 = 164. Wait let me recheck:
+  
+  Nodes: N=7, x from 70 to 1130. Y=112. Numbers at y=56 (Y-56), labels y=80 (Y-32), name at y=148 (Y+36)?? wait: name at Y-56 = 56, number at Y-32 = 80, label at Y+36 = 148, extra at Y+52 = 164. Wait let me recheck: 
 
   ```
   svg += '<text x="' + x + '" y="' + (Y - 56) + '" ... >' + st.name + '</text>';   // y=56: 生成
@@ -958,32 +958,32 @@ Overview page (the focus):
   svg += '<text x="' + x + '" y="' + (Y + 52) + '" ... font-size 10 gray>' + st.extra + '</text>'; // y=164
   ```
   Halo circles at cy=Y=112, r=11. Lane line at y=112.
-
+  
   So vertical stack per node: name (y=56), number (y=80), [halo on lane y=112], label (y=148), extra (y=164). The gap between number baseline 80 and halo top 101 is 21px; between halo bottom 123 and label baseline 148 is 25px. OK.
-
+  
   But wait — there's a really important issue: the lane line and particles pass through the halo circles at y=112, and nodes are evenly spaced across 1060px (xs from 70 to 1130, step ~176.7px). Text "存量提案 214" etc at font-size 10 might be wider than 176px? ~7 chars × 5px = 35-80px, fine.
-
+  
   Evidence tray: rect x=180 y=208 w=960 h=34; text at x=200 y=229; right text at x=1120 text-anchor=end y=229: "累计淘汰 306 · 本季复盘 12 次 → 新假设入队 9（generation +1）". Width 960 at font-size 11 — the right text is long: roughly 40+ chars → ~440px at 11px CJK (11px per full-width char, mixed). Let me estimate: "累计淘汰 306 · 本季复盘 12 次 → 新假设入队 9（generation +1）" ≈ 20 full-width chars (CJK+fullwidth punct ~ 11px each = 220) + latin ~ 20 chars (6px each = 120) ≈ 340px. Left text "证据库 · 归因复盘" ≈ 9 chars ≈ 99px. 200+99 = 299; right starts at 1120-340=780. No overlap. OK.
-
+  
   Feedback arc: path from (185, 222) curving to (56, 134) with arrow at top. It goes from the tray's left edge up to the LEFT of the first node (生成 at x=70), the arrow at x0-14=56. OK.
-
-  FALL_FROM = [1,2,3,4,6] — nodes 评测(index1), 选择期(2), 组合(3), 验证(4), 监控(6) drop particles to the tray. Node index 5 上线 never drops. Also note index 0 生成 doesn't drop (right).
-
-  Hmm wait, one issue: because "组合" stage (index 3) in OVERVIEW_FLOW is labeled "组合验证中" with number 12, and 验证 (index 4) is 17 = 留出+最终确认 (12+5), there's an internal inconsistency: the 12 in 组合 and the 12 in 验证 overlap! Let me check:
+  
+  FALL_FROM = [1,2,3,4,6] — nodes 评测(index1), 选择期(2), 组合(3), 验证(4), 监控(6) drop particles to the tray. Node index 5 上线 never drops. Also note index 0 生成 doesn't drop (right). 
+  
+  Hmm wait, one issue: because "组合" stage (index 3) in OVERVIEW_FLOW is labeled "组合验证中" with number 12, and 验证 (index 4) is 17 = 留出+最终确认 (12+5), there's an internal inconsistency: the 12 in 组合 and the 12 in 验证 overlap! Let me check: 
   - 组合 num: 12 (组合验证中, extra 边际贡献评估 + 冻结)
   - 验证 num: 17 (留出 + 最终确认, extra 每周晋级上限 5)
   - In factory page: 组合验证中 12 = "留出验证 90 天 · 其中最终确认 5"
   - STAGES: 留出验证 12, 最终确认 5 → 17
-
+  
   So the same 12 appears as "组合" count in overview and "留出验证" in factory. The overview says 组合 12 = "组合验证中" and 验证 17 = "留出 + 最终确认". If 组合=12 and 验证=17, then is 17 a subset of 12 or separate? In factory, "组合验证中 12" includes "留出验证 90 天 · 其中最终确认 5" — so 12 is the number of PortfolioDefs in portfolio validation stage, of which 5 are in 最终确认... but wait STAGES says 留出验证 12 + 最终确认 5 = 17. These are contradictory: factory card says 组合验证中=12 of which 最终确认 5 (so 留出=7, final=5), while STAGES says 留出验证=12 AND 最终确认=5 (total 17). And overview 组合=12, 验证=17.
-
+  
   So the numbers are internally inconsistent across views. This is a design-draft bug: the funnel counts don't form a coherent flow. Good catch to report.
 
   Also: 生成 128 vs STAGES 提案 214. In overview "存量提案 214" as extra. And in factory "本周产出 128 · 目标 ≥100". The STAGES bar chart lists 提案 214, 评测中 89, 选择期 47 — so 214 is stock of proposals, 128 this week's output. 89 评测中... OK. But 选择期 47 with 初筛存活 47 (factory card). Then 组合 12, 验证 17 — wait, how can 验证 (17) > 组合 (12)? If portfolio verification follows combination, the downstream count can't exceed the upstream stock unless counting different things: 17 = 12 (留出) + 5 (最终确认) stacked, while 组合 12 = ... hmm. If 组合 12 are the ones in portfolio stage and they flow into 留出 (12), then 验证 17 = 12 leave-out + 5 final + ... no wait, 5 final would be PART of the 12, not additional. So 17 = 12+5 double counts. Unless 组合=12 means "in portfolio-gate evaluation" and those 12 will go to holdout, while 留出=12 and 最终确认=5 are cumulative numbers... Still confusing. The pipeline numbers should be monotonically non-increasing (a funnel). 12 → 17 violates monotonicity. It's because 验证 mixes two queues: 留出(12)+最终确认(5)=17. But then 组合 12 must be ≥ 17? No...
-
+  
   Actually let me think again: perhaps intended semantics: 组合=12 (portfolio candidates being assembled / in combination stage), 验证=17 (12 in holdout + 5 in final confirmation) — but the 5 in final confirmation should come from the 12 that were in holdout previously. So stock semantics: stage counts are current stock; a funnel snapshot. Current stock can be non-monotonic if flows are slow (e.g., 17 currently in verification because accumulated over time, while combination currently has 12). Monotonicity isn't strictly required for stock counts. But the number labels: "组合 12 / 验证 17" — if read as funnel, decreasing counts would be expected; a viewer will read it as funnel and be confused when it goes up. That's a formality issue. The bigger issue: same stage naming inconsistently counts. And "上线 5" = "已挂载因子" plus 监控 18 — but mounted factors (champion 2 + challenger 3 = 5) which are monitoring, so 监控 18 includes them? The factory card: "在跑与监控 2 Champion · Challenger 3 · 监控 18 · 有效独立数 23". 2+3+18 = 23 = 有效独立数 — this is clearly wrong conceptually (monitoring count ≠ effective independence count). 有效独立数 is a clustering-based measure, not a sum of lifecycle states. Presenting them so they coincidentally sum to 23 is misleading.
 
-- The overview cards below: 策略执行 (PnL), 信号与数据 (IC), 昨夜产出 (batch).
+- The overview cards below: 策略执行 (PnL), 信号与数据 (IC), 昨夜产出 (batch). 
 
 **Now for the review structure.** The user wants:
 1. Big layout suggestions (大布局层面)
@@ -1039,7 +1039,7 @@ Let me now think very carefully and produce a high-quality analysis. Let me re-d
 
 **PRD FR7.5 synthesis_report**: 北极星领先指标、cohort 漏斗、有效独立数、来源多样性、资源消耗、五阶段损失、线上偏差、最大约束。
 
-**架构 §2.2 lifecycle data flow**:
+**架构 §2.2 lifecycle data flow**: 
 HypothesisDef → FactorDef → 方法论/PIT门 → 纯度门 → 统一评测与成本门 → 去重/多重检验 → 选择期 → 组合边际贡献门 → 冻结 PortfolioDef → 90天留出与样本量门 → 永久隔离最终确认 → 部署前最近窗口复核 → 版本化信号缓存 → dry-run/paper → RunRecord → 绩效归因与衰减监控 → decayed/disabled; 所有拒绝点 → 证据库 X → 复盘 → 新假设.
 
 **F007 five stages**: 信号质量、组合转换、成本/容量、时序稳定、执行实现.
@@ -1061,7 +1061,7 @@ Now let me carefully identify the issues.
 
 Let me scrutinize each node:
 
-**1. 生成 (128 本周产出, 存量提案 214)**
+**1. 生成 (128 本周产出, 存量提案 214)** 
 - "本周产出 128" mixes a *rate* (本周) into a *stock* pipeline (存量提案 214 in extra). The pipeline is presenting stocks (current counts at each stage) but the first node's main number is a weekly flow. Other nodes show stock. Mixed semantics in same row: 128 (flow/week) → 89 (stock) → 47 (stock) → 12 → 17 → 5 → 18. Also 128 vs the batch table (B-20260912 = 124 candidates; 昨夜产出 card says 124; factor factory card says 本周产出 128) — inconsistent-looking numbers (128 vs 124) for what a viewer will read as the same thing.
 - Also: node 1 should be 提案/HypothesisDef (218 proposal) vs FactorDef level. The factor factory's STAGES list uses "提案 214" as first bar. In OVERVIEW_FLOW it says 存量提案 214 as extra of 生成 node. The distinction HypothesisDef → FactorDef matters (FR2.1). "生成" conflates hypothesis registration and factor generation.
 
@@ -1131,7 +1131,7 @@ Hmm wait, actually let me re-read more carefully:
 - And earlier: "**左树 4 项（总览 / 监控 / 因子 / 设置）...；落地页 = 总览**"
 - And: "**总览 = 全工作流闭环的实时呈现**：动画流水线（粒子流动 + 站点存量 + 落站脉冲）+..."
 
-Yes — direct contradiction: "落地页 = 总览" vs "移除总览页，落地页 = 策略运营". Also "不含任何待办类内容" vs "首屏命名「工作台」：定位是个人工作台（今天需要关注什么）" — workbench implies "today's attention", which contradicts "不含待办". These are three incompatible generations of decisions. The README needs a decision log with timestamps/supersedes or the stale ones removed. This is a concrete, verifiable finding.
+Yes — direct contradiction: "落地页 = 总览" vs "移除总览页，落地页 = 策略运营". Also "不含任何待办类内容" vs "首屏命名「工作台」：定位是个人工作台（今天需要关注什么）" — workbench implies "today's attention", which contradicts "不含待办". These are three incompatible generations of decisions. The README needs a decision log with timestamps/supersedes or the stale ones removed. This is a concrete, verifiable finding. 
 
 **Issue E: Layout-level observations (大布局)**
 
@@ -1162,7 +1162,7 @@ Hmm, but careful: the README says the mockup is the 终局全景蓝图 (end-stat
 }
 .fish-inner::before { content:""; position:absolute; left:14px; right:14px; top:79px; height:2px; ... }
 ```
-Yes: spine spans full inner width; columns = 11; stages = 7. Confirmed: line extends beyond last node into blank area.
+Yes: spine spans full inner width; columns = 11; stages = 7. Confirmed: line extends beyond last node into blank area. 
 
 Hmm wait, actually there's a subtlety: the `.fsh-col` elements are direct children; grid auto-places them in the first 7 tracks; tracks 8-11 empty. Spine (::before) is positioned absolute across full width → extends past node 7. Yes. Fix: repeat(7, minmax(...)) or grid-auto-flow. Good catch.
 
@@ -1176,7 +1176,7 @@ Also miniFlow tooltip: for decayed factors, shows "已降权（note11）" — ti
 
 6. **Top bar**: 环境 DRY-RUN / 数据版本 v2026.09.12 / 成本模型 cm-v1 / UTC clock. Missing: the **canonical ledger / research snapshot** identity. Data version is a dataset-level reference but canonical experiments bind a ResearchSnapshot (multi-dataset). Per FR8.1: "每个数字可追溯 manifest（data_version / cost_model_version 在顶栏与详情页可见）" — README claims this. But strictly the binding identity for multi-dataset is research_snapshot_id (ADR-0007). Showing only one dataset's data_version is insufficient when multiple datasets (ohlcv/funding/kronos signals) can version independently. For formality: top bar should show the active ResearchSnapshot (or at least snapshot + constituent versions on hover/detail), plus maybe code_build_digest and execution tier (canonical). This is a core-metric identity concern.
 
-7. **Line + bar mixing**: factory 流水线状态分布 uses horizontal bars for 10 stages mixing massively different magnitudes (提案 214, 评测中 89, ..., Champion 2) with log-ish visual distortion? No, linear — first bar 100%, others 42%,22%,5.6%... terminal 衰减 41, 停用 96. It's a funnel+outcomes mixed. Fine-ish, but the bar chart mixes "current stages" and "terminal outcomes" (same as the pipeline lane issue). Also the factory hero card #4: "在跑与监控 2 Champion · Challenger 3 · 监控 18 · 有效独立数 23" — mixing counts of different kinds and 有效独立数 is a *research metric* placed as auxiliary text. Per PRD, 有效独立数 is central to 探索能力 (must be reported with nominal throughput). It deserves better than a sub-line.
+7. **Line + bar mixing**: factory 流水线状态分布 uses horizontal bars for 10 stages mixing massively different magnitudes (提案 214, 评测中 89, ..., Champion 2) with log-ish visual distortion? No, linear — first bar 100%, others 42%,22%,5.6%... terminal 衰减 41, 停用 96. It's a funnel+outcomes mixed. Fine-ish, but the bar chart mixes "current stages" and "terminal outcomes" (same as the pipeline lane issue). Also the factory hero card #4: "在跑与监控 2 Champion · Challenger 3 · 监控 18 · 有效独立数 23" — mixing counts of different kinds and 有效独立数 is a *research metric* placed as auxiliary text. Per PRD, 有效独立数 is central to 探索能力 (must be reported with nominal throughput). It deserves better than a sub-line. 
 
 8. **监控 page (策略运营)**: strip (策略/引擎/信号源/滚动IC/陈旧信号/推理耗时) + 6 stat cards + equity curve + IC chart + positions + closed trades. Layout: OK. But: "信号预测力（7 天 IC）" uses threshold 0.015 as 降权线 — consistent with PARAMS. Fine. One mismatch: strip shows "滚动 IC 0.038" but strategy stat card doesn't show it; overview "信号与数据" card shows 0.038 as big number; consistent fake. OK.
 
@@ -1215,7 +1215,7 @@ Let me also check 128 vs 124 vs 117: factory card 本周产出 128; batches B-20
 
 15. **S-curve of metrics on 监控 page**: "滚动 IC 0.038" in strip; overview "信号与数据" big 0.038 label "信号预测力 · 采集延迟 0.8s · 同步 42s · 陈旧信号 7". Meh.
 
-16. **Naming/terminology consistency** (formality):
+16. **Naming/terminology consistency** (formality): 
 - nav: 总览 / 监控 / 因子 / 设置
 - page titles: 总览 / 策略运营 / 因子工厂(+因子库) / 设置
 - README IA table: 策略运营（落地页）/ 因子工厂 / 因子库 / 设置
@@ -1234,12 +1234,12 @@ The mockup mixes lifecycle states into verdict filters ("decayed" in 结论 filt
 
 19. Also missing: 论题检查点 clock (M4 10 weeks / 100 effective independent candidates) — G7. That's a long-horizon governance metric; maybe too much for overview, but worth a mention as a candidate for the settings/project view or weekly report only. Eh — mention lightly.
 
-20. **The 反馈弧 (purple) → claim**: README says 紫色反馈弧（证据库 → 归因复盘 → 新假设入队 → 回到生成，FR6.3-6.5 闭环）. Good. But purple is a *third* semantic color introduced beyond the stated design system: "单强调色（蓝）用于导航选中、主按钮、图表主线；语义色只保留两类：绿/红表示收益正负，琥珀表示告警/降级状态" — purple is not in the declared palette! The design system says single accent + green/red/amber, but the pipeline uses purple #7c3aed for the evidence library/feedback arc, and the compare page uses 4 colors (blue/green/amber/purple CMP_COLORS), and quantile bars use #10b981/#ef4444 (different greens/reds from tokens --green-line/#dc2626?), detail charts use raw hex (#2563eb stroke in svg code instead of var). So the design system's "single accent + 2 semantic" rule is violated in the most prominent component (pipeline) and others. Either the palette rule should be amended (purple = feedback/evidence semantics) or the colors tokenized. Formality finding: the CSS declares tokens, but app.js hardcodes hex colors (e.g., #2563eb, #dc2626, #9ca3af, #7c3aed, #10b981, #ef4444, #334155) — so theme changes (dark mode claim in README: "深色偏好若回归：设计 token 全部集中在 styles.css :root，可派生暗色主题而不动结构") would NOT actually work, because all charts/pipeline colors are hardcoded in JS. Concrete contradiction with the README's own claim.
+20. **The 反馈弧 (purple) → claim**: README says 紫色反馈弧（证据库 → 归因复盘 → 新假设入队 → 回到生成，FR6.3-6.5 闭环）. Good. But purple is a *third* semantic color introduced beyond the stated design system: "单强调色（蓝）用于导航选中、主按钮、图表主线；语义色只保留两类：绿/红表示收益正负，琥珀表示告警/降级状态" — purple is not in the declared palette! The design system says single accent + green/red/amber, but the pipeline uses purple #7c3aed for the evidence library/feedback arc, and the compare page uses 4 colors (blue/green/amber/purple CMP_COLORS), and quantile bars use #10b981/#ef4444 (different greens/reds from tokens --green-line/#dc2626?), detail charts use raw hex (#2563eb stroke in svg code instead of var). So the design system's "single accent + 2 semantic" rule is violated in the most prominent component (pipeline) and others. Either the palette rule should be amended (purple = feedback/evidence semantics) or the colors tokenized. Formality finding: the CSS declares tokens, but app.js hardcodes hex colors (e.g., #2563eb, #dc2626, #9ca3af, #7c3aed, #10b981, #ef4444, #334155) — so theme changes (dark mode claim in README: "深色偏好若回归：设计 token 全部集中在 styles.css :root，可派生暗色主题而不动结构") would NOT actually work, because all charts/pipeline colors are hardcoded in JS. Concrete contradiction with the README's own claim. 
 
 Let me double check: app.js uses '#2563eb' in renderDetail equity line, '#dc2626' drawdown, '#9ca3af' text fills, renderOverview: fbColor = "#7c3aed", '#e5e7eb', '#2563eb', '#eff6ff', '#111827', '#374151', '#9ca3af', '#f5f3ff'; strategy: '#10b981', '#334155', '#dc2626'; compare: CMP_COLORS. Yes — hardcoded. So "设计 token 全部集中在 :root，可派生暗色主题而不动结构" is false for everything rendered via JS/SVG. Good finding: tokenize chart colors via CSS custom properties read at runtime, or centralize in JS constants file.
 
-21. **HTML has stray/broken markup**:
-- Line 273-274: `</table></div>` then `</div>` extra? Let me look:
+21. **HTML has stray/broken markup**: 
+- Line 273-274: `</table></div>` then `</div>` extra? Let me look: 
 
 ```html
     <div class="card">
@@ -1260,7 +1260,7 @@ Line 263-275:
         </div></div>
         <table ...>...</table>
       </div>
-      </div>     ← line 274: this closes...?
+      </div>     ← line 274: this closes...? 
   </section>
 ```
 Count: `<section id="view-settings">` ... tabs, tab-biz panel (`<div class="tab-panel active" id="tab-biz">...` closed), then `<div class="tab-panel" id="tab-ops">` opens at 253, contains 服务健康 sec + card (closed 260), hint, 日志记录 sec, card (opened 264, closed 273). Then line 274 `</div>` closes tab-ops. Then `</section>`. OK actually balanced: let me recount the tab-ops closing. Line 264 `<div class="card">`; inside: 265 `<div style=...>` contains 266 filters div, 267 select etc, 268 span, 269 `</div>` closes filters? Let me carefully recount from the read output:
@@ -1382,7 +1382,7 @@ Also: "每天 02:00 导出快照" — PRD says data_bridge export; timing not fi
 
 Let me also verify "每周晋级上限 5" vs PARAMS "每周留出晋级上限 5" ✓ consistent. And PARAMS "样本量裁决阈值 30 / 69 笔" ✓. Nice.
 
-42. The strategy page strip: "陈旧信号 7（越界已置空）" — matches architecture §4.3 staleness semantics (NaN). Good formality point: it follows the spec. Actually wait — "越界已置空" = set to NaN/no-signal ✓.
+42. The strategy page strip: "陈旧信号 7（越界已置空）" — matches architecture §4.3 staleness semantics (NaN). Good formality point: it follows the spec. Actually wait — "越界已置空" = set to NaN/no-signal ✓. 
 
 43. Detail page metric cards: 6 cards g6: Rank IC 均值/ICIR/IC 正率/成本后多空收益/换手率/毛交易样本 — with power verdict on 毛交易样本 (UNDERPOWERED etc.). Good. Missing: breakeven cost (F007 FR-005 asks breakeven), deflated significance, cohort context; but it's a factor detail view — the blueprint level may be OK. Mention in deep-dive as "consider adding breakeven cost + cohort".
 
@@ -1392,9 +1392,9 @@ Actually F007 FR-005: "输出零成本/maker/taker 三档、资金费率、break
 
 45. **One more real inconsistency**: README claims "总览...不含任何待办类内容" ✓ mockup has none. README bullet "首屏命名「工作台」" contradicts. And the strategy page titled 策略运营 with nav 监控. Also README 交互说明: "`data-goto` 的「查看全部 →」跳转对应视图" — mockup has "进因子工厂 →" in 昨夜产出 card. fine.
 
-46. Check "深链 #factors / #detail / #strategy" — actual view ids: factory/detail/compare/overview/strategy/settings. README says "#factors"! `#factors` doesn't exist → hash handler: `if (h && document.getElementById("view-" + h))` — "view-factors" doesn't exist → nothing happens, lands on default overview. So the README documents a broken deep-link (#factors should be #factory). Concrete defect. Nice catch. Let me double-check index: id="view-factory" — yes; README line 11: "支持 `#factors`、`#detail`、`#strategy` 等 hash 深链直达单页" — #factors broken (should be #factory). Also #detail: view-detail exists but renderDetail uses default selectedFactor; click nav absent for detail — deep link works via gotoView branch? In the hash init: `var navItem = document.querySelector('.nav-item[data-view="' + h + '"]'); if (navItem) navItem.click(); else gotoView(h);` — for h=detail, no nav item → gotoView("detail") → shows view-detail. OK works. #compare works similarly. So only #factors is wrong in README.
+46. Check "深链 #factors / #detail / #strategy" — actual view ids: factory/detail/compare/overview/strategy/settings. README says "#factors"! `#factors` doesn't exist → hash handler: `if (h && document.getElementById("view-" + h))` — "view-factors" doesn't exist → nothing happens, lands on default overview. So the README documents a broken deep-link (#factors should be #factory). Concrete defect. Nice catch. Let me double-check index: id="view-factory" — yes; README line 11: "支持 `#factors`、`#detail`、`#strategy` 等 hash 深链直达单页" — #factors broken (should be #factory). Also #detail: view-detail exists but renderDetail uses default selectedFactor; click nav absent for detail — deep link works via gotoView branch? In the hash init: `var navItem = document.querySelector('.nav-item[data-view="' + h + '"]'); if (navItem) navItem.click(); else gotoView(h);` — for h=detail, no nav item → gotoView("detail") → shows view-detail. OK works. #compare works similarly. So only #factors is wrong in README. 
 
-47. Let me also double check the claim in README: "因子库以「生命周期进展」列替换「结论」列" — but the mockup factor table still HAS 结论 column? Columns: 选/Factor ID/假设/生成器/口径/Rank IC/ICIR/IC 正率/成本/生命周期进展/数据版本. No 结论 column ✓ replaced. But the filter still says "结论" with promising etc. ✓ so the filter remains named 结论 — contradicts "替换结论列" intent? The decision says replace the column, and the filter (结论/生成器/数据版本 三维过滤) still calls it 结论. Minor naming. Also earlier decision "原实验漏斗更名因子工厂" ✓.
+47. Let me also double check the claim in README: "因子库以「生命周期进展」列替换「结论」列" — but the mockup factor table still HAS 结论 column? Columns: 选/Factor ID/假设/生成器/口径/Rank IC/ICIR/IC 正率/成本/生命周期进展/数据版本. No 结论 column ✓ replaced. But the filter still says "结论" with promising etc. ✓ so the filter remains named 结论 — contradicts "替换结论列" intent? The decision says replace the column, and the filter (结论/生成器/数据版本 三维过滤) still calls it 结论. Minor naming. Also earlier decision "原实验漏斗更名因子工厂" ✓. 
 
 48. Small: factory 4 cards - card 2 "初筛存活 47" sub "其余 81 个被纯度门/成本/查重淘汰" — 128-47=81 ✓. Card 3 "组合验证中 12" sub "留出验证 90 天 · 其中最终确认 5" — as discussed, contradictory ("其中"). Card 4 "在跑与监控 2 Champion · Challenger 3 · 监控 18 · 有效独立数 23". So the 4 cards tell: 128 → 47 → 12 → 2. Pipeline overview tells 128 → 89 → 47 → 12 → 17 → 5 → 18. Different number sets (89, 17, 5, 18 appear only in overview; 47 etc. in both). The two components don't obviously derive from one another (e.g., factory card shows 12 组合验证中; overview 组合 12 ✓ same; factory doesn't show 89/17/18). Fine-ish but should share one source.
 
@@ -1443,11 +1443,11 @@ Let me draft the content.
 
 2. 大布局（全局）审视 + 建议 — maybe 5 bullets:
    - 总览重心：运营重、研究轻；缺北极星。建议三段带。
-   - 各页面与真相源/层级标注缺失（canonical vs ops、manifest 追溯）— 顶栏只有单数据集版本，应带 ResearchSnapshot。
-   - 术语四套词汇表（阶段/verdict/生命周期/门禁）混用 — 需要 vocabulary registry。
+   - 各页面与真相源/层级标注缺失（canonical vs ops、manifest 追溯）— 顶栏只有单数据集版本，应带 ResearchSnapshot。 
+   - 术语四套词汇表（阶段/verdict/生命周期/门禁）混用 — 需要 vocabulary registry。 
    - README 内部矛盾 + 死链 #factors + 落地页冲突 — 设计资产自身要"决策日志化"（supersedes）。
    - 视觉 token 声明与实现不符（JS 硬编码色板 → 暗色不可派生；紫色超出调色板；10px #9ca3af; .lane-dash 无 reduced-motion；11 列死区）。
-
+   
    Maybe split: 布局层 vs 细节缺陷. Keep ≤5 bullets each.
 
 3. 7 节点逐个体检 (table): 节点 | 数字语义 | 问题 | 建议。That's 7 rows. Plus intro on the three pillars. Then concrete proposed re-design of the lane: propose either "7 宏观阶段 + 门禁分隔/预算/子门损失注记" or a 9-10 门禁正式漏斗. Give the proposed node semantics list. I'll propose a concrete alternative spec:
@@ -1463,7 +1463,7 @@ Let me draft the content.
    - Table A: 项目真正的关键节点（权威顺序，12 gates compressed maybe 10 rows) — but cap: I'll write as a compact pipeline string + 5 highlight notes on the ones with "hard semantics" (成本否定=直接 dead; 拒绝者入分母; cohort FINALIZED 才可晋级; 每周5+append-only台账; 永久隔离; 部署复核≠确认通过; preview/canonical 隔离; 样本量三级).
    - Table B: 核心指标 map: 北极星 / 转化效率 / 探索能力 / 漏斗健康 / 线上结果 / 信任护栏 → PRD 出处 → mockup 现状 → 建议落点. 6 rows.
    - "关注点"=the console's jobs: 今天/本周/cohort/北极星/审计 — 5 items, with mockup coverage check.
-   Then: 总览缺的关键读数清单 (shortlist): 北极星 28d、有效独立数、最大流失级、留出预算、UNDERPOWERED 计数、部署复核队列。
+   Then: 总览缺的关键读数清单 (shortlist): 北极星 28d、有效独立数、最大流失级、留出预算、UNDERPOWERED 计数、部署复核队列。 
 
 5. 建议的下一步 (one action): offer two options: (a) 我直接改设计稿（本轮交付：流水线重构为门禁化漏斗 + 数字一致性 + README 矛盾清理 + 死链/列宽 bug），约 30–40 分钟；(b) 先只出"流水线语义规格"一页纸（节点/单位/预算/损失字段 + 数据字典），你审完再动稿。推荐 (b)→(a)? Or recommend (a)? The user asked analysis; the next step is their call. I'll recommend: 先定语义规格再改稿 — one option; and give the exact files. Under 2 min action: "确认走 A 还是 B" is not a "doable action"... The guideline: end with ONE next action doable in <2 min. E.g., "下一步（<2分钟）：告诉我按 A 还是 B 走；若 A，直接说'改稿'我就开工。" That's fine.
 
@@ -1478,7 +1478,7 @@ A) Fishbone 11 columns: `grid-template-columns: repeat(11, minmax(88px, 1fr))` �
 Wait — maybe the intent: labels above/below need ~88px min each and they wanted 11 to make the total min-width 990 for scroll. min-width:990px = 11×90. If they used 7, min-width would be 7×90=630. Their min-width 990 + 11 columns suggests leftover from an earlier 11-node fishbone (maybe 10 gates +). So flag as "看起来是旧版 11 节点残留：7 个节点占 11 列，轴线延伸到空白区" — good.
 
 B) README contradictions:
-- "首屏命名「工作台」：定位是个人工作台（今天需要关注什么），不是系统总览；"
+- "首屏命名「工作台」：定位是个人工作台（今天需要关注什么），不是系统总览；" 
 - "左树 4 项（总览 / 监控 / 因子 / 设置）...落地页 = 总览；"
 - "移除「工作台/总览」页，落地页 = 策略运营：..."
 - IA table: "一级视图共 4 个：策略运营（落地页）/ 因子工厂 / 因子库 / 设置。"
@@ -1554,13 +1554,13 @@ W) 核心指标表 (as analyzed above). Let me build concise mapping (PRD row �
 - 信任护栏（快照/manifest/留出台账/复现率 100%、前视 0）→ 顶栏数据版本 ✓、manifest 详情 ✓、留出台账 仅在 detail 提示 + logs △ → 建议"完整性状态"块（如 快照有效/Ledger 孤账=0/复现率）。
 - （附加 F007）五阶段损失 + 最大约束 → 缺。
 
-X) One more: "关注点" list maybe:
+X) One more: "关注点" list maybe: 
 - 产能 vs 有效探索的区分（名义/有效独立/来源）
 - 失败结构与停止时钟（成本主导 or 假设枯竭 or 可信存活；G7 检查点）
 - 证据预算（留出周上限、隔离窗、样本量级别）
 - 部署时滞（复核 SLO、champion 轮换）
 - 口径单一（manifest 追溯、canonical 边界）
-That's 5.
+That's 5. 
 
 Y) For the "7 节点" section, I'll give a table: 节点 | 现数字 | 问题 | 建议（保持宏观 7 段的话怎么改）。Problems:
 1. 生成: 128 本周产出（流量）与存量提案 214 混排；与工厂卡/批次对不上 → 节点统一为存量，流量单独放"本周新增"条；明确对象=HypothesisDef/FactorDef。
@@ -1575,7 +1575,7 @@ Actually wait — is 组合 stage "组合门" occurring before 留出? FR3.4: Fa
 
 Z) Also propose: the lane's feedback arc is good conceptually (unique closing loop); keep but formalize: label the loop with SLA: "复盘→入队 ≤N 天；generation+1；计入试验预算" and metrics (本季复盘12次/入队9). Present in tray text already. Fine, minor.
 
-Additionally, I want to propose an explicit **redesigned node data contract** (what each node shows): for each stage: 名称、对象（FactorDef/PortfolioDef/DeploymentRun）、存量、7d 净变化、等待中/进行中拆分、门禁拒绝数（分原因）、预算（若适用）。And a data dictionary line: all numbers from `v_funnel_status` (experiment_store 投影) — the README already maps endpoints; my addition: include gates/budgets/loss in that view.
+Additionally, I want to propose an explicit **redesigned node data contract** (what each node shows): for each stage: 名称、对象（FactorDef/PortfolioDef/DeploymentRun）、存量、7d 净变化、等待中/进行中拆分、门禁拒绝数（分原因）、预算（若适用）。And a data dictionary line: all numbers from `v_funnel_status` (experiment_store 投影) — the README already maps endpoints; my addition: include gates/budgets/loss in that view. 
 
 Also the format: maybe show a small ASCII of proposed lane:
 
@@ -1616,7 +1616,7 @@ Also I can note the tension: 北极星 (28d trusted PortfolioDefs) is intentiona
 Hmm, actually wait — I should double-check my claim that the North Star isn't anywhere. Search mockup for "可信" — appears in README (可信样本量) and PARAMS note "需最终确认 + 可信样本量后人工开启"; overview? No. Factory cards? No. So yes missing.
 
 Also missing: 研究到证据周期 (median time) — nowhere.
-Missing: 来源多样性 — nowhere.
+Missing: 来源多样性 — nowhere. 
 
 OK. Also one subtle thing: the README says "有效独立数等研究指标作为辅助信息收纳" for factory — that was a decision ("收纳为辅助"). My critique can push back: 有效独立数 is a *primary* exploration metric per PRD §2.3 ("名义目标 ≥100/周，不单独作为成功判据") — PRD explicitly says nominal must be reported *alongside* effective independent count. So burying it in a sub-line contradicts "必须与有效独立数、完整漏斗、来源多样性、研究周期和线上偏差一起报告" (README of repo, top). Great grounding: repo README says: "每周 ≥100 个名义候选仍是 AI 因子工厂的产能目标，但必须与有效独立数、完整漏斗、来源多样性、研究周期和线上偏差一起报告，不能单独作为成功判据。" So the console's factory card showing "128 候选 ✓ 已达成" as the big number with 有效独立数 as footnote is exactly the anti-pattern the project warned against ("不能单独作为成功判据"). Excellent — this is a *sharp* review point with authoritative grounding. The 4 factory cards tell: 128 达成 (success vibes) → ... → 有效独立数 23 as footnote. Recommend: pair nominal+effective side by side with 来源多样性 and 研究周期. Strong.
 
@@ -1644,7 +1644,7 @@ Also should I mention the F004 file they had selected? The selected snippet was 
 
 Let me also reconsider: is there something in the repo about a "正式" pipeline that the user might be comparing against? E.g., maybe they saw the mockup screenshots themselves and disliked it. My analysis stands on its own.
 
-Let me now also double-check node #2 "评测 89": STAGES "评测中 89" ✓. Node #3 47 ✓ "选择期 47". Node #4 12 ✓ "组合验证中 12" (card). Node #5 17 = 12+5 per STAGES 留出验证12+最终确认5. Node #6 5 = Champion2+Challenger3. Node #7 18 = STAGES 监控18. So overview derives from STAGES with node5 = sum of two rows and node6 = sum of two rows, node7 = one row. Inconsistent aggregation rule (sum-of-two for 5/6, single for others; and 12 double-appears in node4 and node5). Actually node4's 12 comes from "组合验证中 12" (card) which equals STAGES' 留出验证 12?? The card sub says "留出验证 90 天 · 其中最终确认 5" — so card's "组合验证中 12" encompasses 留出验证. So node4=12 (PortfolioDefs in verification sphere), node5=17=12+5?? That double counts within the overview itself (12 counted at 组合 AND inside 验证 17). Hmm so cleanest statement: **组合 12 与 验证 17 相邻两节点存在重复计数嫌疑（17=12+5，而 12 已在组合节点计过）**。或者 12 与 17 分属不同口径（组合=组合门中，验证=留出+确认中；则 17 里不该含 12）。Either way, incoherent.
+Let me now also double-check node #2 "评测 89": STAGES "评测中 89" ✓. Node #3 47 ✓ "选择期 47". Node #4 12 ✓ "组合验证中 12" (card). Node #5 17 = 12+5 per STAGES 留出验证12+最终确认5. Node #6 5 = Champion2+Challenger3. Node #7 18 = STAGES 监控18. So overview derives from STAGES with node5 = sum of two rows and node6 = sum of two rows, node7 = one row. Inconsistent aggregation rule (sum-of-two for 5/6, single for others; and 12 double-appears in node4 and node5). Actually node4's 12 comes from "组合验证中 12" (card) which equals STAGES' 留出验证 12?? The card sub says "留出验证 90 天 · 其中最终确认 5" — so card's "组合验证中 12" encompasses 留出验证. So node4=12 (PortfolioDefs in verification sphere), node5=17=12+5?? That double counts within the overview itself (12 counted at 组合 AND inside 验证 17). Hmm so cleanest statement: **组合 12 与 验证 17 相邻两节点存在重复计数嫌疑（17=12+5，而 12 已在组合节点计过）**。或者 12 与 17 分属不同口径（组合=组合门中，验证=留出+确认中；则 17 里不该含 12）。Either way, incoherent. 
 
 Also "组合 12 组合验证中" vs node label "组合验证中" — combines 组合门 (selection-data) and 验证 (holdout)?? confusing. I'll present.
 
@@ -1686,7 +1686,7 @@ Actually PRD lists: 生成 → 纯度门 → 证据/成本门 → 去重/多重�
 
 I think I should present the 10-station mapping to the PRD's funnel line directly — that's the strongest "formal" argument:
 
-PRD §2.3 漏斗链 = 生成 → 纯度门 → 证据/成本门 → 去重/多重检验 → 选择期 → 组合门 → 留出门 → 最终确认 → 部署前复核 (9 stages). Plus architecture adds 方法论/PIT 门 after generation. So the formal pipeline = 生成 → 方法论/PIT → 纯度 → 成本/证据 → 去重/多重检验 → 选择期 → 组合门 → 留出 → 最终确认 → 部署复核 → 监控 (11). The mockup's 7 macro stages compress 纯度/成本/查重 into 评测 and 留出/最终确认 into 验证 and 部署复核 into 上线 — net effect: the three compression points are precisely where the project's credibility rules live. That's my核心论点.
+PRD §2.3 漏斗链 = 生成 → 纯度门 → 证据/成本门 → 去重/多重检验 → 选择期 → 组合门 → 留出门 → 最终确认 → 部署前复核 (9 stages). Plus architecture adds 方法论/PIT 门 after generation. So the formal pipeline = 生成 → 方法论/PIT → 纯度 → 成本/证据 → 去重/多重检验 → 选择期 → 组合门 → 留出 → 最终确认 → 部署复核 → 监控 (11). The mockup's 7 macro stages compress 纯度/成本/查重 into 评测 and 留出/最终确认 into 验证 and 部署复核 into 上线 — net effect: the three compression points are precisely where the project's credibility rules live. That's my核心论点. 
 
 Alright — also worth confirming: does PRD G1/G3/G5/G7 give concrete "核心指标" numbers the console should show? G5 "最终确认通过至 dry-run ≤1 天"; G3 "≥100 名义/周 + 报告有效独立数、来源分布、各级漏斗"; M4 checklist "周报输出完整指标体系"; §2.3 table. Yes.
 

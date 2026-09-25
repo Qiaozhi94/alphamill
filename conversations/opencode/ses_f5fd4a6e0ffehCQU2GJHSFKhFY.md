@@ -53,12 +53,12 @@ Let me read CLAUDE.md and list the features directory.
 <type>file</type>
 <content>
 1: # AlphaMill
-2:
+2: 
 3: AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，贯通数据治理 → 假设与因子 →
 4: 证据评测 → 组合与策略 → Freqtrade 执行 → 监控归因与复盘（中文别名：淘沙）。
-5:
+5: 
 6: ## 当前结构
-7:
+7: 
 8: - `docs/alphamill-prd.md`：正式 PRD（产品真相源），产品判断以此为准。
 9: - `docs/alphamill-architecture.md`：四平面架构与接口契约（架构真相源），随实现迭代。
 10: - `docs/alphamill-research-factor-mining.md`：因子挖掘/ML 选型调研证据（决策已提炼至 ADR-0001）。
@@ -126,14 +126,14 @@ Let me do these in parallel.
 4: created: 2026-09-06
 5: updated: 2026-09-07
 6: ---
-7:
+7: 
 8: # Feature Specs Guide
-9:
+9: 
 10: 本目录记录 AlphaMill 的 feature-level SDD artifacts。所有需求按「一 feature 一
 11: 文件夹」输出，feature 文件夹按 PRD 的大版本（`0.1`、`0.2`…）分层存放。
-12:
+12: 
 13: ## Directory Shape
-14:
+14: 
 15: ```text
 16: docs/features/
 17:   README.md                   本文：规则与入口
@@ -145,7 +145,7 @@ Let me do these in parallel.
 23:     <version>.md              版本发布与收口摘要（全部 done 后创建）
 24:   <version>/                  例如 0.1/
 25:     Fxxx-feature-name/
-26:
+26:   
 …[truncated]
   ```
   </details>
@@ -183,16 +183,16 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 <type>file</type>
 <content>
 1: # BACKLOG —— 活跃 Feature 索引
-2:
+2: 
 3: 本文件只列 `status != done` 的 Feature，是 `docs/features/<version>/Fxxx-*/spec.md`
 4: frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独立状态真相源）。
-5:
+5: 
 6: | Feature | 版本 | 状态 | 链接 |
 7: |---|---|---|---|
 8: | F002-data-bridge | 0.2 | review | [spec](docs/features/0.2/F002-data-bridge/spec.md) |
 9: | F004-kronos-inference-runtime | 0.2 | draft | [spec](docs/features/0.2/F004-kronos-inference-runtime/spec.md) |
 10: | F007-evaluation-gates | 0.2 | draft | [spec](docs/features/0.2/F007-evaluation-gates/spec.md) |
-11:
+11: 
 12: > 规则：feature 状态变更（spec frontmatter）时必须同步本表；`done` 的 Feature 移出本表，
 13: > 交付记录进入 `docs/features/releases/<version>.md`。
 14: > 示例行（复制后替换，链接必须指向真实 spec.md）：
@@ -243,13 +243,13 @@ Let me read these files.
 10: created: 2026-09-12
 11: updated: 2026-09-14
 12: ---
-13:
+13: 
 14: # F002：数据桥——Parquet 湖导出与 DuckDB 研究取数层
-15:
+15: 
 16: > Owner: Georg | Target: v0.2.0
-17:
+17: 
 18: ## 0. 来源与意图
-19:
+19: 
 20: - **PRD 来源**:`docs/alphamill-prd.md` FR1.2(不可变快照)、FR1.3(研究只读边界)、FR1.4(双口径与时间语义)、FR1.6(灾备,湖部分);里程碑 M1
 21: - **架构来源**:`docs/alphamill-architecture.md` §〇(存储三件套分工)、§四 data_bridge(质量门·对账·manifest)、§4.4(Parquet 湖 manifest 契约)
 22: - **系统设计 / Research / Contract 来源**:`docs/alphamill-integration.md` §一(TimescaleDB → Parquet 湖,导出设计/修订政
@@ -273,22 +273,22 @@ Let me read these files.
 8: created: 2026-09-12
 9: updated: 2026-09-13
 10: ---
-11:
+11: 
 12: # F002:数据桥——Parquet 湖导出与 DuckDB 研究取数层 - 任务
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Design: `design.md`
-15:
+15: 
 16: ## 0. 来源与执行规则
-17:
+17: 
 18: - 行为与验收真相源:`spec.md`。
 19: - 技术方案与边界:`design.md`。
 20: - 每项任务只描述一个可验证动作,并引用合法的 US/需求/AC ID。
 21: - 完成且验证后立即把 `[ ]` 改为 `[x]`,不得最后统一补勾。
 22: - `[P]` 只用于修改不同文件、没有显式前置依赖且不会争用同一状态的任务。
 23: - 实现中若任务顺序或契约失效,先修订三件套,再继续编码。
-24:
+24: 
 25: ## 1. 前置条件
-26:
+26: 
 27: - F001 已 done:TimescaleDB 数据就绪(631 万行 binance)、`lake/` 目录位与 NAS 通道已预留、调度先例(backup/snapshot timer)
 …[truncated]
   ```
@@ -344,23 +344,23 @@ Let me do these in parallel.
 4: created: 2026-09-06
 5: updated: 2026-09-07
 6: ---
-7:
+7: 
 8: # 开发流程（AlphaMill）
-9:
+9: 
 10: 本文是项目的**原则入口与质量门**唯一真源：汇总「项目不可违反原则」的短摘要与各自
 11: 唯一拥有者链接，规定开发纪律、验证流程、状态转换与复核协议。
-12:
+12: 
 13: ## 0. 项目不可违反原则（入口）
-14:
+14: 
 15: 以下原则是**阻断性**的：违反其中任何一条的规格/实现不得进入实现或收口阶段。规范
 16: 正文在各自的唯一拥有者中，本文只给摘要与入口。**每条原则的规范正文只放一个唯一
 17: 拥有者**，本文只写短摘要与链接，不重复 PRD、architecture、decisions 的完整定义。
-18:
+18: 
 19: | # | 原则 | 短摘要 | 规范正文唯一拥有者 |
 20: |---|---|---|---|
 21: | 1 | 可追溯规格优先 | 功能必须先有已评审规格；实现/测试/实验/结论必须引用需求编号；未写入规格的行为不视为承诺 | 本文 + `docs/features/README.md` |
 22: | 2 | 证据门不降级 | 候选按样本功效分级并经过留出与最终确认；效率提升不得来自放宽门禁 | `docs/decisions/0003-validation-gate-non-degradation.md` |
-23: | 3 | 无前视一等公民 | 因子定义过 AST 纯度门 + 独立逐 K
+23: | 3 | 无前视一等公民 | 因子定义过 AST 纯度门 + 独立逐 K 
 …[truncated]
   ```
   </details>
@@ -373,25 +373,25 @@ Let me do these in parallel.
 <content>
 1: #!/usr/bin/env python3
 2: """规格生命周期校验（骨架版，node flavor 的 check-feature-gates.mjs 的 Python 对应）。
-3:
+3: 
 4: 校验 docs/features/<version>/Fddd-*/ 三件套：
 5:   - 三件套齐全、frontmatter 合法、ID 唯一、status/gate_version 合法
 6:   - spec.md 是状态唯一真相源（design/tasks 不得声明独立 status）
 7:   - gate v1：固定章节结构、Q/DQ 关闭、AC 引用第 4 节真实需求、
 8:     review/done 的 tests 路径真实存在
 9:   - BACKLOG.md 与所有非 done Feature 双向集合一致
-10:
+10: 
 11: 纯函数 + CLI 分离，只用标准库；参考项目在此基础上抽了共享 spec_validation 模块
 12: 并补了变异测试。用法：python tools/validate_spec_lifecycle.py
 13: 退出码 0 = 全部通过；1 = 存在违规。
 14: """
-15:
+15: 
 16: from __future__ import annotations
-17:
+17: 
 18: import pathlib
 19: import re
 20: import sys
-21:
+21: 
 22: ROOT = pathlib.Path(__file__).resolve().parent.parent
 23: ALLO
 …[truncated]
@@ -410,18 +410,18 @@ Let me do these in parallel.
 4: closed_at: 2026-09-12
 5: features: [F001]
 6: ---
-7:
+7: 
 8: # 0.1 版本收口摘要
-9:
+9: 
 10: > 收口日期:2026-09-12 | Feature:F001-quant-crypto-migration(done,22/22 任务)
-11:
+11: 
 12: ## 交付内容
-13:
+13: 
 14: **F001:quant-crypto 资产清算迁移**——原开发仓 quant-crypto 归档前的一次性资产清算。
 15: 执行中途遭遇宿主机整机重装事故,原 TimescaleDB 数据卷(650 万行)灭失且无备份,
 16: 契约经修订由「数据卷迁移+新旧对账」转为「交易所重建+回填完整性校验」
 17: (事故与教训见 `docs/reviews/RETROSPECTIVE.md` 模式教训 #16)。
-18:
+18: 
 19: | FR | 摘要 | 证据 |
 20: |---|---|---|
 21: | FR-001 数据资产重建与完整性校验 | 全新 TimescaleDB + Binance 回填 2024-09-10→2026-09-10 满窗 631 万行(6 对,缺失率≤0.13%)+ 5 连续聚合 + 衍生品两表;`reports/f001-backfill-20260910.json` PASS | `tests/integration/test_f001_row_reconciliation.py` |
@@ -542,18 +542,18 @@ bc98f
 8: created: 2026-09-12
 9: updated: 2026-09-12
 10: ---
-11:
+11: 
 12: # F004：Kronos 真实推理运行时 - 设计
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Tasks: `tasks.md`
-15:
+15: 
 16: ## 0. 输入与约束
-17:
+17: 
 18: - **行为契约**：`spec.md`（FR-001 / NFR-001）
 19: - **上游 Contract**：F001 冻结的 Kronos HTTP API（`GET /health`、`GET /predict/{symbol:path}`、`POST /predict_batch`），零改动
 20: - **执行环境**：与 F001 收口态一致（WSL2 + docker-ce；本机无独立显卡，CPU 推理实测 3.4–7.2s/次）
 21: - **实现约束**：`vendor/Kronos`（pin `67b630e`）与 `models/`（391MB + 16MB）不入库，由 F001 既有流程获取
-22:
+22: 
 23: ## 1. 技术概要
 …[truncated]
   ```
@@ -632,7 +632,7 @@ Hmm. So what does the user want now? "当前项目的f002需求正式收口" —
 
 Let me reconsider. Perhaps the review was done locally (CURRENT-code.md, FIX-log.md are local-only, gitignored) and now the owner has completed it and wants to finalize. The RETROSPECTIVE.md should record the code review for F002 (like 循环 6 for F001).
 
-But actually, maybe I'm overcomplicating. Let me re-read the prior revert commit message: "修正状态——检视未完成，按 owner 裁决由 done 修正为 review".
+But actually, maybe I'm overcomplicating. Let me re-read the prior revert commit message: "修正状态——检视未完成，按 owner 裁决由 done 修正为 review". 
 
 I think the right move: this is ambiguous enough that I should ask ONE clarifying question, OR investigate what's actually pending. But the user is the owner and gave an explicit directive. Given the ADHD output style and "ask one short question if ambiguous", let me think about whether it's ambiguous.
 
@@ -650,7 +650,7 @@ Wait — let me reconsider the whole thing. Let me look at what a "正式收口"
 
 Actually, hold on. Let me re-examine. The commit `46abbf2 chore(f002): F002 状态 review → done，移出活跃索引` then `3f345b3 docs(f002): 修正状态——检视未完成，按 owner 裁决由 done 修正为 review`. Then `569359b` is a design doc iteration.
 
-So currently F002 is review. "检视未完成" means the review wasn't finished. Now the user says officially close.
+So currently F002 is review. "检视未完成" means the review wasn't finished. Now the user says officially close. 
 
 The most reasonable action given the ambiguity: Ask ONE short question — has the review been completed, or do they want me to run the review (code review) first and then close?
 
@@ -669,7 +669,7 @@ Actually, I realize I should just ask the user. But before that, let me gather a
 
 Let me run a quick scan.
 
-Actually, the key question: is the "检视"(code review) for F002 complete? Let me check if there's a review report. The RETROSPECTIVE doesn't have a 循环 10 for F002 code review.
+Actually, the key question: is the "检视"(code review) for F002 complete? Let me check if there's a review report. The RETROSPECTIVE doesn't have a 循环 10 for F002 code review. 
 
 Hmm, wait. Let me reconsider — maybe the review that was "未完成" refers to the design review (循环 7/9 were design). And the code was implemented, merged (PR #1), but then the code review (like 循环 6 for F001) hadn't happened. So the revert to review was correct.
 
@@ -677,7 +677,7 @@ Now "正式收口" — the user might have completed the code review manually (v
 
 I think the safest and most useful action is to ask one focused question. But the user might expect me to just do it.
 
-Let me re-read the exact phrasing: "当前项目的f002需求正式收口". In Chinese project management jargon, "收口" = to finalize/close/wrap up. "正式收口" = formal closure. Combined with the pm skill's "收工、记一下" triggers...
+Let me re-read the exact phrasing: "当前项目的f002需求正式收口". In Chinese project management jargon, "收口" = to finalize/close/wrap up. "正式收口" = formal closure. Combined with the pm skill's "收工、记一下" triggers... 
 
 Hmm, actually the pm skill is about project status across projects. Not this.
 
@@ -767,15 +767,15 @@ freqtrade/user_data/tradesv3.sqlite*
 <content>
 315: - 全接纳率 100% 需警惕"检视在凑数"的反向信号；本循环的对冲证据是：3 条为修复引入（非首轮凑数可得）、1 条（D003）在修复后仍被降级为待办（R2-04），说明发现具备实质性而非形式化。
 316: - 协议偏差 1 项（已追认）：R2-02 占两笔 commit（`9509933` + `2e64750`），修复方主动声明，两笔均限于 R2-02 文件集合，不影响 bisect 定位。
-317:
+317: 
 318: ---
-319:
+319: 
 320: ## 循环 9：ADR-0007 后 F002 三件套追踪补齐
-321:
+321: 
 322: - report_type: doc-review | round: 1（定向核对）→ 2（diff-only 复核）| 状态: 闭环
 323: - 日期：2026-09-13 | 基线：`0405865` → `ba3cc8e`
 324: - 范围：`docs/features/0.2/F002-data-bridge/{spec,design,tasks}.md`；只补 ADR 来源、验收映射与任务追踪，不改变 F002 产品范围。
-325: - 结论：三项 Medium 全部修复，Critical/High/Low 为 0；spec/design/tasks 的 AC 集合均为 AC-001..015；本地 `python3 tools/verify.py`（经项目 `.venv` 解释器实跑）103 passed / 8 skipped；源文档提交 `ba3cc8e` 的 CI run `34763002847` 双 job
+325: - 结论：三项 Medium 全部修复，Critical/High/Low 为 0；spec/design/tasks 的 AC 集合均为 AC-001..015；本地 `python3 tools/verify.py`（经项目 `.venv` 解释器实跑）103 passed / 8 skipped；源文档提交 `ba3cc8e` 的 CI run `34763002847` 双 job 
 …[truncated]
   ```
   </details>
@@ -810,7 +810,7 @@ Author: qiaozhi li <qiaozhi_li@126.com>
 Date:   Mon Sep 14 01:51:33 2026 +0800
 
     docs(f002): 修正状态——检视未完成，按 owner 裁决由 done 修正为 review
-
+    
     此前把 review → done 记为完成属误操作：检视（review）尚未发生。
     恢复 BACKLOG 与 CLAUDE.md 活跃索引中的 F002 条目。
 
@@ -824,7 +824,7 @@ Author: qiaozhi li <qiaozhi_li@126.com>
 Date:   Mon Sep 14 01:51:33 2026 +0800
 
     docs(f002): 修正状态——检视未完成，按 owner 裁决由 done 修正为 review
-
+    
     此前把 review → done 记为完成属误操作：检视（review）尚未发生。
     恢复 BACKLOG 与 CLAUDE.md 活跃索引中的 F002 条目。
 
@@ -867,7 +867,7 @@ Given the process requires the review record in RETROSPECTIVE (循环 6 for F001
 
 I think the correct, careful action is to ask ONE short question OR to check with the user. But wait — my instructions say the user is the owner and explicitly requested. Also "Confirm before destructive actions" — closing a feature isn't destructive.
 
-Hmm, let me weigh. The safest approach that respects both the user's directive and the process:
+Hmm, let me weigh. The safest approach that respects both the user's directive and the process: 
 
 Option A: Execute the closure (3 files) + run verify. Simple, matches the user's explicit "正式收口". But if review isn't done, I repeat a reverted mistake.
 
@@ -886,7 +886,7 @@ I think the user is telling me the review is complete and to perform the formal 
 
 Hmm, but actually — let me reconsider whether the user wants me to ALSO conduct the review. The phrase "正式收口" alone doesn't say "检视". If they wanted a review, they'd say "检视一下". "收口" = closure.
 
-Let me make a decision: I'll ask one concise clarifying question because the review status is genuinely ambiguous and gets the closure right. Actually no — the user's ADHD style wants action, and they explicitly said "正式收口".
+Let me make a decision: I'll ask one concise clarifying question because the review status is genuinely ambiguous and gets the closure right. Actually no — the user's ADHD style wants action, and they explicitly said "正式收口". 
 
 Wait, let me look at this from the pm skill angle once more. The pm skill description: "多项目全时段项目管理... 当用户说项目进展、今天做什么、项目管理、需求阶段、周复盘、周报、月复盘、月度进展、收工、记一下、某个项目怎么样了". "收口" is not listed. So the pm skill isn't the trigger.
 
@@ -896,11 +896,11 @@ Hmm, actually, let me reconsider the "检视未完成" issue one final time. The
 
 BUT — I notice the RETROSPECTIVE.md was last modified Sep 13 22:34, and the revert was Sep 14 01:51. So after the revert, no review was recorded. Today is Sep 14 (env date says Mon Sep 14 2026). So it's the same day! The revert happened at 01:51, and now the user says close. Very likely the user did the review between then and now (or is declaring it done).
 
-Hmm, given it's the same day and no review record exists, I'm suspicious. Let me ask ONE short question to be safe. Actually — you know, the user is clearly aware of the process (they reverted the premature done). If they now say "正式收口", they mean it.
+Hmm, given it's the same day and no review record exists, I'm suspicious. Let me ask ONE short question to be safe. Actually — you know, the user is clearly aware of the process (they reverted the premature done). If they now say "正式收口", they mean it. 
 
-Let me just do it, but include a check: I'll verify there's no open review blocker by checking for the local review drafts (already confirmed none) and the RETROSPECTIVE (no F002 code review).
+Let me just do it, but include a check: I'll verify there's no open review blocker by checking for the local review drafts (already confirmed none) and the RETROSPECTIVE (no F002 code review). 
 
-Decision: I'll ask one short question. Rationale: the difference between "closure only" (5 min) and "closure requires a review first" (hours) is >2x, and there's an explicit prior revert for exactly this. The instruction says MUST ask when 2x effort difference.
+Decision: I'll ask one short question. Rationale: the difference between "closure only" (5 min) and "closure requires a review first" (hours) is >2x, and there's an explicit prior revert for exactly this. The instruction says MUST ask when 2x effort difference. 
 
 But hmm, the user might be annoyed. Let me phrase it as: confirm review status, then I'll close immediately.
 
@@ -959,7 +959,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postpro
 
 > [reasoning] No F002 code-review cycle in RETROSPECTIVE, no review artifacts, and no commits since the revert touching F002. So as of the last recorded activity, the 检视 (review) that the owner said was "未完成/尚未发生" still has no recorded completion.
 
-But the user says "正式收口" now.
+But the user says "正式收口" now. 
 
 Hmm. This is genuinely ambiguous:
 - Interpretation 1: The user has completed the review (outside git, e.g., manual reading) and wants me to formally close (3-file change).
@@ -1044,28 +1044,28 @@ Actually, let me search sessions for the revert commit context. session_search f
 当前项目的f002需求正式收口
 
 [assistant (Sisyphus - ultraworker)] 2026-09-14T13:46:30.846Z
-[tool: read]
-[tool: bash]
+[tool: read] 
+[tool: bash] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-14T13:46:36.804Z
-[tool: read]
-[tool: bash]
-[tool: read]
+[tool: read] 
+[tool: bash] 
+[tool: read] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-14T13:46:39.256Z
-[tool: read]
-[tool: read]
+[tool: read] 
+[tool: read] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-14T13:46:41.727Z
-[tool: read]
-[tool: read]
-[tool: read]
-[tool: bash]
+[tool: read] 
+[tool: read] 
+[tool: read] 
+[tool: bash] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-14T13:46:45.903Z
-[tool: bash]
-[tool: read]
-[tool:
+[tool: bash] 
+[tool: read] 
+[tool: 
 …[truncated]
   ```
   </details>
@@ -1106,7 +1106,7 @@ Hmm, but is option 1 really recommended? Given no review record, maybe option 2.
 
 Hmm, actually, wait. Let me reconsider whether I even need to ask. The instruction says the user is the owner; "正式收口" is an explicit, unambiguous directive in this project's vocabulary (it maps to a precise operation defined in features/README.md and the revert commit). The "ambiguity" I'm worried about is whether the review happened — but that's the user's declaration to make, and they effectively made it by saying "正式收口".
 
-Ugh. OK. Let me think about what a good senior engineer would do. They'd notice the prior revert and say: "Before I flip it to done — the last time it was flipped, you reverted it because the 检视 hadn't happened. I see no 检视 record (RETROSPECTIVE only has design cycles 7/9). Do you want me to (a) close now, or (b) run the code review first?" That's exactly asking one short question.
+Ugh. OK. Let me think about what a good senior engineer would do. They'd notice the prior revert and say: "Before I flip it to done — the last time it was flipped, you reverted it because the 检视 hadn't happened. I see no 检视 record (RETROSPECTIVE only has design cycles 7/9). Do you want me to (a) close now, or (b) run the code review first?" That's exactly asking one short question. 
 
 I'll do that. It's the senior-engineer move and aligns with "After three failed fixes, stop and name the doubtful assumption" / "ask one short question if ambiguous".
 
@@ -1177,7 +1177,7 @@ Fast-forward
  docs/SOP.md                                        |  14 +-
  docs/alphamill-architecture.md                     |  28 +-
  docs/alphamill-integration.md                      |   7 +-
- docs/alphamill-prd.md
+ docs/alphamill-prd.md               
 …[truncated]
   ```
   </details>
@@ -1236,13 +1236,13 @@ The review has happened — remote `main` had 8 new commits including **循环 1
 10: created: 2026-09-12
 11: updated: 2026-09-14
 12: ---
-13:
+13: 
 14: # F002：数据桥——Parquet 湖导出与 DuckDB 研究取数层
-15:
+15: 
 16: > Owner: Georg | Target: v0.2.0
-17:
+17: 
 18: ## 0. 来源与意图
-19:
+19: 
 20: - **PRD 来源**:`docs/alphamill-prd.md` FR1.2(不可变快照)、FR1.3(研究只读边界)、FR1.4(双口径与时间语义)、FR1.6(灾备,湖部分);里程碑 M1
 21: - **架构来源**:`docs/alphamill-architecture.md` §〇(存储三件套分工)、§四 data_bridge(质量门·对账·manifest)、§4.4(Parquet 湖 manifest 契约)
 22: - **系统设计 / Research / Contract 来源**:`docs/alphamill-integration.md` §一(TimescaleDB → Parquet 湖,导出设计/修订政
@@ -1257,10 +1257,10 @@ The review has happened — remote `main` had 8 new commits including **循环 1
 <type>file</type>
 <content>
 1: # BACKLOG —— 活跃 Feature 索引
-2:
+2: 
 3: 本文件只列 `status != done` 的 Feature，是 `docs/features/<version>/Fxxx-*/spec.md`
 4: frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独立状态真相源）。
-5:
+5: 
 6: | Feature | 版本 | 状态 | 链接 |
 7: |---|---|---|---|
 8: | F002-data-bridge | 0.2 | review | [spec](docs/features/0.2/F002-data-bridge/spec.md) |
@@ -1279,11 +1279,11 @@ The review has happened — remote `main` had 8 new commits including **循环 1
 <type>file</type>
 <content>
 337: 3. 裁决分布：fixed 3、partial/rejected/tracked 0；建议命中率 100%，修复严格限定为追踪补齐，没有借机扩大 F002 范围。
-338:
+338: 
 339: ---
-340:
+340: 
 341: ## 循环 10：F002 数据桥实现代码检视
-342:
+342: 
 343: - report_type: code-review（round 1）→ fix-verification（round 2、3）| 状态: 闭环
 344: - 日期：2026-09-14 | 基线：`569359b` →（re-baseline）`ad09ff4` → 第 3 轮修复序列
 345: - 范围：`src/alphamill/data_bridge/` 全部 F002 新增模块 + `tests/{unit,integration}/test_f002_*` +
@@ -1341,22 +1341,22 @@ Review cycle 10 is complete (closed, Critical/High 0). Now checking the tracked 
 8: created: 2026-09-12
 9: updated: 2026-09-13
 10: ---
-11:
+11: 
 12: # F002:数据桥——Parquet 湖导出与 DuckDB 研究取数层 - 任务
-13:
+13: 
 14: > Owner: Georg | Spec: `spec.md` | Design: `design.md`
-15:
+15: 
 16: ## 0. 来源与执行规则
-17:
+17: 
 18: - 行为与验收真相源:`spec.md`。
 19: - 技术方案与边界:`design.md`。
 20: - 每项任务只描述一个可验证动作,并引用合法的 US/需求/AC ID。
 21: - 完成且验证后立即把 `[ ]` 改为 `[x]`,不得最后统一补勾。
 22: - `[P]` 只用于修改不同文件、没有显式前置依赖且不会争用同一状态的任务。
 23: - 实现中若任务顺序或契约失效,先修订三件套,再继续编码。
-24:
+24: 
 25: ## 1. 前置条件
-26:
+26: 
 27: - F001 已 done:TimescaleDB 数据就绪(631 万行 binance)、`lake/` 目录位与 NAS 通道已预留、调度先例(backup/snapshot timer)
 …[truncated]
   ```
@@ -1370,9 +1370,9 @@ Review cycle 10 is complete (closed, Critical/High 0). Now checking the tracked 
 <content>
 46: - AI 权限红线：Agent 只提出候选和复盘建议，不裁决门禁、不改变生产状态、不触发真实下单。
 47: - 实盘红线：无候选通过最终确认并满足可信样本量前，不触碰实盘下单路径。
-48:
+48: 
 49: ## 当前活跃 Feature
-50:
+50: 
 51: - F002 数据桥（v0.2, review）→ `docs/features/0.2/F002-data-bridge/`
 52: - F004 Kronos 推理运行时（v0.2, draft）→ `docs/features/0.2/F004-kronos-inference-runtime/`
 53: - F007 统一评测台与证据门禁（v0.2, draft）→ `docs/features/0.2/F007-evaluation-gates/`
@@ -1398,7 +1398,7 @@ Review cycle 10 is complete (closed, Critical/High 0). Now checking the tracked 
 8: created: 2026-09-12
 9: updated: 2026-09-13
 10: ---
-11:
+11: 
 12: # F002:数据桥——Parquet 湖导出与 DuckDB 研究取数层 - 设计
 
 (Showing lines 1-12 of 431. Use offset=13 to continue.)
@@ -1469,7 +1469,7 @@ I think the right move: execute the closure (3 files), but FIRST verify the stat
 
 Actually, let me step back and think about what the user actually wants. "当前项目的f002需求正式收口" + "拉一下最新代码". They pulled the latest (which includes review cycle 10 closure). Now they want the formal closure. So: flip to done.
 
-The question is whether T021 blocks. Let me look at whether there's a precedent — F001 had T017/T019 etc. Let me not overthink. The review explicitly tracked T021 as a follow-up and closed the review. The owner says close.
+The question is whether T021 blocks. Let me look at whether there's a precedent — F001 had T017/T019 etc. Let me not overthink. The review explicitly tracked T021 as a follow-up and closed the review. The owner says close. 
 
 BUT: I'm worried about the strict SOP rule and the previous revert. Let me consider flagging T021 to the owner and asking whether to (a) close now with T021 tracked, or (b) run T021 first.
 
@@ -1511,7 +1511,7 @@ CONTAINER ID   IMAGE                                COMMAND                  CRE
 2d115d34822a   freqtradeorg/freqtrade:stable        "/usr/local/bin/alph…"   2 days ago   Up 2 days             0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp              quant-freqtrade
 12fdf5e75a03   timescale/timescaledb:latest-pg16    "docker-entrypoint.s…"   2 days ago   Up 2 days (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp              quant-timescaledb
 0123c03cc067   deployment-data-collector            "python -m alphamill…"   2 days ago   Up 2 days                                                                      quant-data-collector
-5d4106ac85a4   grafana/grafana:latest
+5d4106ac85a4   grafana/grafana:latest           
 …[truncated]
   ```
   </details>
@@ -1526,9 +1526,9 @@ CONTAINER ID   IMAGE                                COMMAND                  CRE
 381: - 重启与恢复:分区文件原子写(staging + rename)且**已发布的 `.rN` 永不重写**;中断后的恢复路径是**写新 `.rN` 并以新 manifest 发布**,不是「重导覆盖」(F002-R3-04——覆盖语义与 §3 的不可变模型直接冲突);调度失败按退出码 1 由 systemd 重试(见 §5);
 382: - 权限 / escalation / 凭据边界:库凭据走 `.env`(既有);lake/ 无密钥;取数模块不接受任何"写"参数面(签名上不存在写路径,NFR-001 由接口形状保证 + 测试断言);
 383: - Windows / POSIX / 版本兼容:纯 WSL2 内运行,无跨界文件交换;DuckDB/PyArrow 版本 pin 入 pyproject(check_dep_pins 覆盖);Parquet 文件格式与 DuckDB 版本解耦(列式开放格式)。
-384:
+384: 
 385: ## 8. 测试策略与验收映射
-386:
+386: 
 387: | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 388: |---|---|---|---|
 389: | `AC-001` | integration | `tests/integration/test_f002
@@ -1544,28 +1544,28 @@ CONTAINER ID   IMAGE                                COMMAND                  CRE
 <content>
 1: #!/usr/bin/env python3
 2: """本地统一验证入口（公开验证唯一入口）。
-3:
+3: 
 4: 按固定顺序运行：规格生命周期校验 → 文档相对链接检查 → dev 依赖 pin 范围检查
 5: → 密钥模式扫描 → pytest → ruff check → ruff format check。任一步失败即记录，
 6: 全部跑完后汇总返回非零（不短路）。
-7:
+7: 
 8: 各底层命令仍可单独用于定位，但 README、SOP 与 CLAUDE 不再各自维护完整命令清单，
 9: 统一指向本入口。
-10:
+10: 
 11: 用法：
 12:     python3 tools/verify.py
 13: 退出码 0 表示全部通过；非 0 时打印失败步骤。
 14: """
-15:
+15: 
 16: from __future__ import annotations
-17:
+17: 
 18: import pathlib
 19: import subprocess
 20: import sys
-21:
+21: 
 22: ROOT = pathlib.Path(__file__).resolve().parent.parent
-23:
-24:
+23: 
+24: 
 25: def _run(cmd: list[str], label: str) -> bool:
 26:     print(f"\n== {label} ==")
 27:     proc = subprocess.run(cmd, cwd=ROOT)
@@ -1724,7 +1724,7 @@ I think the best action: run T021 now (env available), fill the evidence, then c
 
 Let me first do a quick dry run of just the F002 integration tests to gauge time and correctness. Let me set up the env.
 
-The command:
+The command: 
 ```
 ALPHAMILL_INTEGRATION=1 ALPHAMILL_REAL_LAKE_DIR=/home/georg/projects/alphamill/lake .venv/bin/python -m pytest tests/integration -q
 ```
@@ -1799,7 +1799,7 @@ Environment is fully available (docker + TimescaleDB + real `lake/`). T021 can b
 <type>file</type>
 <content>
 1: """F002 调度与灾备接入集成测试（AC-006）。
-2:
+2: 
 3: - CLI 子进程按 timer 同款调用方式增量导出 → 退出码 0、manifest/分区齐备；
 4: - systemd unit 契约（02:00/周日 04:00、重试与退出码锁定）由
 5:   tests/unit/test_f002_timer_contract.py 覆盖；
@@ -1807,20 +1807,20 @@ Environment is fully available (docker + TimescaleDB + real `lake/`). T021 can b
 7:   NAS 端产物齐全的真实传输验证在 T010 手工执行并记入验收证据（SOP 真实环境
 8:   测试纪律：外部 NAS 凭据/网络不在 pytest 自动化范围内，须显式记录）。
 9: """
-10:
+10: 
 11: from __future__ import annotations
-12:
+12: 
 13: import os
 14: import subprocess
 15: import sys
 16: from pathlib import Path
-17:
+17: 
 18: import pytest
 19: from conftest import D4, F002_DB, seed_f002_data
-20:
+20: 
 21: from alphamill.data_bridge import manifest as mf
 22: from alphamill.data_bridge import registry
-23:
+23: 
 24:
 …[truncated]
   ```
@@ -1833,19 +1833,19 @@ Environment is fully available (docker + TimescaleDB + real `lake/`). T021 can b
 <type>file</type>
 <content>
 1: """F002 导出→对账→失效语义→中断恢复 集成测试（AC-001/002/010/014）。
-2:
+2: 
 3: 需要本地 docker + quant-timescaledb 在线；使用一次性 f002_integration 库，
 4: 不触碰生产 quant 库与真实 lake/（见 conftest f002_db / f002_lake fixture）。
 5: """
-6:
+6: 
 7: from __future__ import annotations
-8:
+8: 
 9: import datetime as dt
-10:
+10: 
 11: import psycopg2
 12: import pytest
 13: from conftest import D1, D2, D3, D4, seed_f002_data
-14:
+14: 
 15: from alphamill.data_bridge import manifest as mf
 16: from alphamill.data_bridge import reconcile, registry
 17: from alphamill.data_bridge.errors import InvalidVersionError, VersionNotFoundError
@@ -1863,7 +1863,7 @@ Environment is fully available (docker + TimescaleDB + real `lake/`). T021 can b
 
 > [reasoning] Good. The F002 export/reconcile tests use a one-time `f002_integration` DB and tmp lake — they don't touch production quant DB or real lake. The schedule_backup test uses a real-DB CLI run against F002_DB with tmp lake. The `test_real_deployment_lake_layout_matches_contract` reads real lake dir (read-only).
 
-So running the integration suite is safe.
+So running the integration suite is safe. 
 
 Now let me run T021: the F002 integration subset with the flags. Let me first run just the F002 integration files to check they pass, then expand to the full suite as SOP requires.
 
@@ -1971,7 +1971,7 @@ T021's verify line says "全绿且不出现 skip". There's 1 skip, but it's the 
 
 Hmm. T021 specifically: "在具备 docker + TimescaleDB 的环境重跑 F002 集成套件 ... 全绿且不出现 skip，其中必须包含 test_f002_revision.py::test_full_export_removes_source_partition_and_records_removed". The "不出现 skip" refers to F002 integration cases (which were previously all skipped due to no docker socket). We now have 0 skips among F002 tests — all 15 passed. The 1 skip is F001's Kronos real-model test, which is a different feature and gated by KRONOS_REQUIRE_REAL_MODEL.
 
-So T021 is satisfied for F002.
+So T021 is satisfied for F002. 
 
 Now let me update the artifacts:
 
@@ -2049,7 +2049,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 <path>/home/georg/projects/alphamill/docs/README.md</path>
 <type>file</type>
 <content>
-40:
+40: 
 41: - **PRD（产品判断）**：→ [`alphamill-prd.md`](alphamill-prd.md)
 42: - **架构（含契约）**：→ [`alphamill-architecture.md`](alphamill-architecture.md)
 43: - **选型调研证据**：→ [`alphamill-research-factor-mining.md`](alphamill-research-factor-mining.md)
@@ -2058,12 +2058,12 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 46: - **开发流程 SOP**：→ [`SOP.md`](SOP.md)
 47: - **Feature 规格指南与状态门禁规则**：→ [`features/README.md`](features/README.md)
 48: - **检视复盘**：→ [`reviews/RETROSPECTIVE.md`](reviews/RETROSPECTIVE.md)
-49:
+49: 
 50: ## 所有权规则（机器可校验）
-51:
+51: 
 52: - `status` 只能出现在 Feature `spec.md` frontmatter；`design.md` / `tasks.md`
 53:   不得声明独立 Status。
-54: - `BACKLOG.md` 与所有非 done Feature
+54: - `BACKLOG.md` 与所有非 done Feature 
 …[truncated]
   ```
   </details>
@@ -2113,9 +2113,9 @@ Lines 218-231:
 219: 因此 F002 done 时湖内 `signals_log` 的内容预期仍以 `source=placeholder` 为主——**导出管线正确
 220: 不等于内容可用于因子研究**。收口时验收证据必须如实记录该 dataset 的行数与 `source` 分布,
 221: 不得以"五 dataset 齐备"含糊带过;F004 落地后内容自动升级,F002 无需返工。
-222:
+222: 
 223: ### 历史验收证据(2026-09-14 实测,WSL2 Ubuntu + docker-ce + TimescaleDB 631 万行生产库)
-224:
+224: 
 225: 本节数字来自上述具备 Docker/TimescaleDB 的验收环境，保留为历史证据；不能替代当前工作树的
 226: 可复核结果。代码检视循环 10 的修复固化在 `/home/georg/projects/alphamill`、分支 `main`、
 227: 提交 `ad09ff4`（第 1-2 轮）与其后的第 3 轮 Low 级修复序列；在该状态上执行
@@ -2205,9 +2205,9 @@ Let me read lines 218-232 precisely.
 219: 因此 F002 done 时湖内 `signals_log` 的内容预期仍以 `source=placeholder` 为主——**导出管线正确
 220: 不等于内容可用于因子研究**。收口时验收证据必须如实记录该 dataset 的行数与 `source` 分布,
 221: 不得以"五 dataset 齐备"含糊带过;F004 落地后内容自动升级,F002 无需返工。
-222:
+222: 
 223: ### 历史验收证据(2026-09-14 实测,WSL2 Ubuntu + docker-ce + TimescaleDB 631 万行生产库)
-224:
+224: 
 225: 本节数字来自上述具备 Docker/TimescaleDB 的验收环境，保留为历史证据；不能替代当前工作树的
 226: 可复核结果。代码检视循环 10 的修复固化在 `/home/georg/projects/alphamill`、分支 `main`、
 227: 提交 `ad09ff4`（第 1-2 轮）与其后的第 3 轮 Low 级修复序列；在该状态上执行
@@ -2419,7 +2419,7 @@ s                                                                        [100%]
 =========================== short test summary info ============================
 SKIPPED [1] tests/integration/test_f001_kronos_smoke.py:86: AC-006 需真实模型实例：设 KRONOS_REQUIRE_REAL_MODEL=1 并把 KRONOS_BASE_URL 指向真实实例（命令见本文件 docstring / spec §6 AC-006）
 SKIPPED [1] tests/integration/test_f002_schedule_backup.py:84: 未设置 ALPHAMILL_REAL_LAKE_DIR（本用例仅在有真实湖时运行）
-215
+215 
 …[truncated]
   ```
   </details>

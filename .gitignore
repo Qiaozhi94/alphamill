@@ -67,3 +67,6 @@ lake/
 
 # F003 生成运行产物（run.json/因子/checkpoint，体积大；只入库 curated 摘要）
 reports/generation/
+reports/backfill/*.log
+# 逐片进度日志（stderr，体积大且可重跑复现）：入库只留逐片摘要 *.log.json 与 run.json
+reports/backfill/*.log.err

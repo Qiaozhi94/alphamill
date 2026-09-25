@@ -2,14 +2,15 @@
 kind: feature
 id: F008
 version: "0.2"
-status: developing
+status: done
+status_evidence: merge 9e0bc05 + CI 36124046003 绿
 branch: feat/F008-universe-expansion
 gate_version: 1
 related_features: [F001, F002, F003, F007]
 topics: [data-bridge, universe, backfill, data-quality, point-in-time, m2]
 doc_kind: spec
 created: 2026-09-14
-updated: 2026-09-19
+updated: 2026-09-25
 ---
 
 # F008：宇宙扩容与 point-in-time 宇宙台账
@@ -117,7 +118,7 @@ updated: 2026-09-19
 
 ### 范围内
 
-- 宇宙发现与筛选口径（Binance USDⓈ-M 永续；滚动 90 天日均 USDT 成交额**排名前 40** + 上线 >180 天 + 排除稳定币对/杠杆代币/指数篮子类合约）；
+- 宇宙发现与筛选口径（Binance USDⓈ-M **加密**永续；滚动 90 天日均 USDT 成交额**排名前 40** + 上线 >180 天 + 排除稳定币对/杠杆代币/指数篮子类合约/代币化 TradFi/贵金属背书代币 + **数据可达性前置**——候选须能被研究数据路线（现货 `ohlcv_1m`）取到数）；
 - 目标宇宙的人工确认冻结、版本化与变更留痕；
 - 分批历史回填编排：限速、退避重试、断点续跑、幂等、进度与失败可见；
 - 新 pair 质量门：复用 `tools/f001_backfill_report.py` 的完整性口径（缺失率、边界闭合、连续聚合与 1m 基表按桶重算一致）并参数化到多 pair；
@@ -148,7 +149,7 @@ updated: 2026-09-19
 
 ### Requirement: 宇宙发现与筛选口径（`FR-001`）
 
-系统应当按显式口径从交易所公开数据产出候选 pair 清单，并记录口径、数据快照时间与每个候选的筛选指标；同一口径与同一快照应当得到同一候选清单。口径由四部分组成：交易所与市场类型；**按滚动窗口日均成交额排名取前 N**（不使用绝对金额阈值）；上线天数下限；排除规则（稳定币对、杠杆代币、指数/篮子类合约）。
+系统应当按显式口径从交易所公开数据产出候选 pair 清单，并记录口径、数据快照时间与每个候选的筛选指标；同一口径与同一快照应当得到同一候选清单。口径由五部分组成：交易所与市场类型（**排名市场**：Binance USDⓈ-M **加密**永续，`underlyingType=COIN`）；**按滚动窗口日均成交额排名取前 N**（不使用绝对金额阈值）；上线天数下限；排除规则（稳定币对、杠杆代币、指数/篮子类合约、**代币化 TradFi**——股票/商品类 `TRADIFI_PERPETUAL`、**贵金属背书代币**——`PAXG`/`XAUT`，其 `underlyingType` 记作 `COIN` 只能按标的名单排除）；**数据可达性前置**——候选必须在研究数据路线（`ohlcv_1m` 的现货命名空间）有对应市场，只有永续、取不到数的标的不得进入目标宇宙（`1000X` 缩放命名按同标的映射到现货 `X`，不跨标的猜测）。
 
 #### Scenario: 口径可复现
 
@@ -222,7 +223,7 @@ updated: 2026-09-19
 
 ### Requirement: 导出清单与湖内 artifact 联动（`FR-006`）
 
-当 pair 通过质量门时，系统应当把它纳入 `F002` 的导出清单——**导出清单定义为「台账中在本次导出窗口终点（`window_end`）可交易 且 质量门判定为 ACTIVE」的 pair 集合**（无独立实体，由台账与判定记录联合导出），由导出侧在 pair 选择处按该集合过滤实现，不改 `F002` 的 manifest / 对账 / 修订与失效语义；`symbol_map` 保持全量（回答「库里有什么」），与导出清单（回答「研究能用什么」）**允许不等**，回填写库即让 `symbol_map` 产生新 digest 属预期行为；宇宙台账应当以 canonical JSON 发布为内容寻址 artifact（digest 为 canonical 字节的 SHA-256 并带 `sha256:` 前缀，同 digest 文件必须逐字节一致），供 ResearchSnapshot 按显式 digest 引用。`symbol_map` 因新 pair 产生新 digest 时，旧 digest 应当仍可读取。
+当 pair 通过质量门时，系统应当把它纳入 `F002` 的导出清单——**导出清单定义为「台账中在本次导出窗口终点（`window_end`）可交易 且 质量门判定为 ACTIVE」的 pair 集合**（无独立实体，由台账与判定记录联合导出），由导出侧在 pair 选择处按该集合过滤实现（按被导出 dataset 的 `market_type` 取命名空间交集），不改 `F002` 的 manifest / 对账 / 修订与失效语义；`symbol_map` 保持全量（回答「库里有什么」），与导出清单（回答「研究能用什么」）**允许不等**，回填写库即让 `symbol_map` 产生新 digest 属预期行为；宇宙台账应当以 canonical JSON 发布为内容寻址 artifact（digest 为 canonical 字节的 SHA-256 并带 `sha256:` 前缀，同 digest 文件必须逐字节一致），供 ResearchSnapshot 按显式 digest 引用。`symbol_map` 因新 pair 产生新 digest 时，旧 digest 应当仍可读取。
 
 #### Scenario: artifact 内容寻址
 
@@ -280,6 +281,7 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 
 - **台账区间记录标的可交易期，不是准入时点**：`valid_from` = 真实上市时间、`valid_to` = 退市时间；准入与隔离是另一条状态线，落在质量门判定记录（`DR-004`）与导出清单里，不写进台账区间——两者混用会让 `universe_at(T)` 在扩容日之前返回空集，横截面掩码直接失效；
 - 台账只追加：历史区间一经发布不可改写，成员变化只能以新区间表达；
+- **成员按湖内命名空间成对登记**：同一 `db_symbol` 在研究数据集（`ohlcv_1m`，`spot`）与派生品数据集（`derivatives_*`，`perp`）里是两条 `lake_pair`（`BTC-USDT` / `BTC-USDT-PERP`），台账两条都要有——少一条会让 `F003` 的横截面掩码把对应数据集的分区整片掩掉。口径里的 `market_type=perp` 是**排名市场**（用 USDⓈ-M 永续成交额排名），不是湖内命名空间；
 - 退出不等于删除：退市/剔除的 pair 历史数据永久保留——删了就是幸存者偏差；
 - 未过质量门的数据不进导出清单，也不能被手工塞进去；
 - 未冻结的宇宙定义不得驱动回填等长跑任务；
@@ -296,19 +298,21 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `DR-001`): 同一口径与同一交易所快照两次发现得到相同候选清单与相同 universe_id；逐候选筛选指标入档 — tests: `tests/unit/test_f008_discover.py`
-- [ ] **AC-002** (`FR-002`): 未冻结的候选清单驱动回填被非零拒绝；冻结后成员增删产生新版本且旧版本不可改写 — tests: `tests/unit/test_f008_universe_def.py`
-- [ ] **AC-003** (`FR-003`, `NFR-002`): 回填中断后重跑从断点继续、不写重复行、行数与预期一致 — tests: `tests/integration/test_f008_backfill.py`
-- [ ] **AC-004** (`FR-003`, `NFR-001`): 限流错误触发退避重试且不超过上限，请求速率不因失败而提高 — tests: `tests/unit/test_f008_rate_limit.py`
-- [ ] **AC-005** (`FR-004`, `DR-004`): 缺失率超限、未闭合边界、连续聚合对不上、重复主键四类 fixture 均被拦在导出清单外并各记原因码；全项通过者进入清单（重复主键 fixture 以无主键约束的 scratch 源表承载——参考表 `ohlcv_1m` 的主键使重复无法构造，用真实表只能得到恒真的空转断言） — tests: `tests/integration/test_f008_quality_gate.py`
-- [ ] **AC-006** (`FR-004`): 上线晚于回填窗口起点的 pair 按实际可得窗口计算缺失率，不被误判为缺失 — tests: `tests/unit/test_f008_quality_gate_window.py`
-- [ ] **AC-007** (`FR-005`, `NFR-003`): 含上市/退市/中途进出的 fixture 上，universe_at(T) 在各时点返回正确成员集合 — tests: `tests/unit/test_f008_membership.py`
-- [ ] **AC-008** (`FR-005`, `DR-002`): 尝试原地改写已发布历史区间被拒绝；退出记录保留历史数据不删除 — tests: `tests/unit/test_f008_membership.py`
-- [ ] **AC-009** (`FR-006`, `IR-002`): 台账 artifact 同内容得同 digest 且逐字节一致、内容变化得新 digest 且旧 digest 仍可读；发布出的 artifact 能被下游 `factor_factory.generators.universe.load_explicit_universe` 按 digest 直接加载通过；新 pair 进入导出清单后 symbol_map 同样满足该性质 — tests: `tests/integration/test_f008_export_integration.py`
-- [ ] **AC-010** (`TR-001`, `TR-002`, `DR-003`, `NFR-004`): 成员变更与回填进度/失败事件可按 run 与 pair 查询，且台账可交易期变更与准入状态变更可按 `line` 区分；运行记录标注 hostname — tests: `tests/integration/test_f008_backfill.py`
-- [ ] **AC-011** (`NFR-005`): 扩容后实测记录磁盘占用、单次全量导出耗时与 NAS 备份时长，并与 F002 的 6 对基线对照 — tests: `tests/integration/test_f008_capacity_report.py`
-- [ ] **AC-012** (`IR-001`, `FR-002`, `FR-003`, `FR-004`): CLI 五个子命令的契约与 `design.md` §4 登记的全部九类启动期拒绝全覆盖——`discover` 口径缺字段 / 交易所不可达，`freeze` 缺 `--confirm` / 候选清单为空，`backfill` 定义未冻结 / 窗口非法 / 磁盘余量不足，`gate` 对回填未完成的 pair 判 `INCOMPLETE`，`show` 定义或 digest 不存在——各自以非零退出并给出可区分的原因 — tests: `tests/unit/test_f008_cli_contract.py`
-- [ ] **AC-013** (`IR-003`, `IR-002`, `DR-003`): 台账 artifact 与 `BackfillRun` 均带 `schema_version`；artifact 加载方在 `schema_version` 与期望值不符、顶层或成员出现未知键时拒绝加载并报错，不做宽松忽略 — tests: `tests/unit/test_f008_artifact.py`
+- [x] **AC-001** (`FR-001`, `DR-001`): 同一口径与同一交易所快照两次发现得到相同候选清单与相同 universe_id；逐候选筛选指标入档 — tests: `tests/unit/test_f008_discover.py`
+- [x] **AC-002** (`FR-002`): 未冻结的候选清单驱动回填被非零拒绝；冻结后成员增删产生新版本且旧版本不可改写 — tests: `tests/unit/test_f008_universe_def.py`
+- [x] **AC-003** (`FR-003`, `NFR-002`): 回填中断后重跑从断点继续、不写重复行、行数与预期一致 — tests: `tests/integration/test_f008_backfill.py`
+- [x] **AC-004** (`FR-003`, `NFR-001`): 限流错误触发退避重试且不超过上限，请求速率不因失败而提高 — tests: `tests/unit/test_f008_rate_limit.py`
+- [x] **AC-005** (`FR-004`, `DR-004`): 缺失率超限、未闭合边界、连续聚合对不上、重复主键四类 fixture 均被拦在导出清单外并各记原因码；全项通过者进入清单（重复主键 fixture 以无主键约束的 scratch 源表承载——参考表 `ohlcv_1m` 的主键使重复无法构造，用真实表只能得到恒真的空转断言） — tests: `tests/integration/test_f008_quality_gate.py`
+- [x] **AC-006** (`FR-004`): 上线晚于回填窗口起点的 pair 按实际可得窗口计算缺失率，不被误判为缺失 — tests: `tests/unit/test_f008_quality_gate_window.py`
+- [x] **AC-007** (`FR-005`, `NFR-003`): 含上市/退市/中途进出的 fixture 上，universe_at(T) 在各时点返回正确成员集合 — tests: `tests/unit/test_f008_membership.py`
+- [x] **AC-008** (`FR-005`, `DR-002`): 尝试原地改写已发布历史区间被拒绝；退出记录保留历史数据不删除 — tests: `tests/unit/test_f008_membership.py`
+- [x] **AC-009** (`FR-006`, `IR-002`): 台账 artifact 同内容得同 digest 且逐字节一致、内容变化得新 digest 且旧 digest 仍可读；发布出的 artifact 能被下游 `factor_factory.generators.universe.load_explicit_universe` 按 digest 直接加载通过；新 pair 进入导出清单后 symbol_map 同样满足该性质 — tests: `tests/integration/test_f008_export_integration.py`
+- [x] **AC-010** (`TR-001`, `TR-002`, `DR-003`, `NFR-004`): 成员变更与回填进度/失败事件可按 run 与 pair 查询，且台账可交易期变更与准入状态变更可按 `line` 区分；运行记录标注 hostname — tests: `tests/integration/test_f008_backfill.py`
+- [x] **AC-011** (`NFR-005`): 扩容后实测记录磁盘占用、单次全量导出耗时与 NAS 备份时长，并与 F002 的 6 对基线对照 — tests: `tests/integration/test_f008_capacity_report.py`
+  - **实测（执行机 `qiaozhi-lt`，2026-09-24/25）**：磁盘占用 湖 **30,028** 分区文件 / **1,015 MB**（基线 8,860 / 272 MB）；单次全量导出 **860 s**（数据集级 839.82 s，基线 228 s；对 35 对外推 1,330 s 为 **0.65×**）；NAS 备份 **8,356 s**、NAS 端 **30,028** 个 parquet（三段 md5 校验一致）。记录：`reports/f008/capacity-report.json`；执行机门禁：`ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f008_capacity_report.py` = **4 passed**。NAS 备份的传输路径为 tailnet DERP 中继（执行机不在家网），详见 `reports/f008/执行机取证-T020-T023.md` §13.5
+- [x] **AC-012** (`IR-001`, `FR-002`, `FR-003`, `FR-004`): CLI 五个子命令的契约与 `design.md` §4 登记的全部九类启动期拒绝全覆盖——`discover` 口径缺字段 / 交易所不可达，`freeze` 缺 `--confirm` / 候选清单为空，`backfill` 定义未冻结 / 窗口非法 / 磁盘余量不足，`gate` 对回填未完成的 pair 判 `INCOMPLETE`，`show` 定义或 digest 不存在——各自以非零退出并给出可区分的原因 — tests: `tests/unit/test_f008_cli_contract.py`
+- [x] **AC-013** (`IR-003`, `IR-002`, `DR-003`): 台账 artifact 与 `BackfillRun` 均带 `schema_version`；artifact 加载方在 `schema_version` 与期望值不符、顶层或成员出现未知键时拒绝加载并报错，不做宽松忽略 — tests: `tests/unit/test_f008_artifact.py`
+- [x] **AC-014** (`IR-002`, `FR-006`, `NFR-003`): `F007` 的只读消费面（`src/alphamill/evaluation/universe_ledger.py`，被 `src/alphamill/experiment_store/research_snapshot.py` 调用）按 IR-002 的 canonical JSON 加载同一 digest 的 artifact，`universe_at(T)` 各时点结果与本 feature 台账一致；消费面不再残留任何 `<digest>.csv` 读写路径 — tests: `tests/contract/test_f007_upstream_contracts.py`
 
 ## 7. 测试、依赖与决策
 
@@ -323,6 +327,7 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 
 - 上游 Feature / Contract：F001（Binance 数据路线、`historical_backfill.py`、`tools/f001_backfill_report.py` 完整性口径）；F002（Parquet 湖、dataset registry、`symbol_map`、reader 与 manifest 契约）。
 - 下游消费者：`F003`（横截面 PIT 掩码与候选质量结论的宇宙前提）、`F007`（ResearchSnapshot 的 universe/calendar 摘要，ADR-0007）、FR4/M3 组合构建。
+  - **`F007` 消费面待迁移（开工前检查 2026-09-19）**：main 上 `evaluation/universe_ledger.py` 仍按已被裁决废弃的 CSV 契约（`<digest>.csv` + 9 列）读写，而 ADR-0007 / 架构 §4.3 / F007 DR-006 与本文 `IR-002` 都已冻结为 canonical JSON——**三份文档一致，代码没跟上**。`SC-004`（F007 可直接消费）要求把该消费面迁到 JSON，由 `AC-014` 验收、`tasks.md` T029 承载；迁移只改消费面与其测试，F007 的 ResearchSnapshot 身份语义（ADR-0007 组合 digest 公式）不变。
 - 外部 / 环境依赖：Binance 公开行情与限流策略；执行机的磁盘余量（约 4200 万行）；NAS 备份窗口。
 
 ### 决策与风险
@@ -345,6 +350,8 @@ FROZEN -> 新版本  成员增删产生新 universe_id，旧版本只读
 | 流动性阈值用绝对金额还是排名 | **排名**：滚动 90 天日均成交额前 N | 绝对金额会随市场周期漂移——牛市可能 60 个 pair 过线、熊市只剩十几个，同一口径产出的宇宙规模不可控，与 FR-001 的可复现要求冲突；排名法自适应且直接产出目标规模 | 窗口与名次进 `UniverseDef.criteria`，变更即新 `universe_id` |
 | 上线天数要不要求满窗 | **不要求**：维持 >180 天，允许部分历史 | 要求"上线满 2 年"等于只选活过两年的币，这是幸存者偏差的另一张脸——而消除它正是本 feature 的立意；PIT 台账已正确处理"何时进入"，部分历史是合法状态 | 缺失率按实际可得窗口计算（AC-006） |
 | 结构性重复标的 | 排除稳定币对、杠杆代币、指数/篮子类合约（如 BTCDOM） | 它们在横截面 rank 里要么是常数噪声，要么与主流币结构性重复，会污染 IC | 排除规则与排除原因一并入档（DR-001） |
+| 代币化 TradFi、贵金属代币与「只有永续」的标的 | **排除**：`underlyingType` 非 `COIN`（EQUITY/COMMODITY）按 `tokenized_tradfi` 排除；金本位代币（`PAXG`/`XAUT`）按 `tokenized_commodity` 排除；无现货对应市场的按 `no_spot_market` 排除；`1000X` 只按同标的映射到现货 `X` | 排名用永续流动性，但**研究数据来自现货路线**（`ohlcv_1m` 是 spot）；把取不到数的标的放进宇宙会在台账与导出清单里制造「有成员、无数据」的缺口，而代币化股票/商品与加密资产的横截面驱动因素不同，混进去会污染 IC | 2026-09-21 首次真实发现（T019）实测：40 对里 12 对无现货（含 XAU/XAG/MSTR/CRCL/EWY/INTC），owner 裁决按本行处理 |
+| F007 消费面仍是 CSV 契约 | **随本 feature 迁移到 canonical JSON**（`evaluation/universe_ledger.py` 与其契约/集成测试），迁移只改读写面，不动 ResearchSnapshot 身份公式 | 2026-09-19 裁决把 artifact 定为 JSON 后，ADR-0007 / 架构 §4.3 / F007 DR-006 / 本文 IR-002 四份文档都改了，**F007 已 `done` 的代码没改**——文档一致不等于代码一致；不迁移则 `SC-004` 落空，ResearchSnapshot 的 `--universe` 路径直接找不到 artifact | 开工前检查 2026-09-19 发现；`AC-014` 验收、T029 承载；F007 状态保持 `done`（属契约对齐维护，不重开 feature） |
 
 ## 8. 待确认问题
 

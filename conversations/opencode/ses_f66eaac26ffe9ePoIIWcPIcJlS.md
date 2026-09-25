@@ -169,18 +169,18 @@ docs/features/0.2/F002-
 <type>file</type>
 <content>
 1: # ADR-0005：呈现与观测架构 —— 真相源/投影/展示三分与自建前端路线
-2:
+2: 
 3: - 日期：2026-09-13
 4: - 状态：Accepted
 5: - 决策人：Georg
 6: - 背景：呈现层长期路线；PRD FR8 / FR6.1 / FR6.4 / FR7.2 / FR7.4；架构文档 §〇 / §七
-7:
+7: 
 8: ## 背景
-9:
+9: 
 10: 当前呈现面三件：Grafana（`quant-overview` 平台观测 + `dryrun-monitoring` 策略运营，F001
 11: 迁入并验收有数）、FreqUI（Freqtrade 镜像自带，`api_server` 已启用）、CLI（`tools/verify.py`
 12: 门禁与操作）。三个结构性问题随里程碑逼近：
-13:
+13: 
 14: 1. **研究证据没有承载面**：评测台（FR3）落地后 M2 出口要求周产能 ≥100 候选，版本化报告
 15:    靠文件浏览不可持续；架构文档 §五 原计划的「Grafana 实验台账看板」与版本态产物形态
 16:    （文件 + 谱系图 + 逐因子下钻）不匹配。
@@ -218,9 +218,9 @@ index fcac818..36c928e 100644
 --- a/docs/reviews/RETROSPECTIVE.md
 +++ b/docs/reviews/RETROSPECTIVE.md
 @@ -232,10 +232,12 @@
-
+ 
  ## 循环 7：F002 数据桥需求设计检视
-
+ 
 -- report_type: doc-review | round: 1（full-scan）→ 2（修复覆盖 >30%，一次性 full-scan）→ 3（diff-only 封顶与 owner 角色合并）| 状态: 闭环候选
 +- report_type: doc-review | round: 1（full-scan）→ 2（修复覆盖 >30%，一次性 full-scan）→ 3（diff-only 封顶与 owner 角色合并）| 状态: 闭环
  - 日期：2026-09-12 → 2026-09-13 | 基线：`6491224` → 终态工作树基于 `a99a1c9`
@@ -238,18 +238,18 @@ index fcac818..36c928e 100644
 <type>file</type>
 <content>
 1: # RETROSPECTIVE —— 检视复盘
-2:
+2: 
 3: 本文件由 review-convergence skill 维护，记录每轮检视发现的缺陷与过程教训。
 4: `docs/reviews/` 下其它文件本地-only（见 `.gitignore`）。
-5:
+5: 
 6: ## 循环 1：全项目文档检视（项目开工前全量）
-7:
+7: 
 8: - report_type: doc-review | round: 1（full-scan）→ 2（diff-only 复核）| 状态: 闭环
 9: - 日期：2026-09-07 | 基线：1bd8c4d → 终基线 7969a97（修复轮 7 个分批提交）
 10: - 检视人：Sisyphus；修复方：项目所有者（Georg/qiaozhi li）
 11: - 范围：docs/ 全部 17 份入库文件 + CLAUDE.md/README.md/BACKLOG.md + 三路独立取证（检视人通读 + explore agent 代码区实测 + Oracle agent 战略评审）
 12: - 结论：首轮 2 Critical / 8 High / 10 Medium / 4 Low 共 24 条；修复轮全数处理并自查发现 fix-regression N1 一条（PRD 与架构成本口径矛盾，当轮修复）；round-2 diff-only 复核逐条验证通过，verify.py 六步全绿 ×3，检视人独立变异验证两道新门禁（死链注入→红→还原→绿；pin 复现 C001 原始故障→红→还原→绿）。
-13:
+13: 
 14: | ID | 一
 …[truncated]
   ```
@@ -460,29 +460,29 @@ Let me read ses_f66ed4154ffe12I2MmCmVVdy1N and ses_f66eaac26ffe9ePoIIWcPIcJlS.
 
   ```text
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:44:15.233Z
-[tool: bash]
+[tool: bash] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:44:19.302Z
-[tool: bash]
-[tool: bash]
+[tool: bash] 
+[tool: bash] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:44:23.793Z
-[tool: bash]
+[tool: bash] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:44:26.373Z
-[tool: bash]
+[tool: bash] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:44:29.536Z
-[tool: bash]
+[tool: bash] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:44:31.351Z
 Both configs are valid. Let me verify `deepseek-flash` actually exists on the DeepSeek official API before declaring done.
-[tool: bash]
+[tool: bash] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:44:39.087Z
 `deepseek-flash` confirmed on the official API (`deepseek-flash`, `deepseek-v4-pro`).
-[tool: todowrite]
-[tool: bash]
+[tool: todowrite] 
+[tool: bash] 
 
 [assistant (Sisyphu
 …[truncated]
@@ -493,30 +493,30 @@ Both configs are valid. Let me verify `deepseek-flash` actually exists on the De
 
   ```text
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:45:07.228Z
-[tool: bash]
-[tool: glob]
-[tool: glob]
+[tool: bash] 
+[tool: glob] 
+[tool: glob] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:45:11.250Z
-[tool: bash]
-[tool: read]
-[tool: read]
+[tool: bash] 
+[tool: read] 
+[tool: read] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:45:13.746Z
-[tool: bash]
-[tool: read]
+[tool: bash] 
+[tool: read] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:45:17.278Z
-[tool: session_list]
-[tool: bash]
+[tool: session_list] 
+[tool: bash] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:45:22.054Z
-[tool: session_search]
-[tool: session_search]
-[tool: session_search]
+[tool: session_search] 
+[tool: session_search] 
+[tool: session_search] 
 
 [assistant (Sisyphus - ultraworker)] 2026-09-13T04:45:23.910Z
-[tool: session_read]
+[tool: session_read] 
 [tool: session_read]
   ```
   </details>
@@ -680,7 +680,7 @@ Found 12 match(es) in 12 file(s)
 
 [Agent Usage Reminder]
 
-You
+You 
 …[truncated]
   ```
   </details>
@@ -737,11 +737,11 @@ conversations/opencode/ses_f8852a9
 11: tokens_output: 22630
 12: cost: 0.0
 13: ---
-14:
+14: 
 15: # 量化交易研究项目全面检视
-16:
+16: 
 17: ## user · 2026-09-06T16:18:18Z
-18:
+18: 
 19: [analyze-mode]
 20: ANALYSIS MODE. Gather context before diving deep:
 21: CONTEXT GATHERING (parallel):
@@ -823,7 +823,7 @@ total 14816
 drwxr-xr-x     7 georg georg      240 Sep 13 12:45 .
 drwxrwxrwt 21419 root  root    436740 Sep 13 12:45 ..
 drwxr-xr-x     3 georg georg       60 Sep 10 21:40 .omo
-drwxr-xr-x
+drwxr-xr-x    
 …[truncated]
   ```
   </details>
@@ -1021,19 +1021,19 @@ File references (@path) in this skill are relative to this directory.
 <type>file</type>
 <content>
 1: # F002 文档检视修复日志
-2:
+2: 
 3: > 本文件为修复方的 append-only 声明通道（review-convergence 协议）。
 4: > 检视报告 `CURRENT-doc.md` 的 status 由检视方独占，本文件不修改它。
-5:
+5: 
 6: ## Round 1 · 2026-09-12
-7:
+7: 
 8: - **findings**：F002-D001~D010、F002-Q001、F002-Q002 共 12 条，全部处理。
 9: - **baseline**：`main@d60137b`（与报告声明一致，无漂移）。
 10: - **commits**：见下方「协议偏差」——12 条集中在 design.md/spec.md/tasks.md/integration.md
 11:   四份文档的交错编辑面，按域一次提交。
-12:
+12: 
 13: ### 逐条修复方案
-14:
+14: 
 15: | ID | 修复方案 | 落点 |
 16: |---|---|---|
 17: | D001 | 分区文件名加 `.rN` 修订序号，写入后永不覆盖；版本↔文件绑定改由 manifest `partitions` 清单显式枚举，未变分区跨版本共享物理文件；`_staging/` + manifest 最后写 = 原子发布点。并写明为何不把 data_version 放进路径（周日全量将产生 52 份/年 631 万行副本）及其代价 | design §3 |
@@ -1049,12 +1049,12 @@ File references (@path) in this skill are relative to this directory.
 <type>file</type>
 <content>
 1: # AlphaMill
-2:
+2: 
 3: AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，贯通数据治理 → 假设与因子 →
 4: 证据评测 → 组合与策略 → Freqtrade 执行 → 监控归因与复盘（中文别名：淘沙）。
-5:
+5: 
 6: ## 当前结构
-7:
+7: 
 8: - `docs/alphamill-prd.md`：正式 PRD（产品真相源），产品判断以此为准。
 9: - `docs/alphamill-architecture.md`：四平面架构与接口契约（架构真相源），随实现迭代。
 10: - `docs/alphamill-research-factor-mining.md`：因子挖掘/ML 选型调研证据（决策已提炼至 ADR-0001）。
@@ -1084,7 +1084,7 @@ Wait, important: The review CURRENT-doc.md baseline says `main @ 2d9c556`. Curre
 
 Now, the user says "作为修复者请认真审视检视意见并修复问题". So I need to:
 1. Fix D001-D010.
-2. Write FIX-log.md declaring the fixes (append to the ADR-0005 review log; but the existing FIX-log.md is for F002!). Hmm. The archive FIX-log.md is "F002 文档检视修复日志". The ADR review is a NEW loop. The archive dir has CURRENT-doc.md (ADR review) and FIX-log.md (F002). Since docs/reviews/ is gitignored and the F002 artifacts were deleted, but this ADR review's CURRENT-doc.md is in /tmp.
+2. Write FIX-log.md declaring the fixes (append to the ADR-0005 review log; but the existing FIX-log.md is for F002!). Hmm. The archive FIX-log.md is "F002 文档检视修复日志". The ADR review is a NEW loop. The archive dir has CURRENT-doc.md (ADR review) and FIX-log.md (F002). Since docs/reviews/ is gitignored and the F002 artifacts were deleted, but this ADR review's CURRENT-doc.md is in /tmp. 
 
 Wait, actually — the review report CURRENT-doc.md at /tmp is the ADR review. But where should it live? By the skill, `docs/reviews/CURRENT-doc.md`. Hmm, but the F002 CURRENT-doc was deleted at closure. The ADR review created a new CURRENT-doc.md... but it's in /tmp archive, not in docs/reviews/. That's odd. Maybe the reviewer (a separate session) archived the report to /tmp and deleted docs/reviews/CURRENT-doc.md.
 
@@ -1094,7 +1094,7 @@ Hmm, actually the archive dir contains FIX-log.md at 12:22 which is the F002 fix
 
 But per the protocol, the fixer should have docs/reviews/FIX-log.md to append to. The FIX-log is for F002. Hmm, actually the ADR review would need a new FIX-log. But the skill says one FIX-log.md file (fixer-owned, append-only). The F002 FIX-log covers the F002 loop. For a new ADR loop, we'd append a new section... but the file was archived/deleted.
 
-Wait — maybe the intent: The review is round 1 of the ADR loop. The fixer's job is to fix the 10 findings AND write the FIX-log declaration. But the CURRENT-doc.md is in /tmp (not docs/reviews). The user didn't specify.
+Wait — maybe the intent: The review is round 1 of the ADR loop. The fixer's job is to fix the 10 findings AND write the FIX-log declaration. But the CURRENT-doc.md is in /tmp (not docs/reviews). The user didn't specify. 
 
 Let me focus on the substance: fix the 10 findings. The user's ask is "修复问题" (fix the problems). The review protocol overhead (FIX-log, closure, RETROSPECTIVE) is secondary but I should honor the repo conventions: The skill says fixer writes FIX-log.md and must NOT modify CURRENT-doc.md status.
 
@@ -1150,15 +1150,15 @@ Review report located: ADR-0005 Round-1, 10 open findings (D001–D010). Baselin
 <type>file</type>
 <content>
 1: # AlphaMill — 系统架构设计
-2:
+2: 
 3: > 版本：v0.1 | 日期：2026-09-13 | 配套：[alphamill-prd.md](./alphamill-prd.md)
-4:
+4: 
 5: ---
-6:
+6: 
 7: ## 〇、存储三件套分工（TimescaleDB / Parquet / DuckDB）
-8:
+8: 
 9: **不是三选一的竞品，是流水线上的三段**：Parquet 是文件格式（箱子），DuckDB 是查询引擎（开箱的手），TimescaleDB 是数据库服务（实时柜台）。
-10:
+10: 
 11: | | TimescaleDB | Parquet 湖 | DuckDB |
 12: |---|---|---|---|
 13: | 本质 | PG 时序扩展（数据库服务） | 列式文件格式（无服务） | 进程内 OLAP 查询引擎 |
@@ -1166,7 +1166,7 @@ Review report located: ADR-0005 Round-1, 10 open findings (D001–D010). Baselin
 15: | 擅长 | 实时最新值、连续聚合、Grafana 直连 | 大范围列扫描、快照不可变=可复现 | 直接对 Parquet 跑 SQL |
 16: | 复现性 | ❌ 数据会被回补/修订 | ✅ 同一 data_version 永远同结果 | 无关（读的人） |
 17: | 角色 | **联机运营库** | **研究快照**（封存账本） | **取数入口**（会计的手） |
-18:
+18: 
 19: ```text
 20: CCXT 采集 ──写入──▶ TimescaleDB（联机运营库，随时改）
 21
@@ -1181,22 +1181,22 @@ Review report located: ADR-0005 Round-1, 10 open findings (D001–D010). Baselin
 <type>file</type>
 <content>
 1: # BACKLOG —— 活跃 Feature 索引
-2:
+2: 
 3: 本文件只列 `status != done` 的 Feature，是 `docs/features/<version>/Fxxx-*/spec.md`
 4: frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独立状态真相源）。
-5:
+5: 
 6: | Feature | 版本 | 状态 | 链接 |
 7: |---|---|---|---|
 8: | F002-data-bridge | 0.2 | draft | [spec](docs/features/0.2/F002-data-bridge/spec.md) |
 9: | F004-kronos-inference-runtime | 0.2 | draft | [spec](docs/features/0.2/F004-kronos-inference-runtime/spec.md) |
-10:
+10: 
 11: > 规则：feature 状态变更（spec frontmatter）时必须同步本表；`done` 的 Feature 移出本表，
 12: > 交付记录进入 `docs/features/releases/<version>.md`。
 13: > 示例行（复制后替换，链接必须指向真实 spec.md）：
 14: > `| F001-<name> | 0.1 | draft | [spec](docs/features/0.1/F001-<name>/spec.md) |`
-15:
+15: 
 16: ## 规划中（编号已预留 / 待分配，未立 spec）
-17:
+17: 
 …[truncated]
   ```
   </details>
@@ -1208,22 +1208,22 @@ Review report located: ADR-0005 Round-1, 10 open findings (D001–D010). Baselin
 <type>file</type>
 <content>
 1: # ADR-0002：外部依赖管理策略 —— vendor / fork / 原样依赖三分法
-2:
+2: 
 3: - 日期：2026-09-06
 4: - 状态：Accepted
 5: - 决策人：Georg
 6: - 操作细节：[`docs/alphamill-integration.md`](../alphamill-integration.md) §五
-7:
+7: 
 8: ## 背景
-9:
+9: 
 10: AlphaMill 引入四个开源项目：AlphaGen（挖掘引擎）、Freqtrade（执行）、Vibe-Trading（可选第二实现/Agent）、
 11: Kronos（时序基础模型）。需要统一"改谁、不改谁、怎么跟上游"的规则。
-12:
+12: 
 13: 判断原则：**改动深度决定集成距离**。fork 仅适用于"要上游全部功能 + 必须改核心 + 上游不收 PR"
 14: 的窄缝——四个引入项没有一个落在缝里。
-15:
+15: 
 16: ## 决策
-17:
+17: 
 18: | 引入项 | 方式 | 要点 |
 19: |---|---|---|
 20: | AlphaGen | **vendor** 进主仓 | 动大手术（换数据层/现代化）+ 上游冻结 + 只用子集 |
@@ -1253,12 +1253,12 @@ Let me read.
 230:   必须留痕，且不能覆盖硬安全门。
 231: - **FR7.5 周期报告**：每周报告北极星领先指标、完整漏斗、有效独立数、来源多样性、资源消耗、线上
 232:   偏差和最大约束，不以名义候选数单独宣告成功。
-233:
+233: 
 234: ### FR8 呈现与审查界面
-235:
+235: 
 236: 呈现层的实现路线（真相源/投影/展示三分、自建前端次序、工具降级）见 ADR-0005；本节只约束
 237: 产品行为。
-238:
+238: 
 239: - **FR8.1 研究证据浏览**：因子、组合与实验的版本化报告、权益/回撤/分位数/IC 曲线和实验谱系
 240:   经统一只读界面浏览；研究控制台先于 M2 周产能爬坡上线。界面渲染对象仅限可追溯 manifest 的
 241:   版本化产物，实时运营数据不进入研究界面（运营观测走监控栈）。
@@ -1268,11 +1268,11 @@ Let me read.
 245:   动作（FR6.2）经统一 API 完成；前端不直写生产状态，全部操作落 FR7.4 审计。
 246: - **FR8.4 裁决不页面化**：门禁与统计裁决保持确定性脚本路径，界面只呈现裁决结果，不提供
 247:   裁决按钮。
-248:
+248: 
 249: ## 五、非功能需求与安全红线
-250:
+250: 
 251: | 类别 | 要求 |
-252:
+252: 
 …[truncated]
   ```
   </details>
@@ -1292,7 +1292,7 @@ Let me read.
 7: <link rel="stylesheet" href="styles.css">
 8: </head>
 9: <body>
-10:
+10: 
 11: <header>
 12:   <div class="brand">ALPHAMILL<em>///</em>淘沙 <small>CONSOLE REV 0.1-DESIGN</small></div>
 13:   <div class="top-cell">ENV <b>DRY-RUN</b></div>
@@ -1341,7 +1341,7 @@ Also need docs/README.md (already read fully at start) — D006 wants docs/desig
 
 Also D009: BACKLOG planning table + validate_spec_lifecycle regex. The suggested fix: add comment forbidding Fxxx- prefix in first column, OR make check_backlog section-aware. Given "gate-without-teeth" pattern, better to add section-awareness or at least a guard. But minimal: add a comment. Hmm. The review marks D009 low quality, symptom-patch, existing test notes "现状不误报". Actually the real fragility: if someone writes a plan row whose first column starts with `F005-...` AND has 4th col spec link, it'd be misparsed. Minimal robust fix: make check_backlog only parse the active table (skip the "规划中" section), or add a comment. The suggested fix offers either. I'll do the comment + maybe a guard. Let me think about the best fix that's a "root cause" fix: make check_backlog section-aware — only parse rows before the "## 规划中" header, or skip rows in the planning section. That's a small code change in a gate, requiring a regression test per repo convention (each fix needs a regression test). Hmm, doc-review fixes may not need tests, but D009 touches a gate script. Per skill §6, each fix needs a regression test that can go into the suite, and gates need mutation verification. But for doc-review, "文档改动 + 门禁通过" is the evidence. However D009 modifies a gate (validate_spec_lifecycle.py).
 
-Actually, let me reconsider. The simplest and safest fix for D009 matching suggested_fix: add an explicit comment in BACKLOG planning table that first column must not use Fxxx- prefix. That's doc-only. But it's "gate-without-teeth" — a comment is weak. However the review's own note says it doesn't currently misreport. The suggested fix explicitly allows "注释禁止首列 Fxxx- 前缀". Given effort/risk, I'll implement section-awareness in check_backlog (root cause) AND add a regression test, OR just the comment. Let me decide: The review is a doc-review; the issue is low. But pattern_tag is gate-without-teeth, and the skill emphasizes gates must have teeth. Making check_backlog section-aware is the robust fix and small. But it changes behavior: currently the planning table's rows aren't matched because 4th column isn't `[spec](...)`. If we make it section-aware, we'd restrict to the active section, which doesn't change current behavior but prevents future false positives. Hmm, actually section-awareness would only help if a planning row accidentally has a spec link.
+Actually, let me reconsider. The simplest and safest fix for D009 matching suggested_fix: add an explicit comment in BACKLOG planning table that first column must not use Fxxx- prefix. That's doc-only. But it's "gate-without-teeth" — a comment is weak. However the review's own note says it doesn't currently misreport. The suggested fix explicitly allows "注释禁止首列 Fxxx- 前缀". Given effort/risk, I'll implement section-awareness in check_backlog (root cause) AND add a regression test, OR just the comment. Let me decide: The review is a doc-review; the issue is low. But pattern_tag is gate-without-teeth, and the skill emphasizes gates must have teeth. Making check_backlog section-aware is the robust fix and small. But it changes behavior: currently the planning table's rows aren't matched because 4th column isn't `[spec](...)`. If we make it section-aware, we'd restrict to the active section, which doesn't change current behavior but prevents future false positives. Hmm, actually section-awareness would only help if a planning row accidentally has a spec link. 
 
 Wait, re-read D009 title: "BACKLOG 规划表对 check_backlog 正则脆弱——首列一旦写成 Fxxx- 前缀即触发「含未知 Feature」误报". So if a planning row's first column is `F005-研究控制台` and 4th column is `[spec](...)`, it'd be matched and flagged unknown. Actually the planning table's 4th column is "编号状态" (F005（ADR-0005 预留）), not a link. So no current issue. The fix: section-aware parsing (only parse the first table up to "## 规划中"), or comment.
 
@@ -1428,7 +1428,7 @@ drwxr-xr-x  6 georg georg 4096 Sep 11 00:18 .venv
 81:     研究数字可追溯 manifest，运营数字来自运营视图。门禁裁决不出现在任何页面（FR8.4）。
 82:   </div>
 83: </section>
-84:
+84: 
 85: <!-- ═══ 1 实验漏斗 ═══ -->
 86: <section class="view" id="view-funnel">
 87:   <div class="view-head">
@@ -1436,10 +1436,10 @@ drwxr-xr-x  6 georg georg 4096 Sep 11 00:18 .venv
 89:     <span class="ph">F005 · M2 周产能 ≥100 的审查载体</span>
 90:   </div>
 91:   <div class="src">SRC: GET /api/v1/funnel · <b>v_funnel_status（experiment_store 投影）</b></div>
-92:
+92: 
 93:   <div class="grid g4">
 94:     <div class="panel"><h3>本周候选产能</h3><div class="big">128</div><div class="sub">目标 ≥100 · FR2 出口</div></div>
-95:     <div class="panel"><h3>有效独立数</h3><div class="big">23</div><div
+95:     <div class="panel"><h3>有效独立数</h3><div class="big">23</div><div 
 …[truncated]
   ```
   </details>
@@ -1633,25 +1633,25 @@ tests/unit/test_historical_backfill_
 <content>
 1: #!/usr/bin/env python3
 2: """规格生命周期校验（骨架版，node flavor 的 check-feature-gates.mjs 的 Python 对应）。
-3:
+3: 
 4: 校验 docs/features/<version>/Fddd-*/ 三件套：
 5:   - 三件套齐全、frontmatter 合法、ID 唯一、status/gate_version 合法
 6:   - spec.md 是状态唯一真相源（design/tasks 不得声明独立 status）
 7:   - gate v1：固定章节结构、Q/DQ 关闭、AC 引用第 4 节真实需求、
 8:     review/done 的 tests 路径真实存在
 9:   - BACKLOG.md 与所有非 done Feature 双向集合一致
-10:
+10: 
 11: 纯函数 + CLI 分离，只用标准库；参考项目在此基础上抽了共享 spec_validation 模块
 12: 并补了变异测试。用法：python tools/validate_spec_lifecycle.py
 13: 退出码 0 = 全部通过；1 = 存在违规。
 14: """
-15:
+15: 
 16: from __future__ import annotations
-17:
+17: 
 18: import pathlib
 19: import re
 20: import sys
-21:
+21: 
 22: ROOT = pathlib.Path(__file__).resolve().parent.parent
 23: ALLO
 …[truncated]
@@ -1675,17 +1675,17 @@ Let me read it.
 <type>file</type>
 <content>
 1: """validate_spec_lifecycle 回归测试（CURRENT-code.md C002）。
-2:
+2: 
 3: 三组真实校验：frontmatter 解析与 status 必填、AC tests 路径逃逸检查、
 4: BACKLOG 双向一致性。全部走 verify_repo(root=tmp_path) 端到端断言。
 5: """
-6:
+6: 
 7: from __future__ import annotations
-8:
+8: 
 9: import pathlib
-10:
+10: 
 11: from tools import validate_spec_lifecycle as vsl
-12:
+12: 
 13: SPEC_GATE0_DRAFT = """---
 14: kind: feature
 15: id: F001
@@ -1693,16 +1693,16 @@ Let me read it.
 17: status: draft
 18: gate_version: 0
 19: ---
-20:
+20: 
 21: # F001-demo
-22:
+22: 
 23: 正文占位。
 24: """
 25: DESIGN_MIN = "# F001-demo design\n"
 26: TASKS_MIN = "# F001-demo tasks\n"
 27: BACKLOG_HEADER = "# BACKLOG\n\n| Feature | 版本 | 状态 | 链接 |\n|---|---|---|---|\n"
-28:
-29:
+28: 
+29: 
 30: def write_feature(tmp_path: pathlib
 …[truncated]
   ```
@@ -1716,27 +1716,27 @@ Let me read it.
 <content>
 1: #!/usr/bin/env python3
 2: """dev 依赖 pin 一致性检查（CURRENT-code.md C001 回归门）。
-3:
+3: 
 4: 校验 [project.optional-dependencies].dev 中每个依赖的已安装版本是否落在
 5: 声明的版本范围内。手写最小版本比较器（仅支持 >=/<=/==/!=/>/< 与逗号组合的
 6: 简单 specifier，按点分段整数比较），不引入第三方依赖；语义化版本的
 7: pre-release/dev 后缀等复杂场景超出本门禁目标，不做处理。
-8:
+8: 
 9: 用法：python tools/check_dep_pins.py
 10: 退出码 0 = 全部在范围内；1 = 存在越界/未安装/无法解析。
 11: """
-12:
+12: 
 13: from __future__ import annotations
-14:
+14: 
 15: import importlib.metadata
 16: import pathlib
 17: import re
 18: import sys
 19: import tomllib
 20: from collections.abc import Callable
-21:
+21: 
 22: ROOT = pathlib.Path(__file__).resolve().parent.parent
-23:
+23: 
 24: NAME_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(.*)$")
 25: CLAUSE_RE = re.compile
 …[truncated]
@@ -1941,7 +1941,7 @@ Let me write:
 Hmm "运营面归 F003/M3-M4" — F003 is AlphaGen vendor, not operations. Operations is F006 (运营操作入口) and M3/M4 self-built. Let me be accurate: 运营面归 M3/M4 自建运营面（FR8.3 写路径归 F006）. Let me write:
 - F005 research; 运营面（策略运营/信号质量）归 M3/M4 业务运营面自建（写路径与审计归 F006）；平台面归 Grafana 告警栈末端（决策 5）；应急面归 F006。
 
-Also mention "原型中每页顶部标注归属".
+Also mention "原型中每页顶部标注归属". 
 
 Now index.html: add a global scope banner. Insert right after `<main>` (line 42) before the first section. Let me add:
 
@@ -1973,7 +1973,7 @@ Wait, but D008 also modifies decision 4. That's fine — separate edit/commit.
 
 Let me add decision 7 after item 6 (line 60-62). The list currently ends:
 ```
-6. **自建增量次序**（每步独立有价值、可随时停）：...
+6. **自建增量次序**（每步独立有价值、可随时停）：... 
 ```
 Then blank line, then `## 备选方案`.
 
@@ -2046,7 +2046,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 
 ## assistant · 2026-09-13T04:47:10Z
 
-- **tool**: `edit({"filePath": "/home/georg/projects/alphamill/docs/decisions/0002-external-dependency-policy.md", "newString": "| Kronos 模型代码 | 原样依赖（上游 fresh clone + pin commit） | 零改动；权重走 HuggingFace；服务薄壳为本仓 `kronos_service/` |\n| 前端构建期工具链（Node/npm，`web/` SPA） | 原样依赖（**仅构建期**，pin lockfile） | 生产运行时零新增（构建产物静态托管）；`package-lock.json` 入库、pin Node 主版本；仅在里程碑边界升级（ADR-0005 决策 4/7） |\n\n**永不 fork。**", "oldString": "| Kronos 模型代码 | 原样依赖（上游 fresh clone + pin commit） | 零改动；权重走 HuggingFace；服务薄壳为本仓 `kronos_service/` |\n\n**永不
+- **tool**: `edit({"filePath": "/home/georg/projects/alphamill/docs/decisions/0002-external-dependency-policy.md", "newString": "| Kronos 模型代码 | 原样依赖（上游 fresh clone + pin commit） | 零改动；权重走 HuggingFace；服务薄壳为本仓 `kronos_service/` |\n| 前端构建期工具链（Node/npm，`web/` SPA） | 原样依赖（**仅构建期**，pin lockfile） | 生产运行时零新增（构建产物静态托管）；`package-lock.json` 入库、pin Node 主版本；仅在里程碑边界升级（ADR-0005 决策 4/7） |\n\n**永不 fork。**", "oldString": "| Kronos 模型代码 | 原样依赖（上游 fresh clone + pin commit） | 零改动；权重走 HuggingFace；服务薄壳为本仓 `kronos_service/` |\n\n**永不 
 …[truncated])`
 
 
@@ -2432,7 +2432,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 
 ## assistant · 2026-09-13T04:47:53Z
 
-- **tool**: `edit({"filePath": "/home/georg/projects/alphamill/tools/validate_spec_lifecycle.py", "newString": "    for line in backlog.read_text(encoding=\"utf-8\").replace(\"\\r\\n\", \"\\n\").split(\"\\n\"):\n        if line.lstrip().startswith(\"## \"):\n            break  # 只解析活跃索引表；「规划中」等后续小节不参与门禁双向校验\n        m = row_re.match(line.strip())\n        if m:\n            rows.append(\n                (m.group(1).strip(), m.group(2).strip(), m.group(3).strip(), m.group(4).strip())\n            )", "oldString":
+- **tool**: `edit({"filePath": "/home/georg/projects/alphamill/tools/validate_spec_lifecycle.py", "newString": "    for line in backlog.read_text(encoding=\"utf-8\").replace(\"\\r\\n\", \"\\n\").split(\"\\n\"):\n        if line.lstrip().startswith(\"## \"):\n            break  # 只解析活跃索引表；「规划中」等后续小节不参与门禁双向校验\n        m = row_re.match(line.strip())\n        if m:\n            rows.append(\n                (m.group(1).strip(), m.group(2).strip(), m.group(3).strip(), m.group(4).strip())\n            )", "oldString": 
 …[truncated])`
 
 
@@ -3258,7 +3258,7 @@ Potential deviations:
 
 Hmm, this is a bit confusingly worded. It says the fixer completes steps 1-5 (回写 RETROSPECTIVE.md、写模式教训、同步会话归档) and then appends the FIX-log declaration. But steps 1-6 later are described as the closure sequence, and step 6 is reviewer-only. Actually re-reading: "闭环执行序列（核对通过后连续执行）: 1. git add... commit RETROSPECTIVE... 2. push... CI... 3. ... 4. CI 绿 → 清理... 5. 汇报". Hmm, that's the reviewer's closure.
 
-Actually the paragraph says: the fixer does steps 1-5 of the "闭环时" list:
+Actually the paragraph says: the fixer does steps 1-5 of the "闭环时" list: 
 1. RETROSPECTIVE 里每个循环标题下第一行元数据带 report_type
 2. 把 issue 表每条原样追加进 RETROSPECTIVE.md
 3. 写模式教训
@@ -3380,7 +3380,7 @@ Hmm.
 
 OK, I think I should just ask? No — the user gave a directive; asking might be seen as not following. Actually the skill says don't stop to ask except two cases. But this is a meta question about which role.
 
-Let me look at whether there's a `CURRENT-doc.md` expectation and whether the RETROSPECTIVE already has a loop for ADR-0005. The reviewer's CURRENT-doc.md has `status: open` for all and `stop_condition_met: false`. So the loop is mid-flight. As fixer, my job is done pending review.
+Let me look at whether there's a `CURRENT-doc.md` expectation and whether the RETROSPECTIVE already has a loop for ADR-0005. The reviewer's CURRENT-doc.md has `status: open` for all and `stop_condition_met: false`. So the loop is mid-flight. As fixer, my job is done pending review. 
 
 Given "严格按照检视skill的要求", and that the skill strongly separates fixer (FIX-log + report waiting) from reviewer (verify + close), and the user originally said "作为修复者", I think the strict requirement I haven't met is:
 
@@ -3412,7 +3412,7 @@ Hmm, actually, let me reconsider the timeline. The user's FIRST message came at 
 
 Given ambiguity, the best move might be to ask ONE short clarifying question per the intent gate ("If the request is ambiguous, ask one short question"). But the user just said "strictly follow the skill" — asking might annoy.
 
-Actually — I think there's a cleaner reading. The skill's **§8 says the fixer must do steps 1–5 then FIX-log**. Steps 1-5 include "回写 RETROSPECTIVE.md、写模式教训、同步会话归档". So the user is likely telling me: "you didn't complete the skill's required fixer steps (RETROSPECTIVE writeback etc.) — do it strictly."
+Actually — I think there's a cleaner reading. The skill's **§8 says the fixer must do steps 1–5 then FIX-log**. Steps 1-5 include "回写 RETROSPECTIVE.md、写模式教训、同步会话归档". So the user is likely telling me: "you didn't complete the skill's required fixer steps (RETROSPECTIVE writeback etc.) — do it strictly." 
 
 But wait, there's a subtlety: those steps 1-5 are under "闭环时" (at closure). Closure happens after verification. The user may want me to switch to reviewer, verify, and close. Since I'm the only agent, "strictly per skill" = do both roles with explicit viewpoint switch.
 
@@ -3425,7 +3425,7 @@ OK. Decision: I'll do the full strict thing but in the correct role sequence:
 
 Hmm, but that's a big scope and the user only said "strictly follow". Also the user said earlier "作为修复者" (as fixer). The new message doesn't change the role explicitly.
 
-Let me re-read the new message: "严格按照检视skill的要求" — "Strictly according to the review skill's requirements." This is a directive to me (the fixer) to ensure my work strictly complies.
+Let me re-read the new message: "严格按照检视skill的要求" — "Strictly according to the review skill's requirements." This is a directive to me (the fixer) to ensure my work strictly complies. 
 
 Given my report ended with "next action: reviewer independently verifies", maybe the user is saying: don't hand-wave; the skill requires specific fixer steps. The most concrete fixer obligations I might have missed:
 - §0 baseline declaration in session → add to session (I can restate).
@@ -3440,7 +3440,7 @@ Therefore, writing the final RETROSPECTIVE entry now would be premature (the ski
 
 So strictly, as fixer, my obligations end at: commits + FIX-log + report "等待复核". Which I did.
 
-Then what is the user asking?!
+Then what is the user asking?! 
 
 Hmm, maybe the user actually wants me to run **Round 2 (diff-only review)** as the reviewer, strictly per the skill — i.e., don't stop at round 1. The skill mandates "最低 2 轮,不是 1 轮". My report stopped at round 1 and asked the reviewer to verify. If no reviewer is coming, the user wants me to do round 2 (independent diff-only verification) per the skill, and converge.
 
@@ -3464,7 +3464,7 @@ Given the previous turn I explicitly deferred to "检视方", and the user respo
 
 But step 6 deletion: the skill says only reviewer deletes after CI green. I'd be reviewer. But CI: the owner already pushed; I should check CI status via gh. If green, delete.
 
-However — there's a big problem: the CURRENT-doc.md is in /tmp, not docs/reviews/. The reviewer's process file wasn't placed canonically. Also, /tmp archive might be the owner's archive (so deletion wouldn't apply). Hmm. If CURRENT-doc.md isn't in docs/reviews/, there's nothing to delete there. The FIX-log.md I created IS in docs/reviews/.
+However — there's a big problem: the CURRENT-doc.md is in /tmp, not docs/reviews/. The reviewer's process file wasn't placed canonically. Also, /tmp archive might be the owner's archive (so deletion wouldn't apply). Hmm. If CURRENT-doc.md isn't in docs/reviews/, there's nothing to delete there. The FIX-log.md I created IS in docs/reviews/. 
 
 This is getting messy. And the owner is actively committing, which means me committing RETROSPECTIVE could conflict.
 
@@ -3476,7 +3476,7 @@ The user: "严格按照检视skill的要求" could mean: **my fix approach viola
 
 Wait — did I touch anything I shouldn't? Let me check my commits: D001-D010 touched docs + tools + tests. I did NOT touch RETROSPECTIVE.md or CURRENT-doc.md. Good.
 
-Hmm, but the skill says for doc-review fixes, the fixer should write the FIX-log with "证据三件套". I did.
+Hmm, but the skill says for doc-review fixes, the fixer should write the FIX-log with "证据三件套". I did. 
 
 Let me just go with the reviewer-round-2 + closure interpretation but be careful:
 - Actually, maybe simpler: the user wants me to follow the skill and produce Round 2. Let me do the diff-only independent verification (round 2) and report, and if clean, state "收敛候选成立，等待 CI/检视人收口" — NOT delete.
@@ -3502,7 +3502,7 @@ Ugh. OK. Let me look at this from the "what would the skill's author do" view an
 
 F002 fixer (doc-review) Round-1 FIX-log:
 - findings handled ✓
-- commits (grouped with protocol deviation stated)
+- commits (grouped with protocol deviation stated) 
 - 逐条修复方案 table ✓
 - 新增机器门禁 (ACs) — added spec ACs to lock assertions
 - regression_tests: declared none runnable, but noted ACs nail assertions
@@ -3525,11 +3525,11 @@ Hmm OK.
 
 Let me just consider: maybe the user is annoyed that I said "D001–D009 已被并行检视会话推送" and left D010 unpushed, and "严格执行skill" means **the round-end must end with exactly one push and CI green**, so I should push D010 and ensure CI. Actually the owner already pushed everything (origin == HEAD). So that's moot.
 
-I think I need more information. But per ADHD guidance and the skill, let me not over-ask.
+I think I need more information. But per ADHD guidance and the skill, let me not over-ask. 
 
 New approach: I'll interpret "严格按照检视skill的要求" as: **execute the skill's mandated Round 2 (diff-only) review and the closure writeback**, because that's the part of the skill that hasn't been done and is unambiguously required for the loop to converge. I'll do it carefully and report; I will NOT delete process files if there's risk, but the skill says to. Hmm.
 
-Wait, actually, let me reconsider whether the user might be the REVIEWER and is asking me (fixer) to strictly comply because they noticed a specific deviation. If the user is the reviewer, they'd handle closure. Then my job is only fixer compliance. In that case, what fixer requirement did I break?
+Wait, actually, let me reconsider whether the user might be the REVIEWER and is asking me (fixer) to strictly comply because they noticed a specific deviation. If the user is the reviewer, they'd handle closure. Then my job is only fixer compliance. In that case, what fixer requirement did I break? 
 
 The skill §6: "**每个修复先跑它的目标回归测试（秒级）再进下一个**". For docs, there's no test. But I ran the FULL gate once at the end (53s) — correct per "全量门禁每轮只在轮末跑一次".
 
@@ -3551,8 +3551,8 @@ Hmm, but the skill's sequence requires CI green BEFORE deletion. Let me check CI
 
 Wait, actually — maybe I should re-read: is there a possibility the user wants me to run the review skill's **round 2 myself and update CURRENT-doc.md statuses** (which I'm "not allowed" to as fixer)? The user saying "strictly follow" might override the role separation? Unlikely.
 
-Let me just do the most thorough strict thing:
-1. Round-2 independent diff verification (reviewer viewpoint),
+Let me just do the most thorough strict thing: 
+1. Round-2 independent diff verification (reviewer viewpoint), 
 2. Find and fix any regressions,
 3. Update the CURRENT-doc.md (in /tmp? or recreate at canonical docs/reviews/) with verified statuses,
 4. Write RETROSPECTIVE loop entry + 模式教训,
@@ -3591,7 +3591,7 @@ Let me do:
 - D006: grep docs/README for "呈现层视觉原型" and CLAUDE for docs/design
 - D007: grep BACKLOG for "编号按分配时刻"
 - D008: grep ADR for "F005.1" and BACKLOG
-- D009: gate + test (re-run mutation)
+- D009: gate + test (re-run mutation) 
 - D010: grep CLAUDE for duplicate decisions (count)
 
 Then run full gate, check CI.
@@ -3672,16 +3672,16 @@ index a550a25..27ee196 100644
 --- a/BACKLOG.md
 +++ b/BACKLOG.md
 @@ -15,12 +15,14 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独
-
+ 
  ## 规划中（编号已预留 / 待分配，未立 spec）
-
+ 
 -手工维护的前瞻队列，不是上表的派生索引，也不参与门禁双向校验；spec 立项后转入上表
 -并从本节移除。编号规则：跨版本连续递增（见 `docs/features/README.md`）。
 +手工维护的前瞻队列，不是上表的派生索引，也不参与门禁双向校验（`check_backlog` 只解析本
 +标题之上的活跃索引表，本节表格即使行形状相同也不会被误判）；spec 立项后转入上表
 +并从本节移除。编号规则：跨版本连续递增（见 `docs/features/README.md`）；**编号按分配时刻
 +递增，与执行顺序无关**（如 F007 评测台先于编号更小的 F005 研究控制台执行）。
-
+ 
  | Feature | 需求 | 里程碑窗口 | 编号状态 | 关键约束 |
  |---|---|---|---|---|
  | 评测台/门禁（FR3） | FR3.1~FR3.6 | M1 收尾（F002/F004 之后） | F007（已调配） | ADR-0005 约束传播：报告必须持久化曲线级时间序列（权益/回撤/分位数/IC 衰减） |
@@ -3719,7 +3719,7 @@ This is exactly what round-2 diff review should catch. Let me investigate.
 
 Actually, I deferred "组合与台账只读视图（M3+）" to F005.1, but kept "谱系与漏斗" in F005 (I wrote "谱系与漏斗。组合与台账只读视图（M3+）为 F005.1"). Let me re-read my ADR edit:
 "渲染对象**仅限版本态产物**：因子列表与指标对比、单因子曲线组（权益/回撤/分位数/IC 衰减）、谱系与漏斗。组合与台账只读视图（M3+）为 F005 的后续增量 **F005.1**"
-So 谱系与漏斗 stays in F005; only 组合与台账 is deferred. And the original line had "（M3+）组合与台账只读视图" — the (M3+) qualified only 组合与台账. Good, that's consistent. FR8.1's 实验谱系 stays in F005.
+So 谱系与漏斗 stays in F005; only 组合与台账 is deferred. And the original line had "（M3+）组合与台账只读视图" — the (M3+) qualified only 组合与台账. Good, that's consistent. FR8.1's 实验谱系 stays in F005. 
 
 But wait, the BACKLOG F005 row I wrote says "渲染对象仅限研究版本态产物（组合/台账只读视图为 F005.1 增量，M3+）". Consistent.
 
@@ -3781,11 +3781,11 @@ This is a Round-2 diff-review finding: **R2-01 (fix-regression)** — D004's fix
 
 Let me fix it: change `results/<object_id>/<data_version>/curves.parquet` → `reports/bench/<object_id>/<data_version>/curves.parquet` (matching mockup's `reports/bench/<id>/<dv>/report.json`).
 
-Wait, app.js: `"reports/bench/" + f.id + "/" + f.dv + "/report.json"`. So the canonical is `reports/bench/<id>/<dv>/report.json`. So curves should be `reports/bench/<object_id>/<data_version>/curves.parquet`, same directory as report.json.
+Wait, app.js: `"reports/bench/" + f.id + "/" + f.dv + "/report.json"`. So the canonical is `reports/bench/<id>/<dv>/report.json`. So curves should be `reports/bench/<object_id>/<data_version>/curves.parquet`, same directory as report.json. 
 
 Let me verify the mockup is authoritative? It's a design mockup (non-contract per D002). But F001/architecture `reports/` is authoritative. The mockup aligns. So fix `results/` → `reports/bench/`.
 
-Actually, to be safe and avoid over-specifying a subdir (`bench/`) that isn't in the architecture contract, I could say "与 `report.json` 同目录（`reports/<object_id>/<data_version>/curves.parquet`，路径前缀由评测台约定，见 mockup `reports/bench/...`）". Hmm. The review D004 suggested "Parquet 路径 + manifest 关联键 + 最小列集". Simpler: `reports/bench/<object_id>/<data_version>/curves.parquet`. But is "bench" the right namespace? The mockup says so. But the architecture F007 report isn't defined yet. I'll use `reports/<object_id>/<data_version>/curves.parquet` to stay consistent with `reports/` root without inventing `bench/`. Hmm, but the mockup (accessible convention) uses bench/.
+Actually, to be safe and avoid over-specifying a subdir (`bench/`) that isn't in the architecture contract, I could say "与 `report.json` 同目录（`reports/<object_id>/<data_version>/curves.parquet`，路径前缀由评测台约定，见 mockup `reports/bench/...`）". Hmm. The review D004 suggested "Parquet 路径 + manifest 关联键 + 最小列集". Simpler: `reports/bench/<object_id>/<data_version>/curves.parquet`. But is "bench" the right namespace? The mockup says so. But the architecture F007 report isn't defined yet. I'll use `reports/<object_id>/<data_version>/curves.parquet` to stay consistent with `reports/` root without inventing `bench/`. Hmm, but the mockup (accessible convention) uses bench/. 
 
 Actually the safest is to align with the mockup since it's the concrete instance: `reports/bench/<object_id>/<data_version>/curves.parquet`. But the mockup is explicitly non-contract (D002). Hmm. Yet it reflects the intended structure.
 
@@ -4111,7 +4111,7 @@ Wait, but is R2-01 even appropriate to keep? Let me think about the "one finding
 
 Hmm, but actually the user might prefer I NOT have done round-2 at all and just left the D-fix. But undoing a correct fix makes no sense. I'll keep it and disclose.
 
-Actually, let me reconsider: maybe the user is annoyed that after my first fix report, I went off doing "round 2 review", "RETROSPECTIVE", "conversations archive" etc. in my thinking/plan, and wants me to just be the fixer. The safest response:
+Actually, let me reconsider: maybe the user is annoyed that after my first fix report, I went off doing "round 2 review", "RETROSPECTIVE", "conversations archive" etc. in my thinking/plan, and wants me to just be the fixer. The safest response: 
 - Confirm fixer role, no reviewer/closure actions.
 - Ensure all D001–D010 fixes + FIX-log are complete and gate green.
 - Report "修复已完成，等待检视方复核".
@@ -4417,7 +4417,7 @@ A new canonical `docs/reviews/CURRENT-doc.md` (16:15) — reading it for the thr
 - **R2-02** (medium, fix-regression, partial-symmetric-fix): "谱系" ownership inconsistent in three places: ADR decision 4 says 谱系 stays in F005; the prototype banner's F005 page list omits it; the prototype nav labels "谱系与台账" whole page as M3+.
   Suggested fix (option a, recommended): keep 谱系 in F005 → banner F005 page list add "谱系"; prototype LINEAGE page split into "谱系(F005)" and "台账(F005.1)" two ph marks. Or (b) move 谱系 to F005.1 too.
 
-- **R2-03** (medium, fix-regression, cross-doc-contract-drift): curves sidecar "最小列集" `ic_decay`/`quantile_returns` duplicate the same-named scalar fields in report.json, and contradict the "时间轴为逐日/逐 bar UTC 时间戳" row-axis caliber.
+- **R2-03** (medium, fix-regression, cross-doc-contract-drift): curves sidecar "最小列集" `ic_decay`/`quantile_returns` duplicate the same-named scalar fields in report.json, and contradict the "时间轴为逐日/逐 bar UTC 时间戳" row-axis caliber. 
   Suggested fix: rename columns to time-expanded forms: `equity_after_cost / drawdown / q1_cum..q5_cum / long_short_cum / rolling_ic_h{1,2,4,12,24}`; add a sentence "report.json 的 ic_decay/quantile_returns 是全样本标量汇总，侧车是其时间展开，二者口径必须可互推".
 
 - **R2-04** (low, process-gap, gate-without-teeth): ADR-0005 后续行动 ④ (extend check_dep_pins for package-lock) has no acceptance criteria — it's an unexecuted task, not a defect.
@@ -4447,7 +4447,7 @@ Fix option (a) recommended:
 2. Banner: add 谱系 to F005 page list → "（总览 / 漏斗 / 因子库 / 详情 / 对比 / 谱系）". Also maybe mention 台账 F005.1.
 3. Prototype nav LINEAGE: split into "谱系" (F005) and "台账" (F005.1). The nav currently has one item "谱系与台账 M3+". Since the prototype is a single-page mockup with one `#view-lineage` section containing both 谱系 and 台账, I need to either:
    - Split the nav item into two? The section is one view. The suggestion says "原型 LINEAGE 页拆成「谱系(F005)」与「台账(F005.1)」两个 ph 标记". So within the LINEAGE view-head, have two ph marks: 谱系 F005, 台账 F005.1. And update nav label to reflect both: e.g., `<span class="ph">谱系 F005 / 台账 F005.1</span>`. Hmm, "两个 ph 标记".
-
+   
    Let me design: nav item: `谱系与台账 <span class="ph">F005/F005.1</span>` — indicates 谱系 in F005, 台账 in F005.1. And the LINEAGE view-head: `<span class="ph">谱系 F005 · 台账 F005.1 · append-only 只读</span>`. Also maybe split the two panels with their own labels: the "对象谱系" panel → F005; the "APPEND-ONLY 台账" panel → F005.1. That's the cleanest "两个 ph 标记".
 
    Let me do:
@@ -4552,7 +4552,7 @@ Round 2 review found 3 open fix-regressions: **R2-02** (谱系 ownership inconsi
 346:  <div class="src">SRC: POST /api/v1/ops/* · <b>前端不直写 DB；全部动作落 append-only 台账</b></div>
 
 === ADR decision 4 + 后续行动 ===
-4.
+4. 
 …[truncated]
   ```
   </details>
@@ -4582,9 +4582,9 @@ Files:
    New: "衰减）、谱系与漏斗（谱系属 F005）。组合与台账只读视图（M3+）为 F005 的后续增量 **F005.1**（台账只读视图归 F005.1；组合只读视图并入 M3 规划），不属 M2 前窗口。"
    Hmm, need to be careful. Let me write:
    "衰减）、谱系与漏斗（谱系归 F005）。组合只读视图与台账只读视图（M3+）为 F005 的后续增量 **F005.1**，不属 M2 前窗口（另立 spec 或并入 M3 规划）。"
-
+   
    But then the prototype nav says "谱系 F005 / 台账 F005.1" — but ADR says 台账 and 组合 both F005.1. That's consistent (台账 F005.1).
-
+   
    Actually the reviewer's suggested fix: "ADR 决策 4 谱系留在 F005，则横幅 F005 页清单补「谱系」，原型 LINEAGE 页拆成「谱系(F005)」与「台账(F005.1)」两个 ph 标记". So the key is谱系 F005, 台账 F005.1. Good.
 
 6. **banner F005 list**: "F005 只实现研究面（总览 / 漏斗 / 因子库 / 详情 / 对比）" → add 谱系: "（总览 / 漏斗 / 因子库 / 详情 / 对比 / 谱系）"; and maybe note 台账 F005.1. The banner already says "运营面归 M3/M4...". Let me add "（总览 / 漏斗 / 因子库 / 详情 / 对比 / 谱系）" and for the 台账 mention: the banner says nothing about F005.1. It's fine; but to be safe add "台账只读视图为 F005.1 增量". Hmm, keep concise. I'll add 谱系 to the F005 list.
@@ -4690,7 +4690,7 @@ Banner current (after earlier edit):
 ```
 Change "（总览 / 漏斗 / 因子库 / 详情 / 对比）" → "（总览 / 漏斗 / 因子库 / 详情 / 对比 / 谱系；台账只读视图为 F005.1）".
 
-ADR decision 4:
+ADR decision 4: 
 "衰减）、谱系与漏斗。组合与台账只读视图（M3+）为 F005 的后续增量 **F005.1**，不属 M2 前窗口（另立 spec 或并入 M3 规划）。"
 →
 "衰减）、谱系与漏斗（谱系归 F005）。组合与台账只读视图（M3+）为 F005 的后续增量 **F005.1**（台账只读视图归 F005.1），不属 M2 前窗口（另立 spec 或并入 M3 规划）。"
@@ -4873,7 +4873,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 
 Let me run verify.
 
-Also, I should double-check the R2-02 fix for consistency:
+Also, I should double-check the R2-02 fix for consistency: 
 - ADR decision 4 now says "谱系归 F005" and "组合与台账只读视图（M3+）为 F005.1（其中台账只读视图归 F005.1）" — a bit redundant ("台账...其中台账"). Let me re-read my edit:
 "**谱系归 F005**；**组合与台账只读视图（M3+）为 F005 的后续增量 F005.1**（其中台账只读视图归 F005.1），不属 M2 前窗口"
 Hmm "（其中台账只读视图归 F005.1）" is redundant because the sentence already says 组合与台账 → F005.1. But the reviewer's point was to make 台账 explicitly F005.1 (matching prototype) and 谱系 F005. The redundancy is minor but a round-3 reviewer might flag "partial-symmetric-fix" again or just redundancy. Let me clean it: remove the parenthetical, since "组合与台账只读视图...为 F005.1" already puts 台账 in F005.1. Actually the reason I added it: the prototype nav now says "谱系 F005 / 台账 F005.1", while ADR groups "组合与台账" as F005.1. That's consistent. So the parenthetical is unnecessary. Let me remove it to avoid awkwardness.
@@ -4916,7 +4916,7 @@ R2-02 fix has a redundant parenthetical — cleaning it before final gate.
 49:    衰减）、谱系与漏斗。**谱系归 F005**；**组合与台账只读视图（M3+）为 F005 的后续增量
 50:    F005.1**（其中台账只读视图归 F005.1），不属 M2 前窗口（另立 spec 或并入 M3 规划）。
 51:    **实时 PnL 不进控制台**，跳转运营面。
-52:
+52: 
 53: 5. **工具定位与降级路线**：
 54:    - **Grafana 终局退守平台观测 + 告警引擎**；策略运营板随自建运营面落地后删除；
 55:      **不做研究看板**（修订架构文档 §五 原计划的「实验台账看板」）。
@@ -5071,7 +5071,7 @@ Incremental: 0 files updated, 0 nodes, 0 edges (postprocess=minimal)
 
 > [reasoning] Now run the full gate at round end.
 
-Then verify the R2-02 three-place consistency one more time (self-check):
+Then verify the R2-02 three-place consistency one more time (self-check): 
 - ADR: 谱系归 F005; 台账 F005.1; 组合 M3.
 - index.html: banner F005 list includes 谱系, notes 台账 F005.1; nav "谱系 F005 / 台账 F005.1"; view-head same; panels F005/F005.1.
 - BACKLOG: 含谱系 F005; 台账 F005.1; 组合随 M3.
@@ -5207,9 +5207,9 @@ Gate green (109 passed, 1 skipped, exit 0). Appending the Round-3 fixer declarat
 <type>file</type>
 <content>
 55:   `CURRENT-doc.md` status、不删除过程稿。
-56:
+56: 
 57: ## Round 2 · 2026-09-13（修复方自审补正，append-only）
-58:
+58: 
 59: - **findings**：无新增外部检视意见。修复方在交付声明前自审 Round-1 diff，发现并修正 1 条
 60:   自身引入的契约漂移（fix-regression），暂编号 `R2-01`，供检视方在 `CURRENT-doc.md` 正式登记。
 61: - **R2-01**：D001~D010 修复引入——D004 把曲线侧车路径写成
@@ -5218,7 +5218,7 @@ Gate green (109 passed, 1 skipped, exit 0). Appending the Round-3 fixer declarat
 64:   F001 全部报告落 `reports/`），且 `results/` 在既有文档中无定义。
 65: - **commits**：`e129fb7` docs(adr-0005): 修复 R2-01——曲线侧车路径对齐 reports/ 报告根（fix-regression）
 66: - **修复方案**：路径改为 `reports/bench/<object_id>/<data_version>/curves.parquet`，并注明报告根
-67:   `reports/` 见 §三
+67:   `reports/` 见 §三 
 …[truncated]
   ```
   </details>

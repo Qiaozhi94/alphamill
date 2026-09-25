@@ -1,7 +1,6 @@
 """TimescaleDB → Parquet 导出编排：快照读取、分区写入、对账与 manifest 发布。
 
-增量版本继承未变分区；full 版本以当前源库全量结果为组成，但仍复用未变文件。
-文件与 manifest 的发布均不可变；对账失败保留 invalid 审计版本。CLI 入口见底部 `main()`。
+增量继承未变分区；full 以源库全量结果为组成但复用未变文件；对账失败保留 invalid 版本。
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from typing import Any
 from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge import partitions, paths, reconcile, registry, symbol_map
 from alphamill.data_bridge.collector.db_writer import db_connect
-from alphamill.data_bridge.errors import DataBridgeError, VersionNotFoundError
+from alphamill.data_bridge.errors import DataBridgeError
 from alphamill.data_bridge.export_policy import guard_full_shrink as _guard_full_shrink
 from alphamill.data_bridge.export_policy import merge_partitions as _merge_partitions
 from alphamill.data_bridge.export_summary import build_summary as _summary
@@ -24,17 +23,6 @@ logger = logging.getLogger(__name__)
 
 # 测试注入点（AC-010 并发 upsert）：签名 (conn) -> None，生产路径恒为 None。
 PostExportHook = Any
-
-
-def _baseline(root: Path, dataset: str) -> tuple[str | None, dict[str, Any] | None]:
-    try:
-        version = mf.latest_valid_version(root, dataset)
-        manifest = mf.load_manifest(root, dataset, version)
-        mf.validate_manifest_integrity(root, manifest)
-        mf.verify_value_digest(registry.require_dataset(dataset), manifest)
-        return version, manifest
-    except VersionNotFoundError:
-        return None, None
 
 
 def _resolve_window(
@@ -115,13 +103,17 @@ def export_dataset(
     lake_root: Path | None = None,
     post_export_hook: PostExportHook = None,
     allow_shrink: bool = False,
+    admitted: set[str] | None = None,
+    universe_filter: bool = False,
 ) -> dict[str, Any]:
     """导出单个 dataset（design §4 契约）；返回 manifest 摘要 dict。
 
-    mode: incremental（默认，窗口 = 上一 valid manifest 最大日期 +1 ~ window_end）
-          | full（全 span 重导 + 分区级 diff，仅在内容变化时发布新版本）。
-    window_end: 窗口开区间上界；缺省为今日 00:00 UTC，即导到昨天。
-    allow_shrink: full 模式下确认源库收缩确属有意（见 _guard_full_shrink）。
+    mode: incremental（默认，窗口 = 上一 valid manifest 最大日期 +1 ~ window_end）| full
+          （全 span 重导 + 分区级 diff，仅在内容变化时发布新版本）；`window_end` 缺省为今日 00:00Z。
+    `allow_shrink`: full 模式下确认源库收缩确属有意（见 `_guard_full_shrink`）。
+    `admitted`: F008 导出准入集合（`lake_pair`）；`None`（默认）与 F002 现状逐字节一致。
+    `universe_filter`: 按「台账可交易 ∩ 质量门 ACTIVE」在本 dataset 的窗口终点上现算准入集合
+        （F008 `FR-006`）；与显式 `admitted` 互斥，只在本参数为真且未显式给出集合时生效。
     """
     if mode not in ("incremental", "full"):
         raise ValueError(f"未知 mode: {mode!r}")
@@ -132,12 +124,35 @@ def export_dataset(
     started = time.monotonic()
     try:
         return _export_one(
-            conn, spec, mode, window_end, root, post_export_hook, started, allow_shrink
+            conn,
+            spec,
+            mode,
+            window_end,
+            root,
+            post_export_hook,
+            started,
+            allow_shrink,
+            admitted,
+            universe_filter,
         )
     finally:
         reconcile.reset_snapshot_session(conn)
         if own_conn:
             conn.close()
+
+
+def _admitted_only(
+    entries: list[dict[str, Any]], admitted: set[str] | None
+) -> list[dict[str, Any]]:
+    """按准入集合收窄基线条目：未准入 pair 的日期是策略排除，不是数据缺口（检视 R1-005）。
+
+    没有 `pair` 键的条目（非 pair 分区数据集如 `signals_log`）不参与裁剪，否则整片缺口账被清掉
+    （检视第 2 轮 N1）；与 `produce_partitions` 的 `pair_partitioned` 守卫同类。
+    """
+    if admitted is None:
+        return entries
+    keys = [(e.get("logical_partition_key") or e).get("pair") for e in entries]
+    return [e for e, key in zip(entries, keys, strict=True) if key is None or key in admitted]
 
 
 def _export_one(
@@ -149,18 +164,38 @@ def _export_one(
     post_export_hook: PostExportHook,
     started: float,
     allow_shrink: bool = False,
+    admitted: set[str] | None = None,
+    universe_filter: bool = False,
 ) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
-    baseline_version, baseline = _baseline(root, spec.name)
+    # 回退只允许全量模式（检视 R1-001）：增量把回退版当继承基线会丢中间版本的分区
+    baseline_version, baseline = mf.usable_baseline(root, spec.name, allow_fallback=mode == "full")
     baseline_partitions = baseline["partitions"] if baseline else []
 
     xmin, taken_at = reconcile.begin_snapshot_tx(conn)
     start, end = _resolve_window(conn, spec, mode, window_end, baseline_partitions)
+    if universe_filter and admitted is None:
+        # F008 导出清单：台账可交易 ∩ 质量门 ACTIVE，取本次导出的窗口终点作为 PIT 时点
+        from alphamill.data_bridge.universe.quality_gate import export_admitted
+
+        admitted = export_admitted(
+            conn,
+            dt.datetime.combine(end, dt.time.min, tzinfo=dt.UTC),
+            market_type=spec.market_type,
+        )
     symbol_map_ref = symbol_map.export_symbol_map(conn=conn, lake_root=root)
-    lake_pairs = partitions.lake_pairs_map(conn, market_type=spec.market_type)
+    # 未收窄映射用于质量标记记账（检视 R1-002）：未准入 pair 的标记不该让整轮导出 FATAL
+    all_lake_pairs = partitions.lake_pairs_map(conn, market_type=spec.market_type)
+    lake_pairs = (
+        all_lake_pairs
+        if admitted is None
+        else {key: pair for key, pair in all_lake_pairs.items() if pair in admitted}
+    )
     excluded_null = reconcile.count_null_event_time(conn, spec)
     flagged, flagged_total = (
-        partitions.quality_flags(conn, lake_pairs) if spec.source_table == "ohlcv_1m" else ([], 0)
+        partitions.quality_flags(conn, all_lake_pairs)
+        if spec.source_table == "ohlcv_1m"
+        else ([], 0)
     )
     metadata_changed = mf.metadata_changed(
         baseline, symbol_map_ref.digest, flagged, flagged_total, excluded_null
@@ -193,7 +228,7 @@ def _export_one(
     data_version = mf.next_data_version(root, spec.name, dt.datetime.now(dt.UTC).date())
 
     produced, produced_keys, written = partitions.produce_partitions(
-        root, spec, conn, start, end, baseline_partitions, lake_pairs
+        root, spec, conn, start, end, baseline_partitions, lake_pairs, admitted
     )
     window_dates = partitions.date_span(start.isoformat(), (end - dt.timedelta(days=1)).isoformat())
     empty_keys = partitions.empty_cell_keys(
@@ -201,11 +236,11 @@ def _export_one(
         mode,
         produced_keys,
         window_dates,
-        baseline_partitions=baseline_partitions,
-        baseline_skipped=baseline["skipped"] if baseline else [],
+        baseline_partitions=_admitted_only(baseline_partitions, admitted),
+        baseline_skipped=_admitted_only(baseline["skipped"] if baseline else [], admitted),
     )
     skipped = mf.synthesize_skipped(
-        baseline["skipped"] if baseline and mode == "incremental" else [],
+        _admitted_only(baseline["skipped"], admitted) if baseline and mode == "incremental" else [],
         produced_keys,
         empty_keys,
     )

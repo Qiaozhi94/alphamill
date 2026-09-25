@@ -676,9 +676,25 @@ mock 服务 `kronos-signal` 无 GPU 显存可释放，不在本契约范围—�
   | 控制面不可达（连接拒绝/超时），但部署清单中存在该服务 | 状态未知 | **fail-closed** 留在单槽队列；若此前已发出 `stop`，同样保留恢复责任 |
 - **所有权**：契约正文由本节拥有；客户端调用与运行取证归 F003（训练窗口编排），服务端实现归
   F009（`docs/features/0.2/F009-kronos-lifecycle-endpoints/`）。
-- **GPU 基座前置**：本契约的显存语义只在 GPU 实例上成立。截至 2026-09-20，`kronos-signal-real`
-  是 CPU 实例（`KRONOS_DEVICE: cpu`、CPU wheel、healthcheck 以 `device=cpu` 为通过条件，
-  且这些事实被 F004 的变异门锁死），**仓内没有任何 GPU Kronos 实例**。GPU 基座（CUDA 镜像、
-  compose 设备预留、device/healthcheck 断言改写、F004 回归契约迁移）归独立 Feature，
-  是 F009 真实卸载取证与 F003 T033 的**硬前置**；在它落地前，控制面可交付、可契约验收，
-  但"显存真实下降"一类结论一律不得声称成立。
+- **GPU 基座**：本契约的显存语义只在 GPU 实例上成立。基座已由 **F010**（`docs/features/0.2/
+  F010-kronos-gpu-runtime/`）交付：torch 走构建参数驱动的 CUDA wheel（`2.14.0` + `cu130`，
+  缺省仍是 CPU wheel）、GPU 面集中在 `deployment/docker-compose.gpu.yml` 一个 override 文件
+  （独立镜像标签 + nvidia 设备预留 + `KRONOS_DEVICE: cuda` + 以 `device` 以 `cuda` 开头为判据的
+  healthcheck），默认 compose 文件不含任何 GPU 面；显式要求 cuda 而拿不到时**启动失败可见，
+  不静默回落 cpu**。
+  **实测（2026-09-24，执行机 `qiaozhi-lt`，RTX 4060 Laptop / 驱动 616.64）**：`kronos-signal-real`
+  以 `device=cuda:0` 加载并产出 `source=kronos` 真实信号；**常驻显存峰值 565 MiB**，在下表白天行
+  ≤3GB 预算之内，故该预算维持原值、不触发重标。
+  **两套读数的口径（代码检视 R1-009）**：下文出现的数字来自两个不同来源，不可混用——
+  ① **宿主 `nvidia-smi --query-gpu=memory.used`**（整卡已用，含 Windows 桌面合成器等其他租户）：
+  F010 的常驻峰值 565 MiB 与旅程里的 565 → 137 MiB 属此口径；② **容器内
+  `torch.cuda.mem_get_info` 的 `total - free`**（F009 `/lifecycle/status` 的 `vram_bytes`）：
+  1.49GB → 1.07GB 属此口径，数值更高是因为它含 CUDA context 与缓存分配器的保留量。
+  **常驻预算（下表白天行 ≤3GB）以 ① 对照**；两个口径都远低于该预算，结论不因选哪个而变。
+
+  **显存释放已验证（2026-09-24，F010 T011/T018）**：`stop` 之后显存真实下降且卸载后可用显存
+  达到训练预算——`vram_bytes` 1.49GB → 1.07GB，整卡可用 7.53GB ≥ 6GB（F003 `vram_limit_gb`
+  缺省值，故该缺省与下表夜槽行**均不重标**）；夜槽完整旅程亦已端到端跑通：常驻 565 MiB →
+  `stop` → 137 MiB → 可用 7820 MiB → `restore` → `/predict` 恢复 `source=kronos`。载体
+  `tests/integration/test_f009_vram_release.py` 的先红态已解除，现为常规通过用例。
+  至此控制面语义与显存释放能力**均已在真实 GPU 上验证**。

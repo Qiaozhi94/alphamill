@@ -89,7 +89,14 @@ src/alphamill/data_bridge/
 | `universe_id` | 触发本次变更的 `UniverseDef` 内容摘要 |
 | `ingested_at` | 采集时间，支撑 bitemporal 语义与"何时知道的"审计 |
 
-约束：区间不重叠（同一 pair 的 `valid_from` 严格递增）；**没有 UPDATE 路径**——退出用写 `valid_to` 的追加记录表达，历史行不可改写（数据库层用触发器或应用层单写封装，落地任务里择一并写明）。
+约束（追加语义，2026-09-19 实现期定稿）：**只追加的状态迁移行**——同一 pair 的 `valid_from` 严格递增（append 顺序即时间序），**没有 UPDATE / DELETE 路径**（数据库触发器 + 应用层单写封装双保险）。台账的「可交易区间」由行**派生**而不是直接存储：
+
+- 每一行是一次状态迁移，`reason ∈ {listed, delisted, initial_seed}` 是迁移后的状态；
+- `valid_to` 为空表示该状态开放；非空时用于一次性表达已闭合的历史区间（例如入库时已退市的 `initial_seed`）；
+- **派生规则**：同一 pair 按 `valid_from` 升序，第 i 行的区间 = `[valid_from_i, valid_to_i ?? valid_from_{i+1} ?? ∞)`；`delisted` 行本身不贡献可交易区间（它只终止前一行）；
+- `universe_at(T)`（库侧）= 「`valid_from <= T` 的最后一个状态是 `listed`/`initial_seed`」；artifact 内是派生后的**并集区间**，消费方的半开区间并集判定与库侧逐点一致。
+
+这样「退市」= 追加一行 `delisted`（而不是改写旧行的 `valid_to`），历史行永远可审计；**区间不重叠**由「同一 pair 的 `valid_from` 严格递增」保证（与 `DR-002` 是同一约束的两种说法）。`universe_quality_verdicts` 同族：准入判定也只追加，最新一条（按 `judged_at, id`）是当前准入状态。
 
 **Migration**：一个前向迁移 `db/migrations/005_universe_membership.sql`（现有编号止于 `004_`）建表 + 索引 `(lake_pair, valid_from)`；无回滚数据（新表）。`tools/apply_migrations.py` 有两条硬约束，迁移必须满足：**幂等**（`CREATE TABLE/INDEX IF NOT EXISTS`、`CREATE OR REPLACE FUNCTION`）与**不得含非事务语句**（`CREATE INDEX CONCURRENTLY` / `VACUUM` / `ALTER SYSTEM` 会被 `assert_transactional` 拦下）；整文件在单事务内执行，触发器与触发器函数是事务内合法语句、可用。首次迁移后必须立即执行"现有 6 对补台账"（`reason=initial_seed`，`valid_from` 取各自实际数据起点），否则老 pair 在 PIT 查询里会凭空全程存在。
 
@@ -99,13 +106,20 @@ src/alphamill/data_bridge/
 
 | 字段 | 值 | 说明 |
 |---|---|---|
-| `exchange` / `market_type` | `binance` / `perp` | F001 事故后的数据路线 |
+| `exchange` / `market_type` | `binance` / `perp` | **排名市场**（USDⓈ-M 永续的流动性最可比），不是湖内命名空间——见下方「湖内命名空间」 |
 | `turnover_lookback_days` | 90 | 成交额统计窗口 |
 | `turnover_rank_top_n` | 40 | **按排名取前 N，不设绝对金额阈值**——绝对阈值随市场周期漂移，产出规模不可控 |
 | `min_listed_days` | 180 | 不要求满窗：要求上线满 2 年等于只选活过两年的币，是幸存者偏差的另一张脸 |
-| `exclude_rules` | 稳定币对 / 杠杆代币 / 指数篮子类合约 | 横截面 rank 里的常数噪声与结构性重复 |
+| `exclude_rules` | 稳定币对 / 杠杆代币 / 指数篮子类合约 / 代币化 TradFi / 贵金属背书代币（`PAXG`/`XAUT`） | 横截面 rank 里的常数噪声、结构性重复、非加密资产（`underlyingType` 非 `COIN`）与金本位代币（驱动因素不同） |
+| 资格前置 | 必须在研究数据路线有市场（现货命名空间） | 排名看永续流动性，但**数据来自 `ohlcv_1m`（spot）**；取不到数的标的进宇宙会在台账与导出清单里制造「有成员、无数据」的缺口 |
 
 批次：`candidates` 按成交额排名有序，批 1 取前 30（含现有 6 对），批 2 取第 31–40。批次只影响回填与准入的时序，不影响 `universe_id`——冻结的是完整的 40 对定义。
+
+**湖内命名空间（2026-09-19 实现期定稿）**：口径里的 `market_type=perp` 只决定**排名用哪个市场的成交额**；湖内 pair 名由**数据集自己的 `market_type`** 决定——`ohlcv_1m` 是 `spot`（`BTC-USDT`），`derivatives_*` 是 `perp`（`BTC-USDT-PERP`）。因此：
+
+- 候选的 `lake_pair` 取研究数据集的命名空间（`spot`，`BTC-USDT`）；
+- **准入时按同一 `db_symbol` 同源写两条命名空间**的台账行（`spot` + `perp`，同一 `valid_from`／`reason`）——`F003` 的张量掩码按 `lake_pair` 过滤（`generators/lake_tensor.py` 用 `spec.market_type` 映射后再 `isin(universe_at(T))`），少写一条就会让对应数据集的分区被整片掩掉；
+- 导出过滤落到**被导出 dataset 的 `market_type`** 上：`export_admitted(conn, at, market_type=spec.market_type)` 以 `db_symbol` 为桥——准入判定按贸易符号，台账按命名空间。
 
 **湖内 artifact**：`lake/_metadata/universes/<digest>.json`，**canonical JSON**，schema 冻结为
 
@@ -126,7 +140,7 @@ src/alphamill/data_bridge/
 
 > **开工前检查补记（2026-09-19）**：上述消费者当前只存在于 `feat/F003-alphagen-vendor`（F003 仍 `developing`、未并入 main），main 上 `src/alphamill/factor_factory/` 只有 `__init__.py` 与 `bench/`。因此 `AC-009` 的「下游可加载」断言在 F003 落地前**物理上不可执行**：F008 侧先由 `AC-013`（`tests/unit/test_f008_artifact.py`）锁死同一 schema 的键集合、排序与 `sha256:` digest 规则，跨消费者那条断言按项目 SOP「已知缺口显式标记」写成 `xfail(strict=True)` 并注明原因是该分支依赖，F003 并入 main 后 XPASS 转红、强制摘除标记并真跑。依赖登记见 `tasks.md` §4。
 
-**导出清单（无独立实体）**：定义为「台账中在本次导出窗口终点 `window_end` 可交易 ∩ 质量门判定为 ACTIVE」的 pair 集合（`admitted = universe_at(window_end)`，增量与全量同口径），由 `universe_membership` 与质量门判定记录联合导出。落地方式：`partitions.lake_pairs_map(conn, market_type, admitted: set[str] | None = None)` 增加可选准入集合参数，`None` 时保持现行为——F002 既有测试与 manifest/对账/修订语义一律不变。**过滤必须同时作用于单元格发现**（开工前检查补记 2026-09-19）：`discover_cells()` 产出的 `(exchange, symbol, date)` 单元格要在映射 `lake_pair` 之前就按准入集合剔除——现行 `produce_partitions()` 对 `lake_pairs.get(...)` 返回 `None` 的单元格直接抛 `DataBridgeError`，只过滤 `lake_pairs_map` 会把「未准入」变成「导出失败」而不是「不导出」。剔除后的单元格既不产出分区，也不进 manifest 的 `pairs`；未准入 pair 的在湖分区按 F002 既有语义留给下个版本继承，不做删除。`symbol_map` **不**参与该过滤，保持全量（回填写库即产生新 digest，属预期；旧 digest 仍可按引用读取）。
+**导出清单（无独立实体）**：定义为「台账中在本次导出窗口终点 `window_end` 可交易 ∩ 质量门判定为 ACTIVE」的 pair 集合（增量与全量同口径），由 `universe_membership` 与质量门判定记录联合导出，并在**被导出 dataset 的 `market_type` 命名空间**上取交集（`export_admitted(conn, window_end, market_type=...)`；准入按 `db_symbol` 判定，命名空间按台账行区分）。落地方式：`partitions.lake_pairs_map(conn, market_type, admitted: set[str] | None = None)` 增加可选准入集合参数，`None` 时保持现行为——F002 既有测试与 manifest/对账/修订语义一律不变。**过滤必须同时作用于单元格发现**（开工前检查补记 2026-09-19）：`discover_cells()` 产出的 `(exchange, symbol, date)` 单元格要在映射 `lake_pair` 之前就按准入集合剔除——现行 `produce_partitions()` 对 `lake_pairs.get(...)` 返回 `None` 的单元格直接抛 `DataBridgeError`，只过滤 `lake_pairs_map` 会把「未准入」变成「导出失败」而不是「不导出」。剔除后的单元格既不产出分区，也不进 manifest 的 `pairs`；未准入 pair 的在湖分区按 F002 既有语义留给下个版本继承，不做删除。`symbol_map` **不**参与该过滤，保持全量（回填写库即产生新 digest，属预期；旧 digest 仍可按引用读取）。
 
 **`BackfillRun`（JSON，落 `reports/backfill/<run_id>/`）**：`run_id` / `universe_id` / `pairs[]` / `window` / 限速参数 / 逐 pair `{rows, last_cursor, status, retries, error}` / `hostname` / 起止时间。
 

@@ -33,9 +33,20 @@
 
 ### 1.3 宇宙扩容（FR1.5）
 
-1. 运行 quant-crypto 的 `discover_okx_swap_universe.py`，按流动性（日均成交额）+ 上线时长（>180 天）筛 30~50 对；
-2. 复用 `historical_backfill.py` 分批回补（限速保护）；
-3. 新 pair 先进质量流程（缺失检测/异常跳变），通过后才入导出清单。
+1. 按 Binance USDⓈ-M 永续的滚动 90 天日均 USDT 成交额**排名前 40** + 上线 >180 天 + 排除规则
+   （稳定币对 / 杠杆代币 / 指数篮子）产出候选，人工确认后冻结为目标宇宙——
+   实现见 `F008` 的 `python -m alphamill.data_bridge.universe discover|freeze`；
+   **不复用** quant-crypto 的 `discover_okx_swap_universe.py`：F001 事故后数据路线已由 OKX 改为
+   Binance（`EXCHANGES=binance` 已进 compose/.env/策略配置），该脚本的交易所与接口都不匹配；
+2. 复用 `historical_backfill.py` 分批回补（限速保护、退避重试、断点续跑），分两批：批 1 = 前 30
+   （含现有 6 对），批 2 = 第 31–40；
+3. 新 pair 先过质量流程（缺失率 ≤1% 按**实际可得窗口**算 / 边界闭合 / 重复主键 / 连续聚合按桶
+   精确对账），通过后才写入准入记录并进入导出清单；同时把「可交易期」写进只追加的
+   `universe_membership` 台账并发布为内容寻址 artifact（`lake/_metadata/universes/<digest>.json`），
+   供横截面 PIT 掩码与 ResearchSnapshot 按显式 digest 消费。
+
+> 口径与实现细节的唯一拥有者：`docs/features/0.2/F008-universe-expansion/`（spec 行为契约 /
+> design 技术方案 / tasks 执行清单）。本节只保留操作入口与路线结论。
 
 ---
 
@@ -225,3 +236,54 @@ quant-crypto 的门禁脚本参数化迁移到 `src/alphamill/validation/`：
 | 生成器产出垃圾海啸 | 评测台分诊阈值（RankIC + 查重）先行过滤；注册表只收存活者 |
 | Freqtrade 策略读取了坏缓存 | 冒烟回测前置 + 审计器校验时间戳对齐；坏缓存直接拒绝挂载 |
 | 夜间批处理超时 | 生成器/评测台分任务队列，单代失败不回滚已入库结果 |
+
+---
+
+## 七、Kronos 推理实例：CPU 默认与 GPU 叠加（F010）
+
+`kronos-signal-real` 只有一个实例名（架构 §7.1 生命周期契约的目标），CPU/GPU 由是否叠加
+`deployment/docker-compose.gpu.yml` 区分。默认文件对 GPU 一无所知，开发机与 CI 不受影响。
+
+| 项 | 默认（CPU） | 叠加 GPU override（仅执行机） |
+|---|---|---|
+| 镜像 | compose 生成的 `<project>-kronos-signal-real` | `alphamill/kronos-signal-real:gpu` |
+| torch | `2.14.0` + `whl/cpu`（`ARG` 缺省） | `2.14.0` + `whl/cu130`（只覆盖索引） |
+| `KRONOS_DEVICE` | `cpu` | `cuda`（显式 → 拿不到 CUDA 即启动失败，不回落 cpu） |
+| 设备预留 | 无 | `nvidia × 1` |
+| healthcheck | `device == 'cpu'` | `device` 以 `cuda` 开头 |
+
+**前置**（执行机，一次性）：宿主驱动满足 CUDA 13.0 最低要求（R580+）；docker 装有
+nvidia-container-toolkit 并 `nvidia-ctk runtime configure --runtime=docker` 后重启 docker——
+`docker info` 的 Runtimes 须含 `nvidia`，否则守护进程直接拒绝设备请求（容器不启动，这**不是**
+严格分支的失败，见 F010 design §7）。
+
+**构建器**：GPU 镜像的 CUDA 依赖单个 wheel 达数百 MB，默认 buildx builder 的 RUN 步骤走
+bridge 网络，在执行机上连续三次读超时（约 155s 处）；改用 host 网络的 builder 一次成功
+（实测 20MB/s vs 7MB/s）。因此构建前 `export BUILDX_BUILDER=hostnet`（集成用例会自动选它）。
+该 builder 不存在时先建一次（每台机器一次性）：
+
+```bash
+docker buildx create --name hostnet --driver docker-container \
+  --driver-opt network=host --use        # 已存在则 docker buildx use hostnet
+```
+
+**取包链路**：Dockerfile 两层 pip 都固定 `--retries 10 --timeout 120`（本机到 PyPI 的链路
+间歇断流，实测 BrokenPipeError 中断过构建）。cu130 索引把 torch 的 NVIDIA 依赖
+（cudnn/nccl…）指向 `pypi.nvidia.com`，该域名在本机经代理下载大文件会失败；需要绕行时在
+**本机** `deployment/.env` 里给 `TORCH_EXTRA_INDEX_URL`（例如国内 PyPI 镜像），
+compose override 只引用该变量、缺省为空——单机的网络绕行不写进 GPU 面契约（F010 R1-004）。
+
+```bash
+# 启用 GPU 实例（执行机）
+export BUILDX_BUILDER=hostnet
+docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.gpu.yml \
+  --profile kronos-real up -d --build kronos-signal-real
+docker logs quant-kronos-signal-real | grep '\[kronos-real\] model loaded'   # 实际设备 + torch CUDA 版本
+
+# 切回 CPU 实例：不叠加 override 重新 up（两类镜像标签互不覆盖，无需重建 GPU 镜像）
+docker compose -f deployment/docker-compose.yml --profile kronos-real up -d --build kronos-signal-real
+```
+
+注意：F004 的 `tests/integration/test_f004_real_profile.py` 断言的是**默认（CPU）配置**
+（`KRONOS_DEVICE=cpu`、容器 torch 可导入），在 GPU 实例常驻时跑它会判红——这不是回归；
+GPU 配置的集成断言在 `tests/integration/test_f010_gpu_runtime.py`。

@@ -1,0 +1,320 @@
+[
+  {
+    "db_symbol": "BTC/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:f23e69854e8f75e57b0bbad36fd1c09b72b10a7accd4621a6529b558db2f2534"
+  },
+  {
+    "db_symbol": "ETH/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:babe90c4b906c0dec7cae48318c25f18c4481ae19fce80a38b4758ff614f36db"
+  },
+  {
+    "db_symbol": "SOL/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:d001fa0ab5dbaaf041db752eedcf15399d0c1bf8579e77b2bf7061df30c9268e"
+  },
+  {
+    "db_symbol": "ZEC/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:d441c6deb68ed43ae54f89df5877be741c4dade39b2f21ca67b297c4f645fd1c"
+  },
+  {
+    "db_symbol": "XRP/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:57d38014abfb3b745e46b38db1fa7b8d1a5ef35b9f0ad41d11c56cc793cde692"
+  },
+  {
+    "db_symbol": "DOGE/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:afe759dde03bf93e2b9c75fc327e5497e301763e84178235d4c0f75851bf4cea"
+  },
+  {
+    "db_symbol": "BNB/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:d565e0840fd371d131faf70fb7fb449c5348de3134849cfd75dfeab5412fdde5"
+  },
+  {
+    "db_symbol": "PEPE/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:ab1e454a0133f0f403e4f735e2c7c1bbb5ed37b6a03aff4fd536a4a71d2d7d01"
+  },
+  {
+    "db_symbol": "BANK/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "missing_ratio_exceeded",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "NEAR/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:b9692765358412a5c0fffdd79e360bb9b64b3a5812eaf78f1c19de2849119318"
+  },
+  {
+    "db_symbol": "ENA/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:b042e443c77fe206021e398c78a6029a53dcc8690faff6a95b33c173eb390aeb"
+  },
+  {
+    "db_symbol": "SUI/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:1011fa11e7e21321a041ee8cfefaf54068fe0240d79ad9684acbf75db146781d"
+  },
+  {
+    "db_symbol": "UNI/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:8c6af3838db7669cca0d4d578771477fb852994ce5078dbc4a431f261262cbf3"
+  },
+  {
+    "db_symbol": "ADA/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:42bcb6aecc9f8360c875504a9c8f6a2906a9de73498211b440d0f93591a0100e"
+  },
+  {
+    "db_symbol": "WLD/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:8e3c684b1fb8ae0a37f54a0dff86baad02937e65055c7653f37ff2bb961e41d7"
+  },
+  {
+    "db_symbol": "TRUMP/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "boundary_not_closed",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "PUMP/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "missing_ratio_exceeded",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "LINK/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:f4288b318cc7c0f825b2ddb46bd443b18fc416fa563a9590f3c1f4f26eb51b91"
+  },
+  {
+    "db_symbol": "LSK/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:d4f279e066e971a0cb03b463364b98cfce6e81b59bd53faa22662fec0caf9e76"
+  },
+  {
+    "db_symbol": "AAVE/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:4f65f3d3151b233abc93f7520741cd2ac0d986ecbccd3012c10f25883603b020"
+  },
+  {
+    "db_symbol": "TUT/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "missing_ratio_exceeded",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "TAO/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:5c814ab9f8388ceb0198e46168f34d91504832a129e00fa3924f64c8e1765815"
+  },
+  {
+    "db_symbol": "AVAX/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:04d34a25f29cbe26299062cfc21a110208d3fa47882eece36a752c871ff84a63"
+  },
+  {
+    "db_symbol": "ARB/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:df34a7cf39b4251f2310ba8e15120b413d74f4f4027f489fbfa4bf1951514ec4"
+  },
+  {
+    "db_symbol": "DEXE/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "aggregate_mismatch",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "ACE/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:146349f108629b32d7bd839917164f9a37b41efb39a1522922854e498930ccb6"
+  },
+  {
+    "db_symbol": "BCH/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:ca8c38d7aaa67d78be6a64a526ea5a8e26c61b6e669a89f816cf03cc93276054"
+  },
+  {
+    "db_symbol": "ONDO/USDT",
+    "verdict": "QUARANTINED",
+    "reason_code": "missing_ratio_exceeded",
+    "steps": [
+      "admission_recorded"
+    ],
+    "artifact_digest": null
+  },
+  {
+    "db_symbol": "FIL/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:f3f5726c9a52c4f7ff3cf6ac9fab4afc7b61a78ba500d7b4438c383c0c3ffa93"
+  },
+  {
+    "db_symbol": "XLM/USDT",
+    "verdict": "ACTIVE",
+    "reason_code": null,
+    "steps": [
+      "ledger_appended",
+      "artifact_published",
+      "admission_recorded"
+    ],
+    "artifact_digest": "sha256:e8ed1ee40c2f05390e912773a0e429f7ed8b456c75077e4428fd3b1999a804ab"
+  }
+]

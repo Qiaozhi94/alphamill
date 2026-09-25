@@ -1,0 +1,20 @@
+{
+  "universe_id": "sha256:6d85a249e8fe509518443afb3407d0ed6ea736260c570c8f860676e0c466a709",
+  "snapshot_at": "2026-09-22T14:46:28.039241Z",
+  "criteria": "binance/perp USDT top40 of 90d listed>180d exclude=stablecoin_pair,leveraged_token,index_basket,tokenized_tradfi,tokenized_commodity",
+  "selected": 40,
+  "candidates": 727,
+  "definition_path": "/home/georg/projects/alphamill/lake/_metadata/universe_defs/sha256:6d85a249e8fe509518443afb3407d0ed6ea736260c570c8f860676e0c466a709.json",
+  "top": [
+    "BTC/USDT",
+    "ETH/USDT",
+    "SOL/USDT",
+    "ZEC/USDT",
+    "XRP/USDT",
+    "DOGE/USDT",
+    "BNB/USDT",
+    "PEPE/USDT",
+    "BANK/USDT",
+    "NEAR/USDT"
+  ]
+}
