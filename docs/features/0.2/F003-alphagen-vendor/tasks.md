@@ -84,8 +84,13 @@ updated: 2026-09-14
       — **镜像出处（须复核）**：`alphamill/kronos-signal-real:gpu-t033`（77db3df8ebf0，2026-09-24 22:35）= 2026-09-23 由仓库 Dockerfile + `docker-compose.gpu.yml` 构建的 `:gpu` 基底，叠加 `feat/F010-kronos-gpu-runtime@2cda3b4` 的 `src`（含 F009 控制面）以 `pip install --no-deps` 覆盖；运行时依赖集合未变（自基底以来 `pyproject` 的 `dependencies` 无改动，唯一变更是 dev extras 加 `httpx`）。当日网络受限，整镜像重建在 mock 层反复超时，故未做一次性重建；**网络恢复后应以仓库 Dockerfile 重建同一镜像并复跑本命令复核**。
 
 - [x] T034 (`AC-001`, `AC-011`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
-- [ ] T035 (`AC-006`, `DR-001`): `F008` 宇宙扩容落地后，用扩容宇宙（≥30 对）复跑一次挖掘运行作对照，记录两次运行的 `universe` 与候选质量差异；在此之前的质量结论一律标注「6 对宇宙」前提 — verify: `pytest -q tests/integration/test_f003_generation_run.py` + 两次 `run.json` 的 `universe` 对照
-
+- [x] T035 (`AC-006`, `DR-001`): `F008` 宇宙扩容落地后，用扩容宇宙复跑一次挖掘运行作**可消费性对照**——记录两次运行的绑定身份、有效对数与夜槽 offload 行为；**候选质量差异在 `manual` 后端下结构性不可观测**（`cli.py` 的 `--generator` 只接受 `manual`，该后端从固定假设集出候选、不读宇宙面板；AlphaGen 后端目前只能从代码调 `run_generation`，未接 CLI——见 §5 明确后移）。在此之前的质量结论一律标注「6 对宇宙」前提 — verify: 两次 `run.json` 的 `universe` 对照
+      — 取证（2026-09-25，`qiaozhi-lt` / RTX 4060 Laptop / `--allow-offhours` **非夜槽执行**，白天卸载 Kronos 属显式偏离并已记录）：
+        · 基线 `reports/generation/manual-20260925T112312220871Z-2570ce64`：universe `sha256:d001fa0a…`、`pair_count=6`（湖内有效 3 对）、completed/cuda、proposed 5 / registered 5、拒绝计数全 0、9.1s、`kronos_offload=stopped/vram_released`（1.637 → 1.191 GB）；
+        · 扩容 `reports/generation/manual-20260925T112414585715Z-2844e94a`：universe `sha256:097bb31e…`、`pair_count=52`（湖内有效 **26** 对）、completed/cuda、proposed 5 / registered 5、拒绝计数全 0、9.4s、`kronos_offload=stopped/vram_released`；两次运行结束后 `/lifecycle/status` 均回到 `state=running`。
+      — **已知缺口（不改判据）**：原文要求「≥30 对」，台账成员 52 满足，但**湖内有效只有 26 对**——`v2026.09.24` 导出只含现货，台账里 26 个 `-PERP` 成员在湖内无分区。`lake_tensor.py` 按 `universe_at()` 掩码，缺失 pair 只是不出现、不 fail-closed，故运行成立但对数不达标；补齐需 F008 追加 PERP 导出。
+      — 绑定形态：CLI 不接 `mode: snapshot`（需调用方注入 `SnapshotResolver`），两次均用 `explicit_tuples`；绑定档与 F003 口径 calendar（`kind=continuous_24_7`）归档在 `reports/f003/t035/`。cutoff 取 `2026-09-10T00:00Z`：`derivatives_funding_rates` 数据止于 `2026-09-10T08:00Z`。
+      — 踩坑记录：`python -m alphamill.factor_factory.cli` 无 `__main__` 入口、静默无输出（真入口 `alphamill-generate` → `cli:main`）；快照 `symbol_map_digest` 必须与 dataset 版本声明一致（`v2026.09.24` 用 `sha256:fd6c495c…`，旧的 `aff5f08a…` 判红）。
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 - [x] T036 [TEST] (`US-001`, `AC-001`, `AC-003`, `AC-004`): 旅程 US-001 端到端验收——固定快照绑定与 seed 经 `produce()` 连跑两次得到同一 `factor_id` 集合、落盘后加载的 FactorDef 可直接执行、invalid 绑定被拒并留 `rejected` 终态；夹具在 Phase 1 先以红灯立起，收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/unit/test_f003_generator_contract.py tests/unit/test_f003_factor_store.py tests/unit/test_f003_alphagen_adapter.py tests/integration/test_f003_lake_tensor.py`
@@ -125,6 +130,8 @@ updated: 2026-09-14
 - `T006 [P]`：只改假设模块，与接口/存储任务无共享状态（无前置边，仅可并行）。
 
 ## 5. 明确后移
+
+- AlphaGen 后端接入 CLI `--generator`（当前只接受 `manual`）→ **独立 Feature**（BACKLOG 规划中已登记）：没有它，「宇宙扩容 → 候选质量差异」在 CLI 路径上结构性不可观测（T035 实测：换宇宙后 proposed/registered 与拒绝计数逐项相同）；AC-006 的换手惩罚/可达性预筛在真实挖掘产出上的验收也依赖该载体。
 
 - ResearchSnapshot 的实现与 `research_snapshot_id` 唯一绑定形态 → `F007`：身份归 `experiment_store/`，F003 过渡期用显式元组绑定（spec Q-002）。
 - 因子注册表的评测摘要回写、`|ρ|>0.99` 查重与生命周期状态机 → `F007` / `F006`：依赖评测结论，生成器不持有。
