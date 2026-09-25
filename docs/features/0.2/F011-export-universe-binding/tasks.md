@@ -44,6 +44,8 @@ updated: 2026-09-25
 - [ ] T008 (`AC-004`): CLI 契约套件：无冻结定义 → `E_UNIVERSE_NOT_FROZEN`；未知 id → `E_UNIVERSE_NOT_FOUND`；两者均非零退出且不发布新版本 — verify: `tests/unit/test_f011_cli_contract.py`
 - [ ] T009 (`AC-001`, `AC-002`, `AC-006`): 集成套件（真实 scratch 库 + 临时湖）全绿 — verify: `tests/integration/test_f011_export_universe_binding.py`
 - [ ] T010 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
+### [TEST] 组：层 2 旅程验收轨（必填）
+
 - [ ] T011 [TEST] (`AC-001`, `AC-002`, `AC-005`, `AC-006`): 层 2 旅程验收（US-001/002/003 端到端：落选即移出 → 台账与数据零变化 → 显式绑定可复现 → 摘要可查 → 重新入选自动回来）— verify: `tests/integration/test_f011_export_universe_binding.py`
 - [ ] T012 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`): 收口回写：spec 验收证据与 AC 勾选、`BACKLOG.md` 状态、`docs/features/releases/0.2.md` 交付记录、frontmatter 流转 — verify: `python3 tools/validate_spec_lifecycle.py`
 
