@@ -30,8 +30,8 @@ updated: 2026-09-25
 
 ### Phase 1：绑定解析与交集（最小切片 = US-001）
 
-- [ ] T003 (`FR-002`, `FR-003`, `AC-003`, `AC-004`): 实现 `definition.latest_frozen(lake_root)`（冻结时刻定序、同时刻按 `universe_id`）与显式版本解析；无冻结定义抛 `UniverseNotFrozenError`、指定 id 不存在抛 `UniverseNotFoundError` — verify: `tests/unit/test_f011_export_universe_binding.py`
-- [ ] T004 (`FR-001`, `FR-005`, `AC-001`, `AC-002`): `export_admitted` 增 `universe_id` 关键字参数，按 `db_symbol` 与 `definition.selected` 求交；台账/判定记录保持只读 — verify: `tests/unit/test_f011_export_universe_binding.py`
+- [ ] T003 (`FR-002`, `FR-003`, `AC-003`, `AC-004`): 实现 `definition.latest_frozen(lake_root)`（枚举 `defs_dir` 下 `*.frozen.json`，按 `frozen_at` 定序、同时刻按 `universe_id`）与显式版本解析；无冻结定义抛 `UniverseNotFrozenError`、指定 id 不存在抛 `UniverseNotFoundError` — verify: `tests/unit/test_f011_export_universe_binding.py`
+- [ ] T004 (`FR-001`, `FR-005`, `AC-001`, `AC-002`): `export_admitted` 增 `bound_universe` 关键字参数（区别于既有 `universe_id` 判定过滤），按 `db_symbol` 与 `definition.selected` 求交；台账/判定记录保持只读 — verify: `tests/unit/test_f011_export_universe_binding.py`
 - [ ] T005 (`FR-004`, `IR-001`, `IR-002`, `AC-005`): 导出侧接线：`--universe-id` 可选参数、绑定解析接入 `--universe-filter`、运行摘要写入 `universe_id` 与排序稳定的 `dropped_by_universe`，逐条日志记录被剔除 pair — verify: `tests/unit/test_f011_cli_contract.py`
 
 ### Phase 2：真实库/湖旅程（US-002 / US-003）

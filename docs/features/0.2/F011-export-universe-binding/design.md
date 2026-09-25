@@ -22,8 +22,8 @@ updated: 2026-09-25
 
 改动集中在三个点，都是既有函数的**参数扩展**，不新增模块：
 
-1. `data_bridge/universe/definition.py`：新增 `latest_frozen(lake_root)` —— 遍历已冻结定义，按冻结时刻取最新（同时刻按 `universe_id` 定序）。
-2. `data_bridge/universe/quality_gate.py::export_admitted`：新增 `universe_id: str | None = None`，按 `db_symbol` 与 `definition.selected` 求交；`None` 时解析最新冻结定义（解析失败抛 `UniverseNotFrozenError`）。
+1. `data_bridge/universe/definition.py`：新增 `latest_frozen(lake_root)` —— 枚举 `defs_dir(lake_root)` 下的 `*.frozen.json`（冻结记录，已确认字段含 `frozen_at`/`frozen_by`），按 `frozen_at` 取最新（同时刻按 `universe_id` 定序）；无冻结记录时抛 `UniverseNotFrozenError`。
+2. `data_bridge/universe/verdicts.py::export_admitted`：新增 `bound_universe: str | None = None`（**定义版本**；与既有 `universe_id` 形参——它过滤的是判定记录——互不干扰），按 `db_symbol` 与 `definition.selected` 求交；`bound_universe is None` 时解析最新冻结定义（解析失败抛 `UniverseNotFrozenError`）。
 3. `data_bridge/exporter.py` + `data_bridge/cli.py`：`--universe-filter` 打开时解析绑定版本、把 `universe_id` 与 `dropped_by_universe` 写进运行摘要；新增 `--universe-id` 覆盖。
 
 影响面：导出准入集合的口径（默认关闭时不变）、CLI 契约（新增一个可选参数）、运行摘要（新增两个键）。**不改**：台账、artifact、manifest schema、质量门阈值、`symbol_map` 全量语义。
@@ -34,7 +34,7 @@ updated: 2026-09-25
 CLI (--universe-filter / --universe-id)
   └─ exporter.export_dataset
        ├─ definition.latest_frozen(lake_root)        # 解析绑定版本（可被 --universe-id 覆盖）
-       └─ quality_gate.export_admitted(conn, at, market_type=..., universe_id=...)
+       └─ verdicts.export_admitted(conn, at, market_type=..., bound_universe=...)
             = universe_at(at) ∩ verdicts(ACTIVE) ∩ selected(bound)   # 全部按 db_symbol 求交
 ```
 
@@ -54,7 +54,7 @@ CLI (--universe-filter / --universe-id)
 |---|---|---|
 | `exporter --universe-filter` | 语义扩展 | 由「台账 ∩ ACTIVE」变为「台账 ∩ ACTIVE ∩ 当前宇宙入选集」 |
 | `exporter --universe-id <digest>` | 新增（可选） | 显式绑定；必须已冻结且存在 |
-| `export_admitted(..., universe_id=None)` | 新增关键字参数 | `None` ⇒ 最新冻结定义；解析失败抛 `UniverseNotFrozenError` |
+| `export_admitted(..., bound_universe=None)` | 新增关键字参数 | 定义版本；`None` ⇒ 最新冻结定义，解析失败抛 `UniverseNotFrozenError`。**注意**：既有 `universe_id` 形参过滤判定记录，二者不同 |
 | 运行摘要 dict | 新增 `universe_id` / `dropped_by_universe` | 关闭过滤时 `null` / `[]`；列表排序稳定 |
 
 退出码与原因码沿用既有表：无冻结定义 → `E_UNIVERSE_NOT_FROZEN`；指定 id 不存在 → `E_UNIVERSE_NOT_FOUND`（均为非零，`IR-003`）。
@@ -67,9 +67,9 @@ CLI (--universe-filter / --universe-id)
 
 ```text
 resolve_bound_universe():
-  explicit_id? -> load_definition(explicit_id)（未冻结/不存在 -> 拒绝）
-  else         -> latest_frozen(lake_root)（无 -> 拒绝）
-admitted = export_admitted(conn, window_end, market_type, universe_id=bound)
+  explicit_id? -> load_definition(explicit_id) + require_frozen（未冻结/不存在 -> 拒绝）
+  else         -> latest_frozen(lake_root)（无冻结记录 -> 拒绝）
+admitted = export_admitted(conn, window_end, market_type=..., bound_universe=bound)
 dropped  = sorted(active_symbols - selected_symbols(bound))
 ```
 
@@ -110,7 +110,8 @@ dropped  = sorted(active_symbols - selected_symbols(bound))
 | 交集实现位置 | `export_admitted` 单点 | 与 `F008` 既有结构一致，避免第二处过滤 | — |
 | manifest 不记绑定 | 只进运行摘要/日志 | `F002` 契约冻结；`pairs` 已是结果证据 | 更强的审计留痕单独评审 |
 | 残余风险：`gate` 只遍历 `selected` | 本 feature 不修；落选 pair 的旧 ACTIVE 判定仍留在判定表 | 判定表只追加是 `F008` 的既定语义，交集已能覆盖其影响 | 若需要「判定随宇宙收窄」，另立 feature |
-| 残余风险：多版本并存时的「最新」歧义 | 定序规则明确（冻结时刻 → `universe_id`）并写进摘要 | 可复现优先 | — |
+| 残余风险：多版本并存时的「最新」歧义 | 定序规则明确（`frozen_at` → `universe_id`，字段已核实存在）并写进摘要 | 可复现优先 | — |
+| 形参命名 | 新参数用 `bound_universe`，与既有 `universe_id`（判定过滤）区分 | 同名会让两个语义在一个调用点混叠，属可读性/正确性风险 | — |
 
 ## 10. 待确认设计问题
 

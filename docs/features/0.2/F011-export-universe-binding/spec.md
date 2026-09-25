@@ -123,6 +123,8 @@ updated: 2026-09-25
 
 系统应当把导出准入集合解析为 `universe_at(窗口终点)` ∩ 质量门 ACTIVE ∩ **被绑定宇宙版本的入选集合**（按 `db_symbol` 求交，与判定记录到湖内命名空间的既有桥一致）。
 
+交集所用的版本与 `export_admitted` **既有的** `universe_id` 形参（它过滤的是**判定记录**）是两件事：本 feature 新增的形参名为 `bound_universe`（定义版本），两者各自独立、可同时给出。
+
 #### Scenario: 落选即移出
 
 - GIVEN `U1` 含 `X` 且 ACTIVE，`U2` 不含 `X`
@@ -151,7 +153,7 @@ updated: 2026-09-25
 
 ### Requirement: 绑定结果的审计留痕（`FR-004`）
 
-系统应当在运行摘要与日志中记录本次绑定的 `universe_id` 以及因该交集而被剔除的 pair 列表（`db_symbol` 层），使「这一版清单按哪个宇宙算的」可事后回答。
+系统应当在运行摘要与日志中记录本次绑定的 `universe_id` 以及因该交集而被剔除的 pair 列表，使「这一版清单按哪个宇宙算的」可事后回答。被剔除列表 `dropped_by_universe` 的精确定义是：**在不做交集时会进清单、但因绑定而被剔除的 `db_symbol`**，即 `{verdicts(ACTIVE) 且当前可交易} − selected(bound)`，按 `db_symbol` 升序、去重。
 
 #### Scenario: 摘要可查
 
@@ -183,7 +185,7 @@ updated: 2026-09-25
 ### 非功能需求
 
 - **NFR-001**：绑定解析不得引入按 pair 的额外数据库往返（集合运算在内存完成；定义与台账各读一次）。
-- **NFR-002**：**向后兼容**：不传 `--universe-filter` 时，导出结果与现状逐字节一致（含 manifest 与分区集）。
+- **NFR-002**：**向后兼容**：不传 `--universe-filter` 时，导出结果与改动前在同一输入下**可观察等价**——manifest 的关键字段与分区集与改动前一致（不要求跨运行逐字节相同，因为导出本身会写新的 data_version 与 exported_at）。
 - **NFR-003**：确定性：同一 `universe_id` + 同一窗口终点 ⇒ 同一准入集合（与调用顺序、字典序无关，输出排序稳定）。
 
 ## 5. 生命周期与不变量
@@ -216,7 +218,7 @@ updated: 2026-09-25
 - [ ] **AC-003** (`FR-002`, `IR-001`, `US-002`): 默认取最新冻结定义；显式 `--universe-id` 时以指定版本为准（两个版本给出不同集合）— tests: `tests/unit/test_f011_export_universe_binding.py`
 - [ ] **AC-004** (`FR-003`, `IR-003`): 无冻结定义时开启过滤 → 非零退出且码为 `E_UNIVERSE_NOT_FROZEN`；指定不存在的 id → `E_UNIVERSE_NOT_FOUND`；两种情况都未发布新版本 — tests: `tests/unit/test_f011_cli_contract.py`
 - [ ] **AC-005** (`FR-004`, `IR-002`, `SC-003`): 运行摘要含被绑定 `universe_id` 与排序稳定的 `dropped_by_universe`；关闭过滤时为 `null`/`[]` — tests: `tests/unit/test_f011_export_universe_binding.py`
-- [ ] **AC-006** (`NFR-002`): 不传 `--universe-filter` 时导出结果与现状逐字节一致（manifest 字段与分区集）— tests: `tests/integration/test_f011_export_universe_binding.py`
+- [ ] **AC-006** (`NFR-002`): 不传 `--universe-filter` 时，同一 fixture 下 manifest 的 `pairs`/`partitions`/`skipped`/`rows` 与改动前一致（可观察等价）— tests: `tests/integration/test_f011_export_universe_binding.py`
 - [ ] **AC-007** (`NFR-003`, `NFR-001`): 同一绑定 + 同一窗口终点重复解析得到同一集合；集合运算不产生按 pair 的额外查询 — tests: `tests/unit/test_f011_export_universe_binding.py`
 
 ## 7. 测试、依赖与决策
