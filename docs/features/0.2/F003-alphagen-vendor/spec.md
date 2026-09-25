@@ -9,7 +9,7 @@ related_features: [F001, F002, F007, F008]
 topics: [factor-factory, alphagen, vendor, generators, m2]
 doc_kind: spec
 created: 2026-09-14
-updated: 2026-09-20
+updated: 2026-09-26
 ---
 
 # F003：AlphaGen vendor 与可插拔生成器平面
@@ -300,21 +300,27 @@ L1/L2          -> L0                           仅在重开一轮冒烟 time-box
 - **SC-003**：产能成立——单次挖掘运行入册 ≥50 个通过自检的候选，协同池作为 meta-factor 注册并可反解重算；
 - **SC-004**：边界成立——生成侧拒绝可计数、不静默降级，生成器无任何评测或晋级能力。
 
+> **成功标准取证**：SC-001 由 AC-001/AC-004 锁定；SC-002 由 T019/T032 的 time-box 实跑与裁决回写（spec §7 决策表「冒烟闸门 time-box 裁决」行，2026-09-19 L0 锁定 AlphaGen）；SC-003 由 `test_f003_generation_run.py::test_generation_run_registers_fifty_candidates_when_integration_cuda_enabled`在执行机 CUDA 下断言 registered ≥ 50；SC-004 由 AC-005/AC-011/AC-012 与 `rejected` 终态用例锁定。
+
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `IR-002`): 两个后端经同一 produce() 接口产出通过 schema 校验的 FactorDef；返回值含结论字段时校验失败；落盘 DTO 加载后得到的 FactorDef 可直接执行（compute 由表达式重建、meta 还原） — tests: `tests/unit/test_f003_generator_contract.py`
-- [ ] **AC-002** (`FR-002`): vendor 目录内每处改动带 alphamill 标注、VENDORED.md 记录上游 repo/commit/日期/修改清单/许可，且**改动集合与冻结的上游基线逐文件比对一致（差异集合 = 标注集合）**，vendor 不反向依赖胶水模块 — tests: `tests/unit/test_f003_vendor_hygiene.py`
+
+> **取证（2026-09-26，执行机 `qiaozhi-lt` / RTX 4060 Laptop 8GB / 驱动 616.64）**：12 条 AC 引用的全部测试一次跑通——`ALPHAMILL_INTEGRATION=1 KRONOS_CONTROL_URL=http://127.0.0.1:8002 pytest -q`（11 个文件）→ **163 passed，exit=0**（377.97s）。统一质量门 `python3 tools/verify.py` exit=0（1577 passed / 32 skipped / 1 xfailed）。
+> **AC-006 的边界**：换手惩罚/可达性预筛与 run.json 参数记录已由 `test_f003_generation_run.py` 锁定；但「宇宙扩容 → 候选质量差异」在 CLI 路径上结构性不可观测（`--generator` 只接受 `manual`），T035 实测两次运行的 proposed/registered 与拒绝计数逐项相同，该口径的真实载体已登记为 BACKLOG 规划中的独立 Feature（AlphaGen 后端接入 CLI）。
+> **AC-010 的显存证据**：T033 在执行机取得（54 passed / 1 skipped / 0 xfailed），夜槽卸载判据1.637 → 1.191 GB 见 T035 两次运行的 `kronos_offload`。
+- [x] **AC-001** (`FR-001`, `IR-002`): 两个后端经同一 produce() 接口产出通过 schema 校验的 FactorDef；返回值含结论字段时校验失败；落盘 DTO 加载后得到的 FactorDef 可直接执行（compute 由表达式重建、meta 还原） — tests: `tests/unit/test_f003_generator_contract.py`
+- [x] **AC-002** (`FR-002`): vendor 目录内每处改动带 alphamill 标注、VENDORED.md 记录上游 repo/commit/日期/修改清单/许可，且**改动集合与冻结的上游基线逐文件比对一致（差异集合 = 标注集合）**，vendor 不反向依赖胶水模块 — tests: `tests/unit/test_f003_vendor_hygiene.py`
   - **证据（2026-09-20）**：vendor 子集完整性此前只在开发机工作树上成立。`.gitignore` 的裸 `models/` 规则（本意是 Kronos 权重）匹配任意层级目录，把 `alphagen/models/{alpha_pool,linear_alpha_pool}.py` 整目录静默排除——`_upstream_baseline.json` 声明 20 个 blob，入库只有 18 个，任何干净 clone 上`from alphagen.models.linear_alpha_pool import MseAlphaPool` 都会失败。已对该路径显式反选并按 pin commit `259687e` 取回两个 blob，sha256 与 baseline 逐字节一致（属无修改集合，不需 `# [alphamill]` 标注）。AC-002 的成立范围由此从「开发机工作树」修正为「干净 clone」，取证载体为 CI（py3.11/py3.13）。
-- [ ] **AC-003** (`FR-003`, `DR-001`): 按显式绑定构造张量；invalid 版本或 digest 不符时拒绝启动并留 `rejected` 终态 run.json（含 termination/reason/时间戳与 DR-001 运行字段）；张量与 reader 行集在抽样点数值一致且不可交易时点掩码为不可用 — tests: `tests/integration/test_f003_lake_tensor.py`
-- [ ] **AC-004** (`FR-004`): 编译后的 compute 闭包与 vendor 张量求值在同一切片容差内一致；meta.expression 可反解为等价表达式；data_columns 由 feature_map 反解得到；落盘后加载的 FactorDef 可直接执行 — tests: `tests/unit/test_f003_alphagen_adapter.py`
-- [ ] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数；拒绝事件含表达式原文与原因码且可按 run 查询（TR-002） — tests: `tests/unit/test_f003_operator_registry.py`
-- [ ] **AC-006** (`FR-005`, `NFR-001`): 换手惩罚/可达性预筛生效——零交易型表达式不进池；成本后收益预筛参数（`cost_model`、`min_after_cost_return`）写入 run.json 的 objective；在执行机上单次挖掘入册 ≥50 个通过自检候选 — tests: `tests/integration/test_f003_generation_run.py`
-- [ ] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；2 日 time-box 只裁 L0 锁定或 L1 降级，L2 须 L1 连续 2 周判据（ADR-0001）；ADR-0001 两条 M2 冒烟义务（逐级计数自第一天入库、奖励频率抽查）可核验，下游漏斗级以 owner=F007/not_yet_available 显式占位；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
-- [ ] **AC-008** (`FR-007`, `DR-004`): 协同池导出为 meta-factor 并持久化为可执行 FactorDef（`generator=pool`，加载后可直接重算），成员 factor_id 与权重可反解，重算值与训练期记录容差内一致，成员或权重变化产生新 `factor_id` 版本 — tests: `tests/integration/test_f003_alpha_pool.py`
-- [ ] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空）；FactorDef 以内容寻址 JSON 持久化且不含结论字段（DR-002）；HypothesisDef 字段齐备（DR-003）；completed 运行的 run_completed 事件可查（TR-001）；重跑得到相同协同池成员（NFR-003）；配置摘要以 canonical config artifact + `config_digest` 落盘（见 NFR-003） — tests: `tests/integration/test_f003_generation_run.py`
-- [ ] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；FIFO 每类状态记录含 `queue_seq`/`run_id`/时间戳，先入队先取锁、释放后队首取得、等待超时留 `queue_timeout` 终态；夜槽卸载 Kronos（live owner = F003，经架构 §7.1 服务生命周期契约——服务端实现归 BACKLOG 待分配 feature，校验显存释放，失败即 fail-closed 留队列；未部署与 `device=cpu` 实例按架构 §7.1 观测→处置决策表记 `offload_not_needed`，404/`E_UNSUPPORTED_VERSION` 回落探测：`/health.device=cpu` 或设备侧 `memory.used` 低于阈值 → `offload_not_needed`；达到阈值或读数不可得 → fail-closed（不依赖 GPU 进程列表），停止失败与控制面不可达但服务在 fail-closed）且运行记录持久化 `device` / `hostname` / `kronos_offload`，开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`
-- [ ] **AC-011** (`NFR-004`, `IR-001`): egress guard 安装后出网尝试被拒绝（socket 构造被替换、只放行 AF_UNIX；断言范围为**进程级护栏，非内核隔离**）、护栏缺失时拒绝启动；写 `reports/generation/<run_id>/` 之外路径（证据台账/留出/晋级状态）的尝试被拒绝；缺绑定的 `mine` 请求非零退出并留 `rejected` 终态 run.json — tests: `tests/integration/test_f003_boundaries.py`, `tests/unit/test_f003_cli_contract.py`
-- [ ] **AC-012** (`IR-003`): `GenerationRun` manifest 与 FactorDef JSON 均持久化 `schema_version`；`show` 遇到未知 `schema_version` 以非零退出拒绝，不做兼容性猜测 — tests: `tests/unit/test_f003_cli_contract.py`
+- [x] **AC-003** (`FR-003`, `DR-001`): 按显式绑定构造张量；invalid 版本或 digest 不符时拒绝启动并留 `rejected` 终态 run.json（含 termination/reason/时间戳与 DR-001 运行字段）；张量与 reader 行集在抽样点数值一致且不可交易时点掩码为不可用 — tests: `tests/integration/test_f003_lake_tensor.py`
+- [x] **AC-004** (`FR-004`): 编译后的 compute 闭包与 vendor 张量求值在同一切片容差内一致；meta.expression 可反解为等价表达式；data_columns 由 feature_map 反解得到；落盘后加载的 FactorDef 可直接执行 — tests: `tests/unit/test_f003_alphagen_adapter.py`
+- [x] **AC-005** (`FR-005`, `TR-002`): 算子能力登记表覆盖全部启用算子；未登记算子/前视/非法跨 pair 候选被拒绝并按原因码计数；拒绝事件含表达式原文与原因码且可按 run 查询（TR-002） — tests: `tests/unit/test_f003_operator_registry.py`
+- [x] **AC-006** (`FR-005`, `NFR-001`): 换手惩罚/可达性预筛生效——零交易型表达式不进池；成本后收益预筛参数（`cost_model`、`min_after_cost_return`）写入 run.json 的 objective；在执行机上单次挖掘入册 ≥50 个通过自检候选 — tests: `tests/integration/test_f003_generation_run.py`
+- [x] **AC-007** (`FR-006`): 冒烟闸门判据逐条自动判定并写入当日 manifest；任一触发即输出降级裁决且不输出"通过"；2 日 time-box 只裁 L0 锁定或 L1 降级，L2 须 L1 连续 2 周判据（ADR-0001）；ADR-0001 两条 M2 冒烟义务（逐级计数自第一天入库、奖励频率抽查）可核验，下游漏斗级以 owner=F007/not_yet_available 显式占位；回切须重开 time-box — tests: `tests/integration/test_f003_smoke_gate.py`
+- [x] **AC-008** (`FR-007`, `DR-004`): 协同池导出为 meta-factor 并持久化为可执行 FactorDef（`generator=pool`，加载后可直接重算），成员 factor_id 与权重可反解，重算值与训练期记录容差内一致，成员或权重变化产生新 `factor_id` 版本 — tests: `tests/integration/test_f003_alpha_pool.py`
+- [x] **AC-009** (`DR-002`, `DR-003`, `TR-001`, `NFR-003`): GenerationRun 记录引擎版本/绑定/seed/device/档位与逐级计数；同一组 seed/绑定/code digest/配置 重跑得到相同 factor_id 集合（factor_id 内容寻址、不含 run 序号，运行归属由 run_id 承载）；自动候选绑定 mechanism_unknown 假设且 `applicable_state` 取显式默认值（不留空）；FactorDef 以内容寻址 JSON 持久化且不含结论字段（DR-002）；HypothesisDef 字段齐备（DR-003）；completed 运行的 run_completed 事件可查（TR-001）；重跑得到相同协同池成员（NFR-003）；配置摘要以 canonical config artifact + `config_digest` 落盘（见 NFR-003） — tests: `tests/integration/test_f003_generation_run.py`
+- [x] **AC-010** (`NFR-002`, `NFR-005`): 可用显存低于上限或与在跑任务撞车时运行进队列而非并行；FIFO 每类状态记录含 `queue_seq`/`run_id`/时间戳，先入队先取锁、释放后队首取得、等待超时留 `queue_timeout` 终态；夜槽卸载 Kronos（live owner = F003，经架构 §7.1 服务生命周期契约——服务端实现归 BACKLOG 待分配 feature，校验显存释放，失败即 fail-closed 留队列；未部署与 `device=cpu` 实例按架构 §7.1 观测→处置决策表记 `offload_not_needed`，404/`E_UNSUPPORTED_VERSION` 回落探测：`/health.device=cpu` 或设备侧 `memory.used` 低于阈值 → `offload_not_needed`；达到阈值或读数不可得 → fail-closed（不依赖 GPU 进程列表），停止失败与控制面不可达但服务在 fail-closed）且运行记录持久化 `device` / `hostname` / `kronos_offload`，开发机 CPU 运行被拒绝用于产能/显存结论 — tests: `tests/unit/test_f003_gpu_slot.py`
+- [x] **AC-011** (`NFR-004`, `IR-001`): egress guard 安装后出网尝试被拒绝（socket 构造被替换、只放行 AF_UNIX；断言范围为**进程级护栏，非内核隔离**）、护栏缺失时拒绝启动；写 `reports/generation/<run_id>/` 之外路径（证据台账/留出/晋级状态）的尝试被拒绝；缺绑定的 `mine` 请求非零退出并留 `rejected` 终态 run.json — tests: `tests/integration/test_f003_boundaries.py`, `tests/unit/test_f003_cli_contract.py`
+- [x] **AC-012** (`IR-003`): `GenerationRun` manifest 与 FactorDef JSON 均持久化 `schema_version`；`show` 遇到未知 `schema_version` 以非零退出拒绝，不做兼容性猜测 — tests: `tests/unit/test_f003_cli_contract.py`
 
 ## 7. 测试、依赖与决策
 

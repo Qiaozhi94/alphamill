@@ -97,7 +97,8 @@ updated: 2026-09-14
 - [x] T037 [TEST] (`US-002`, `AC-007`): 旅程 US-002 端到端验收——在执行机按 `smoke --day 1`、`--day 2` 走完 time-box：逐条 L1 判据 pass/fail、两条 M2 义务入 manifest、判据未达标即输出 L1 降级、回切请求被拒；收尾全量执行 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_smoke_gate.py` + 当日 manifest
 - [x] T038 [TEST] (`US-003`, `AC-006`, `AC-008`, `AC-009`): 旅程 US-003 端到端验收——执行机训练夜槽一次完整挖掘：入册 ≥50、逐级计数入 run.json、成本后收益与可达性预筛参数入 objective、协同池可导出且按成员重算一致、零交易型表达式被排除、同配置重跑得到相同 factor_id 集合与池成员 — verify: `ALPHAMILL_INTEGRATION=1 pytest -q tests/integration/test_f003_generation_run.py tests/integration/test_f003_alpha_pool.py tests/unit/test_f003_objective.py`
 
-- [ ] T039: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
+- [x] T039: 回写 spec 验收证据、勾选验收清单、更新 `BACKLOG.md` 状态与 spec frontmatter — verify: `python3 tools/validate_spec_lifecycle.py`
+      — 取证（2026-09-26）：12 条 AC 全部勾选并附统一取证行（11 个测试文件一次跑通 163 passed / exit=0，见 spec §6）；SC-001..004 逐条给出锁定物；`updated` 改为 2026-09-26；状态与 BACKLOG 由 `scripts/sdd_status.py --advance` 写入（状态唯一写入口）。
 
 ## 4. 依赖与并行关系
 
