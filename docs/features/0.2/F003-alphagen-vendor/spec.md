@@ -2,7 +2,7 @@
 kind: feature
 id: F003
 version: "0.2"
-status: developing
+status: code-reviewing
 branch: feat/F003-alphagen-vendor
 gate_version: 1
 related_features: [F001, F002, F007, F008]
