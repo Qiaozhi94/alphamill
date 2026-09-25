@@ -2,7 +2,8 @@
 kind: feature
 id: F003
 version: "0.2"
-status: code-reviewing
+status: done
+status_evidence: merge 287c4d2 + CI run 36166844398 绿（1580 passed 本地 exit=0）
 branch: feat/F003-alphagen-vendor
 gate_version: 1
 related_features: [F001, F002, F007, F008]
