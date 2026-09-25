@@ -727,7 +727,8 @@ AC_FINDING = "F003-D017"
 
 FEATURE_DIR_RE = re.compile(r"^F\d{3}-")
 CLAUDE_ACTIVE_RE = re.compile(r"^-\s+(F\d{3})\b")
-README_ACTIVE_RE = re.compile(r"当前\s*((?:F\d{3}\s*/\s*)+F\d{3})")
+# 1..N 个 ID：收口到只剩一个活跃 feature 时也必须能表达（F008 收口实测）
+README_ACTIVE_RE = re.compile(r"当前\s*(F\d{3}(?:\s*/\s*F\d{3})*)")
 BACKLOG_ROW_RE = re.compile(r"^\|\s*(F\d{3}-[^|]+)\s*\|")
 
 
