@@ -42,10 +42,10 @@ updated: 2026-09-26
 ## 3. 验证与验收任务
 
 - [x] T008 (`AC-003`, `AC-005`, `AC-007`): 单元套件：默认/显式绑定、摘要字段、确定性（重复解析同集合）、无按 pair 的额外查询 — verify: `tests/unit/test_f011_export_universe_binding.py`（green: 单元 25 passed；变异验证 6/6 判红：drop_cutoff min→max、allows <=→<、生效过滤去 frozen_at、判缺不过判据、产出用 covers 代替 allows、CLI 先刷新后解析）
-- [ ] T009 (`AC-003`, `AC-004`, `AC-008`): CLI 契约套件：`IR-003` 六种情形逐一断言退出码 2 + stderr 原因码 + `symbol_map`/新版本未落盘；单给 `--universe-id` 被拒；多 dataset 只解析一次；两份 `deployment/*export.service` 的 `--universe-filter` 一致 — verify: `tests/unit/test_f011_cli_contract.py`
-- [ ] T010 (`AC-001`, `AC-002`, `AC-006`): 集成套件（真实 scratch 库 + 临时湖）全绿 — verify: `tests/integration/test_f011_export_journey.py`
-- [ ] T011 (`AC-009`): `F008` 既有测试零修改全绿（`git diff main -- tests/integration/test_f008_*.py` 为空）— verify: `tests/integration/test_f008_quality_gate.py`、`tests/integration/test_f008_export_integration.py`
-- [ ] T012 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
+- [x] T009 (`AC-003`, `AC-004`, `AC-008`): CLI 契约套件：`IR-003` 六种情形逐一断言退出码 2 + stderr 原因码 + `symbol_map`/新版本未落盘；单给 `--universe-id` 被拒；多 dataset 只解析一次；两份 `deployment/*export.service` 的 `--universe-filter` 一致 — verify: `tests/unit/test_f011_cli_contract.py`（green: 16 passed——六情形退出码 2 + `FATAL: <code>:` + 未刷新 symbol_map/未导出；单给 `--universe-id` 被 parser.error 拒绝；两 dataset 只解析 1 次；两份部署单元开关一致；触及模块 ≤350 行）
+- [x] T010 (`AC-001`, `AC-002`, `AC-006`): 集成套件（真实 scratch 库 + 临时湖）全绿 — verify: `tests/integration/test_f011_export_journey.py`（green: 真实 scratch 库 + 临时湖 6 passed，qiaozhi-lt 2026-09-26）
+- [x] T011 (`AC-009`): `F008` 既有测试零修改全绿（`git diff main -- tests/integration/test_f008_*.py` 为空）— verify: `tests/integration/test_f008_quality_gate.py`、`tests/integration/test_f008_export_integration.py`（green: `git diff main -- tests/integration/test_f008_*.py` 为空；F008 集成 21 passed/1 xfailed）
+- [x] T012 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`): 运行项目统一质量门 — verify: `python3 tools/verify.py`（green: `tools/verify.py` exit=0，pytest 1627 passed / 32 skipped / 1 xfailed，含连库集成，qiaozhi-lt 2026-09-26）
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
 - [ ] T013 [TEST] (`AC-001`, `AC-002`, `AC-005`, `AC-006`): 层 2 旅程验收（US-001/002/003 端到端：落选即移出 → 台账与数据零变化 → 显式绑定可复现 → 摘要可查 → 重新入选自动回来）— verify: `tests/integration/test_f011_export_journey.py`
