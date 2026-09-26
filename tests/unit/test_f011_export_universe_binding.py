@@ -480,3 +480,16 @@ def test_summary_keys_are_always_present_and_dropped_is_sorted(ledger, dropped_e
     )
     assert bound["universe_id"] == dropped_eth.universe_id
     assert bound["dropped_by_universe"] == ["ADA/USDT", "ETH/USDT", "ZEC/USDT"]
+
+
+def test_orphan_freeze_record_on_default_path_is_artifact_error(lake) -> None:
+    """检视 R3：默认解析遇到「有冻结记录、无定义文件」是湖内产物损坏，不是显式 id 不存在。"""
+    from alphamill.data_bridge.universe.definition import definition_path
+
+    good = _define(
+        lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    definition_path(good.universe_id, lake).unlink()
+    with pytest.raises(UniverseArtifactError) as info:
+        binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+    assert info.value.code == "E_UNIVERSE_ARTIFACT"
