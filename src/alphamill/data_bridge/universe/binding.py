@@ -28,7 +28,9 @@ from alphamill.data_bridge.universe.definition import (
 )
 from alphamill.data_bridge.universe.errors import (
     UniverseAmbiguousError,
+    UniverseArtifactError,
     UniverseLookaheadError,
+    UniverseNotFoundError,
     UniverseNotFrozenError,
 )
 
@@ -125,8 +127,13 @@ def _frozen_versions(lake_root: Path | None) -> list[Version]:
     for path in sorted(root.glob(f"*{FREEZE_SUFFIX}")):
         universe_id = path.name[: -len(FREEZE_SUFFIX)]
         freeze = load_freeze(universe_id, lake_root)
-        if freeze is not None:
-            out.append((load_definition(universe_id, lake_root), freeze))
+        if freeze is None:
+            continue
+        try:
+            definition = load_definition(universe_id, lake_root)
+        except UniverseNotFoundError as exc:  # 有冻结记录无定义：湖内产物损坏（检视 R3）
+            raise UniverseArtifactError(f"冻结记录 {path.name} 没有对应的定义文件") from exc
+        out.append((definition, freeze))
     return out
 
 
