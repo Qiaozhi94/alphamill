@@ -124,6 +124,7 @@ updated: 2026-09-26
 - **同一 pair 在多个版本**：以被绑定版本的入选集合为准；旧版本的判定不参与。
 - **落选 ≠ 退市**：落选不写 `valid_to`、不删湖分区，台账区间仍由 `F008` 维护；两者在导出侧用同一条截止日规则，只是截止日来源不同（冻结日 / `valid_to`）。
 - **落选 pair 的历史分区**：截止日及之前的单元格在增量与全量两种 mode 下都从源库产出并对账，之后的不产出；空湖重建、基线缺该 pair 时同样能导回历史——导出准入集合变窄不等于数据消失。
+- **重新入选**：pair 在新版本中重新入选后不再有截止日。增量只导新窗口，不回填；**下一次全量**会一次性从源库补回落选期间（截止日到重新入选之间）已采集的数据，并发布一个内容变化的新版本，此后增量与全量稳定一致。这是有意的语义：湖回答「有哪些数据」，某一天某 pair 是否属于宇宙由版本历史回答（下游横截面按 point-in-time 宇宙取成员，见架构 §4.1.1「截面边界」），不由湖里有没有分区回答。
 - **截止日之后的缺口**：属于策略排除，不记 `skipped`；截止日之前的空单元格是真实缺口，照常记 `skipped`（两种 mode 同一规则）。
 - **历史窗口**（`--window-end` 早于最新定义的 `frozen_at`）：只能绑定 `frozen_at ≤ 窗口终点`（当时已生效）的定义，不得绑定当时尚未冻结的宇宙（前视）。
 - **多口径并存**（冻结定义的 `criteria.exchange`/`criteria.market_type` 不止一种）：默认解析拒绝并要求显式 `--universe-id`，不得串线。
@@ -277,7 +278,7 @@ updated: 2026-09-26
 ### 验收清单
 
 - [ ] **AC-001** (`FR-001`, `US-001`): `U1` 含 X → `U2` 不含 X 时，导出准入集合不含 X 的 `lake_pair`；`U3` 重新含 X 时又回到集合内 — tests: `tests/integration/test_f011_export_universe_binding.py`
-- [ ] **AC-002** (`FR-005`, `DR-001`, `US-001`): 上述全过程 `universe_membership` 行数/区间零变化；增量、全量、空湖首导三种导出下，新版本均含 X（落选）与 Y（退市）截止日及之前的全部分区且对账通过、均无截止日之后的分区，`skipped` 在增量与全量间一致（连跑「增量→全量→增量」不因 `skipped` 翻转产生新版本）；截止日前的源库修订被全量导出吸收；连续落选段跨 `U2`→`U3` 时截止日仍为 `U2` 的冻结日 — tests: `tests/integration/test_f011_export_universe_binding.py`
+- [ ] **AC-002** (`FR-005`, `DR-001`, `US-001`): 上述全过程 `universe_membership` 行数/区间零变化；增量、全量、空湖首导三种导出下，新版本均含 X（落选）与 Y（退市）截止日及之前的全部分区且对账通过、均无截止日之后的分区，`skipped` 在增量与全量间一致（连跑「增量→全量→增量」不因 `skipped` 翻转产生新版本）；截止日前的源库修订被全量导出吸收；连续落选段跨 `U2`→`U3` 时截止日仍为 `U2` 的冻结日；X 在后续版本重新入选后，首次全量新增其落选期间的分区，之后「增量→全量」不再产生新版本 — tests: `tests/integration/test_f011_export_universe_binding.py`
 - [ ] **AC-003** (`FR-002`, `IR-001`, `US-002`): 默认在 `frozen_at ≤ at` 的冻结定义中取 `snapshot_at` 最新者（晚冻结的旧快照不胜出；`snapshot_at ≤ t < frozen_at` 的版本不被历史 `--window-end t` 绑定）；显式 `--universe-id` 时以指定版本为准（两个版本给出不同集合）；单给 `--universe-id` 不开 `--universe-filter` 被参数解析拒绝 — tests: `tests/unit/test_f011_export_universe_binding.py`、`tests/unit/test_f011_cli_contract.py`
 - [ ] **AC-004** (`FR-003`, `IR-003`): `IR-003` 表六种情形逐一触发：退出码 2、stderr 含对应原因码；且均未发布 `symbol_map` 与任何新版本 — tests: `tests/unit/test_f011_cli_contract.py`
 - [ ] **AC-005** (`FR-004`, `IR-002`, `SC-003`): 运行摘要含被绑定 `universe_id` 与排序稳定的 `dropped_by_universe`；关闭过滤时为 `null`/`[]` — tests: `tests/unit/test_f011_export_universe_binding.py`
