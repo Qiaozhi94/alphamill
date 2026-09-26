@@ -314,3 +314,179 @@ def test_resolution_is_deterministic(lake) -> None:
     assert first.universe_id == second.universe_id
     assert [d.universe_id for d, _ in first.chain] == [d.universe_id for d, _ in second.chain]
     assert [f.frozen_at for _, f in first.chain] == sorted(f.frozen_at for _, f in first.chain)
+
+
+# ------------------------------------------------------------------ 准入集合与截止日（T004）
+
+from alphamill.data_bridge.universe import membership as membership_mod  # noqa: E402
+from alphamill.data_bridge.universe import verdicts as verdicts_mod  # noqa: E402
+from alphamill.data_bridge.universe.membership import MembershipRow  # noqa: E402
+from alphamill.data_bridge.universe.verdicts import (  # noqa: E402
+    VERDICT_ACTIVE,
+    VERDICT_QUARANTINED,
+    Admission,
+    PairGateResult,
+    export_admission,
+    export_admitted,
+)
+
+AT = _utc("2026-09-05")
+LISTED = _utc("2026-09-01")
+
+
+def _row(symbol: str, *, market_type: str = "spot", valid_from=LISTED, reason="listed"):
+    base = symbol.split("/")[0]
+    lake_pair = f"{base}-USDT" + ("-PERP" if market_type == "perp" else "")
+    return MembershipRow(
+        exchange="binance",
+        market_type=market_type,
+        db_symbol=symbol,
+        lake_pair=lake_pair,
+        valid_from=valid_from,
+        reason=reason,
+        universe_id="u-test",
+    )
+
+
+def _verdict(symbol: str, verdict: str = VERDICT_ACTIVE) -> PairGateResult:
+    base = symbol.split("/")[0]
+    return PairGateResult(
+        db_symbol=symbol,
+        lake_pair=f"{base}-USDT-PERP",
+        exchange="binance",
+        market_type="perp",
+        verdict=verdict,
+        reason_code=None,
+        metrics={},
+    )
+
+
+@pytest.fixture()
+def ledger(monkeypatch):
+    """判定与台账两次读库的内存桩，并记录调用次数（AC-007：各一次）。"""
+    state: dict = {"verdicts": [], "rows": [], "calls": {"verdicts": 0, "membership": 0}}
+
+    def fake_verdicts(conn, *, universe_id=None):
+        state["calls"]["verdicts"] += 1
+        return {f"{v.lake_pair}": v for v in state["verdicts"]}
+
+    def fake_membership(conn, **kwargs):
+        state["calls"]["membership"] += 1
+        return list(state["rows"])
+
+    monkeypatch.setattr(verdicts_mod, "current_verdicts", fake_verdicts)
+    monkeypatch.setattr(membership_mod, "load_membership", fake_membership)
+    return state
+
+
+@pytest.fixture()
+def dropped_eth(lake):
+    """U1 选 BTC/ETH/SOL（冻结 08-31）→ U2 选 BTC/SOL、ETH 落选（冻结 09-03 10:00）。"""
+    _define(
+        lake,
+        selected=("BTC", "ETH", "SOL"),
+        snapshot_at="2026-08-30T00:00:00Z",
+        frozen_at="2026-08-31",
+    )
+    _define(
+        lake,
+        selected=("BTC", "SOL"),
+        dropped=("ETH",),
+        snapshot_at="2026-09-02T12:00:00Z",
+        frozen_at="2026-09-03T10:00:00",
+    )
+    return binding_mod.resolve_binding(AT, lake_root=lake)
+
+
+def test_without_binding_admission_keeps_f008_semantics(ledger) -> None:
+    ledger["verdicts"] = [_verdict("BTC/USDT"), _verdict("ETH/USDT", VERDICT_QUARANTINED)]
+    ledger["rows"] = [_row("BTC/USDT"), _row("ETH/USDT"), _row("BTC/USDT", market_type="perp")]
+
+    admission = export_admission(object(), AT, market_type="spot")
+
+    assert admission.admitted == frozenset({"BTC-USDT"})
+    assert dict(admission.cutoffs) == {}
+    assert admission.dropped == ()
+    assert export_admitted(object(), AT, market_type="spot") == admission.admitted
+
+
+def test_binding_drops_unselected_pair_with_cutoff_and_reports_it(ledger, dropped_eth) -> None:
+    ledger["verdicts"] = [_verdict(s) for s in ("BTC/USDT", "ETH/USDT", "SOL/USDT")]
+    ledger["rows"] = [_row(s) for s in ("BTC/USDT", "ETH/USDT", "SOL/USDT")]
+
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+
+    assert admission.admitted == frozenset({"BTC-USDT", "SOL-USDT"})
+    assert dict(admission.cutoffs) == {"ETH-USDT": date(2026, 9, 3)}
+    assert admission.dropped == ("ETH/USDT",)
+    assert admission.allows("ETH-USDT", "2026-09-03") is True  # 含当日
+    assert admission.allows("ETH-USDT", "2026-09-04") is False
+    assert admission.allows("BTC-USDT", "2030-01-01") is True
+    assert admission.allows("DOGE-USDT", "2026-09-01") is False
+
+
+def test_delisted_pair_gets_interval_end_cutoff_even_if_still_selected(ledger, dropped_eth) -> None:
+    """退市用追加 `delisted` 行记录；截止日 = 派生区间终点所在日（恰为 00:00 取前一日）。"""
+    ledger["verdicts"] = [_verdict(s) for s in ("BTC/USDT", "SOL/USDT")]
+    ledger["rows"] = [
+        _row("BTC/USDT"),
+        _row("SOL/USDT"),
+        _row("SOL/USDT", valid_from=_utc("2026-09-02T12:00:00"), reason="delisted"),
+        _row("BTC/USDT", valid_from=_utc("2026-09-04"), reason="delisted"),
+    ]
+
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+
+    assert admission.admitted == frozenset()
+    assert dict(admission.cutoffs) == {"SOL-USDT": date(2026, 9, 2), "BTC-USDT": date(2026, 9, 3)}
+    assert admission.dropped == (), "退市 pair 不可交易，不算『因绑定而剔除』"
+
+
+def test_dropped_and_delisted_takes_the_earlier_cutoff(ledger, dropped_eth) -> None:
+    ledger["verdicts"] = [_verdict("ETH/USDT")]
+    ledger["rows"] = [
+        _row("ETH/USDT"),
+        _row("ETH/USDT", valid_from=_utc("2026-09-04T08:00:00"), reason="delisted"),
+    ]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    assert dict(admission.cutoffs) == {"ETH-USDT": date(2026, 9, 3)}
+
+    ledger["rows"] = [
+        _row("ETH/USDT"),
+        _row("ETH/USDT", valid_from=_utc("2026-09-02T08:00:00"), reason="delisted"),
+    ]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    assert dict(admission.cutoffs) == {"ETH-USDT": date(2026, 9, 2)}
+
+
+def test_non_active_or_not_yet_listed_pairs_get_no_cutoff(ledger, dropped_eth) -> None:
+    ledger["verdicts"] = [_verdict("ETH/USDT", VERDICT_QUARANTINED), _verdict("DOGE/USDT")]
+    ledger["rows"] = [_row("ETH/USDT"), _row("DOGE/USDT", valid_from=_utc("2026-09-10"))]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    assert admission.admitted == frozenset()
+    assert dict(admission.cutoffs) == {}
+    assert admission.dropped == ()
+
+
+def test_dropped_is_scoped_to_the_dataset_market_type(ledger, dropped_eth) -> None:
+    ledger["verdicts"] = [_verdict("ETH/USDT")]
+    ledger["rows"] = [_row("ETH/USDT", market_type="perp")]
+    spot = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    perp = export_admission(object(), AT, market_type="perp", bound_universe=dropped_eth)
+    assert spot.dropped == () and dict(spot.cutoffs) == {}
+    assert perp.dropped == ("ETH/USDT",)
+    assert dict(perp.cutoffs) == {"ETH-USDT-PERP": date(2026, 9, 3)}
+
+
+def test_admission_reads_verdicts_and_ledger_once_and_is_deterministic(ledger, dropped_eth) -> None:
+    """AC-007：判定与台账各一次查询；同一绑定 + 同一 at 重复计算得同一结果。"""
+    ledger["verdicts"] = [_verdict(s) for s in ("SOL/USDT", "ETH/USDT", "BTC/USDT")]
+    ledger["rows"] = [_row(s) for s in ("SOL/USDT", "ETH/USDT", "BTC/USDT")]
+
+    first = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    assert ledger["calls"] == {"verdicts": 1, "membership": 1}
+    ledger["rows"].reverse()
+    second = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+
+    assert first == second
+    assert isinstance(first, Admission)
