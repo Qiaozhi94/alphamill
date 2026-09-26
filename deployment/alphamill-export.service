@@ -9,7 +9,10 @@ StartLimitBurst=3
 Type=oneshot
 WorkingDirectory=%h/projects/alphamill
 EnvironmentFile=%h/projects/alphamill/deployment/.env
-ExecStart=%h/projects/alphamill/.venv/bin/python -m alphamill.data_bridge.exporter --mode incremental
+# F011：按「台账可交易 ∩ 质量门 ACTIVE ∩ 当时生效的冻结宇宙」导出；落选/退市按截止日保留历史。
+# 日常增量与周日全量必须同开同关（tests/unit/test_f011_cli_contract.py 锁定），
+# 绑定不到可用宇宙时退出码 2（不重试），原因码见 stderr 行首 E_UNIVERSE_*。
+ExecStart=%h/projects/alphamill/.venv/bin/python -m alphamill.data_bridge.exporter --mode incremental --universe-filter
 # 退出码契约（design §5）：1=可重试瞬时故障；2=不可重试数据裁决（对账失败等）
 Restart=on-failure
 RestartSec=15min
