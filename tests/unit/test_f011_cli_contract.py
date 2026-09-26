@@ -209,3 +209,15 @@ def test_touched_modules_stay_within_the_sop_line_limit(relative) -> None:
     """design §0：SOP 350 行硬上限（仓库无全局行数门禁，按本 feature 触及面锁定）。"""
     lines = (REPO / relative).read_text(encoding="utf-8").count("\n")
     assert lines <= 350, f"{relative}: {lines} 行"
+
+
+def test_invalid_window_end_with_filter_is_fatal_not_transient(harness, capsys) -> None:
+    """检视 R1：开过滤时非法 `--window-end` 是参数裁决（退出码 2），不得漏成可重试的 1。"""
+    _u1(harness["lake"])
+
+    rc = cli.main(["--universe-filter", "--window-end", "not-a-date"])
+
+    assert rc == 2
+    assert "FATAL:" in capsys.readouterr().err
+    assert harness["calls"]["refresh"] == 0
+    assert harness["calls"]["exports"] == []
