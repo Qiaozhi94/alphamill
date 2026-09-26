@@ -7,20 +7,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from alphamill.data_bridge.universe import binding as binding_mod
-from alphamill.data_bridge.universe.definition import (
-    UniverseDef,
-    build_definition,
-    freeze_definition,
-    freeze_path,
-    write_definition,
-)
-from alphamill.data_bridge.universe.discover import MarketSnapshot, evaluate
+from alphamill.data_bridge.universe.definition import freeze_path
 from alphamill.data_bridge.universe.errors import (
     UniverseAmbiguousError,
     UniverseArtifactError,
@@ -28,40 +21,10 @@ from alphamill.data_bridge.universe.errors import (
     UniverseNotFoundError,
     UniverseNotFrozenError,
 )
-from tests.f008_fixtures import criteria_for, market
+from tests.f011_fixtures import define_universe, utc
 
-
-def _utc(text: str) -> datetime:
-    return datetime.fromisoformat(text).replace(tzinfo=UTC)
-
-
-def _define(
-    lake: Path,
-    *,
-    selected: tuple[str, ...],
-    dropped: tuple[str, ...] = (),
-    snapshot_at: str,
-    frozen_at: str | None,
-    market_type: str = "perp",
-) -> UniverseDef:
-    """写一版定义：`selected` 按成交额排前、`dropped` 垫底并被 top_n 截掉（仍是候选）。"""
-    criteria = criteria_for(turnover_rank_top_n=len(selected), market_type=market_type)
-    records = [market(base, turnover=10_000_000.0 - index) for index, base in enumerate(selected)]
-    records += [market(base, turnover=1_000.0 + index) for index, base in enumerate(dropped)]
-    snap = MarketSnapshot(
-        exchange=criteria.exchange,
-        market_type=market_type,
-        snapshot_at=snapshot_at,
-        markets=tuple(records),
-    )
-    definition = build_definition(criteria, evaluate(snap, criteria))
-    assert {c.db_symbol.split("/")[0] for c in definition.selected} == set(selected)
-    write_definition(definition, lake)
-    if frozen_at is not None:
-        freeze_definition(
-            definition.universe_id, frozen_by="tester", lake_root=lake, frozen_at=_utc(frozen_at)
-        )
-    return definition
+_utc = utc
+_define = define_universe
 
 
 @pytest.fixture()

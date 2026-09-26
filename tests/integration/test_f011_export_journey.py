@@ -21,20 +21,14 @@ from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge.exporter import export_dataset
 from alphamill.data_bridge.universe.admission import admit_pair
 from alphamill.data_bridge.universe.binding import resolve_binding
-from alphamill.data_bridge.universe.definition import (
-    build_definition,
-    freeze_definition,
-    load_definition,
-    write_definition,
-)
-from alphamill.data_bridge.universe.discover import MarketSnapshot, evaluate
+from alphamill.data_bridge.universe.definition import load_definition
 from alphamill.data_bridge.universe.membership import (
     MembershipRow,
     append_membership,
     load_membership,
 )
 from alphamill.data_bridge.universe.quality_gate import VERDICT_ACTIVE, PairGateResult
-from tests.f008_fixtures import criteria_for, market
+from tests.f011_fixtures import define_universe, utc
 
 pytestmark = pytest.mark.integration
 
@@ -42,26 +36,17 @@ SYMBOLS = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
 DAYS = [date(2026, 9, 1) + timedelta(days=offset) for offset in range(6)]
 
 
-def _utc(text: str) -> datetime:
-    return datetime.fromisoformat(text).replace(tzinfo=UTC)
+_utc = utc
 
 
 def _define(lake, *, selected, dropped=(), snapshot_at, frozen_at) -> str:
-    criteria = criteria_for(turnover_rank_top_n=len(selected))
-    records = [market(base, turnover=10_000_000.0 - i) for i, base in enumerate(selected)]
-    records += [market(base, turnover=1_000.0 + i) for i, base in enumerate(dropped)]
-    snap = MarketSnapshot(
-        exchange=criteria.exchange,
-        market_type=criteria.market_type,
+    return define_universe(
+        lake,
+        selected=selected,
+        dropped=dropped,
         snapshot_at=snapshot_at,
-        markets=tuple(records),
-    )
-    definition = build_definition(criteria, evaluate(snap, criteria))
-    write_definition(definition, lake)
-    freeze_definition(
-        definition.universe_id, frozen_by="tester", lake_root=lake, frozen_at=_utc(frozen_at)
-    )
-    return definition.universe_id
+        frozen_at=frozen_at,
+    ).universe_id
 
 
 def _seed_ohlcv(conn) -> None:
