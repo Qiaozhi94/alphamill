@@ -289,9 +289,10 @@ updated: 2026-09-26
 - [x] **AC-009** (`FR-001`): `export_admitted(conn, at)`（不给 `bound_universe`）保持 `F008` 语义——`F008` 既有测试零修改全绿 — tests: `tests/integration/test_f008_quality_gate.py`、`tests/integration/test_f008_export_integration.py`
 
 取证（2026-09-26，执行机 `qiaozhi-lt`，需求分支 `feat/F011-export-universe-binding`）：上列三个测试文件
-`tests/unit/test_f011_export_universe_binding.py`（25）、`tests/unit/test_f011_cli_contract.py`（16）、
-`tests/integration/test_f011_export_journey.py`（6，真实 scratch 库）全部通过；`F008` 集成测试零修改
-21 passed / 1 xfailed（AC-009）；统一质量门 `tools/verify.py` exit=0（1627 passed / 32 skipped / 1 xfailed）。
+`tests/unit/test_f011_export_universe_binding.py`（28）、`tests/unit/test_f011_cli_contract.py`（17）、
+`tests/integration/test_f011_export_journey.py`（8，真实 scratch 库）全部通过（含代码检视循环 24 的 7 条回归）；`F008` 集成测试零修改
+21 passed / 1 xfailed（AC-009）；统一质量门 `tools/verify.py` exit=0（1633 passed / 32 skipped / 1 xfailed）。AC-006 的默认路径另以改动前代码
+（main@80c1a53）在同一 fixture 上实跑的 pairs/rows/skipped/value_digest 作基准对照。
 关键判据的变异验证 6/6 判红（截止日取最早冻结日、截止日含当日、生效过滤含 `frozen_at`、判缺过截止日判据、
 单元格产出用 `allows` 而非 `covers`、CLI 在刷新 `symbol_map` 之前解析）。真实环境只读核对：生产湖默认绑定
 `sha256:6d85a249…`，spot/perp 准入各 35 对，与 `F008` 口径逐一相同（当前无落选，符合 `Q-002` 判断）。
