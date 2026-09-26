@@ -140,6 +140,7 @@ def test_universe_id_without_filter_is_rejected_by_argument_parsing(harness, cap
 def test_binding_is_resolved_once_and_shared_by_all_datasets(harness) -> None:
     """AC-008：一次运行只解析一次绑定；各 dataset 拿同一绑定、同一窗口终点。"""
     bound = _u1(harness["lake"])
+    before = dt.datetime.now(dt.UTC).date().isoformat()
 
     rc = cli.main(["--universe-filter", "--dataset", "ohlcv_1m", "--dataset", "signals_log"])
 
@@ -151,8 +152,9 @@ def test_binding_is_resolved_once_and_shared_by_all_datasets(harness) -> None:
     kwargs = [k for _, k in calls["exports"]]
     assert {k["bound_universe"].universe_id for k in kwargs} == {bound.universe_id}
     assert all(k["universe_filter"] is True for k in kwargs)
-    today = dt.datetime.now(dt.UTC).date().isoformat()
-    assert {k["window_end"] for k in kwargs} == {today}, "窗口终点一次定值、全部 dataset 共用"
+    after = dt.datetime.now(dt.UTC).date().isoformat()
+    ((window_end,),) = [{k["window_end"] for k in kwargs}]  # 窗口终点一次定值、全部 dataset 共用
+    assert window_end in {before, after}, "跨 UTC 午夜运行也只取一次『今天』（检视 R7）"
 
 
 def test_explicit_universe_id_is_passed_through(harness) -> None:
