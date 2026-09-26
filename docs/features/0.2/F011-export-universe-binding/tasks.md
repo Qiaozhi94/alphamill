@@ -30,14 +30,14 @@ updated: 2026-09-26
 
 ### Phase 1：绑定解析与交集（最小切片 = US-001）
 
-- [ ] T003 (`FR-002`, `FR-003`, `IR-003`, `AC-003`, `AC-004`): 新增 `data_bridge/universe/binding.py::resolve_bound_universe(at, *, universe_id=None, lake_root=None)`（默认：已冻结 ∧ `snapshot_at ≤ at`，多口径抛 `UniverseAmbiguousError`，按 `snapshot_at`→`frozen_at`→`universe_id` 取最新；显式：存在/已冻结/不前视）；`errors.py` 新增 `UniverseAmbiguousError`（`E_UNIVERSE_AMBIGUOUS`） — verify: `tests/unit/test_f011_export_universe_binding.py`
-- [ ] T004 (`FR-001`, `FR-004`, `AC-001`, `AC-005`, `AC-009`): `verdicts.export_admission` 一次读判定与台账、同时产出 `Admission(admitted, dropped)`；`export_admitted` 改为其薄包装并增 `bound_universe: UniverseDef | None = None`（`None` 保持 `F008` 原语义）；台账/判定记录保持只读 — verify: `tests/unit/test_f011_export_universe_binding.py`
-- [ ] T005 (`FR-005`, `AC-002`): `export_policy.merge_partitions` 增 `admitted`：`--mode full --universe-filter` 时继承非准入 pair 的基线分区与 skipped 条目，`guard_full_shrink` 以含继承的 `merged` 判断 — verify: `tests/integration/test_f011_export_universe_binding.py`
+- [ ] T003 (`FR-002`, `FR-003`, `IR-003`, `AC-003`, `AC-004`): 新增 `data_bridge/universe/binding.py::resolve_binding(at, *, universe_id=None, lake_root=None) -> Binding`（候选：已冻结 ∧ `frozen_at ≤ at` ∧ `snapshot_at ≤ at`；多口径抛 `UniverseAmbiguousError`；按 `snapshot_at`→`frozen_at`→`universe_id` 取最新；显式：存在/已冻结/不前视，前视抛 `UniverseLookaheadError`）与 `Binding.drop_cutoff`（连续落选段最早冻结日）；`errors.py` 新增 `E_UNIVERSE_AMBIGUOUS`、`E_UNIVERSE_LOOKAHEAD` — verify: `tests/unit/test_f011_export_universe_binding.py`
+- [ ] T004 (`FR-001`, `FR-004`, `AC-001`, `AC-005`, `AC-009`): `verdicts.export_admission` 一次读判定与台账、同时产出 `Admission(admitted, cutoffs, dropped)`（`cutoffs` = min(落选截止日, 退市截止日)）；`export_admitted` 改为其薄包装并增 `bound_universe: Binding | None = None`（`None` 保持 `F008` 原语义）；台账/判定记录保持只读 — verify: `tests/unit/test_f011_export_universe_binding.py`
+- [ ] T005 (`FR-005`, `AC-002`): 截止日判据接线：`produce_partitions` 单元格过滤改用 `Admission.allows(pair, date)`；`_admitted_only` 迁入 `export_policy.admitted_only` 并按同一判据过滤判缺候选与增量继承的基线 `skipped`；`merge_partitions` 不改；`partitions.py`/`exporter.py` 净增 ≤0 — verify: `tests/integration/test_f011_export_universe_binding.py`
 - [ ] T006 (`FR-003`, `FR-004`, `IR-001`, `IR-002`, `IR-003`, `AC-003`, `AC-004`, `AC-005`, `AC-008`): 导出侧接线：`--universe-id`（单给即 `parser.error`）；`cli.main` 在 `_refresh_symbol_map()` 之前一次性解析绑定、固定 `window_end` 并传给全部 dataset；stderr 输出 `FATAL: <code>: <消息>`；运行摘要两键 + 逐条剔除日志；`exporter.py`/`binding.py`/`verdicts.py` ≤350 行由行数断言锁定 — verify: `tests/unit/test_f011_cli_contract.py`
 
 ### Phase 2：真实库/湖旅程（US-002 / US-003）
 
-- [ ] T007 (`AC-001`, `AC-002`, `AC-006`): 集成旅程：三版定义（U1 含 X → U2 不含 → U3 重新含）+ 落选前后台账零变化 + 增量与全量两种 mode 下既有分区原样继承 + 默认关闭过滤的对照导出 — verify: `tests/integration/test_f011_export_universe_binding.py`
+- [ ] T007 (`AC-001`, `AC-002`, `AC-006`): 集成旅程：三版定义（U1 含 X → U2 不含 → U3 重新含）+ 落选前后台账零变化 + 增量/全量/空湖首导下截止日前分区齐全且截止日后无分区、`skipped` 不翻转、源库修订被吸收 + 默认关闭过滤的对照导出 — verify: `tests/integration/test_f011_export_universe_binding.py`
 
 ## 3. 验证与验收任务
 
@@ -56,9 +56,9 @@ updated: 2026-09-26
 - `T001 -> T002`：先关问题再核契约。
 - `T002 -> T003`：定序/口径字段与签名确认后才能实现解析。
 - `T003 -> T004`：交集需要一个已解析出的绑定版本。
-- `T004 -> T005`：全量继承依赖 `Admission.admitted`。
+- `T004 -> T005`：截止日判据依赖 `Admission.allows`。
 - `T004 -> T006`：CLI 接线依赖 `export_admission` 与新的 `bound_universe` 参数。
-- `T005 -> T007`、`T006 -> T007`：旅程要跑完整的导出接线（含全量继承与默认关闭对照）。
+- `T005 -> T007`、`T006 -> T007`：旅程要跑完整的导出接线（含截止日判据与默认关闭对照）。
 - `T004 -> T008`：单元套件覆盖交集实现本体。
 - `T006 -> T009`：原因码取自 CLI 接线。
 - `T007 -> T010`：集成套件与旅程同载体，先实现后全量跑。
@@ -71,5 +71,4 @@ updated: 2026-09-26
 
 - 生产调度单元是否打开 `--universe-filter`（`deployment/alphamill-export.service` 与 `deployment/alphamill-fullexport.service`，两者必须同开同关）——部署决策，由 owner 决定后单独执行（`spec.md` §8 `Q-002`）。
 - 超出 journald 保留期的绑定审计留痕（运行摘要长期持久化）——本 feature 只落 journald（`spec.md` `FR-004`），需要时另立 feature。
-- 全量模式下非准入 pair 继承分区的源库复核——另立 feature（`spec.md` §7）。
 - 判定表随宇宙收窄（落选 pair 的旧 ACTIVE 判定仍留在只追加的判定表）——本 feature 只用交集覆盖其影响，语义层面的收窄另立 feature。
