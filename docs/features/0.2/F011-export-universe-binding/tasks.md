@@ -48,8 +48,8 @@ updated: 2026-09-26
 - [x] T012 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`): 运行项目统一质量门 — verify: `python3 tools/verify.py`（green: `tools/verify.py` exit=0，pytest 1627 passed / 32 skipped / 1 xfailed，含连库集成，qiaozhi-lt 2026-09-26）
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
-- [ ] T013 [TEST] (`AC-001`, `AC-002`, `AC-005`, `AC-006`): 层 2 旅程验收（US-001/002/003 端到端：落选即移出 → 台账与数据零变化 → 显式绑定可复现 → 摘要可查 → 重新入选自动回来）— verify: `tests/integration/test_f011_export_journey.py`
-- [ ] T014 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`): 收口回写：spec 验收证据与 AC 勾选、`BACKLOG.md` 状态、`docs/features/releases/0.2.md` 交付记录、frontmatter 流转 — verify: `python3 tools/validate_spec_lifecycle.py`
+- [x] T013 [TEST] (`AC-001`, `AC-002`, `AC-005`, `AC-006`): 层 2 旅程验收（US-001/002/003 端到端：落选即移出 → 台账与数据零变化 → 显式绑定可复现 → 摘要可查 → 重新入选自动回来）— verify: `tests/integration/test_f011_export_journey.py`（green: `test_f011_export_journey.py` 6 passed——落选即移出（dropped=[ETH]）→ 台账零变化 → 显式回绑 U1 可复现 → 摘要 universe_id/dropped 可查 → U3 重新入选回到集合、首次全量补回落选期；真实环境只读核对（qiaozhi-lt 2026-09-26，生产湖 + 只读库会话）：默认绑定 `sha256:6d85a249…`（快照/冻结 09-22，入选 40），spot/perp 准入各 35 对且与 F008 口径逐一相同，无落选、无截止日）
+- [x] T014 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`): 收口回写：spec 验收证据与 AC 勾选、`BACKLOG.md` 状态、`docs/features/releases/0.2.md` 交付记录、frontmatter 流转 — verify: `python3 tools/validate_spec_lifecycle.py`（本次回写：spec AC-001~009 勾选 + §6 取证行；`BACKLOG.md` 与 frontmatter 随 developing → code-reviewing 同步；`docs/features/releases/0.2.md` 交付记录与 done 流转按 SOP 在代码检视闭环后的收口提交中落 main（F003 先例 `68da1ae`））
 
 ## 4. 依赖与并行关系
 
