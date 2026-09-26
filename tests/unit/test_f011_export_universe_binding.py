@@ -453,3 +453,30 @@ def test_admission_reads_verdicts_and_ledger_once_and_is_deterministic(ledger, d
 
     assert first == second
     assert isinstance(first, Admission)
+
+
+# ------------------------------------------------------------------ 运行摘要（AC-005 / IR-002）
+
+
+def test_summary_keys_are_always_present_and_dropped_is_sorted(ledger, dropped_eth) -> None:
+    import time
+
+    from alphamill.data_bridge import registry
+    from alphamill.data_bridge.export_summary import build_summary
+
+    spec = registry.require_dataset("ohlcv_1m")
+    common = dict(
+        excluded=0, started=time.monotonic(), no_op=True, reason="window-empty", revision_diff=[]
+    )
+    plain = build_summary(spec, "incremental", None, None, [], [], [], {}, **common)
+    assert plain["universe_id"] is None
+    assert plain["dropped_by_universe"] == []
+
+    ledger["verdicts"] = [_verdict(s) for s in ("ZEC/USDT", "ETH/USDT", "ADA/USDT", "BTC/USDT")]
+    ledger["rows"] = [_row(s) for s in ("ZEC/USDT", "ETH/USDT", "ADA/USDT", "BTC/USDT")]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    bound = build_summary(
+        spec, "incremental", None, None, [], [], [], {}, **common, **admission.summary_fields()
+    )
+    assert bound["universe_id"] == dropped_eth.universe_id
+    assert bound["dropped_by_universe"] == ["ADA/USDT", "ETH/USDT", "ZEC/USDT"]

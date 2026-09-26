@@ -171,6 +171,7 @@ def test_journey_drop_cutoff_reentry_and_mode_consistency(world) -> None:
     ), "SOL 退市截止 09-02：之前照常产出"
 
     dropped = _export(world, "incremental", "2026-09-05")  # 绑定 U2：ETH 落选，截止 09-03
+    assert dropped["status"] == "valid", "截止日前的 ETH/SOL 分区照常与源库对账"
     assert dropped["universe_id"] == ids["U2"]
     assert dropped["dropped_by_universe"] == ["ETH/USDT"]
     expected_u2 = (
@@ -193,7 +194,7 @@ def test_journey_drop_cutoff_reentry_and_mode_consistency(world) -> None:
     assert ("ETH-USDT", "2026-09-04") not in _cells(lake, reentry), "增量不回填落选期"
 
     backfill = _export(world, "full", "2026-09-06")
-    assert backfill["no_op"] is False
+    assert backfill["no_op"] is False and backfill["status"] == "valid", backfill
     assert ("ETH-USDT", "2026-09-04") in _cells(lake, backfill), "首次全量补回落选期"
     assert _export(world, "incremental", "2026-09-06")["no_op"] is True
     assert _export(world, "full", "2026-09-06")["no_op"] is True, "补回后两种 mode 重新一致"
