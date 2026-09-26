@@ -58,6 +58,18 @@ class UniverseAlreadyFrozenError(UniverseError):
     code = "E_UNIVERSE_ALREADY_FROZEN"
 
 
+class UniverseAmbiguousError(UniverseError):
+    """默认解析遇到多种 `(exchange, market_type)` 口径：拒绝串线，要求显式指定（F011）。"""
+
+    code = "E_UNIVERSE_AMBIGUOUS"
+
+
+class UniverseLookaheadError(UniverseError):
+    """显式指定的宇宙版本在窗口终点时尚未生效（`frozen_at`/`snapshot_at` 晚于 at，F011）。"""
+
+    code = "E_UNIVERSE_LOOKAHEAD"
+
+
 class UniverseArtifactError(UniverseError):
     """台账 artifact 非法：schema_version 不符、未知键、digest 不符或非 canonical。"""
 
