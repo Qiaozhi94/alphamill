@@ -2,7 +2,7 @@
 kind: feature
 id: F011
 version: "0.2"
-status: developing
+status: code-reviewing
 status_evidence: G1 计划批准（owner 2026-09-26，按 tasks.md T001-T014）
 branch: feat/F011-export-universe-binding
 gate_version: 1
@@ -35,7 +35,7 @@ updated: 2026-09-26
 本 spec 中以下概念严格区分，「导出清单」一词**只**作为第一项的别名使用：
 
 - **导出准入集合**（= 导出清单）：本次运行、某个 dataset 上**不限日期**产出分区的 `lake_pair` 集合 = `universe_at(at)` ∩ 质量门 ACTIVE ∩ `selected(bound)`，按窗口终点 `at` 现算；
-- **截止日**：已离开导出准入集合、但判定为 ACTIVE 的 pair 的历史产出上界（UTC 日期，**含当日**）。落选 pair = 其**本次连续落选段**内各版本 `frozen_at` 的最早日期；退市 pair = 台账 `valid_to` 所在日（`valid_to` 恰为某日 00:00 时取前一日）；两者兼有取较早者。分区日期 ≤ 截止日照常产出与对账，> 截止日不产出；
+- **截止日**：已离开导出准入集合、但判定为 ACTIVE 的 pair 的历史产出上界（UTC 日期，**含当日**）。落选 pair = 其**本次连续落选段**内各版本 `frozen_at` 的最早日期；退市 pair = 台账**派生可交易区间**（`materialize_intervals`：`delisted` 行终止前一行，或行上显式 `valid_to`）中 `at` 之前最后一个区间终点所在日（终点恰为某日 00:00 时取前一日）；两者兼有取较早者。分区日期 ≤ 截止日照常产出与对账，> 截止日不产出；
 - **本轮产出集合**：本次运行实际新写/重写分区的 pair（导出准入集合 ∪ 有截止日且窗口内有 ≤ 截止日单元格的 pair）；
 - **manifest `pairs`**：新版本内全部分区涉及的 pair = 本轮产出 ∪ 继承分区（含落选/退市 pair 截止日前的**历史**分区）。落选 pair 留在这里是正确的 point-in-time 语义——它在截止日前确实是成员。
 
@@ -123,7 +123,7 @@ updated: 2026-09-26
 
 - **没有任何冻结定义**：开启准入过滤时**拒绝启动**（不得静默按「全集」放行）。
 - **同一 pair 在多个版本**：以被绑定版本的入选集合为准；旧版本的判定不参与。
-- **落选 ≠ 退市**：落选不写 `valid_to`、不删湖分区，台账区间仍由 `F008` 维护；两者在导出侧用同一条截止日规则，只是截止日来源不同（冻结日 / `valid_to`）。
+- **落选 ≠ 退市**：落选不写 `valid_to`、不删湖分区，台账区间仍由 `F008` 维护；两者在导出侧用同一条截止日规则，只是截止日来源不同（冻结日 / 台账派生区间终点）。
 - **落选 pair 的历史分区**：截止日及之前的单元格在增量与全量两种 mode 下都从源库产出并对账，之后的不产出；空湖重建、基线缺该 pair 时同样能导回历史——导出准入集合变窄不等于数据消失。
 - **重新入选**：pair 在新版本中重新入选后不再有截止日。增量只导新窗口，不回填；**下一次全量**会一次性从源库补回落选期间（截止日到重新入选之间）已采集的数据，并发布一个内容变化的新版本，此后增量与全量稳定一致。这是有意的语义：湖回答「有哪些数据」，某一天某 pair 是否属于宇宙由版本历史回答（下游横截面按 point-in-time 宇宙取成员，见架构 §4.1.1「截面边界」），不由湖里有没有分区回答。
 - **截止日之后的缺口**：属于策略排除，不记 `skipped`；截止日之前的空单元格是真实缺口，照常记 `skipped`（两种 mode 同一规则）。
@@ -278,22 +278,31 @@ updated: 2026-09-26
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `US-001`): `U1` 含 X → `U2` 不含 X 时，导出准入集合不含 X 的 `lake_pair`；`U3` 重新含 X 时又回到集合内 — tests: `tests/integration/test_f011_export_universe_binding.py`
-- [ ] **AC-002** (`FR-005`, `DR-001`, `US-001`): 上述全过程 `universe_membership` 行数/区间零变化；增量、全量、空湖首导三种导出下，新版本均含 X（落选）与 Y（退市）截止日及之前的全部分区且对账通过、均无截止日之后的分区，`skipped` 在增量与全量间一致（连跑「增量→全量→增量」不因 `skipped` 翻转产生新版本）；截止日前的源库修订被全量导出吸收；连续落选段跨 `U2`→`U3` 时截止日仍为 `U2` 的冻结日；X 在后续版本重新入选后，首次全量新增其落选期间的分区，之后「增量→全量」不再产生新版本 — tests: `tests/integration/test_f011_export_universe_binding.py`
-- [ ] **AC-003** (`FR-002`, `IR-001`, `US-002`): 默认在 `frozen_at ≤ at` 的冻结定义中取 `snapshot_at` 最新者（晚冻结的旧快照不胜出；`snapshot_at ≤ t < frozen_at` 的版本不被历史 `--window-end t` 绑定）；显式 `--universe-id` 时以指定版本为准（两个版本给出不同集合）；单给 `--universe-id` 不开 `--universe-filter` 被参数解析拒绝 — tests: `tests/unit/test_f011_export_universe_binding.py`、`tests/unit/test_f011_cli_contract.py`
-- [ ] **AC-004** (`FR-003`, `IR-003`): `IR-003` 表六种情形逐一触发：退出码 2、stderr 含对应原因码；且均未发布 `symbol_map` 与任何新版本 — tests: `tests/unit/test_f011_cli_contract.py`
-- [ ] **AC-005** (`FR-004`, `IR-002`, `SC-003`): 运行摘要含被绑定 `universe_id` 与排序稳定的 `dropped_by_universe`；关闭过滤时为 `null`/`[]` — tests: `tests/unit/test_f011_export_universe_binding.py`
-- [ ] **AC-006** (`NFR-002`): 不传 `--universe-filter` 时，同一 fixture 下 manifest 的 `pairs`/`partitions`/`skipped`/`rows` 与改动前一致（可观察等价）— tests: `tests/integration/test_f011_export_universe_binding.py`
-- [ ] **AC-007** (`NFR-003`, `NFR-001`): 同一绑定 + 同一窗口终点重复解析得到同一集合；集合运算不产生按 pair 的额外查询 — tests: `tests/unit/test_f011_export_universe_binding.py`
-- [ ] **AC-008** (`FR-003`, `FR-005`, `Q-002`): 多 dataset 运行只解析一次绑定、全部 dataset 摘要的 `universe_id` 相同；`deployment/alphamill-export.service` 与 `deployment/alphamill-fullexport.service` 的 `--universe-filter` 开关一致 — tests: `tests/unit/test_f011_cli_contract.py`
-- [ ] **AC-009** (`FR-001`): `export_admitted(conn, at)`（不给 `bound_universe`）保持 `F008` 语义——`F008` 既有测试零修改全绿 — tests: `tests/integration/test_f008_quality_gate.py`、`tests/integration/test_f008_export_integration.py`
+- [x] **AC-001** (`FR-001`, `US-001`): `U1` 含 X → `U2` 不含 X 时，导出准入集合不含 X 的 `lake_pair`；`U3` 重新含 X 时又回到集合内 — tests: `tests/integration/test_f011_export_journey.py`
+- [x] **AC-002** (`FR-005`, `DR-001`, `US-001`): 上述全过程 `universe_membership` 行数/区间零变化；增量、全量、空湖首导三种导出下，新版本均含 X（落选）与 Y（退市）截止日及之前的全部分区且对账通过、均无截止日之后的分区，`skipped` 在增量与全量间一致（连跑「增量→全量→增量」不因 `skipped` 翻转产生新版本）；截止日前的源库修订被全量导出吸收；连续落选段跨 `U2`→`U3` 时截止日仍为 `U2` 的冻结日；X 在后续版本重新入选后，首次全量新增其落选期间的分区，之后「增量→全量」不再产生新版本 — tests: `tests/integration/test_f011_export_journey.py`
+- [x] **AC-003** (`FR-002`, `IR-001`, `US-002`): 默认在 `frozen_at ≤ at` 的冻结定义中取 `snapshot_at` 最新者（晚冻结的旧快照不胜出；`snapshot_at ≤ t < frozen_at` 的版本不被历史 `--window-end t` 绑定）；显式 `--universe-id` 时以指定版本为准（两个版本给出不同集合）；单给 `--universe-id` 不开 `--universe-filter` 被参数解析拒绝 — tests: `tests/unit/test_f011_export_universe_binding.py`、`tests/unit/test_f011_cli_contract.py`
+- [x] **AC-004** (`FR-003`, `IR-003`): `IR-003` 表六种情形逐一触发：退出码 2、stderr 含对应原因码；且均未发布 `symbol_map` 与任何新版本 — tests: `tests/unit/test_f011_cli_contract.py`
+- [x] **AC-005** (`FR-004`, `IR-002`, `SC-003`): 运行摘要含被绑定 `universe_id` 与排序稳定的 `dropped_by_universe`；关闭过滤时为 `null`/`[]` — tests: `tests/unit/test_f011_export_universe_binding.py`
+- [x] **AC-006** (`NFR-002`): 不传 `--universe-filter` 时，同一 fixture 下 manifest 的 `pairs`/`partitions`/`skipped`/`rows` 与改动前一致（可观察等价）— tests: `tests/integration/test_f011_export_journey.py`
+- [x] **AC-007** (`NFR-003`, `NFR-001`): 同一绑定 + 同一窗口终点重复解析得到同一集合；集合运算不产生按 pair 的额外查询 — tests: `tests/unit/test_f011_export_universe_binding.py`
+- [x] **AC-008** (`FR-003`, `FR-005`, `Q-002`): 多 dataset 运行只解析一次绑定、全部 dataset 摘要的 `universe_id` 相同；`deployment/alphamill-export.service` 与 `deployment/alphamill-fullexport.service` 的 `--universe-filter` 开关一致 — tests: `tests/unit/test_f011_cli_contract.py`
+- [x] **AC-009** (`FR-001`): `export_admitted(conn, at)`（不给 `bound_universe`）保持 `F008` 语义——`F008` 既有测试零修改全绿 — tests: `tests/integration/test_f008_quality_gate.py`、`tests/integration/test_f008_export_integration.py`
+
+取证（2026-09-26，执行机 `qiaozhi-lt`，需求分支 `feat/F011-export-universe-binding`）：上列三个测试文件
+`tests/unit/test_f011_export_universe_binding.py`（28）、`tests/unit/test_f011_cli_contract.py`（17）、
+`tests/integration/test_f011_export_journey.py`（8，真实 scratch 库）全部通过（含代码检视循环 24 的 7 条回归）；`F008` 集成测试零修改
+21 passed / 1 xfailed（AC-009）；统一质量门 `tools/verify.py` exit=0（1633 passed / 32 skipped / 1 xfailed）。AC-006 的默认路径另以改动前代码
+（main@80c1a53）在同一 fixture 上实跑的 pairs/rows/skipped/value_digest 作基准对照。
+关键判据的变异验证 6/6 判红（截止日取最早冻结日、截止日含当日、生效过滤含 `frozen_at`、判缺过截止日判据、
+单元格产出用 `allows` 而非 `covers`、CLI 在刷新 `symbol_map` 之前解析）。真实环境只读核对：生产湖默认绑定
+`sha256:6d85a249…`，spot/perp 准入各 35 对，与 `F008` 口径逐一相同（当前无落选，符合 `Q-002` 判断）。
 
 ## 7. 测试、依赖与决策
 
 ### 测试策略
 
 - 单元测试：绑定解析（显式/默认/失败/前视/多口径）、交集语义、摘要字段、确定性（`tests/unit/test_f011_export_universe_binding.py`）、CLI 契约、原因码与部署单元一致性（`tests/unit/test_f011_cli_contract.py`）。
-- 集成测试：真实 scratch 库 + 临时湖上跑「三版定义」旅程（`tests/integration/test_f011_export_universe_binding.py`），覆盖 AC-001/002/006；增量、全量、空湖首导都跑，另含退市 pair 与源库修订。
+- 集成测试：真实 scratch 库 + 临时湖上跑「三版定义」旅程（`tests/integration/test_f011_export_journey.py`），覆盖 AC-001/002/006；增量、全量、空湖首导都跑，另含退市 pair 与源库修订。
 - 回归：`F008` 既有测试零修改全绿（AC-009）。
 - 真实环境 / 手动验证：执行机上对**生产湖**跑一次绑定解析（只读、不发布），核对当前 35 对清单与摘要字段。
 

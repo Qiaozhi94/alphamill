@@ -1159,3 +1159,40 @@ report_type: doc-review · feature: F011 · status: closed · rounds: 0（作者
 - **`origin` 分布**：original-coding 10、fix-regression 4、process-gap 2、spec-drift 1。
 - **存活轮数**：D01 最长（第 1 轮发现，第 3 轮修复，存活 2 轮），原因是决策传达延误而非修复困难；其余均为 1 轮。
 - **裁决分布与建议命中率**：accepted 17 / partial 0 / rejected 0。最终修复方案与建议实质一致 17/17；其中 D01 第 1 次偏离（见裁决记录），D07、D12、D14 的修复比建议更进一步（六情形表、双条件过滤、新增专用码），D01 最终方案把退市也并入截止日判据，顺带修掉 F008 全量模式丢弃退市 pair 历史的问题。
+
+## 循环 24：F011 导出清单绑定当前宇宙版本 实现代码检视
+
+report_type: code-review · feature: F011 · status: closed · rounds: 1（full-scan）→ 2（diff-only） · 基线 `fe4d623` → 修复终态 `7eade05`
+
+- report_type: code-review
+- 周期：2026-09-26（2 轮；第 1 轮独立检视代理全量扫描，第 2 轮另一独立代理 diff-only 复核）
+- 状态：闭环（stop_condition_met: true；无 Critical/High，7 条全部 fixed，第 2 轮 fix-regression 0 条）
+- 基线：`feat/F011-export-universe-binding` @ `fe4d623`（developing → code-reviewing 流转点）→ `7eade05`
+- 被检对象：`diff main...HEAD -- src tests`——新增 `universe/binding.py`，改 `universe/verdicts.py`（`Admission`/`export_admission`）、`exporter.py`、`partitions.py`、`export_policy.py`、`export_summary.py`、`cli.py`、`universe/errors.py`，及 3 个 F011 测试文件
+- 门禁：`tools/verify.py`（worktree，连库）exit=0，1633 passed / 32 skipped / 1 xfailed；RED 均在 RED 提交的父源码上实跑复核
+
+### 循环 24 完整 issue 表
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首现轮 | 修复轮 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F011-R1 | 开过滤时非法 `--window-end` 漏出 ValueError，退出码变成可重试的 1 | medium | correctness | root-cause | original-coding | fixed | 绑定块捕获 ValueError → FATAL + 2 | `_bind_universe` 外补 `except ValueError → EXIT_FATAL`（只包绑定解析，不吞可重试异常） | tests/unit/test_f011_cli_contract.py::test_invalid_window_end_with_filter_is_fatal_not_transient | 1 | 1 | exit-code-contract-gap |
+| F011-R2 | 「截止日前空单元格照常记 skipped」无测试锁定（fixture 无缺口，全程 skipped==[]） | medium | test-coverage | root-cause | original-coding | fixed | 造截止日前缺口；admitted_only 纯单元测试 | 集成用例删 ETH 09-02，断言增量/全量 skipped 均含 09-02、均不含 09-04 且全量 no-op；单元测 admitted_only；变异（判据退回 pair∈admitted）两例判红 | tests/integration/test_f011_export_journey.py::test_gap_before_cutoff_stays_skipped_in_both_modes；tests/unit/test_f011_export_universe_binding.py::test_admitted_only_keeps_entries_up_to_the_cutoff | 1 | 1 | assertion-on-empty-set |
+| F011-R3 | 默认解析遇孤儿冻结记录报 NOT_FOUND 而非 ARTIFACT | low | correctness | root-cause | original-coding | fixed | `_frozen_versions` 转 ArtifactError | 默认枚举路径把定义缺失转 `UniverseArtifactError`；显式 id 路径仍先 `load_definition` 报 NOT_FOUND | tests/unit/test_f011_export_universe_binding.py::test_orphan_freeze_record_on_default_path_is_artifact_error | 1 | 1 | — |
+| F011-R4 | 非 pair 分区 dataset（signals_log）摘要也列 dropped_by_universe | low | correctness | root-cause | original-coding | fixed | 非 pair 分区 dataset 置 [] | `Admission.summary_fields(pair_scoped=registry.pair_partitioned(spec))` | tests/integration/test_f011_export_journey.py::test_non_pair_dataset_records_binding_but_drops_nothing | 1 | 1 | — |
+| F011-R5 | AC-006 只断言全网格，未与改动前对照 | low | test-coverage | root-cause | original-coding | fixed | 与 main golden 对照 | 在 main@80c1a53 的临时 detached worktree 上同 fixture 实跑取基准，pairs/rows/skipped/value_digest 写成常量对照（第 2 轮独立复跑一致） | tests/integration/test_f011_export_journey.py::test_default_off_path_exports_everything_with_null_binding_keys | 1 | 1 | — |
+| F011-R6 | partitions 形参仍叫 admitted:Any；lake_pairs_map(admitted=) 已无调用方但 docstring 要求成对使用 | low | quality | root-cause | original-coding | fixed | 改名 admission 并标注类型；删 lake_pairs_map 的 admitted | `produce_partitions(admission: Admission \| None)`（TYPE_CHECKING 导入）；删 `lake_pairs_map(admitted=)` | tests/unit/test_f011_export_universe_binding.py::test_partition_filters_take_an_admission_not_a_bare_set | 1 | 1 | — |
+| F011-R7 | CLI 用例在 main 返回后才取 today，跨 UTC 午夜偶发失败 | low | test-coverage | root-cause | original-coding | fixed | 前后各取一次 today | 断言窗口终点 ∈ {before, after} 且全 dataset 共用一个 | tests/unit/test_f011_cli_contract.py::test_binding_is_resolved_once_and_shared_by_all_datasets | 1 | 1 | flaky-clock |
+
+### 裁决记录
+
+无 rejected / partial。
+
+### 模式教训
+
+- **「对空集的断言」是本循环的主要测试缺口**（R2）：集成 fixture 每天都有数据，`skipped == []` 在正确实现和退回 F008 判据的错误实现下都成立。**教训**：凡断言「某集合为空 / 不含 X」的用例，要配一个「非空且含 Y」的对照，否则变异杀不死。截止日判据的 6 处变异在开发期全部判红，唯独这一处漏网，正因为它只被空集断言覆盖。
+- **「改动前一致」要有改动前的证据**（R5）：可观察等价不能只断言新代码的输出形状，要在改动前代码上实跑同一 fixture 取基准。用临时 detached worktree 跑 main 最便宜；注意项目 pytest 配置 `pythonpath=src` 会覆盖 `PYTHONPATH`，在分支 worktree 里设环境变量跑出的「基准」其实是分支代码（本循环踩到一次，已改用独立 worktree）。
+- **退出码契约的旁路**（R1）：新增的启动期分支只捕获了自家的 `UniverseError`，而参数解析的 `ValueError` 在旧路径上由导出循环兜住——新分支提前了执行点，就绕开了旧兜底。**教训**：把逻辑挪到更早的执行点时，逐一核对原位置承担的异常分类。
+- **`origin` 分布**：original-coding 7；fix-regression 0（第 2 轮独立复核实跑 RED 与变异确认）。
+- **存活轮数**：全部首现即修（第 1 轮发现、第 1 轮修复），第 2 轮只做核对。
+- **裁决分布与建议命中率**：accepted 7 / partial 0 / rejected 0；修复方案与建议实质一致 7/7（R4 选择「按 pair_scoped 置空」而非改 spec，R5 选择 main 实跑基准而非手写期望值）。
+- **遗留**：F008 的 design.md / tasks.md 仍提及 `lake_pairs_map(admitted=…)`（F008 已 done 的历史文档），不再改写；以本循环 R6 为准。

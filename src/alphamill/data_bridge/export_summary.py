@@ -23,6 +23,8 @@ def build_summary(
     no_op: bool,
     reason: str | None,
     revision_diff: list[dict[str, Any]],
+    universe_id: str | None = None,
+    dropped_by_universe: tuple[str, ...] | list[str] = (),
 ) -> dict[str, Any]:
     return {
         "dataset": spec.name,
@@ -39,4 +41,7 @@ def build_summary(
         "revision_diff": len(revision_diff),
         "excluded_null_event_time": excluded,
         "elapsed_seconds": round(time.monotonic() - started, 2),
+        # F011 IR-002：键始终存在；未开过滤或未给绑定时为 null / []
+        "universe_id": universe_id,
+        "dropped_by_universe": list(dropped_by_universe),
     }

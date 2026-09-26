@@ -10,7 +10,7 @@ import datetime as dt
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -19,6 +19,9 @@ from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge import paths, reconcile, registry, symbol_map
 from alphamill.data_bridge.digest import canonical_json_text, canonical_row_bytes, row_digest
 from alphamill.data_bridge.errors import DataBridgeError, SymbolCollisionError
+
+if TYPE_CHECKING:
+    from alphamill.data_bridge.universe.verdicts import Admission
 
 _PARQUET_RE = re.compile(r"^date=(\d{4}-\d{2}-\d{2})\.r(\d+)\.parquet$")
 _DIM_NAMES = ("exchange", "pair", "timeframe")
@@ -67,15 +70,8 @@ def dim_logical_key(dim: Dim, day: str) -> dict[str, str]:
     return key
 
 
-def lake_pairs_map(
-    conn,
-    market_type: str | None = None,
-    admitted: set[str] | None = None,
-) -> dict[tuple[str, str, str], str]:
-    """(exchange, market_type, db_symbol) → lake pair；按三元键保留市场语义。
-
-    `admitted`（F008 FR-006）：只保留集合内映射；`None` 保持现行为，且必须与
-    `produce_partitions(admitted=...)` 的单元格剔除成对使用。"""
+def lake_pairs_map(conn, market_type: str | None = None) -> dict[tuple[str, str, str], str]:
+    """(exchange, market_type, db_symbol) → lake pair；按三元键保留市场语义（准入收窄在导出侧）。"""
     seen: dict[str, tuple[str, str, str]] = {}
     out: dict[tuple[str, str, str], str] = {}
     for row in symbol_map._rows_from_conn(conn):
@@ -87,8 +83,6 @@ def lake_pairs_map(
             raise SymbolCollisionError(
                 f"lake_pair 碰撞: {lake_pair!r}（{seen[lake_pair]} 与 {key}）"
             )
-        if admitted is not None and lake_pair not in admitted:
-            continue
         seen[lake_pair] = key
         out[key] = lake_pair
     return out
@@ -229,19 +223,19 @@ def produce_partitions(
     end: dt.date,
     baseline_partitions: list[dict[str, Any]],
     lake_pairs: dict[tuple[str, str, str], str],
-    admitted: set[str] | None = None,
+    admission: Admission | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[bool]]:
     """导出窗口内全部单元格 → (produced 条目, 产出逻辑键, 是否新写文件)。
-    `admitted`（F008 FR-006）：未准入单元格在映射 `lake_pair` **之前**剔除；`None` 保持现行为。
+    `admission`（F008 FR-006 / F011）：`allows(pair, date)` 为假的单元格在映射前剔除。
     过滤只作用于 **pair 分区**的 dataset：非 pair 分区者（`signals_log`）单元格是 `(date,)`，
     取 `cell[1]` 会越界（2026-09-24 真实导出实测 `IndexError`，整轮中断）→ 保持原行为。
     """
     cells = discover_cells(conn, spec, start, end)
-    if admitted is not None and registry.pair_partitioned(spec):
+    if admission is not None and registry.pair_partitioned(spec):
         cells = {
             cell: count
             for cell, count in cells.items()
-            if lake_pairs.get((cell[0], spec.market_type, cell[1])) in admitted
+            if admission.allows(lake_pairs.get((cell[0], spec.market_type, cell[1])), cell[-1])
         }
     baseline_by_key = {mf.canonical_key(p["logical_partition_key"]): p for p in baseline_partitions}
     produced: list[dict[str, Any]] = []

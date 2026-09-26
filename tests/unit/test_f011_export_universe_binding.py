@@ -1,0 +1,534 @@
+"""F011：导出准入绑定当前宇宙版本——解析规则、准入与截止日、摘要、确定性（单元层）。
+
+绑定解析（`binding.resolve_binding`）是纯文件计算：在 scratch 湖里写定义与冻结记录
+（冻结时刻可注入），不连库。准入计算（`verdicts.export_admission`）把判定与台账两次
+读库替换成内存桩，只验集合语义与查询次数。
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from alphamill.data_bridge.universe import binding as binding_mod
+from alphamill.data_bridge.universe.definition import freeze_path
+from alphamill.data_bridge.universe.errors import (
+    UniverseAmbiguousError,
+    UniverseArtifactError,
+    UniverseLookaheadError,
+    UniverseNotFoundError,
+    UniverseNotFrozenError,
+)
+from tests.f011_fixtures import define_universe, utc
+
+_utc = utc
+_define = define_universe
+
+
+@pytest.fixture()
+def lake(tmp_path: Path) -> Path:
+    return tmp_path / "lake"
+
+
+# ------------------------------------------------------------------ 解析：默认 / 显式
+
+
+def test_default_binds_latest_snapshot_among_versions_already_frozen(lake) -> None:
+    """AC-003：候选 = `frozen_at ≤ at`；候选内按 `snapshot_at` 取最新——晚冻结的旧快照不胜出。"""
+    _define(lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31")
+    newer = _define(
+        lake, selected=("BTC", "ETH"), snapshot_at="2026-09-02T00:00:00Z", frozen_at="2026-09-03"
+    )
+    _define(  # 旧快照、晚冻结：不得覆盖更新的快照
+        lake, selected=("ETH",), snapshot_at="2026-09-01T00:00:00Z", frozen_at="2026-09-04"
+    )
+
+    bound = binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+
+    assert bound.universe_id == newer.universe_id
+    assert bound.resolution == "default"
+
+
+def test_historical_window_does_not_bind_a_version_frozen_later(lake) -> None:
+    """AC-003 / D12：`snapshot_at ≤ t < frozen_at` 的版本在 t 时尚未生效，不得被绑定。"""
+    old = _define(
+        lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    _define(
+        lake,
+        selected=("BTC", "ETH"),
+        snapshot_at="2026-09-02T00:00:00Z",
+        frozen_at="2026-09-03T10:00:00",
+    )
+
+    assert binding_mod.resolve_binding(_utc("2026-09-03"), lake_root=lake).universe_id == (
+        old.universe_id
+    )
+
+
+def test_explicit_id_overrides_default_and_gives_a_different_version(lake) -> None:
+    older = _define(
+        lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    newer = _define(
+        lake, selected=("BTC", "ETH"), snapshot_at="2026-09-02T00:00:00Z", frozen_at="2026-09-03"
+    )
+    at = _utc("2026-09-05")
+
+    explicit = binding_mod.resolve_binding(at, universe_id=older.universe_id, lake_root=lake)
+
+    assert explicit.universe_id == older.universe_id
+    assert explicit.resolution == "explicit"
+    assert binding_mod.resolve_binding(at, lake_root=lake).universe_id == newer.universe_id
+    # 显式回绑较早版本时，版本链止于被绑定版本，不含之后的版本
+    assert [d.universe_id for d, _ in explicit.chain] == [older.universe_id]
+
+
+# ------------------------------------------------------------------ 解析：拒绝分支（IR-003）
+
+
+def test_no_definition_at_all_is_not_frozen(lake) -> None:
+    with pytest.raises(UniverseNotFrozenError) as info:
+        binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+    assert info.value.code == "E_UNIVERSE_NOT_FROZEN"
+
+
+def test_only_drafts_or_future_versions_is_not_frozen(lake) -> None:
+    _define(lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at=None)
+    _define(lake, selected=("ETH",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-09-10")
+    with pytest.raises(UniverseNotFrozenError):
+        binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+
+
+def test_explicit_unknown_id_is_not_found(lake) -> None:
+    _define(lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31")
+    with pytest.raises(UniverseNotFoundError) as info:
+        binding_mod.resolve_binding(
+            _utc("2026-09-05"), universe_id="sha256:" + "0" * 64, lake_root=lake
+        )
+    assert info.value.code == "E_UNIVERSE_NOT_FOUND"
+
+
+def test_explicit_draft_is_not_frozen(lake) -> None:
+    draft = _define(lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at=None)
+    with pytest.raises(UniverseNotFrozenError):
+        binding_mod.resolve_binding(
+            _utc("2026-09-05"), universe_id=draft.universe_id, lake_root=lake
+        )
+
+
+def test_explicit_version_frozen_after_window_is_lookahead(lake) -> None:
+    later = _define(
+        lake, selected=("BTC",), snapshot_at="2026-09-02T00:00:00Z", frozen_at="2026-09-06"
+    )
+    with pytest.raises(UniverseLookaheadError) as info:
+        binding_mod.resolve_binding(
+            _utc("2026-09-05"), universe_id=later.universe_id, lake_root=lake
+        )
+    assert info.value.code == "E_UNIVERSE_LOOKAHEAD"
+
+
+def test_explicit_snapshot_after_window_is_lookahead_even_if_frozen_at_is_injected_early(
+    lake,
+) -> None:
+    """`freeze_definition(frozen_at=...)` 可注入早于求值的冻结时刻，两个条件都要检查。"""
+    odd = _define(
+        lake, selected=("BTC",), snapshot_at="2026-09-08T00:00:00Z", frozen_at="2026-09-01"
+    )
+    with pytest.raises(UniverseLookaheadError):
+        binding_mod.resolve_binding(_utc("2026-09-05"), universe_id=odd.universe_id, lake_root=lake)
+
+
+def test_default_rejects_multiple_criteria_scopes(lake) -> None:
+    perp = _define(
+        lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    _define(
+        lake,
+        selected=("ETH",),
+        snapshot_at="2026-08-30T00:00:00Z",
+        frozen_at="2026-08-31",
+        market_type="spot",
+    )
+    at = _utc("2026-09-05")
+    with pytest.raises(UniverseAmbiguousError) as info:
+        binding_mod.resolve_binding(at, lake_root=lake)
+    assert info.value.code == "E_UNIVERSE_AMBIGUOUS"
+    # 显式指定可以消歧，版本链只含同口径版本
+    explicit = binding_mod.resolve_binding(at, universe_id=perp.universe_id, lake_root=lake)
+    assert [d.universe_id for d, _ in explicit.chain] == [perp.universe_id]
+
+
+def test_corrupt_freeze_record_is_artifact_error(lake) -> None:
+    good = _define(
+        lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    freeze_path(good.universe_id, lake).write_text("{not json", encoding="utf-8")
+    with pytest.raises(UniverseArtifactError):
+        binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+
+
+# ------------------------------------------------------------------ 落选截止日（spec §1 术语）
+
+
+def test_drop_cutoff_is_none_for_pairs_selected_by_the_bound_version(lake) -> None:
+    _define(
+        lake, selected=("BTC", "ETH"), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    bound = binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+    assert bound.drop_cutoff("ETH/USDT") is None
+
+
+def test_drop_cutoff_is_the_freeze_day_of_the_first_dropping_version(lake) -> None:
+    _define(
+        lake, selected=("BTC", "ETH"), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    _define(
+        lake,
+        selected=("BTC",),
+        dropped=("ETH",),
+        snapshot_at="2026-09-02T12:00:00Z",
+        frozen_at="2026-09-03T10:00:00",
+    )
+    bound = binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+    assert bound.drop_cutoff("ETH/USDT") == date(2026, 9, 3)
+    assert bound.drop_cutoff("BTC/USDT") is None
+
+
+def test_drop_cutoff_does_not_move_when_a_later_version_still_drops_the_pair(lake) -> None:
+    """D01 解释点：连续落选段 U2→U2b 取段内最早冻结日，绑定 U2b 也不后移。"""
+    _define(
+        lake, selected=("BTC", "ETH"), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    _define(
+        lake,
+        selected=("BTC",),
+        dropped=("ETH",),
+        snapshot_at="2026-09-02T12:00:00Z",
+        frozen_at="2026-09-03",
+    )
+    later = _define(
+        lake,
+        selected=("BTC", "SOL"),
+        dropped=("ETH",),
+        snapshot_at="2026-09-03T12:00:00Z",
+        frozen_at="2026-09-04",
+    )
+    bound = binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+    assert bound.universe_id == later.universe_id
+    assert bound.drop_cutoff("ETH/USDT") == date(2026, 9, 3)
+
+
+def test_drop_cutoff_resets_after_reentry_and_a_new_drop(lake) -> None:
+    _define(
+        lake, selected=("BTC", "ETH"), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    _define(
+        lake,
+        selected=("BTC",),
+        dropped=("ETH",),
+        snapshot_at="2026-09-01T00:00:00Z",
+        frozen_at="2026-09-01",
+    )
+    reentry = _define(
+        lake, selected=("BTC", "ETH"), snapshot_at="2026-09-02T00:00:00Z", frozen_at="2026-09-02"
+    )
+    at = _utc("2026-09-05")
+    assert (
+        binding_mod.resolve_binding(
+            at, universe_id=reentry.universe_id, lake_root=lake
+        ).drop_cutoff("ETH/USDT")
+        is None
+    )
+    _define(
+        lake,
+        selected=("BTC", "SOL"),
+        dropped=("ETH",),
+        snapshot_at="2026-09-03T00:00:00Z",
+        frozen_at="2026-09-04",
+    )
+    assert binding_mod.resolve_binding(at, lake_root=lake).drop_cutoff("ETH/USDT") == date(
+        2026, 9, 4
+    )
+
+
+def test_drop_cutoff_for_never_selected_pair_is_the_earliest_freeze_in_chain(lake) -> None:
+    _define(lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31")
+    _define(
+        lake, selected=("BTC", "SOL"), snapshot_at="2026-09-02T00:00:00Z", frozen_at="2026-09-03"
+    )
+    bound = binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+    assert bound.drop_cutoff("DOGE/USDT") == date(2026, 8, 31)
+
+
+def test_resolution_is_deterministic(lake) -> None:
+    """AC-007：同一湖 + 同一 at ⇒ 同一绑定与同一版本链（与目录枚举顺序无关）。"""
+    for day, sel in (
+        ("2026-08-30", ("BTC",)),
+        ("2026-09-01", ("BTC", "ETH")),
+        ("2026-09-02", ("ETH",)),
+    ):
+        _define(lake, selected=sel, snapshot_at=f"{day}T00:00:00Z", frozen_at=day)
+    at = _utc("2026-09-05")
+    first = binding_mod.resolve_binding(at, lake_root=lake)
+    second = binding_mod.resolve_binding(at, lake_root=lake)
+    assert first.universe_id == second.universe_id
+    assert [d.universe_id for d, _ in first.chain] == [d.universe_id for d, _ in second.chain]
+    assert [f.frozen_at for _, f in first.chain] == sorted(f.frozen_at for _, f in first.chain)
+
+
+# ------------------------------------------------------------------ 准入集合与截止日（T004）
+
+from alphamill.data_bridge.universe import membership as membership_mod  # noqa: E402
+from alphamill.data_bridge.universe import verdicts as verdicts_mod  # noqa: E402
+from alphamill.data_bridge.universe.membership import MembershipRow  # noqa: E402
+from alphamill.data_bridge.universe.verdicts import (  # noqa: E402
+    VERDICT_ACTIVE,
+    VERDICT_QUARANTINED,
+    Admission,
+    PairGateResult,
+    export_admission,
+    export_admitted,
+)
+
+AT = _utc("2026-09-05")
+LISTED = _utc("2026-09-01")
+
+
+def _row(symbol: str, *, market_type: str = "spot", valid_from=LISTED, reason="listed"):
+    base = symbol.split("/")[0]
+    lake_pair = f"{base}-USDT" + ("-PERP" if market_type == "perp" else "")
+    return MembershipRow(
+        exchange="binance",
+        market_type=market_type,
+        db_symbol=symbol,
+        lake_pair=lake_pair,
+        valid_from=valid_from,
+        reason=reason,
+        universe_id="u-test",
+    )
+
+
+def _verdict(symbol: str, verdict: str = VERDICT_ACTIVE) -> PairGateResult:
+    base = symbol.split("/")[0]
+    return PairGateResult(
+        db_symbol=symbol,
+        lake_pair=f"{base}-USDT-PERP",
+        exchange="binance",
+        market_type="perp",
+        verdict=verdict,
+        reason_code=None,
+        metrics={},
+    )
+
+
+@pytest.fixture()
+def ledger(monkeypatch):
+    """判定与台账两次读库的内存桩，并记录调用次数（AC-007：各一次）。"""
+    state: dict = {"verdicts": [], "rows": [], "calls": {"verdicts": 0, "membership": 0}}
+
+    def fake_verdicts(conn, *, universe_id=None):
+        state["calls"]["verdicts"] += 1
+        return {f"{v.lake_pair}": v for v in state["verdicts"]}
+
+    def fake_membership(conn, **kwargs):
+        state["calls"]["membership"] += 1
+        return list(state["rows"])
+
+    monkeypatch.setattr(verdicts_mod, "current_verdicts", fake_verdicts)
+    monkeypatch.setattr(membership_mod, "load_membership", fake_membership)
+    return state
+
+
+@pytest.fixture()
+def dropped_eth(lake):
+    """U1 选 BTC/ETH/SOL（冻结 08-31）→ U2 选 BTC/SOL、ETH 落选（冻结 09-03 10:00）。"""
+    _define(
+        lake,
+        selected=("BTC", "ETH", "SOL"),
+        snapshot_at="2026-08-30T00:00:00Z",
+        frozen_at="2026-08-31",
+    )
+    _define(
+        lake,
+        selected=("BTC", "SOL"),
+        dropped=("ETH",),
+        snapshot_at="2026-09-02T12:00:00Z",
+        frozen_at="2026-09-03T10:00:00",
+    )
+    return binding_mod.resolve_binding(AT, lake_root=lake)
+
+
+def test_without_binding_admission_keeps_f008_semantics(ledger) -> None:
+    ledger["verdicts"] = [_verdict("BTC/USDT"), _verdict("ETH/USDT", VERDICT_QUARANTINED)]
+    ledger["rows"] = [_row("BTC/USDT"), _row("ETH/USDT"), _row("BTC/USDT", market_type="perp")]
+
+    admission = export_admission(object(), AT, market_type="spot")
+
+    assert admission.admitted == frozenset({"BTC-USDT"})
+    assert dict(admission.cutoffs) == {}
+    assert admission.dropped == ()
+    assert export_admitted(object(), AT, market_type="spot") == admission.admitted
+
+
+def test_binding_drops_unselected_pair_with_cutoff_and_reports_it(ledger, dropped_eth) -> None:
+    ledger["verdicts"] = [_verdict(s) for s in ("BTC/USDT", "ETH/USDT", "SOL/USDT")]
+    ledger["rows"] = [_row(s) for s in ("BTC/USDT", "ETH/USDT", "SOL/USDT")]
+
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+
+    assert admission.admitted == frozenset({"BTC-USDT", "SOL-USDT"})
+    assert dict(admission.cutoffs) == {"ETH-USDT": date(2026, 9, 3)}
+    assert admission.dropped == ("ETH/USDT",)
+    assert admission.allows("ETH-USDT", "2026-09-03") is True  # 含当日
+    assert admission.allows("ETH-USDT", "2026-09-04") is False
+    assert admission.allows("BTC-USDT", "2030-01-01") is True
+    assert admission.allows("DOGE-USDT", "2026-09-01") is False
+
+
+def test_delisted_pair_gets_interval_end_cutoff_even_if_still_selected(ledger, dropped_eth) -> None:
+    """退市用追加 `delisted` 行记录；截止日 = 派生区间终点所在日（恰为 00:00 取前一日）。"""
+    ledger["verdicts"] = [_verdict(s) for s in ("BTC/USDT", "SOL/USDT")]
+    ledger["rows"] = [
+        _row("BTC/USDT"),
+        _row("SOL/USDT"),
+        _row("SOL/USDT", valid_from=_utc("2026-09-02T12:00:00"), reason="delisted"),
+        _row("BTC/USDT", valid_from=_utc("2026-09-04"), reason="delisted"),
+    ]
+
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+
+    assert admission.admitted == frozenset()
+    assert dict(admission.cutoffs) == {"SOL-USDT": date(2026, 9, 2), "BTC-USDT": date(2026, 9, 3)}
+    assert admission.dropped == (), "退市 pair 不可交易，不算『因绑定而剔除』"
+
+
+def test_dropped_and_delisted_takes_the_earlier_cutoff(ledger, dropped_eth) -> None:
+    ledger["verdicts"] = [_verdict("ETH/USDT")]
+    ledger["rows"] = [
+        _row("ETH/USDT"),
+        _row("ETH/USDT", valid_from=_utc("2026-09-04T08:00:00"), reason="delisted"),
+    ]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    assert dict(admission.cutoffs) == {"ETH-USDT": date(2026, 9, 3)}
+
+    ledger["rows"] = [
+        _row("ETH/USDT"),
+        _row("ETH/USDT", valid_from=_utc("2026-09-02T08:00:00"), reason="delisted"),
+    ]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    assert dict(admission.cutoffs) == {"ETH-USDT": date(2026, 9, 2)}
+
+
+def test_non_active_or_not_yet_listed_pairs_get_no_cutoff(ledger, dropped_eth) -> None:
+    ledger["verdicts"] = [_verdict("ETH/USDT", VERDICT_QUARANTINED), _verdict("DOGE/USDT")]
+    ledger["rows"] = [_row("ETH/USDT"), _row("DOGE/USDT", valid_from=_utc("2026-09-10"))]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    assert admission.admitted == frozenset()
+    assert dict(admission.cutoffs) == {}
+    assert admission.dropped == ()
+
+
+def test_dropped_is_scoped_to_the_dataset_market_type(ledger, dropped_eth) -> None:
+    ledger["verdicts"] = [_verdict("ETH/USDT")]
+    ledger["rows"] = [_row("ETH/USDT", market_type="perp")]
+    spot = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    perp = export_admission(object(), AT, market_type="perp", bound_universe=dropped_eth)
+    assert spot.dropped == () and dict(spot.cutoffs) == {}
+    assert perp.dropped == ("ETH/USDT",)
+    assert dict(perp.cutoffs) == {"ETH-USDT-PERP": date(2026, 9, 3)}
+
+
+def test_admission_reads_verdicts_and_ledger_once_and_is_deterministic(ledger, dropped_eth) -> None:
+    """AC-007：判定与台账各一次查询；同一绑定 + 同一 at 重复计算得同一结果。"""
+    ledger["verdicts"] = [_verdict(s) for s in ("SOL/USDT", "ETH/USDT", "BTC/USDT")]
+    ledger["rows"] = [_row(s) for s in ("SOL/USDT", "ETH/USDT", "BTC/USDT")]
+
+    first = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    assert ledger["calls"] == {"verdicts": 1, "membership": 1}
+    ledger["rows"].reverse()
+    second = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+
+    assert first == second
+    assert isinstance(first, Admission)
+
+
+# ------------------------------------------------------------------ 运行摘要（AC-005 / IR-002）
+
+
+def test_summary_keys_are_always_present_and_dropped_is_sorted(ledger, dropped_eth) -> None:
+    import time
+
+    from alphamill.data_bridge import registry
+    from alphamill.data_bridge.export_summary import build_summary
+
+    spec = registry.require_dataset("ohlcv_1m")
+    common = dict(
+        excluded=0, started=time.monotonic(), no_op=True, reason="window-empty", revision_diff=[]
+    )
+    plain = build_summary(spec, "incremental", None, None, [], [], [], {}, **common)
+    assert plain["universe_id"] is None
+    assert plain["dropped_by_universe"] == []
+
+    ledger["verdicts"] = [_verdict(s) for s in ("ZEC/USDT", "ETH/USDT", "ADA/USDT", "BTC/USDT")]
+    ledger["rows"] = [_row(s) for s in ("ZEC/USDT", "ETH/USDT", "ADA/USDT", "BTC/USDT")]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    bound = build_summary(
+        spec, "incremental", None, None, [], [], [], {}, **common, **admission.summary_fields()
+    )
+    assert bound["universe_id"] == dropped_eth.universe_id
+    assert bound["dropped_by_universe"] == ["ADA/USDT", "ETH/USDT", "ZEC/USDT"]
+
+
+def test_orphan_freeze_record_on_default_path_is_artifact_error(lake) -> None:
+    """检视 R3：默认解析遇到「有冻结记录、无定义文件」是湖内产物损坏，不是显式 id 不存在。"""
+    from alphamill.data_bridge.universe.definition import definition_path
+
+    good = _define(
+        lake, selected=("BTC",), snapshot_at="2026-08-30T00:00:00Z", frozen_at="2026-08-31"
+    )
+    definition_path(good.universe_id, lake).unlink()
+    with pytest.raises(UniverseArtifactError) as info:
+        binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
+    assert info.value.code == "E_UNIVERSE_ARTIFACT"
+
+
+def test_partition_filters_take_an_admission_not_a_bare_set() -> None:
+    """检视 R6：产出过滤只接受带 `allows` 的 Admission；`lake_pairs_map` 不再单独收窄。"""
+    import inspect
+
+    from alphamill.data_bridge import partitions
+
+    params = inspect.signature(partitions.produce_partitions).parameters
+    assert "admission" in params and "admitted" not in params
+    assert "admitted" not in inspect.signature(partitions.lake_pairs_map).parameters
+
+
+def test_admitted_only_keeps_entries_up_to_the_cutoff(ledger, dropped_eth) -> None:
+    """检视 R2：基线分区 / skipped / 判缺结果按 (pair, date) 判据收窄；无 pair 条目不参与。"""
+    from alphamill.data_bridge.export_policy import admitted_only
+
+    ledger["verdicts"] = [_verdict(s) for s in ("BTC/USDT", "ETH/USDT")]
+    ledger["rows"] = [_row(s) for s in ("BTC/USDT", "ETH/USDT")]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    entries = [
+        {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-02"},
+        {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-03"},
+        {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-04"},
+        {
+            "logical_partition_key": {
+                "exchange": "binance",
+                "pair": "BTC-USDT",
+                "date": "2026-09-09",
+            }
+        },
+        {"exchange": "binance", "pair": "DOGE-USDT", "date": "2026-09-01"},
+        {"date": "2026-09-04"},
+    ]
+
+    kept = admitted_only(entries, admission)
+
+    assert kept == [entries[0], entries[1], entries[3], entries[5]]
+    assert admitted_only(entries, None) is entries

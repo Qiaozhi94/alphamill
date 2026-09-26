@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import time
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from alphamill.data_bridge import manifest as mf
 from alphamill.data_bridge import partitions, paths, reconcile, registry, symbol_map
 from alphamill.data_bridge.collector.db_writer import db_connect
 from alphamill.data_bridge.errors import DataBridgeError
+from alphamill.data_bridge.export_policy import admitted_only as _admitted_only
 from alphamill.data_bridge.export_policy import guard_full_shrink as _guard_full_shrink
 from alphamill.data_bridge.export_policy import merge_partitions as _merge_partitions
 from alphamill.data_bridge.export_summary import build_summary as _summary
@@ -105,6 +107,7 @@ def export_dataset(
     allow_shrink: bool = False,
     admitted: set[str] | None = None,
     universe_filter: bool = False,
+    bound_universe: Any | None = None,
 ) -> dict[str, Any]:
     """导出单个 dataset（design §4 契约）；返回 manifest 摘要 dict。
 
@@ -114,6 +117,7 @@ def export_dataset(
     `admitted`: F008 导出准入集合（`lake_pair`）；`None`（默认）与 F002 现状逐字节一致。
     `universe_filter`: 按「台账可交易 ∩ 质量门 ACTIVE」在本 dataset 的窗口终点上现算准入集合
         （F008 `FR-006`）；与显式 `admitted` 互斥，只在本参数为真且未显式给出集合时生效。
+    `bound_universe`（F011）：被绑定宇宙（`Binding`），随过滤再交入选集并按截止日产出历史。
     """
     if mode not in ("incremental", "full"):
         raise ValueError(f"未知 mode: {mode!r}")
@@ -134,25 +138,12 @@ def export_dataset(
             allow_shrink,
             admitted,
             universe_filter,
+            bound_universe,
         )
     finally:
         reconcile.reset_snapshot_session(conn)
         if own_conn:
             conn.close()
-
-
-def _admitted_only(
-    entries: list[dict[str, Any]], admitted: set[str] | None
-) -> list[dict[str, Any]]:
-    """按准入集合收窄基线条目：未准入 pair 的日期是策略排除，不是数据缺口（检视 R1-005）。
-
-    没有 `pair` 键的条目（非 pair 分区数据集如 `signals_log`）不参与裁剪，否则整片缺口账被清掉
-    （检视第 2 轮 N1）；与 `produce_partitions` 的 `pair_partitioned` 守卫同类。
-    """
-    if admitted is None:
-        return entries
-    keys = [(e.get("logical_partition_key") or e).get("pair") for e in entries]
-    return [e for e, key in zip(entries, keys, strict=True) if key is None or key in admitted]
 
 
 def _export_one(
@@ -166,6 +157,7 @@ def _export_one(
     allow_shrink: bool = False,
     admitted: set[str] | None = None,
     universe_filter: bool = False,
+    bound_universe: Any | None = None,
 ) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
     # 回退只允许全量模式（检视 R1-001）：增量把回退版当继承基线会丢中间版本的分区
@@ -174,22 +166,23 @@ def _export_one(
 
     xmin, taken_at = reconcile.begin_snapshot_tx(conn)
     start, end = _resolve_window(conn, spec, mode, window_end, baseline_partitions)
-    if universe_filter and admitted is None:
-        # F008 导出清单：台账可交易 ∩ 质量门 ACTIVE，取本次导出的窗口终点作为 PIT 时点
-        from alphamill.data_bridge.universe.quality_gate import export_admitted
+    from alphamill.data_bridge.universe.verdicts import exporter_admission
 
-        admitted = export_admitted(
-            conn,
-            dt.datetime.combine(end, dt.time.min, tzinfo=dt.UTC),
-            market_type=spec.market_type,
-        )
+    # 台账可交易 ∩ ACTIVE [∩ F011 被绑定宇宙 + 截止日]；窗口终点为 PIT 时点
+    admission = exporter_admission(
+        conn, end, spec.market_type, admitted, universe_filter, bound_universe
+    )
+    scoped = registry.pair_partitioned(spec)
+    summary = partial(
+        _summary, **(admission.summary_fields(pair_scoped=scoped) if admission else {})
+    )
     symbol_map_ref = symbol_map.export_symbol_map(conn=conn, lake_root=root)
     # 未收窄映射用于质量标记记账（检视 R1-002）：未准入 pair 的标记不该让整轮导出 FATAL
     all_lake_pairs = partitions.lake_pairs_map(conn, market_type=spec.market_type)
     lake_pairs = (
         all_lake_pairs
-        if admitted is None
-        else {key: pair for key, pair in all_lake_pairs.items() if pair in admitted}
+        if admission is None
+        else {key: pair for key, pair in all_lake_pairs.items() if admission.covers(pair)}
     )
     excluded_null = reconcile.count_null_event_time(conn, spec)
     flagged, flagged_total = (
@@ -209,7 +202,7 @@ def _export_one(
     ):
         # 窗口为空且已有基线：无新内容可发布（首次导出即使是空表也要发布合法空快照）
         conn.rollback()
-        return _summary(
+        return summary(
             spec,
             mode,
             None,
@@ -228,19 +221,24 @@ def _export_one(
     data_version = mf.next_data_version(root, spec.name, dt.datetime.now(dt.UTC).date())
 
     produced, produced_keys, written = partitions.produce_partitions(
-        root, spec, conn, start, end, baseline_partitions, lake_pairs, admitted
+        root, spec, conn, start, end, baseline_partitions, lake_pairs, admission
     )
     window_dates = partitions.date_span(start.isoformat(), (end - dt.timedelta(days=1)).isoformat())
-    empty_keys = partitions.empty_cell_keys(
-        spec,
-        mode,
-        produced_keys,
-        window_dates,
-        baseline_partitions=_admitted_only(baseline_partitions, admitted),
-        baseline_skipped=_admitted_only(baseline["skipped"] if baseline else [], admitted),
+    empty_keys = _admitted_only(  # 截止日后的空单元格是策略排除（F011 D13）
+        partitions.empty_cell_keys(
+            spec,
+            mode,
+            produced_keys,
+            window_dates,
+            baseline_partitions=_admitted_only(baseline_partitions, admission),
+            baseline_skipped=_admitted_only(baseline["skipped"] if baseline else [], admission),
+        ),
+        admission,
     )
     skipped = mf.synthesize_skipped(
-        _admitted_only(baseline["skipped"], admitted) if baseline and mode == "incremental" else [],
+        _admitted_only(baseline["skipped"], admission)
+        if baseline and mode == "incremental"
+        else [],
         produced_keys,
         empty_keys,
     )
@@ -268,7 +266,7 @@ def _export_one(
     if not content_changed:
         conn.rollback()
         partitions.remove_staging(root, spec.name)
-        return _summary(
+        return summary(
             spec,
             mode,
             None,
@@ -321,7 +319,7 @@ def _export_one(
     else:
         partitions.remove_staging(root, spec.name)
     conn.rollback()
-    return _summary(
+    return summary(
         spec,
         mode,
         data_version,
