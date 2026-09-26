@@ -2,7 +2,7 @@
 kind: feature
 id: F011
 version: "0.2"
-status: developing
+status: code-reviewing
 status_evidence: G1 计划批准（owner 2026-09-26，按 tasks.md T001-T014）
 branch: feat/F011-export-universe-binding
 gate_version: 1
