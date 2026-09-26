@@ -48,4 +48,4 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 
 ## 当前活跃 Feature
 
-- F011 导出清单绑定当前宇宙版本（v0.2, ready-for-development）→ `docs/features/0.2/F011-export-universe-binding/`
+- F011 导出清单绑定当前宇宙版本（v0.2）→ `docs/features/0.2/F011-export-universe-binding/`
