@@ -124,6 +124,9 @@ def main(argv: list[str] | None = None) -> int:
         except UniverseError as exc:  # 拒绝启动：湖内零写入（不发布 symbol_map、不导出）
             print(f"FATAL: {exc.code}: {exc}", file=sys.stderr)
             return EXIT_FATAL
+        except ValueError as exc:  # --window-end 非法：参数裁决，不可重试（检视 R1）
+            print(f"FATAL: {exc}", file=sys.stderr)
+            return EXIT_FATAL
         except OSError as exc:
             print(f"FATAL: 瞬时故障（可重试）: {exc}", file=sys.stderr)
             return EXIT_TRANSIENT
