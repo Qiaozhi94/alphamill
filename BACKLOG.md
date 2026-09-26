@@ -5,7 +5,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 
 | Feature | 版本 | 状态 | 链接 |
 |---|---|---|---|
-| F011-export-universe-binding | 0.2 | ready-for-development | [spec](docs/features/0.2/F011-export-universe-binding/spec.md) |
+| F011-export-universe-binding | 0.2 | developing | [spec](docs/features/0.2/F011-export-universe-binding/spec.md) |
 
 > **F003 已收口（2026-09-26，done）**：AlphaGen vendor 与可插拔生成器平面已在 main 上，
 > 交付记录见 `docs/features/releases/0.2.md`；「AlphaGen 后端接入 CLI `--generator`」作为
