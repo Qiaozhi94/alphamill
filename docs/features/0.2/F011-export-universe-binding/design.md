@@ -177,7 +177,7 @@ _export_one（过滤开启且给了 binding）:
 
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
-| `AC-001` | integration | `tests/integration/test_f011_export_universe_binding.py`：U1→U2→U3 三版旅程 | 导出准入集合含/不含 X 的 `lake_pair` 随绑定版本变化 |
+| `AC-001` | integration | `tests/integration/test_f011_export_journey.py`：U1→U2→U3 三版旅程 | 导出准入集合含/不含 X 的 `lake_pair` 随绑定版本变化 |
 | `AC-002` | integration | 同上：增量、全量、空湖首导各跑一次；落选 X + 退市 Y；源库修订 X 截止日前一天；`U2`→`U3` 连续落选 | 台账零变化；X/Y 截止日及之前分区齐全且对账通过、之后无分区；「增量→全量→增量」`skipped` 不翻转、第三次为 no-op；修订进 `revision_diff`；截止日不随 `U3` 后移；X 重新入选后首次全量补回落选期分区、再跑「增量→全量」为 no-op |
 | `AC-003` | unit | `tests/unit/test_f011_export_universe_binding.py`：多版定义（含晚冻结的旧快照、`snapshot_at ≤ t < frozen_at` 的版本、注入 `frozen_at < snapshot_at` 的版本）+ 显式 id；`tests/unit/test_f011_cli_contract.py`：单给 `--universe-id` | 默认取 `snapshot_at ≤ at` 最新；显式覆盖生效且结果不同；参数错误退出 |
 | `AC-004` | unit | `tests/unit/test_f011_cli_contract.py`：spec `IR-003` 六种情形 | 退出码 2 + stderr 原因码；`symbol_map` 与新版本均未落盘 |
