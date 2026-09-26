@@ -38,7 +38,7 @@ updated: 2026-09-24
 
 后果有两层。**直接**：F003 的 T033 要求该契约测试以 0 xfailed 通过，端点不存在则无法完成。**每晚**：夜槽编排只能走决策表第三行的 404 回落探测，靠设备侧读数与阈值猜测，读数达到阈值或不可得即 fail-closed 留在单槽队列。
 
-但"把三个端点挂上去"并不足以解决问题，文档检视（循环 15 round 1）已经指出三处机制缺口：
+但"把三个端点挂上去"并不足以解决问题，文档检视（循环 19 round 1）已经指出三处机制缺口：
 
 1. **`stopped` 不稳定**：`KronosRealSignal.generate_signal()` 每次进入都会在同一把锁内调用 `_load_predictor()`。若 `state` 只从"模型在不在内存里"派生，那么 `stop` 成功之后任何一次 `/predict` 都会自行把模型加载回来、把显存吃回去，完全绕过 `restore`——卸载等于没卸。
 2. **超时不是终态**：动作超时后若后台继续执行且无仲裁，客户端看到的错误与服务端最终状态之间没有稳定关系，相反动作还会迟到生效。
@@ -446,7 +446,7 @@ stopped  -> stopped  stop 幂等重入；restore 失败（E_UNAVAILABLE）；停
 - 单元测试（跨 Feature 侧）：客户端 deadline 余量与分动作值（`test_f003_gpu_slot.py`）、**三条退出路径各自恰调用一次 `restore`**（`test_f003_cli_contract.py`——恢复发生在 CLI 的 finally，控制流证据必须落在 CLI 套件，不能由 gpu_slot 套件代劳）；
 - 集成测试：mock 实例上 `/lifecycle/*` 返回 404 与 compose 暴露面断言；`kronos-signal-real`（CPU）上的停止/恢复往返与准入；迁移后的 F004 端口契约与其变异表仍全绿；
 - 真实环境 / 手动验证：执行机 `qiaozhi-lt` 上 `test_f003_kronos_lifecycle.py` 0 xfailed；`test_f009_vram_release.py` 确认为 xfail 而非 XPASS（**该载体的转正归 F010**）。按 `docs/SOP.md` §3，开发机上的跳过不算证据；
-- 变异纪律：每条新断言须给出"改坏实现即判红"的证明（F004 循环 12、F003 循环 14 的既定做法）；
+- 变异纪律：每条新断言须给出"改坏实现即判红"的证明（F004 循环 12、F003 循环 18 的既定做法）；
 - 不做的：不为 `/predict*` 的既有行为补测（F004 已收口），只为"停机期间不重载"这一新准入语义补测。
 
 ### 依赖
@@ -466,7 +466,7 @@ stopped  -> stopped  stop 幂等重入；restore 失败（E_UNAVAILABLE）；停
 | **超时语义**（检视 R1-003） | `E_TIMEOUT` = "动作仍在进行"，不中断后台；单飞 + `operation` 使最终落点可观测；冲突动作立即 `E_BUSY` 不排队 | 中断加载/卸载会留下半加载态；排队会让相反动作迟到生效。既然无法安全中断，就把"进行中"变成一等状态而不是隐藏状态 | 若实测 `E_BUSY` 重试率高，再向架构 §7.1 提 draining 态 |
 | **错误信封形态**（检视 R1-004） | 错误响应**恰为单键** `{"error": "E_*"}`；显存读数不可得改由成功响应的 `vram_readable=false` + `vram_bytes=null` 表达 | 原来一边声明精确信封、一边要求错误响应附带 `vram_bytes`，JSON schema 无法定义，客户端也无从区分"控制面故障"与"读数缺失"这两件性质完全不同的事 | 契约测试按字段集精确断言，不做宽松匹配 |
 | **mock 的生命周期语义**（检视 R1-005） | **反转此前的 Q-002 决策**：mock 不注册 `/lifecycle/*`，返回 404 | 架构 §7.1 明确 mock 不在契约范围；且 mock 永远 `model_loaded=false`，与 `running ⇒ model_loaded=true` 及 `restore` 返回 running 不可能同时成立。客户端对 404 的处置决策表第三行已覆盖，不需要 mock 假装实现契约 | 见 §8 Q-002 的裁决更新 |
-| **客户端交付边**（检视 R1-006） | F003 的分动作超时与三条路径的 `restore` 纳入本 feature 的 FR-009 / AC-010 | 服务端端点做完但客户端没有 restore、且用 10s 去卡 60s 的 stop，白天恢复旅程仍无 owner，等于端点白做 | `restore` 半边已在 F003 循环 14 修复（R012）；超时半边归本 feature |
+| **客户端交付边**（检视 R1-006） | F003 的分动作超时与三条路径的 `restore` 纳入本 feature 的 FR-009 / AC-010 | 服务端端点做完但客户端没有 restore、且用 10s 去卡 60s 的 stop，白天恢复旅程仍无 owner，等于端点白做 | `restore` 半边已在 F003 循环 18 修复（R012）；超时半边归本 feature |
 | **显存判据强度**（检视 R1-007 / R2-002） | 判据改为"读数真实下降，且卸载后可用显存达到训练预算"，并要求变异判红 | 原断言只检查 `vram_bytes` 是非负整数——端点完全不释放显存也能通过，门禁弱于成功声明 | 该断言随 F010 解除先红态 |
 | **过渡态的 wire 表示**（检视 R4-001） | `state` 取值域加 `transitional`，客户端见到即 fail-closed | 动作一受理就先置 `desired`、后改 `model_loaded`，过渡态是每次 stop/restore 的必经窗口而非异常分支；二值取值域让服务端在这段窗口里构造不出合法响应，`operation` 非空只能补充信息、替代不了必填的 `state` | 决策表新增一行并同步 `check_doc_consistency` 的期望表 |
 | **迟到 stop 的恢复所有权**（检视 R4-002） | **发出过 `stop` 即持有恢复责任**，与该请求返回什么无关；客户端 deadline = 服务端 deadline + 余量 | 只在"同步确认 stopped"时登记恢复，会让 60s 超时返回、61s 后台完成的那次卸载永久停机；两端同 deadline 则客户端先抛 `OSError`，规范的 `E_TIMEOUT` 根本收不到 | 采"无条件 restore"而非"轮询 operation"：`restore` 幂等，且轮询窗口之外的迟到完成轮询兜不住 |

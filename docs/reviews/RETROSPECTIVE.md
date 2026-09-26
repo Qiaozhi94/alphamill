@@ -872,13 +872,13 @@
 ### 模式教训
 
 - **`cross-feature-contract-drift` 占 18 条中的 6 条，且跨越了全部三轮**。Round 1 的 R1-001/004/005/006 是原始漂移；Round 2 的 R2-001/002 是**修复动作自己造出来的新漂移**——收紧了契约却没同步消费端、拆了载体却没同步另一个 feature 的门禁。结论：这个 feature 位于 F003/F004/架构三方接缝上，任何一侧的单边修改都会立刻产生漂移。**教训**：改契约的提交必须在同一轮内把三侧（契约正文 / 本 feature 文档 / 消费端实现）一起过一遍，不能"先改契约，消费端下轮再说"。
-- **`fix-regression` 有 6 条（R2-001..004、R3-001..002），占总数三分之一**。这远高于循环 14 的 1/13。直接原因是本轮是 `rewrite` 而非打补丁——重写的自伤面天然更大。**因此 rewrite 裁决必须配套"升级 full-scan 的复核轮"**，diff-only 在重写场景下覆盖不住。Round 2 显式升级 full-scan 是正确的，Round 3 封顶轮仍抓到 R3-001 则说明封顶轮不是形式主义。
+- **`fix-regression` 有 6 条（R2-001..004、R3-001..002），占总数三分之一**。这远高于循环 22 的 1/13。直接原因是本轮是 `rewrite` 而非打补丁——重写的自伤面天然更大。**因此 rewrite 裁决必须配套"升级 full-scan 的复核轮"**，diff-only 在重写场景下覆盖不住。Round 2 显式升级 full-scan 是正确的，Round 3 封顶轮仍抓到 R3-001 则说明封顶轮不是形式主义。
 - **R3-001 暴露了一个门禁作用域盲区**（`gate-scope-blind-spot`）：`check_task_dag` 只对进入开发流转的状态生效，`doc-reviewing` 的 feature 不在作用域内。于是 `verify.py` 全绿，而 tasks 的 DAG 实际是断的。这不是门禁写错了——作用域设计有其理由（draft/doc-reviewing 期间 tasks 尚在变动）——但**文档检视轮必须手动对 tasks 跑一次 `check_tasks`**，不能以 verify.py 绿作为 DAG 无误的证据。建议写进 SOP 的文档检视清单。
 - **R2-005 是一条「文档比实现更弱」的漂移**：8GB 卡上「已用 5GB」同时满足「低于 6GB 预算」和「取不到 6GB」——收紧 R1-007 的判据时把它写在了已用侧，而夜槽要判的是可用侧。实现（`vram_is_sufficient` 判 `free_gb >= limit_gb`）一直是对的，错的只有契约措辞，由并行会话在本循环收尾时发现并补正。**教训**：给判据加强度时必须同时问「这个量从哪一侧度量」，否则加的是一条看起来更严、实际判错方向的门。
-- **`origin` 分布**：spec-drift 6、original-coding 3、process-gap 3、fix-regression 7。与循环 14（12 original-coding / 1 fix-regression）正好相反：代码检视面对的是"从没被看过的实现"，文档检视面对的是"反复被改的契约"，两者的主风险完全不同。
+- **`origin` 分布**：spec-drift 6、original-coding 3、process-gap 3、fix-regression 7。与循环 22（12 original-coding / 1 fix-regression）正好相反：代码检视面对的是"从没被看过的实现"，文档检视面对的是"反复被改的契约"，两者的主风险完全不同。
 - **存活轮数**：R1 的 12 条均为 1→2（存活 1 轮），R2 的 4 条为 2→2，R3 的 2 条为 3→3。没有跨多轮悬而未决的条目，未触发不收敛升级协议。
 - **裁决分布**：accepted 17 / partial 1 / rejected 0。**建议命中率**：18 条中 15 条 `fix_summary` 与 `suggested_fix` 实质一致；三条偏离都是往更彻底的方向走——R1-001 从"纳入或等待"具体化为立 F010 并配先红态纪律；R1-007 的判据同时写进了契约正文而不只是 AC；R2-003 的修复顺带给 `check_doc_consistency` 加了会判红的钉点。
-- **跨循环联动**：R1-006 与循环 14 的 R012 是同一条缺陷的两半（restore 所有权 / 分动作超时），由两个独立视角分别发现——代码检视从实现侧撞上"停了不恢复"，文档检视从契约侧看出"客户端没有 restore 且超时口径错"。这条互证说明两类检视不是重复劳动。
+- **跨循环联动**：R1-006 与循环 22 的 R012 是同一条缺陷的两半（restore 所有权 / 分动作超时），由两个独立视角分别发现——代码检视从实现侧撞上"停了不恢复"，文档检视从契约侧看出"客户端没有 restore 且超时口径错"。这条互证说明两类检视不是重复劳动。
 
 ## 循环 19：F009 Kronos 服务生命周期控制面端点 代码检视
 
@@ -1054,7 +1054,65 @@ report_type: code-review · feature: F008 · status: closed · rounds: 1（full-
 - **成本观察（供下轮采样参考）**：两条最高价值项（Critical + High）都落在**上一轮"实测驱动的修复"的邻域**（T023 的 `usable_baseline` 回退与准入过滤收窄）。教训：**修复密集区应作为下一轮检视的优先采样区**，而不是"刚修过、应该没问题"的免检区。
 - **并行检视的实际形态**：5 片只读 + 1 片测试覆盖并行扫描，再由 4 个修复代理分头落地；跨代理的文件冲突（同一测试文件、同一报错文案）出现了两次，靠"派活时按文件切分 + 报告里显式声明并发面"化解。教训：**并行检视要按文件边界派活**，共享文件（CLI/测试聚合文件）要么独占、要么约定最小 literal edit。
 
-## 循环 22：F011 导出清单绑定当前宇宙版本 需求设计文档检视
+## 循环 22：F003 AlphaGen vendor 与可插拔生成器平面 实现代码检视
+
+report_type: code-review · feature: F003 · status: closed · rounds: 1（full-scan）→ 2（diff-only） · 基线 `b78f3a9` → 修复终态 `0f13d9c`
+
+- report_type: code-review
+- 周期：2026-09-20（2 轮；第 1 轮全量扫描，第 2 轮 diff-only 复核）
+- 状态：闭环（stop_condition_met: true）
+- 基线：`feat/F003-alphagen-vendor` @ `b78f3a9` → 修复终态 `0f13d9c`
+- 被检对象：分支相对 `origin/main` 的 90 文件 / +13813-95，重点 `src/alphamill/factor_factory/` 下
+  `generators/`（22 模块）、`registry/`、`hypotheses/`、`cli.py` 与配套 tests；vendor 冻结子集只检胶水层与卫生门
+- 背景：该 PR 至今零代码检视；同日刚修掉两个 CI 假绿缺陷（收集期 torch 中断、`.gitignore` 裸 `models/` 吞掉 vendor blob）
+
+### 循环 22 完整 issue 表
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首现轮 | 修复轮 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F003-R001 | 训练窗口按 UTC 判定，默认时段表却是本地时间 | high | correctness | root-cause | original-coding | fixed | 配置显式声明时区后换算再比较 | GpuSlotConfig 增 window_tz（默认 Asia/Shanghai），比较前 astimezone；未知时区与 naive 瞬间判红；架构 §7.1 补注语义 | tests/unit/test_f003_gpu_slot.py::test_training_window_reads_local_clock_not_utc_clock | 1 | 1 | timezone-semantics-undeclared |
+| F003-R002 | 显存读数不可得时取锁（fail-open） | high | correctness | root-cause | original-coding | fixed | 区分「无 GPU」与「读数不可得」，后者留队列 | 读数缺失与读数不足走同一路径：释放 OS 锁、以 vram_free_gb=null 重新入队 | tests/unit/test_f003_gpu_slot.py::test_unreadable_vram_never_acquires_the_slot | 1 | 1 | guard-fails-open |
+| F003-R003 | offload_kronos 生产路径未接线 | high | correctness | root-cause | original-coding | fixed | mine 取锁前调用并把结果写进 run.json | cli mine 取锁前调用，控制面地址走配置；fail_closed 即拒绝不取锁；GenerationRun 增 kronos_offload 字段 | tests/unit/test_f003_cli_contract.py::test_mine_fail_closed_offload_rejects_before_taking_the_slot | 1 | 1 | marked-done-not-implemented |
+| F003-R004 | 结论字段护栏不可能触发 | high | correctness | root-cause | original-coding | fixed | 递归筛查 params/meta，反向断言翻红 | reject_conclusion_fields 改递归；build_factor 在 params 入口同样筛查；原「不下钻」测试翻成反向断言 | tests/unit/test_f003_generator_contract.py::test_reject_conclusion_fields_descends_into_params_and_meta | 1 | 1 | scope-promise-mechanism-gap |
+| F003-R005 | CLI 替换 os.fdopen 绕开写路径护栏 | high | correctness | symptom-patch | original-coding | fixed | 护栏按 fd 真实路径放行，不由调用方打补丁 | 护栏自持 ApprovedDescriptors，只放行自己在 root 内开过的 fd 并经 /proc/self/fd 复核；CLI 删除 os.fdopen 替换 | tests/integration/test_f003_boundaries.py::test_write_guard_allows_own_descriptors_and_still_denies_foreign_ones | 1 | 1 | guard-bypassed-by-production-code |
+| F003-R006 | allow-offhours 伪造 now，污染队列时间戳 | high | correctness | symptom-patch | original-coding | fixed | 增显式 ignore_window 参数，ts 用真实时钟 | acquire 增 ignore_window：只旁路时段判定，不旁路显存探测与盖戳时钟 | tests/unit/test_f003_gpu_slot.py::test_allow_offhours_bypasses_window_without_faking_the_clock | 1 | 1 | test-shaped-hack-in-production |
+| F003-R007 | control_url 缺省被判成「确未部署」 | medium | correctness | root-cause | original-coding | fixed | 要求显式部署清单证据才记 not_needed | 部署清单事实由 service_deployed 显式给出（默认 True）；漏配即 fail_closed；顺带把 gpu_slot 拆成仲裁/vram/kronos_offload 三块 | tests/unit/test_f003_gpu_slot.py::test_missing_control_url_fails_closed_unless_service_is_known_absent | 1 | 1 | guard-fails-open |
+| F003-R008 | 崩溃遗留 queued 记录永久占队首 | medium | correctness | root-cause | original-coding | open | 队首判定加租约超时 | — | — | 1 | — | — |
+| F003-R009 | config/factor JSON 非原子写 | medium | correctness | root-cause | original-coding | open | 复用 run_store._atomic_write | — | — | 1 | — | — |
+| F003-R010 | acquire 忙轮询 + 每轮全量重读队列 | low | quality | root-cause | original-coding | open | 轮询间隔可配，只读尾部 | — | — | 1 | — | — |
+| F003-R011 | run_dir 以 parents[4] 猜仓库根 | low | quality | root-cause | original-coding | open | reports_root 显式配置，取不到判红 | — | — | 1 | — | — |
+| F003-R012 | 停了 Kronos 却从不恢复 | high | correctness | root-cause | fix-regression | fixed | 三条退出路径都要恢复常驻 | kronos_offload 增 restore_kronos；cli finally 释放槽后恢复；恢复失败 stderr 告警不静默 | tests/unit/test_f003_cli_contract.py::test_mine_restores_kronos_after_stopping_it | 2 | 2 | stop-without-restore |
+| F003-R013 | 显存预检排在卸载之前，卸载救不了主场景 | high | correctness | root-cause | original-coding | fixed | 顺序改为能力→窗口→卸载→量显存→取锁 | 调整 cli mine 顺序；device 只在确认显存后才写 cuda，被拒运行不自称跑在 GPU 上 | tests/unit/test_f003_cli_contract.py::test_mine_offloads_kronos_before_measuring_vram | 2 | 2 | precondition-ordered-after-remedy |
+
+### 裁决记录
+
+（本循环无被拒 / 部分接纳条目；11 条首轮发现全部接纳，2 条为第 2 轮新增。）
+
+### 模式教训
+
+- **`guard-*` 三连是本循环的主旋律**：13 条里有 6 条（R002/R003/R004/R005/R007 + R013）属于同一个元模式——
+  **门禁存在、测试也绿，但在真实路径上不可能起作用**。形态各异：不可能触发（R004 的顶层筛查对上
+  字段固定的 frozen dataclass）、被生产代码自己打洞（R005 替换 stdlib）、根本没接线（R003 只有单测在用）、
+  读数缺失时放行（R002/R007）、顺序错位使补救永远来不及（R013）。这与同日两个 CI 假绿缺陷
+  （收集期中断让整轮用例一条没跑、裸 `models/` 让 vendor 卫生门没有可检对象）是同族。
+  **教训**：写完一个护栏要追问的不是"测试过了吗"，而是"它在生产路径上有没有一条能触发的输入"。
+  变异判红之所以是硬要求，正因为它是唯一能证伪"绿得没有意义"的手段。
+- **`origin` 分布**：original-coding 12 条、fix-regression 1 条（R012）。首轮 11 条全部是首次实现就带的，
+  没有一条来自此前的修改——这与"该 PR 零代码检视"的事实一致：缺陷不是被改坏的，是从没被看过。
+- **第 2 轮的价值被再次证实**：R012 是 R003 修复亲手引入的（接线之前不存在这条路径），
+  R013 则是 R003 接线之后才**显形**的既有顺序错误——两条在第 1 轮物理上都抓不到。
+  若按"1 轮闭环"收工，交付的会是一个每晚停掉 Kronos 再也不恢复的夜槽。
+- **存活轮数**：全部 fixed 条目均为首现即修（存活 0 轮）。这是角色合并路径（检视方直接下场修复）
+  的典型形态，代价是缺少对抗式复核，故每条修复都以**变异判红**作为独立证据。
+- **裁决分布**：accepted 13 / partial 0 / rejected 0。全接纳通常是"检视在凑数"的信号，但本循环
+  4 条 Medium/Low 明确留 open 不阻塞（协议第 7 条），且 6 条 High 各自有可判红的回归测试，
+  不属于凑数。**建议命中率**：13 条中 11 条 `fix_summary` 与 `suggested_fix` 实质一致；
+  R007 与 R013 的实际修复都比建议更进一步（前者顺带拆了模块边界，后者连带修正了 manifest 的 device 字段）。
+- **未闭合项去向**：R008/R009（Medium）与 R010/R011（Low）四条不阻塞本次闭环，完整留在上表。
+  R008（队首饿死）与 R009（非原子写）建议在 F003 收口前或 T033 执行机取证时一并处理——
+  队首饿死在单机单跑场景下概率低，但夜槽是无人值守的。
+
+## 循环 23：F011 导出清单绑定当前宇宙版本 需求设计文档检视
 
 report_type: doc-review · feature: F011 · status: open · rounds: 0（作者自评，不计）→ 1（full-scan，独立检视）→ 2（待，diff-only）
 

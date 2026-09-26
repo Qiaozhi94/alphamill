@@ -234,12 +234,13 @@ def test_declared_test_carrier_ghost_reference_goes_red(tmp_path: pathlib.Path) 
     assert any("test_f003_ghost.py" in msg for _, msg in errors)
 
 
-def test_declared_test_carrier_landed_allowlist_entry_goes_red(tmp_path: pathlib.Path) -> None:
+def test_declared_test_carrier_landed_allowlist_entry_goes_red(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """F003-R4-005：白名单条目对应文件已落盘必须判红（过期豁免会盖住载体删除）。"""
     _materialize_referenced_tests(tmp_path)
-    landed = tmp_path / next(iter(cdc.DECLARED_TEST_ALLOWLIST))
-    landed.parent.mkdir(parents=True, exist_ok=True)
-    landed.write_text("# landed\n", encoding="utf-8")
+    landed = "tests/integration/test_f003_kronos_lifecycle.py"
+    monkeypatch.setattr(cdc, "DECLARED_TEST_ALLOWLIST", {landed: "T999"})
     errors = cdc.check_declared_test_carriers(tmp_path)
     assert any("白名单条目已落盘" in msg for _, msg in errors)
 
@@ -337,18 +338,15 @@ def test_f007_requirement_id_order_goes_red_on_reorder(tmp_path: pathlib.Path) -
     assert "f007_requirement_id_order" in ids
 
 
-def test_declared_test_carrier_orphan_entry_goes_red(tmp_path: pathlib.Path) -> None:
+def test_declared_test_carrier_orphan_entry_goes_red(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """F003-R4-005/R5-004：三件套已不引用的白名单条目必须判红（孤儿豁免不得残留）。"""
     _materialize_referenced_tests(tmp_path)
-    target_ref = next(iter(cdc.DECLARED_TEST_ALLOWLIST))
-    # 该引用可能同时出现在 spec/design/tasks——三处都去掉才构成孤儿条目。
-    for rel in (cdc.SPEC, cdc.DESIGN, cdc.TASKS):
-        doc = tmp_path / rel
-        kept = [ln for ln in doc.read_text(encoding="utf-8").split("\n") if target_ref not in ln]
-        assert target_ref not in "\n".join(kept), f"测试前提：{rel} 中该引用可整行移除"
-        doc.write_text("\n".join(kept), encoding="utf-8")
+    orphan = "tests/unit/test_ghost_carrier.py"
+    monkeypatch.setattr(cdc, "DECLARED_TEST_ALLOWLIST", {orphan: "T999"})
     errors = cdc.check_declared_test_carriers(tmp_path)
-    assert any(f"孤儿条目，请移除）：{target_ref}" in msg for _, msg in errors)
+    assert any(f"孤儿条目，请移除）：{orphan}" in msg for _, msg in errors)
 
 
 def _arch_copy(tmp_path: pathlib.Path) -> pathlib.Path:
