@@ -8,11 +8,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import socket
 from collections.abc import Iterable
-from dataclasses import dataclass
-from datetime import UTC, datetime
-from typing import Any
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from alphamill.data_bridge.universe.binding import Binding
+
+logger = logging.getLogger(__name__)
 
 VERDICT_ACTIVE = "ACTIVE"
 VERDICT_QUARANTINED = "QUARANTINED"
@@ -126,15 +132,65 @@ def admitted_pairs(conn, *, universe_id: str | None = None) -> frozenset[str]:
 
 
 def export_admitted(
-    conn, at: datetime, *, market_type: str | None = None, universe_id: str | None = None
+    conn,
+    at: datetime,
+    *,
+    market_type: str | None = None,
+    universe_id: str | None = None,
+    bound_universe: Binding | None = None,
 ) -> frozenset[str]:
-    """导出侧准入集合 = 台账可交易 ∩ 质量门 ACTIVE（`FR-006`）。
+    """导出侧准入集合 = 台账可交易 ∩ 质量门 ACTIVE（`FR-006`）[∩ 被绑定宇宙入选集，F011]。
 
     准入记录按贸易符号（`db_symbol`）判定，而台账里同一个符号有 spot / perp 两条湖内
     命名空间，因此过滤要落到**被导出 dataset 的 market_type** 上：`market_type` 给定时
     只在台账里该命名空间的成员上取交集，缺省（None）等价于 `universe_at` 的直接交集。
+    `bound_universe=None` 保持 F008 原语义；薄包装，口径见 `export_admission`。
     """
-    from alphamill.data_bridge.universe.membership import load_membership, members_at
+    return export_admission(
+        conn, at, market_type=market_type, universe_id=universe_id, bound_universe=bound_universe
+    ).admitted
+
+
+@dataclass(frozen=True, kw_only=True)
+class Admission:
+    """导出准入（F011 `FR-001`/`FR-004`/`FR-005`）。
+
+    `admitted`：不限日期产出分区的 `lake_pair`；`cutoffs`：已离开准入集合、判定 ACTIVE 的
+    `lake_pair` → 截止日（含当日，之后不产出）；`dropped`：因绑定而剔除的 `db_symbol`。
+    """
+
+    admitted: frozenset[str]
+    cutoffs: dict[str, date] = field(default_factory=dict)
+    dropped: tuple[str, ...] = ()
+
+    def covers(self, pair: str | None) -> bool:
+        """该 pair 在本轮是否可能产出分区（准入或有截止日）。"""
+        return pair in self.admitted or pair in self.cutoffs
+
+    def allows(self, pair: str | None, day: str | date) -> bool:
+        """单元格 `(pair, day)` 是否产出——增量与全量同一判据。"""
+        if pair in self.admitted:
+            return True
+        cutoff = self.cutoffs.get(pair) if pair is not None else None
+        if cutoff is None:
+            return False
+        return (date.fromisoformat(day) if isinstance(day, str) else day) <= cutoff
+
+
+def export_admission(
+    conn,
+    at: datetime,
+    *,
+    market_type: str | None = None,
+    universe_id: str | None = None,
+    bound_universe: Binding | None = None,
+) -> Admission:
+    """唯一交集点：判定与台账各读一次，同一 `at`、同一 market_type 下同时产出三件结果。"""
+    from alphamill.data_bridge.universe.membership import (
+        load_membership,
+        materialize_intervals,
+        members_at,
+    )
 
     active_symbols = {
         result.db_symbol
@@ -147,4 +203,34 @@ def export_admitted(
         if row.db_symbol in active_symbols
         and (market_type is None or row.market_type == market_type)
     ]
-    return frozenset(row.lake_pair for row in rows if row.lake_pair in members_at(rows, at))
+    tradable = members_at(rows, at)
+    if bound_universe is None:
+        return Admission(
+            admitted=frozenset(row.lake_pair for row in rows if row.lake_pair in tradable)
+        )
+    selected = bound_universe.selected_symbols()
+    symbol_of = {row.lake_pair: row.db_symbol for row in rows}
+    admitted = frozenset(pair for pair in tradable if symbol_of[pair] in selected)
+    dropped = tuple(sorted({symbol_of[pair] for pair in tradable - admitted}))
+    ended = _delisting_cutoffs(materialize_intervals(rows), tradable, at)
+    cutoffs: dict[str, date] = {}
+    for pair in sorted((tradable - admitted) | ended.keys()):
+        found = [bound_universe.drop_cutoff(symbol_of[pair]), ended.get(pair)]
+        cutoffs[pair] = min(item for item in found if item is not None)
+    for symbol in dropped:
+        logger.info(
+            "绑定 %s 剔除 %s: not_in_universe_selection", bound_universe.universe_id, symbol
+        )
+    return Admission(admitted=admitted, cutoffs=cutoffs, dropped=dropped)
+
+
+def _delisting_cutoffs(intervals, tradable: frozenset[str], at: datetime) -> dict[str, date]:
+    """退市截止日：`at` 时已不可交易者，其最后一个已终止区间终点所在日（恰为 00:00 取前一日）。"""
+    out: dict[str, date] = {}
+    for interval in intervals:
+        end = interval.valid_to
+        if interval.lake_pair in tradable or end is None or end > at:
+            continue
+        day = (end - timedelta(microseconds=1)).date()
+        out[interval.lake_pair] = max(day, out.get(interval.lake_pair, day))
+    return out
