@@ -104,9 +104,12 @@ def _copy_index_tree(tmp_path: pathlib.Path) -> None:
 def test_active_feature_indexes_go_red_on_claude_drift(tmp_path: pathlib.Path) -> None:
     _copy_index_tree(tmp_path)
     claude = tmp_path / "CLAUDE.md"
-    # 按**模式**改写第一条活跃行，不写死具体 FID：每次 feature 收口活跃集都会变
+    # 在活跃段首**插入**一条虚构活跃行，不改写已有行：活跃集为空（全部收口，F011 收口实测）
+    # 与非空时都能变异，也不写死具体 FID
     text = claude.read_text(encoding="utf-8")
-    mutated = re.sub(r"(?m)^-\s+F\d{3}\b", "- F099", text, count=1)
+    mutated = text.replace(
+        "## 当前活跃 Feature\n\n", "## 当前活跃 Feature\n\n- F099 变异注入的虚构活跃行\n", 1
+    )
     assert mutated != text, "变异基准模式不存在（CLAUDE.md 的活跃行改过？需同步本用例）"
     claude.write_text(mutated, encoding="utf-8")
     assert "active_feature_indexes_aligned" in _check_ids(
@@ -121,7 +124,7 @@ def test_active_feature_indexes_go_red_on_readme_drift(tmp_path: pathlib.Path) -
     # 变异按**模式**改写而不是写死当前活跃集：每次 feature 收口活跃集都会变，
     # 写死基准串会让这条变异用例在收口时假红（F009 收口实测）。
     mutated = re.sub(
-        r"活跃 feature 索引（当前 [^）]+）", "活跃 feature 索引（当前 F099）", original
+        r"活跃 feature 索引（当前\s*[^）]+）", "活跃 feature 索引（当前 F099）", original
     )
     assert mutated != original, (
         "变异基准模式不存在（docs/README.md 的活跃索引行改过？需同步本用例）"
@@ -135,9 +138,12 @@ def test_active_feature_indexes_go_red_on_readme_drift(tmp_path: pathlib.Path) -
 def test_active_feature_indexes_go_red_on_backlog_drift(tmp_path: pathlib.Path) -> None:
     _copy_index_tree(tmp_path)
     backlog = tmp_path / "BACKLOG.md"
-    # 按**模式**删掉第一条活跃行，不写死 FID：每次 feature 收口活跃集都会变
+    # 在活跃表头分隔行后**插入**一条虚构行，不删已有行：活跃集为空（全部收口，F011 收口实测）
+    # 与非空时都能变异，也不写死 FID
     text = backlog.read_text(encoding="utf-8")
-    mutated = re.sub(r"(?m)^\|\s*F\d{3}-[^|]+\|.*\n", "", text, count=1)
+    mutated = text.replace(
+        "|---|---|---|---|\n", "|---|---|---|---|\n| F099-drift | 0.2 | draft | 变异注入 |\n", 1
+    )
     assert mutated != text, "变异基准模式不存在（BACKLOG.md 的活跃行改过？需同步本用例）"
     backlog.write_text(mutated, encoding="utf-8")
     assert "active_feature_indexes_aligned" in _check_ids(
