@@ -37,11 +37,11 @@ updated: 2026-09-26
 
 ### Phase 2：真实库/湖旅程（US-002 / US-003）
 
-- [ ] T007 (`AC-001`, `AC-002`, `AC-006`): 集成旅程：三版定义（U1 含 X → U2 不含 → U3 重新含）+ 落选前后台账零变化 + 增量/全量/空湖首导下截止日前分区齐全且截止日后无分区、`skipped` 不翻转、源库修订被吸收 + 默认关闭过滤的对照导出 — verify: `tests/integration/test_f011_export_journey.py`
+- [x] T007 (`AC-001`, `AC-002`, `AC-006`): 集成旅程：三版定义（U1 含 X → U2 不含 → U3 重新含）+ 落选前后台账零变化 + 增量/全量/空湖首导下截止日前分区齐全且截止日后无分区、`skipped` 不翻转、源库修订被吸收 + 默认关闭过滤的对照导出 — verify: `tests/integration/test_f011_export_journey.py`（green: 集成旅程 5 passed——U1→U2→U3、增量/全量/空湖首导、SOL 退市截止、源库修订、默认关闭对照；台账零变化断言在内）
 
 ## 3. 验证与验收任务
 
-- [ ] T008 (`AC-003`, `AC-005`, `AC-007`): 单元套件：默认/显式绑定、摘要字段、确定性（重复解析同集合）、无按 pair 的额外查询 — verify: `tests/unit/test_f011_export_universe_binding.py`
+- [x] T008 (`AC-003`, `AC-005`, `AC-007`): 单元套件：默认/显式绑定、摘要字段、确定性（重复解析同集合）、无按 pair 的额外查询 — verify: `tests/unit/test_f011_export_universe_binding.py`（green: 单元 25 passed；变异验证 6/6 判红：drop_cutoff min→max、allows <=→<、生效过滤去 frozen_at、判缺不过判据、产出用 covers 代替 allows、CLI 先刷新后解析）
 - [ ] T009 (`AC-003`, `AC-004`, `AC-008`): CLI 契约套件：`IR-003` 六种情形逐一断言退出码 2 + stderr 原因码 + `symbol_map`/新版本未落盘；单给 `--universe-id` 被拒；多 dataset 只解析一次；两份 `deployment/*export.service` 的 `--universe-filter` 一致 — verify: `tests/unit/test_f011_cli_contract.py`
 - [ ] T010 (`AC-001`, `AC-002`, `AC-006`): 集成套件（真实 scratch 库 + 临时湖）全绿 — verify: `tests/integration/test_f011_export_journey.py`
 - [ ] T011 (`AC-009`): `F008` 既有测试零修改全绿（`git diff main -- tests/integration/test_f008_*.py` 为空）— verify: `tests/integration/test_f008_quality_gate.py`、`tests/integration/test_f008_export_integration.py`
