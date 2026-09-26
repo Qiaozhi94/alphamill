@@ -172,7 +172,10 @@ def _export_one(
     admission = exporter_admission(
         conn, end, spec.market_type, admitted, universe_filter, bound_universe
     )
-    summary = partial(_summary, **(admission.summary_fields() if admission else {}))
+    scoped = registry.pair_partitioned(spec)
+    summary = partial(
+        _summary, **(admission.summary_fields(pair_scoped=scoped) if admission else {})
+    )
     symbol_map_ref = symbol_map.export_symbol_map(conn=conn, lake_root=root)
     # 未收窄映射用于质量标记记账（检视 R1-002）：未准入 pair 的标记不该让整轮导出 FATAL
     all_lake_pairs = partitions.lake_pairs_map(conn, market_type=spec.market_type)

@@ -165,9 +165,13 @@ class Admission:
     dropped: tuple[str, ...] = ()
     universe_id: str | None = None
 
-    def summary_fields(self) -> dict[str, Any]:
-        """运行摘要的绑定留痕（`IR-002`）：被绑定版本 + 因绑定剔除的 db_symbol。"""
-        return {"universe_id": self.universe_id, "dropped_by_universe": self.dropped}
+    def summary_fields(self, *, pair_scoped: bool = True) -> dict[str, Any]:
+        """运行摘要的绑定留痕（`IR-002`）：被绑定版本 + 因绑定剔除的 db_symbol。
+
+        非 pair 分区的 dataset（`pair_scoped=False`）没有单元格会因绑定被剔除，只记绑定（检视 R4）。
+        """
+        dropped = self.dropped if pair_scoped else ()
+        return {"universe_id": self.universe_id, "dropped_by_universe": dropped}
 
     def covers(self, pair: str | None) -> bool:
         """该 pair 在本轮是否可能产出分区（准入或有截止日）。"""
