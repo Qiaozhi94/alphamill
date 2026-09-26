@@ -493,3 +493,14 @@ def test_orphan_freeze_record_on_default_path_is_artifact_error(lake) -> None:
     with pytest.raises(UniverseArtifactError) as info:
         binding_mod.resolve_binding(_utc("2026-09-05"), lake_root=lake)
     assert info.value.code == "E_UNIVERSE_ARTIFACT"
+
+
+def test_partition_filters_take_an_admission_not_a_bare_set() -> None:
+    """检视 R6：产出过滤只接受带 `allows` 的 Admission；`lake_pairs_map` 不再单独收窄。"""
+    import inspect
+
+    from alphamill.data_bridge import partitions
+
+    params = inspect.signature(partitions.produce_partitions).parameters
+    assert "admission" in params and "admitted" not in params
+    assert "admitted" not in inspect.signature(partitions.lake_pairs_map).parameters
