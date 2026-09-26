@@ -504,3 +504,31 @@ def test_partition_filters_take_an_admission_not_a_bare_set() -> None:
     params = inspect.signature(partitions.produce_partitions).parameters
     assert "admission" in params and "admitted" not in params
     assert "admitted" not in inspect.signature(partitions.lake_pairs_map).parameters
+
+
+def test_admitted_only_keeps_entries_up_to_the_cutoff(ledger, dropped_eth) -> None:
+    """检视 R2：基线分区 / skipped / 判缺结果按 (pair, date) 判据收窄；无 pair 条目不参与。"""
+    from alphamill.data_bridge.export_policy import admitted_only
+
+    ledger["verdicts"] = [_verdict(s) for s in ("BTC/USDT", "ETH/USDT")]
+    ledger["rows"] = [_row(s) for s in ("BTC/USDT", "ETH/USDT")]
+    admission = export_admission(object(), AT, market_type="spot", bound_universe=dropped_eth)
+    entries = [
+        {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-02"},
+        {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-03"},
+        {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-04"},
+        {
+            "logical_partition_key": {
+                "exchange": "binance",
+                "pair": "BTC-USDT",
+                "date": "2026-09-09",
+            }
+        },
+        {"exchange": "binance", "pair": "DOGE-USDT", "date": "2026-09-01"},
+        {"date": "2026-09-04"},
+    ]
+
+    kept = admitted_only(entries, admission)
+
+    assert kept == [entries[0], entries[1], entries[3], entries[5]]
+    assert admitted_only(entries, None) is entries

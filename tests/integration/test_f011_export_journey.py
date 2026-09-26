@@ -295,3 +295,30 @@ def test_non_pair_dataset_records_binding_but_drops_nothing(world) -> None:
     )
     assert summary["universe_id"] == world["ids"]["U2"]
     assert summary["dropped_by_universe"] == []
+
+
+def test_gap_before_cutoff_stays_skipped_in_both_modes(world) -> None:
+    """检视 R2 / FR-005：截止日前的空单元格是真实缺口，增量与全量都记；截止日后的不记。"""
+    lake, conn = world["lake"], world["conn"]
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM ohlcv_1m WHERE symbol = 'ETH/USDT' AND time = %s", (_utc("2026-09-02"),)
+        )
+    conn.commit()
+    gap = {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-02"}
+    after_cutoff = {"exchange": "binance", "pair": "ETH-USDT", "date": "2026-09-04"}
+
+    def skipped(summary) -> list[dict]:
+        version = summary["data_version"] or summary["baseline_version"]
+        return mf.load_manifest(lake, "ohlcv_1m", version)["skipped"]
+
+    first = _export(world, "incremental", "2026-09-03")  # 绑定 U1：ETH 仍在准入集合
+    assert gap in skipped(first)
+
+    dropped = _export(world, "incremental", "2026-09-05")  # 绑定 U2：ETH 截止 09-03
+    assert gap in skipped(dropped), "截止日前的缺口在落选后仍须继承"
+    assert after_cutoff not in skipped(dropped)
+
+    full = _export(world, "full", "2026-09-05")
+    assert gap in skipped(full) and after_cutoff not in skipped(full)
+    assert full["no_op"] is True, "增量与全量对同一 pair 的 skipped 结论一致"
