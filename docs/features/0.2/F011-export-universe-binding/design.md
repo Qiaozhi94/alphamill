@@ -155,7 +155,8 @@ _export_one（过滤开启且给了 binding）:
 
 - 落选/退市 pair 的历史由源库产出、走正常对账与修订检测：空湖重建能导回、源库修订能被全量吸收；
 - 判缺（`empty_cell_keys` 的结果）与增量继承的基线 `skipped` 都过 `admitted_only`：`c` 之前的空单元格照常记 `skipped`，之后的一律不记——增量与全量对同一 pair 的 `skipped` 结论一致，连跑「增量→全量→增量」不会因 `skipped` 翻转发布无数据变化的新版本；
-- `guard_full_shrink` 看到的 `merged` 含落选 pair 截止日前的分区，落选本身不会触发收缩守卫；落选 pair 截止日后的分区本来就不存在（冻结当日之后才会导出该日），故正常运行下 full 与 incremental 分区集一致。
+- `guard_full_shrink` 看到的 `merged` 含落选 pair 截止日前的分区，落选本身不会触发收缩守卫；落选 pair 截止日后的分区本来就不存在（冻结当日之后才会导出该日），故除「重新入选后的首次全量」外，full 与 incremental 分区集一致；
+- 重新入选后该 pair 无截止日：增量不回填落选期，首次全量从源库补回并发布一个内容变化的新版本，之后两种 mode 重新一致（spec §3 边界「重新入选」）。
 
 ## 6. UI 与可观测性
 
@@ -177,7 +178,7 @@ _export_one（过滤开启且给了 binding）:
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
 | `AC-001` | integration | `tests/integration/test_f011_export_universe_binding.py`：U1→U2→U3 三版旅程 | 导出准入集合含/不含 X 的 `lake_pair` 随绑定版本变化 |
-| `AC-002` | integration | 同上：增量、全量、空湖首导各跑一次；落选 X + 退市 Y；源库修订 X 截止日前一天；`U2`→`U3` 连续落选 | 台账零变化；X/Y 截止日及之前分区齐全且对账通过、之后无分区；「增量→全量→增量」`skipped` 不翻转、第三次为 no-op；修订进 `revision_diff`；截止日不随 `U3` 后移 |
+| `AC-002` | integration | 同上：增量、全量、空湖首导各跑一次；落选 X + 退市 Y；源库修订 X 截止日前一天；`U2`→`U3` 连续落选 | 台账零变化；X/Y 截止日及之前分区齐全且对账通过、之后无分区；「增量→全量→增量」`skipped` 不翻转、第三次为 no-op；修订进 `revision_diff`；截止日不随 `U3` 后移；X 重新入选后首次全量补回落选期分区、再跑「增量→全量」为 no-op |
 | `AC-003` | unit | `tests/unit/test_f011_export_universe_binding.py`：多版定义（含晚冻结的旧快照、`snapshot_at ≤ t < frozen_at` 的版本、注入 `frozen_at < snapshot_at` 的版本）+ 显式 id；`tests/unit/test_f011_cli_contract.py`：单给 `--universe-id` | 默认取 `snapshot_at ≤ at` 最新；显式覆盖生效且结果不同；参数错误退出 |
 | `AC-004` | unit | `tests/unit/test_f011_cli_contract.py`：spec `IR-003` 六种情形 | 退出码 2 + stderr 原因码；`symbol_map` 与新版本均未落盘 |
 | `AC-005` | unit | `tests/unit/test_f011_export_universe_binding.py`：摘要字段 | `universe_id` 正确、`dropped_by_universe` 排序稳定且只含本 market_type 可交易者；关闭时为 `null`/`[]` |
