@@ -1111,3 +1111,51 @@ report_type: code-review · feature: F003 · status: closed · rounds: 1（full-
 - **未闭合项去向**：R008/R009（Medium）与 R010/R011（Low）四条不阻塞本次闭环，完整留在上表。
   R008（队首饿死）与 R009（非原子写）建议在 F003 收口前或 T033 执行机取证时一并处理——
   队首饿死在单机单跑场景下概率低，但夜槽是无人值守的。
+
+## 循环 23：F011 导出清单绑定当前宇宙版本 需求设计文档检视
+
+report_type: doc-review · feature: F011 · status: closed · rounds: 0（作者自评，不计）→ 1（full-scan）→ 2（diff-only；design 升级全量重读）→ 3（diff-only，封顶）→ 4（仅核对 D15–D17 的 3 处 diff） · 基线 `a745027` → 修复终态 `6511db1`
+
+- report_type: doc-review
+- 周期：2026-09-25 ～ 2026-09-26（独立检视 3 轮 + 1 次收口核对）
+- 状态：闭环（stop_condition_met: true；Critical/High 清零，17 条全部 fixed）
+- 基线：`origin/feat/F011-export-universe-binding` @ `a745027`（三件套正文与 `main @ e2385d1` 相同）→ 修复分支 `docs/F011-export-universe-binding` @ `6511db1`
+- 被检对象：`docs/features/0.2/F011-export-universe-binding/{spec,design,tasks}.md`；设计声明逐条对照 `data_bridge/{exporter,cli,partitions,export_policy}.py`、`universe/{definition,verdicts,errors,criteria}.py`、F008 既有测试与 `deployment/alphamill-{export,fullexport}.*`
+- 门禁：每轮在 worktree 复跑 `tools/verify.py`——文档门禁 4 项、依赖 pin、密钥扫描、ruff 全过；pytest 仅有 54 个集成测试连库 error（shell 无 `DB_PASSWORD`），与纯文档 diff 无关。CI 只在 push main / PR 触发，最终 CI 随合并 main 由 owner 触发
+- 第 0 轮（补记，D11）：`0a32530`（2026-09-25）是作者在同一会话内对三件套的自查修订（形参命名冲突→`bound_universe`、「逐字节一致」不可测→可观察等价、`dropped_by_universe` 定义补齐），自评档 `readiness: PASS` 被当作收敛证据推进到 `ready-for-development`/`developing`；`e2385d1` 以「不构成独立检视」撤回，状态纠正为 `doc-reviewing`
+
+### 循环 23 完整 issue 表
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首现轮 | 修复轮 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F011-D01 | 全量模式会抹掉落选 pair 的历史分区；日常增量与周日全量两个生产单元的交互未设计 | high | correctness | root-cause | original-coding | fixed | 截止日规则（owner 2026-09-26 拍板）：以被绑定版本冻结日为截止日，之前的数据增量/全量都照常产出并复核，之后不产出 | 第 1 次按「全量继承非准入 pair 基线分区」修（当时 CURRENT 尚未写入拍板结论），第 2 次按截止日重写：截止日 = 连续落选段内最早冻结日（含当日）/ 退市 `valid_to` 日取较早者；单元格判据 `Admission.allows(pair, date)` 在增量/全量/空湖首导统一，从源库产出并对账；`merge_partitions` 不改；Q-002 扩到两个导出单元 | AC-002（待实现） | 1 | 3 | late-decision-propagation |
+| F011-D02 | `export_admitted(bound_universe=None)` 改为自动解析最新冻结定义，会改变 F008 既有调用语义且缺 `lake_root` | high | correctness | root-cause | original-coding | fixed | None 保持 F008 原语义，由调用方解析后传对象 | `bound_universe: Binding \| None`，None 保持 F008 语义、不读湖；CLI 解析后传对象；F008 既有测试零修改 | AC-009（待实现） | 1 | 2 | cross-feature-contract-drift |
+| F011-D03 | 绑定解析落在逐 dataset 的导出事务里：不是启动期拒绝，同一运行各 dataset 可能绑不同版本 | high | correctness | root-cause | original-coding | fixed | 在 `cli.main` 中、`_refresh_symbol_map()` 之前一次解析 | FR-003 定义启动期；CLI 一次解析并固定 `window_end` 传给全部 dataset；拒绝时湖内零写入 | AC-008（待实现） | 1 | 2 | — |
+| F011-D04 | 「导出清单」一词两义：增量 manifest `pairs` 仍含落选 pair，SC-001 字面不可达，「pairs 是结果证据」不成立 | high | correctness | root-cause | original-coding | fixed | spec 定义术语，SC-001 改指准入集合，审计靠运行摘要 | spec §1 术语（准入集合 / 截止日 / 本轮产出 / manifest pairs）；SC-001 重写；删除「pairs 是结果证据」 | — | 1 | 2 | ambiguous-term |
+| F011-D05 | 默认关闭路径的兼容口径三处矛盾（逐字节 vs 可观察等价；摘要键写不写） | medium | correctness | root-cause | original-coding | fixed | 统一为可观察等价，保留 IR-002 | spec §3、design §0/§7 统一为可观察等价；IR-002 键始终存在（null/[]） | — | 1 | 2 | partial-symmetric-fix |
+| F011-D06 | `dropped_by_universe` 无计算载体，design 自相矛盾且漏可交易/market_type | medium | correctness | root-cause | original-coding | fixed | 交集点同时返回 admitted 与 dropped | `export_admission -> Admission(admitted, cutoffs, dropped)` 唯一交集点，`export_admitted` 为薄包装；dropped 限定本 market_type | AC-005 / AC-007（待实现） | 1 | 2 | — |
+| F011-D07 | 原因码不可区分：CLI 不打印 code；草稿 id 与无定义同码；ARTIFACT 未列 | medium | test-coverage | root-cause | original-coding | fixed | stderr 输出 `exc.code`，补全原因码表 | IR-003 六情形表；stderr `FATAL: <code>: <消息>`，退出码 2；AC-004 逐一断言 | AC-004（待实现） | 1 | 2 | — |
+| F011-D08 | 「最新」按 frozen_at 定序且无视 window_end 与口径范围 | medium | correctness | root-cause | original-coding | fixed | 按 snapshot_at 定序、限定口径、不许前视 | snapshot_at 定序、多口径 `E_UNIVERSE_AMBIGUOUS`、显式 id 不许前视（过滤口径后由 D12 修正） | AC-003（待实现） | 1 | 2 | — |
+| F011-D09 | `exporter.py` 已达 350 行硬上限，design 却「不新增模块」 | medium | quality | root-cause | original-coding | fixed | 新增小模块承载解析 | 新增 `universe/binding.py`；exporter/partitions 净增 ≤0；行数断言写进 T006 | T006 行数断言（待实现） | 1 | 2 | — |
+| F011-D10 | `--universe-id` 单给行为未定义；审计留痕持久化位置未说明 | medium | correctness | root-cause | original-coding | fixed | 二选一定义单给行为；写明留痕载体 | 单给由 `parser.error` 拒绝；留痕 = stdout → journald，长期留痕后移 | AC-003（待实现） | 1 | 2 | — |
+| F011-D11 | 第 0 轮检视未留档、未进 RETROSPECTIVE | low | quality | symptom-patch | process-gap | fixed | 闭环时补记 | 本循环补记第 0 轮 | — | 1 | 2 | review-not-recorded |
+| F011-D12 | 默认解析按 `snapshot_at ≤ at` 过滤，会绑定当时尚未冻结的版本，历史回放与当时不一致、与截止日口径冲突 | medium | correctness | root-cause | fix-regression | fixed | 候选按 `frozen_at ≤ at` 过滤，候选内按 snapshot_at 定序 | 过滤 = `frozen_at ≤ at ∧ snapshot_at ≤ at`（后者防注入的 frozen_at 早于求值）；Scenario / AC-003 / IR-003 / Q-001 同步 | AC-003（待实现） | 2 | 3 | reviewer-suggestion-imprecise |
+| F011-D13 | 增量剔除、全量继承非准入 pair 的 skipped，manifest 周期性翻转 | medium | correctness | root-cause | fix-regression | fixed | 两种 mode 同一判据 | 判缺结果与基线 skipped 都过 `admitted_only(…, admission)`；AC-002 断言「增量→全量→增量」第三次 no-op | AC-002（待实现） | 2 | 3 | partial-symmetric-fix |
+| F011-D14 | 显式 id 前视复用 `E_UNIVERSE_WINDOW`，违背 errors.py 码语义只增不改 | low | quality | root-cause | fix-regression | fixed | 新增专用码 | 新增 `UniverseLookaheadError`（`E_UNIVERSE_LOOKAHEAD`） | AC-004（待实现） | 2 | 3 | — |
+| F011-D15 | 重新入选后全量会补回落选期间的数据而增量不会；spec 缺边界，design「full 与 incremental 分区集一致」不成立 | medium | correctness | root-cause | fix-regression | fixed | spec §3 增边界，design 断言加例外，AC-002 增用例 | spec §3 新增「重新入选」边界（湖答有哪些数据，宇宙归属看版本历史，引架构 §4.1.1 截面边界）；design §5 改为「除重新入选后首次全量外一致」；AC-002 增用例 | AC-002（待实现） | 3 | 4 | — |
+| F011-D16 | 分支 RETROSPECTIVE「循环 22」与 main 上 F003 的循环 22 撞号 | low | quality | root-cause | process-gap | fixed | 合并 main 后改号 | `04328d7` 合并 main，F011 改为循环 23 | — | 3 | 4 | loop-number-collision |
+| F011-D17 | CLAUDE.md 写 F011 `draft`，与 spec/BACKLOG 的 `doc-reviewing` 不一致 | low | quality | root-cause | spec-drift | fixed | 同步 CLAUDE.md | `236e8ac` 改为 `doc-reviewing` | — | 3 | 4 | — |
+
+### 裁决记录
+
+无 rejected / partial。D01 第 1 次修复偏离拍板结论，原因经核实是检视方在第 1 轮报告发布**之后**才把「用户已拍板」写进 CURRENT，修复方读到的是旧版建议——记为检视方侧流程缺口，不计修复方。
+
+### 模式教训
+
+- **「设计声明没对照真实代码」是本循环的主因**：第 1 轮 4 条 High 全部如此——全量模式的版本组成（`export_policy.merge_partitions`）、F008 既有调用方（`test_f008_quality_gate.py`）、CLI 的错误处理与 `_refresh_symbol_map()` 顺序、manifest `pairs` 的派生方式，都只要读一遍现有实现就能发现。第 0 轮作者自评恰好跳过了这一步。**教训**：文档检视的清单里必须有「逐条拿设计声明对照真实代码与既有调用方」，不能只查文档之间是否一致。
+- **产品决策要先定语义，再谈实现**：D01 的难点不在代码，而在「落选到底意味着什么」。用时间线把增量/全量两种路径对研究员的可见结果摆出来之后，owner 一次拍板（截止日规则），D13、D15 随之有了统一的判据。**教训**：涉及数据可见性的 finding，修复建议要附一张「哪天读湖看到什么」的对照表。
+- **拍板结论要走显式通道**：结论后写进已发布的 CURRENT，修复方看不到，导致一次白修（`late-decision-propagation`）。**教训**：用户裁决应追加进「裁决记录」并在 FIX-log 加批注通知，不能静默改建议列。
+- **检视方建议本身也会引入问题**：D12 的根源是检视方第 1 轮 D08 的建议（按 snapshot_at 过滤）不准确。`fix-regression` 共 4 条（D12–D15），全部出在第 2 轮之后的 diff 邻域，再次证明第 2 轮 diff 复核省不得。
+- **`origin` 分布**：original-coding 10、fix-regression 4、process-gap 2、spec-drift 1。
+- **存活轮数**：D01 最长（第 1 轮发现，第 3 轮修复，存活 2 轮），原因是决策传达延误而非修复困难；其余均为 1 轮。
+- **裁决分布与建议命中率**：accepted 17 / partial 0 / rejected 0。最终修复方案与建议实质一致 17/17；其中 D01 第 1 次偏离（见裁决记录），D07、D12、D14 的修复比建议更进一步（六情形表、双条件过滤、新增专用码），D01 最终方案把退市也并入截止日判据，顺带修掉 F008 全量模式丢弃退市 pair 历史的问题。
