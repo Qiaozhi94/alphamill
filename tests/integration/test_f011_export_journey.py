@@ -256,3 +256,27 @@ def test_library_filter_without_binding_keeps_f008_semantics(world) -> None:
     assert _cells(world["lake"], summary) == _grid("BTC-USDT", 1, 2, 3, 4) | _grid(
         "ETH-USDT", 1, 2, 3, 4
     )
+
+
+def test_explicit_binding_replays_an_earlier_version(world, tmp_path) -> None:
+    """US-002 / AC-003：显式回绑 `U1` 可复现当时的清单（ETH 不落选），摘要记被绑定版本。"""
+    replay_lake = tmp_path / "replay-lake"
+    export_symbol_map_for(world["conn"], replay_lake)
+    at = _utc("2026-09-05")
+    explicit = resolve_binding(at, universe_id=world["ids"]["U1"], lake_root=world["lake"])
+
+    summary = export_dataset(
+        "ohlcv_1m",
+        mode="full",
+        window_end="2026-09-05T00:00:00Z",
+        conn=world["conn"],
+        lake_root=replay_lake,
+        universe_filter=True,
+        bound_universe=explicit,
+    )
+
+    assert summary["universe_id"] == world["ids"]["U1"]
+    assert summary["dropped_by_universe"] == []
+    assert _cells(replay_lake, summary) == (
+        _grid("BTC-USDT", 1, 2, 3, 4) | _grid("ETH-USDT", 1, 2, 3, 4) | _grid("SOL-USDT", 1, 2)
+    )
