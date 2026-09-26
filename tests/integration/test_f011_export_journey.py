@@ -280,3 +280,18 @@ def test_explicit_binding_replays_an_earlier_version(world, tmp_path) -> None:
     assert _cells(replay_lake, summary) == (
         _grid("BTC-USDT", 1, 2, 3, 4) | _grid("ETH-USDT", 1, 2, 3, 4) | _grid("SOL-USDT", 1, 2)
     )
+
+
+def test_non_pair_dataset_records_binding_but_drops_nothing(world) -> None:
+    """检视 R4：`signals_log` 无 pair 维度，绑定照记，但没有任何单元格因绑定被剔除。"""
+    summary = export_dataset(
+        "signals_log",
+        mode="full",
+        window_end="2026-09-05T00:00:00Z",
+        conn=world["conn"],
+        lake_root=world["lake"],
+        universe_filter=True,
+        bound_universe=resolve_binding(_utc("2026-09-05"), lake_root=world["lake"]),
+    )
+    assert summary["universe_id"] == world["ids"]["U2"]
+    assert summary["dropped_by_universe"] == []
