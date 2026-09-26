@@ -24,18 +24,21 @@ updated: 2026-09-26
 - **上游决策**：ADR-0003（门禁不降级）、ADR-0007（研究快照绑定 dataset 独立版本）
 - **功能类型**：backend / data-model
 - **规格模式**：lite
-- **变更类型**：MODIFIED（导出准入集合的解析口径；`--mode full --universe-filter` 下非准入 pair 的基线分区由「丢弃」改为「继承」；不改 manifest schema、不改台账结构）
+- **变更类型**：MODIFIED（导出准入集合的解析口径；开启过滤时离开准入集合的 pair（落选/退市）按**截止日**继续产出历史分区，不再整体丢弃；不改 manifest schema、不改台账结构）
 - **一句话意图**：让「跌出流动性阈值但仍可交易」的 pair 在**新版宇宙定义**中落选后真正离开导出准入集合（不再产出新分区），同时台账区间与历史分区一动不动——把 `F008` 已冻结的状态机补齐成可执行路径。
 
 ## 1. 问题、目标与非目标
 
 ### 术语
 
-本 spec 中以下三个集合严格区分，「导出清单」一词**只**作为第一项的别名使用：
+本 spec 中以下概念严格区分，「导出清单」一词**只**作为第一项的别名使用：
 
-- **导出准入集合**（= 导出清单）：本次运行、某个 dataset 上**允许产出新分区**的 `lake_pair` 集合，按窗口终点现算；
-- **本轮产出集合**：本次运行实际新写/重写分区的 pair（⊆ 导出准入集合）；
-- **manifest `pairs`**：新版本内全部分区涉及的 pair = 本轮产出 ∪ 继承分区（含落选/退市 pair 的**历史**分区）。落选 pair 留在这里是正确的 point-in-time 语义——它在落选前确实是成员。
+- **导出准入集合**（= 导出清单）：本次运行、某个 dataset 上**不限日期**产出分区的 `lake_pair` 集合 = `universe_at(at)` ∩ 质量门 ACTIVE ∩ `selected(bound)`，按窗口终点 `at` 现算；
+- **截止日**：已离开导出准入集合、但判定为 ACTIVE 的 pair 的历史产出上界（UTC 日期，**含当日**）。落选 pair = 其**本次连续落选段**内各版本 `frozen_at` 的最早日期；退市 pair = 台账 `valid_to` 所在日（`valid_to` 恰为某日 00:00 时取前一日）；两者兼有取较早者。分区日期 ≤ 截止日照常产出与对账，> 截止日不产出；
+- **本轮产出集合**：本次运行实际新写/重写分区的 pair（导出准入集合 ∪ 有截止日且窗口内有 ≤ 截止日单元格的 pair）；
+- **manifest `pairs`**：新版本内全部分区涉及的 pair = 本轮产出 ∪ 继承分区（含落选/退市 pair 截止日前的**历史**分区）。落选 pair 留在这里是正确的 point-in-time 语义——它在截止日前确实是成员。
+
+「连续落选段」按 `FR-002` 的版本定序取：从被绑定版本向前、直到最近一个选中该 pair 的版本为止（不含）的那一段版本。用这一段的**最早**冻结日而不是被绑定版本自己的冻结日，是为了不让截止日随每次重新冻结向后漂移——否则 `U2` 落选、`U3` 仍落选时，绑定 `U3` 会把 `U2`~`U3` 之间本不该产出的数据补产出来。
 
 ### 问题
 
@@ -49,7 +52,7 @@ updated: 2026-09-26
 
 - 导出准入集合 = `universe_at(窗口终点)` ∩ 质量门 ACTIVE ∩ **被绑定宇宙版本的入选集合**；
 - 「被绑定宇宙版本」有确定、可复现、不前视的解析口径，并可被显式指定（审计与回放）；
-- 落选**只影响导出准入集合**：台账区间不写、历史分区在增量与全量两种 mode 下都保留、`symbol_map` 保持全量；重新入选即可回来；
+- 落选**只影响导出准入集合**：台账区间不写、截止日前的历史在增量与全量两种 mode 下都照常产出与对账（不依赖湖里已有内容）、`symbol_map` 保持全量；重新入选即可回来；
 - 没有可用宇宙版本时**拒绝启动**，而不是静默跳过交集（否则承诺形同虚设）。
 
 ### 非目标
@@ -106,7 +109,7 @@ updated: 2026-09-26
 - 导出准入集合的解析口径（新增「被绑定宇宙版本入选集合」这一交集项）；
 - 被绑定版本的解析（默认规则见 `FR-002`）与显式覆盖（CLI/调用参数）；
 - 不可用时的启动期拒绝与原因码；
-- `--mode full --universe-filter` 下非准入 pair 基线分区的继承（`FR-005`）；
+- 离开导出准入集合的 pair（落选/退市）按截止日产出历史分区，增量与全量同一规则（`FR-005`）；
 - 运行摘要/日志的审计留痕（绑定 id + 被剔除 pair）。
 
 ### 范围外
@@ -119,9 +122,10 @@ updated: 2026-09-26
 
 - **没有任何冻结定义**：开启准入过滤时**拒绝启动**（不得静默按「全集」放行）。
 - **同一 pair 在多个版本**：以被绑定版本的入选集合为准；旧版本的判定不参与。
-- **落选 ≠ 退市**：落选不写 `valid_to`、不删湖分区；退市仍走 `F008` 既有路径。
-- **落选 pair 的既有分区**：增量模式按 `F002` 语义继承全部基线；全量模式（`--mode full --universe-filter`）对**非准入 pair**（落选或退市）继承其基线分区、只对准入 pair 重导——导出准入集合变窄不等于数据消失。
-- **历史窗口**（`--window-end` 早于最新定义的 `snapshot_at`）：只能绑定 `snapshot_at ≤ 窗口终点` 的定义，不得绑定「未来」的宇宙（前视）。
+- **落选 ≠ 退市**：落选不写 `valid_to`、不删湖分区，台账区间仍由 `F008` 维护；两者在导出侧用同一条截止日规则，只是截止日来源不同（冻结日 / `valid_to`）。
+- **落选 pair 的历史分区**：截止日及之前的单元格在增量与全量两种 mode 下都从源库产出并对账，之后的不产出；空湖重建、基线缺该 pair 时同样能导回历史——导出准入集合变窄不等于数据消失。
+- **截止日之后的缺口**：属于策略排除，不记 `skipped`；截止日之前的空单元格是真实缺口，照常记 `skipped`（两种 mode 同一规则）。
+- **历史窗口**（`--window-end` 早于最新定义的 `frozen_at`）：只能绑定 `frozen_at ≤ 窗口终点`（当时已生效）的定义，不得绑定当时尚未冻结的宇宙（前视）。
 - **多口径并存**（冻结定义的 `criteria.exchange`/`criteria.market_type` 不止一种）：默认解析拒绝并要求显式 `--universe-id`，不得串线。
 - **单给 `--universe-id` 而不开 `--universe-filter`**：参数错误，拒绝（不隐式开启过滤）。
 - **默认关闭**（不传 `--universe-filter`）：与现状**可观察等价**（`NFR-002`），本 feature 不改变默认路径。
@@ -135,7 +139,7 @@ updated: 2026-09-26
 
 系统应当把导出准入集合解析为 `universe_at(窗口终点)` ∩ 质量门 ACTIVE ∩ **被绑定宇宙版本的入选集合**（按 `db_symbol` 求交，与判定记录到湖内命名空间的既有桥一致）。
 
-交集所用的版本与 `export_admitted` **既有的** `universe_id` 形参（它过滤的是**判定记录**）是两件事：本 feature 新增的形参名为 `bound_universe`，类型为已解析的 `UniverseDef`（不是 id），两者各自独立、可同时给出。`bound_universe=None`（缺省）**保持 `F008` 原语义**——不做宇宙交集；版本解析由调用方（导出 CLI）完成后显式传入，交集函数本身不读湖、不做默认解析。
+交集所用的版本与 `export_admitted` **既有的** `universe_id` 形参（它过滤的是**判定记录**）是两件事：本 feature 新增的形参名为 `bound_universe`，类型为已解析的绑定对象（被绑定 `UniverseDef` + 版本链，用于算截止日；不是 id），两者各自独立、可同时给出。`bound_universe=None`（缺省）**保持 `F008` 原语义**——不做宇宙交集；版本解析由调用方（导出 CLI）完成后显式传入，交集函数本身不读湖、不做默认解析。
 
 #### Scenario: 落选即移出
 
@@ -147,10 +151,12 @@ updated: 2026-09-26
 
 系统应当按以下规则解析被绑定版本（`at` = 本次运行的窗口终点，与导出窗口同一口径）：
 
-1. **默认**：在全部**已冻结**定义中取 `snapshot_at ≤ at` 者；若其 `(criteria.exchange, criteria.market_type)` 不止一种 ⇒ 拒绝（`E_UNIVERSE_AMBIGUOUS`，要求显式指定）；否则按 `snapshot_at` 取最新，并列按 `frozen_at`、再按 `universe_id` 定序。候选为空 ⇒ 拒绝（`E_UNIVERSE_NOT_FROZEN`）。
-2. **显式** `universe_id`：定义必须存在（否则 `E_UNIVERSE_NOT_FOUND`）、已冻结（否则 `E_UNIVERSE_NOT_FROZEN`）、且 `snapshot_at ≤ at`（否则 `E_UNIVERSE_WINDOW`，不许前视）。
+1. **默认**：候选 = 全部 `frozen_at ≤ at` 且 `snapshot_at ≤ at` 的冻结定义（当时已生效的版本）；若其 `(criteria.exchange, criteria.market_type)` 不止一种 ⇒ 拒绝（`E_UNIVERSE_AMBIGUOUS`，要求显式指定）；否则按 `snapshot_at` 取最新，并列按 `frozen_at`、再按 `universe_id` 定序。候选为空 ⇒ 拒绝（`E_UNIVERSE_NOT_FROZEN`）。
+2. **显式** `universe_id`：定义必须存在（否则 `E_UNIVERSE_NOT_FOUND`）、已冻结（否则 `E_UNIVERSE_NOT_FROZEN`）、且 `frozen_at ≤ at` 与 `snapshot_at ≤ at` 同时成立（否则 `E_UNIVERSE_LOOKAHEAD`，不许前视）。
 
-以 `snapshot_at`（宇宙所反映的市场时点）而非 `frozen_at`（人工确认时刻）定序：晚冻结的旧快照不得覆盖更新的快照。
+**过滤**用 `frozen_at`（版本何时生效），**定序**用 `snapshot_at`（宇宙反映的市场时点）：前者保证历史回放与当时实际绑定一致、并与截止日同一口径；后者保证晚冻结的旧快照不覆盖更新的快照。`freeze_definition(frozen_at=...)` 允许注入冻结时刻，代码不保证冻结晚于求值，所以两个条件都要显式检查。
+
+同一解析同时给出**版本链**：与被绑定版本同口径、`frozen_at ≤ at`、按上述定序排在被绑定版本及之前的全部冻结定义，用于计算落选 pair 的截止日（§1 术语）。
 
 #### Scenario: 显式绑定可复现
 
@@ -160,9 +166,9 @@ updated: 2026-09-26
 
 #### Scenario: 历史窗口不前视
 
-- GIVEN `U1.snapshot_at < t < U2.snapshot_at`
+- GIVEN `U1.frozen_at ≤ t < U2.frozen_at`（即使 `U2.snapshot_at < t`）
 - WHEN 以 `--window-end t` 默认解析
-- THEN 绑定 `U1`；显式指定 `U2` 被拒绝（`E_UNIVERSE_WINDOW`）
+- THEN 绑定 `U1`；显式指定 `U2` 被拒绝（`E_UNIVERSE_LOOKAHEAD`）
 
 ### Requirement: 不可用时的启动期拒绝（`FR-003`）
 
@@ -186,14 +192,17 @@ updated: 2026-09-26
 - WHEN 读取运行摘要
 - THEN 含 `universe_id=U2` 与被剔除 pair 列表
 
-### Requirement: 落选与退市分离（`FR-005`）
+### Requirement: 落选与退市分离、截止日产出（`FR-005`）
 
-落选**不得**触发任何台账写入（不追加行、不关闭区间），也不得删除或改写该 pair 的既有湖分区与已发布历史；重新入选时无需人工修补即可回到导出准入集合。
+落选**不得**触发任何台账写入（不追加行、不关闭区间），也不得改写已发布版本；重新入选时无需人工修补即可回到导出准入集合。
 
-对 pair 分区的 dataset，新版本的分区组成按 mode 定义：
+开启过滤且给出被绑定版本时，对 pair 分区的 dataset，单元格 `(pair, date)` 的产出判据**在增量与全量两种 mode 下相同**：
 
-- **增量**：基线全部继承 + 准入 pair 的新窗口分区（`F002` 既有语义）；
-- **全量 + 过滤**：准入 pair 从源库全量重导 + **非准入 pair 的基线分区原样继承**（落选与退市同样适用；修正了 `F008` 实现里全量模式会丢弃非准入 pair 历史的行为）。继承分区不参与本轮全量对账与修订检测——这是非准入 pair 的已知残余，记于 §7。
+- pair ∈ 导出准入集合 ⇒ 产出；
+- pair 有截止日（落选或退市，且判定 ACTIVE）⇒ `date ≤ 截止日` 时产出，之后不产出；
+- 其余 pair ⇒ 不产出。
+
+产出即照常走源库对账与修订检测；版本组成仍按 `F002`（增量 = 基线继承 + 窗口产出；全量 = 源库全量产出）。`skipped` 用同一判据：只对「会产出」的单元格判缺，基线 `skipped` 条目在增量模式按同一判据保留或移除。这同时修正了 `F008` 过滤实现在全量模式下丢弃退市 pair 历史的行为（仅在给出被绑定版本时生效；`bound_universe=None` 的 `F008` 路径不变）。
 
 #### Scenario: 落选后台账零变化
 
@@ -203,9 +212,15 @@ updated: 2026-09-26
 
 #### Scenario: 全量模式不丢落选 pair 的历史
 
-- GIVEN 基线版本含 `X` 的历史分区，`X` 在被绑定版本中落选
+- GIVEN `X` 在被绑定版本中落选，截止日为 `c`
+- WHEN 分别以增量、全量、空湖首导三种方式 `--universe-filter` 导出
+- THEN 三者的新版本都含 `X` 在 `c` 及之前的全部分区（与源库对账一致），都不含 `X` 在 `c` 之后的分区，`skipped` 中 `X` 的条目只落在 `c` 及之前
+
+#### Scenario: 截止日前的源库修订会被全量导出吸收
+
+- GIVEN `X` 截止日前某日的数据在源库被修订
 - WHEN `--mode full --universe-filter` 导出
-- THEN 新版本 manifest 仍含 `X` 的全部基线分区（内容与基线一致），且不含 `X` 的新窗口分区
+- THEN 新版本中该分区为修订后的内容，并出现在 `revision_diff`
 
 ### 数据 / 实体需求
 
@@ -220,10 +235,10 @@ updated: 2026-09-26
 
   | 情形 | 原因码 |
   |---|---|
-  | 默认解析：无 `snapshot_at ≤ at` 的冻结定义（含湖内根本没有定义） | `E_UNIVERSE_NOT_FROZEN` |
+  | 默认解析：无 `frozen_at ≤ at` 且 `snapshot_at ≤ at` 的冻结定义（含湖内根本没有定义） | `E_UNIVERSE_NOT_FROZEN` |
   | 显式 id 的定义文件不存在 | `E_UNIVERSE_NOT_FOUND` |
   | 显式 id 存在但未冻结（草稿） | `E_UNIVERSE_NOT_FROZEN` |
-  | 显式 id 的 `snapshot_at > at`（前视） | `E_UNIVERSE_WINDOW` |
+  | 显式 id 的 `frozen_at > at` 或 `snapshot_at > at`（前视） | `E_UNIVERSE_LOOKAHEAD`（新增） |
   | 默认解析时冻结定义存在多种 `(exchange, market_type)` 口径 | `E_UNIVERSE_AMBIGUOUS`（新增） |
   | 定义或冻结记录损坏（非法 JSON / 键集合 / schema_version / id 不符） | `E_UNIVERSE_ARTIFACT` |
 
@@ -237,16 +252,17 @@ updated: 2026-09-26
 
 ```text
 解析绑定版本（每次运行一次，早于 symbol_map 与任何 dataset）:
-  显式 --universe-id（存在∧已冻结∧snapshot_at ≤ at）> 默认（单口径∧snapshot_at ≤ at 中最新）> 拒绝启动（IR-003）
+  显式 --universe-id（存在∧已冻结∧frozen_at, snapshot_at ≤ at）> 默认（单口径∧frozen_at, snapshot_at ≤ at 中 snapshot_at 最新）> 拒绝启动（IR-003）
 导出准入集合 = universe_at(at) ∩ verdicts(ACTIVE) ∩ selected(bound_universe)
-落选: 仅从上述交集剔除 —— 台账/湖分区/判定记录 均不动；全量模式继承其基线分区
+落选/退市: 移出上述集合，按截止日产出历史（date ≤ 截止日），增量与全量同一判据 —— 台账/判定记录 均不动
 重新入选: 下一版定义重新纳入 ⇒ 自动回到集合（无需写台账）
 ```
 
 不变量：
 
 - 本 feature **没有任何对 `universe_membership` 的写路径**（只读校验由测试与源码扫描共同锁定）；
-- 落选 pair 的既有湖分区在增量与全量两种 mode 下都继承，不因导出准入集合变窄而删除；
+- 落选/退市 pair 截止日前的分区在增量、全量、空湖重建下都能从源库产出，不因导出准入集合变窄而丢失；
+- 单元格产出与 `skipped` 判缺在增量与全量两种 mode 下用同一判据；
 - 同一次运行的全部 dataset 绑定同一个宇宙版本；
 - 默认关闭过滤时，导出链路的可观察行为不变。
 
@@ -254,15 +270,15 @@ updated: 2026-09-26
 
 ### 成功标准
 
-- **SC-001**：落选 pair 在新版定义冻结后不再进入导出准入集合、不再产出新分区（manifest `pairs` 中只保留其历史分区；真实库可复现）；
+- **SC-001**：落选 pair 在新版定义冻结后不再进入导出准入集合、截止日后不再产出分区（manifest `pairs` 中只保留其截止日前的历史分区；真实库可复现）；
 - **SC-002**：落选前后台账行数、区间与湖分区集合零变化；
 - **SC-003**：绑定对象可复现（显式 id）且记录在运行摘要里。
 
 ### 验收清单
 
 - [ ] **AC-001** (`FR-001`, `US-001`): `U1` 含 X → `U2` 不含 X 时，导出准入集合不含 X 的 `lake_pair`；`U3` 重新含 X 时又回到集合内 — tests: `tests/integration/test_f011_export_universe_binding.py`
-- [ ] **AC-002** (`FR-005`, `DR-001`, `US-001`): 上述全过程 `universe_membership` 行数/区间零变化；`--mode incremental` 与 `--mode full` 两种导出下，新版本 manifest 均含 X 的全部基线分区（内容与基线一致）且不含 X 的新窗口分区 — tests: `tests/integration/test_f011_export_universe_binding.py`
-- [ ] **AC-003** (`FR-002`, `IR-001`, `US-002`): 默认取 `snapshot_at ≤ at` 中最新的冻结定义（晚冻结的旧快照不胜出；历史 `--window-end` 绑定当时的版本）；显式 `--universe-id` 时以指定版本为准（两个版本给出不同集合）；单给 `--universe-id` 不开 `--universe-filter` 被参数解析拒绝 — tests: `tests/unit/test_f011_export_universe_binding.py`、`tests/unit/test_f011_cli_contract.py`
+- [ ] **AC-002** (`FR-005`, `DR-001`, `US-001`): 上述全过程 `universe_membership` 行数/区间零变化；增量、全量、空湖首导三种导出下，新版本均含 X（落选）与 Y（退市）截止日及之前的全部分区且对账通过、均无截止日之后的分区，`skipped` 在增量与全量间一致（连跑「增量→全量→增量」不因 `skipped` 翻转产生新版本）；截止日前的源库修订被全量导出吸收；连续落选段跨 `U2`→`U3` 时截止日仍为 `U2` 的冻结日 — tests: `tests/integration/test_f011_export_universe_binding.py`
+- [ ] **AC-003** (`FR-002`, `IR-001`, `US-002`): 默认在 `frozen_at ≤ at` 的冻结定义中取 `snapshot_at` 最新者（晚冻结的旧快照不胜出；`snapshot_at ≤ t < frozen_at` 的版本不被历史 `--window-end t` 绑定）；显式 `--universe-id` 时以指定版本为准（两个版本给出不同集合）；单给 `--universe-id` 不开 `--universe-filter` 被参数解析拒绝 — tests: `tests/unit/test_f011_export_universe_binding.py`、`tests/unit/test_f011_cli_contract.py`
 - [ ] **AC-004** (`FR-003`, `IR-003`): `IR-003` 表六种情形逐一触发：退出码 2、stderr 含对应原因码；且均未发布 `symbol_map` 与任何新版本 — tests: `tests/unit/test_f011_cli_contract.py`
 - [ ] **AC-005** (`FR-004`, `IR-002`, `SC-003`): 运行摘要含被绑定 `universe_id` 与排序稳定的 `dropped_by_universe`；关闭过滤时为 `null`/`[]` — tests: `tests/unit/test_f011_export_universe_binding.py`
 - [ ] **AC-006** (`NFR-002`): 不传 `--universe-filter` 时，同一 fixture 下 manifest 的 `pairs`/`partitions`/`skipped`/`rows` 与改动前一致（可观察等价）— tests: `tests/integration/test_f011_export_universe_binding.py`
@@ -275,7 +291,7 @@ updated: 2026-09-26
 ### 测试策略
 
 - 单元测试：绑定解析（显式/默认/失败/前视/多口径）、交集语义、摘要字段、确定性（`tests/unit/test_f011_export_universe_binding.py`）、CLI 契约、原因码与部署单元一致性（`tests/unit/test_f011_cli_contract.py`）。
-- 集成测试：真实 scratch 库 + 临时湖上跑「三版定义」旅程（`tests/integration/test_f011_export_universe_binding.py`），覆盖 AC-001/002/006；增量与全量两种 mode 都跑。
+- 集成测试：真实 scratch 库 + 临时湖上跑「三版定义」旅程（`tests/integration/test_f011_export_universe_binding.py`），覆盖 AC-001/002/006；增量、全量、空湖首导都跑，另含退市 pair 与源库修订。
 - 回归：`F008` 既有测试零修改全绿（AC-009）。
 - 真实环境 / 手动验证：执行机上对**生产湖**跑一次绑定解析（只读、不发布），核对当前 35 对清单与摘要字段。
 
@@ -289,14 +305,15 @@ updated: 2026-09-26
 
 | 决策 / 风险 | 结论或缓解 | 理由 | 后续 |
 |---|---|---|---|
-| 被绑定版本默认怎么选 | 冻结定义中 `snapshot_at ≤ at` 的最新者（并列按 `frozen_at`→`universe_id`）；多口径并存则拒绝 | 冻结定义是唯一权威且不可变；按市场时点而非确认时刻定序才不会让旧快照覆盖新快照，也不会让历史窗口前视；不引入可变指针（derive, don't store） | 若将来需要「生效指针」或多口径并行导出，另立 feature |
+| 被绑定版本默认怎么选 | `frozen_at ≤ at` 的冻结定义中 `snapshot_at` 最新者（并列按 `frozen_at`→`universe_id`）；多口径并存则拒绝 | 冻结定义是唯一权威且不可变；按生效时刻过滤才能让历史回放与当时一致，按市场时点定序才不会让旧快照覆盖新快照；不引入可变指针（derive, don't store） | 若将来需要「生效指针」或多口径并行导出，另立 feature |
 | 交集放在哪一层 | `verdicts` 内单一函数同时产出准入集合与 `dropped`；`export_admitted` 为其薄包装，`bound_universe=None` 保持 `F008` 原语义 | 台账与判定记录不动，交集是导出侧口径；`F007`/`F003` 消费 artifact 的路径与 `F008` 既有调用不受影响 | — |
 | 是否改 manifest 记录绑定 | **不改**（只进运行摘要/日志，journald 留存） | `F002` manifest 契约冻结；manifest `pairs` 含继承的历史分区，**不能**回答「按哪个宇宙算的」，审计只靠摘要 | 超出 journald 保留期的长期审计另立 feature |
-| 落选 pair 的湖分区 | 增量与全量都保留（全量对非准入 pair 继承基线） | 删数据等于制造幸存者偏差（`F008` `Q-003`） | — |
-| 残余风险：全量模式下非准入 pair 的继承分区不再与源库对账 | 接受；只影响已离开导出准入集合的 pair | 重导它们需要把它们放回生产路径，与「落选即不再产出」矛盾 | 若需要对落选 pair 做源库复核，另立 feature |
+| 落选/退市 pair 的历史（owner 2026-09-26 拍板） | 截止日规则：截止日及之前照常产出并对账，之后不产出；增量与全量同一判据 | 删数据等于制造幸存者偏差（`F008` `Q-003`）；从源库产出而非继承湖内分区，空湖重建与源库修订都成立 | — |
+| 截止日取连续落选段的最早冻结日 | 而非被绑定版本自身的冻结日 | 后者会随每次重新冻结后移，补产出落选期间的数据 | — |
+| 残余风险：截止日之后仍留在基线里的分区（仅在显式回绑更早版本等非常规操作下出现） | 增量按 `F002` 继承、全量不再产出 | 不改写已发布版本；全量本就按源库重组版本 | — |
 | 默认关闭时行为变化 | 零变化（`NFR-002` 锁定） | 避免影响在跑的生产导出 | 生产开关由 owner 决策（`Q-002`） |
 
 ## 8. 待确认问题
 
-- [x] Q-001: 「当前宇宙版本」如何解析才既可复现又不需要人工维护？ — 决策（第 1 轮检视后修订）：默认取 `snapshot_at ≤ 窗口终点` 的冻结定义中 `snapshot_at` 最新者（并列按 `frozen_at`→`universe_id`），多口径并存即拒绝；支持显式 `--universe-id` 覆盖（同样不许前视）；不引入可变「生效指针」。
+- [x] Q-001: 「当前宇宙版本」如何解析才既可复现又不需要人工维护？ — 决策（第 2 轮检视后修订）：默认取 `frozen_at ≤ 窗口终点` 的冻结定义中 `snapshot_at` 最新者（并列按 `frozen_at`→`universe_id`），多口径并存即拒绝；支持显式 `--universe-id` 覆盖（同样不许前视，`E_UNIVERSE_LOOKAHEAD`）；不引入可变「生效指针」。
 - [x] Q-002: 生产导出（日常 `deployment/alphamill-export.service` 与每周日 `deployment/alphamill-fullexport.service`）是否在本 feature 内打开 `--universe-filter`？ — 决策：**不在本 feature 内改生产单元**（它是部署行为、且当前生产判定的落选场景尚未发生）；本 feature 只保证开关打开后语义正确。两单元的开关**必须一致**：只开日常增量时，周日全量不过滤会重新产出落选 pair 的新分区，过滤形同虚设——一致性由 AC-008 测试锁定，开关本身由 owner 另行决定并登记。
