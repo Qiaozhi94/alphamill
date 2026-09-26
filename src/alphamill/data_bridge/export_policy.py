@@ -56,3 +56,19 @@ def guard_full_shrink(
             f"full 导出分区数从 {len(baseline)} 大幅降至 {len(current)}，拒绝发布；"
             "确认源表收缩确属有意后用 --allow-shrink 重跑"
         )
+
+
+def admitted_only(entries: list[dict[str, Any]], admission: Any) -> list[dict[str, Any]]:
+    """按导出准入收窄条目：准入外的 (pair, date) 是策略排除，不是数据缺口（检视 R1-005）。
+
+    判据是 `admission.allows(pair, date)`（F011 截止日：增量与全量同一判据）；没有 `pair` 键的
+    条目（非 pair 分区数据集如 `signals_log`）不参与裁剪，否则整片缺口账被清掉（检视第 2 轮 N1）。
+    """
+    if admission is None:
+        return entries
+    keys = [e.get("logical_partition_key") or e for e in entries]
+    return [
+        e
+        for e, key in zip(entries, keys, strict=True)
+        if key.get("pair") is None or admission.allows(key["pair"], key["date"])
+    ]

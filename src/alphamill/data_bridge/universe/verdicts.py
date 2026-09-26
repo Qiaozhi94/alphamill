@@ -156,12 +156,18 @@ class Admission:
     """导出准入（F011 `FR-001`/`FR-004`/`FR-005`）。
 
     `admitted`：不限日期产出分区的 `lake_pair`；`cutoffs`：已离开准入集合、判定 ACTIVE 的
-    `lake_pair` → 截止日（含当日，之后不产出）；`dropped`：因绑定而剔除的 `db_symbol`。
+    `lake_pair` → 截止日（含当日，之后不产出）；`dropped`：因绑定而剔除的 `db_symbol`；
+    `universe_id`：被绑定版本（未绑定为 None）。
     """
 
     admitted: frozenset[str]
     cutoffs: dict[str, date] = field(default_factory=dict)
     dropped: tuple[str, ...] = ()
+    universe_id: str | None = None
+
+    def summary_fields(self) -> dict[str, Any]:
+        """运行摘要的绑定留痕（`IR-002`）：被绑定版本 + 因绑定剔除的 db_symbol。"""
+        return {"universe_id": self.universe_id, "dropped_by_universe": self.dropped}
 
     def covers(self, pair: str | None) -> bool:
         """该 pair 在本轮是否可能产出分区（准入或有截止日）。"""
@@ -221,7 +227,27 @@ def export_admission(
         logger.info(
             "绑定 %s 剔除 %s: not_in_universe_selection", bound_universe.universe_id, symbol
         )
-    return Admission(admitted=admitted, cutoffs=cutoffs, dropped=dropped)
+    return Admission(
+        admitted=admitted, cutoffs=cutoffs, dropped=dropped, universe_id=bound_universe.universe_id
+    )
+
+
+def exporter_admission(
+    conn,
+    end: date,
+    market_type: str | None,
+    admitted: set[str] | None,
+    universe_filter: bool,
+    bound_universe: Binding | None,
+) -> Admission | None:
+    """导出编排入口：显式集合优先（F008 `admitted=`），否则按过滤开关在窗口终点现算；
+    都没有 ⇒ 不过滤。"""
+    if admitted is not None:
+        return Admission(admitted=frozenset(admitted))
+    if not universe_filter:
+        return None
+    at = datetime.combine(end, datetime.min.time(), tzinfo=UTC)
+    return export_admission(conn, at, market_type=market_type, bound_universe=bound_universe)
 
 
 def _delisting_cutoffs(intervals, tradable: frozenset[str], at: datetime) -> dict[str, date]:

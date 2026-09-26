@@ -229,10 +229,10 @@ def produce_partitions(
     end: dt.date,
     baseline_partitions: list[dict[str, Any]],
     lake_pairs: dict[tuple[str, str, str], str],
-    admitted: set[str] | None = None,
+    admitted: Any = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[bool]]:
     """导出窗口内全部单元格 → (produced 条目, 产出逻辑键, 是否新写文件)。
-    `admitted`（F008 FR-006）：未准入单元格在映射 `lake_pair` **之前**剔除；`None` 保持现行为。
+    `admitted`（F008 FR-006 / F011 `Admission`）：`allows(pair, date)` 为假的单元格在映射前剔除。
     过滤只作用于 **pair 分区**的 dataset：非 pair 分区者（`signals_log`）单元格是 `(date,)`，
     取 `cell[1]` 会越界（2026-09-24 真实导出实测 `IndexError`，整轮中断）→ 保持原行为。
     """
@@ -241,7 +241,7 @@ def produce_partitions(
         cells = {
             cell: count
             for cell, count in cells.items()
-            if lake_pairs.get((cell[0], spec.market_type, cell[1])) in admitted
+            if admitted.allows(lake_pairs.get((cell[0], spec.market_type, cell[1])), cell[-1])
         }
     baseline_by_key = {mf.canonical_key(p["logical_partition_key"]): p for p in baseline_partitions}
     produced: list[dict[str, Any]] = []
