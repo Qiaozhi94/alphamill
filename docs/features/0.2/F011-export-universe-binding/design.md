@@ -78,7 +78,7 @@ cli.main (--universe-filter / --universe-id)
 | `dropped` | `tuple[str, ...]` | `{ACTIVE ∧ 本 market_type 命名空间于 at 可交易的 db_symbol} − selected(bound)`，升序去重；`bound is None` 时为 `()` |
 | `allows(pair, date)` | `bool` | `pair ∈ admitted` 或 `date ≤ cutoffs[pair]` |
 
-退市截止日 = `valid_to` 所在 UTC 日（`valid_to` 恰为 00:00 时取前一日），同一 `lake_pair` 多行时取最后一行（与 `members_at` 同口径）。
+退市截止日 = `membership.materialize_intervals(rows)` 派生区间中、该 `lake_pair` 在 `at` 之前最后一个**已终止**区间的终点所在 UTC 日（终点恰为 00:00 时取前一日）。台账记退市的方式是追加 `reason=delisted` 行（`membership.py:6-9`、`admission.py:99`），行上 `valid_to` 通常为空，因此不能直接读 `valid_to` 列；`at` 时仍可交易（`members_at` 为真）的 pair 没有退市截止日。（T002 核对时修正：原文「读 `valid_to`、多行取最后一行」与台账的状态迁移行模型不符。）
 
 ## 4. 接口、Contract 与 Event
 

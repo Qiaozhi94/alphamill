@@ -23,8 +23,8 @@ updated: 2026-09-26
 
 ## 1. 前置条件
 
-- [ ] T001 (`DQ-001`): 关闭所有阻塞性 spec/design 问题（`Q-001`/`Q-002` 已关闭，§10 无开放设计问题）— verify: `spec.md`、`design.md`
-- [ ] T002 (`FR-001`, `FR-002`): 核对上游契约与真实签名——`F008` 的 `export_admitted`/`load_definition`/`load_freeze`/`require_frozen`/定义枚举落点，定序字段（`snapshot_at` / `frozen_at` / `universe_id`）与口径字段（`criteria.exchange` / `criteria.market_type`），以及 `exporter.py` 当前行数（净增预算）— verify: `src/alphamill/data_bridge/universe/definition.py`
+- [x] T001 (`DQ-001`): 关闭所有阻塞性 spec/design 问题（`Q-001`/`Q-002` 已关闭，§10 无开放设计问题）— verify: `spec.md`、`design.md`（2026-09-26 核对：spec §8 Q-001/Q-002 均 [x]，design §10「无」）
+- [x] T002 (`FR-001`, `FR-002`): 核对上游契约与真实签名——`F008` 的 `export_admitted`/`load_definition`/`load_freeze`/`require_frozen`/定义枚举落点，定序字段（`snapshot_at` / `frozen_at` / `universe_id`）与口径字段（`criteria.exchange` / `criteria.market_type`），以及 `exporter.py` 当前行数（净增预算）— verify: `src/alphamill/data_bridge/universe/definition.py`（2026-09-26 核对：签名与字段均符合 design；`exporter.py`/`partitions.py` 均 350 行；单元格键 = `(exchange, symbol[, timeframe], date_iso)`，`allows(pair, date)` 取 `cell[-1]`；**偏差 1 处已修三件套**：台账以追加 `delisted` 行记退市而非写 `valid_to`，退市截止日改由 `materialize_intervals` 派生区间终点求得）
 
 ## 2. 实现任务
 
