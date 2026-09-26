@@ -67,6 +67,8 @@ lake/
 
 # F003 生成运行产物（run.json/因子/checkpoint，体积大；只入库 curated 摘要）
 reports/generation/
+# GPU 单槽的运行期锁与队列文件（gpu.slot/gpu.queue，纯本机运行态）
+reports/.locks/
 reports/backfill/*.log
 # 逐片进度日志（stderr，体积大且可重跑复现）：入库只留逐片摘要 *.log.json 与 run.json
 reports/backfill/*.log.err
