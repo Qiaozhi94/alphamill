@@ -34,6 +34,10 @@ pytestmark = pytest.mark.integration
 
 SYMBOLS = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
 DAYS = [date(2026, 9, 1) + timedelta(days=offset) for offset in range(6)]
+# AC-006：main @ 80c1a53（F011 改动前）对 `world` fixture 默认路径全量导出的 value_digest
+DEFAULT_PATH_GOLDEN_DIGEST = (
+    "sha256:784ef72425082b14736250492a0382dd6dfb95e3944c2a36c3e7f6dec45cef89"
+)
 
 
 _utc = utc
@@ -242,6 +246,12 @@ def test_default_off_path_exports_everything_with_null_binding_keys(world) -> No
     )
     assert summary["universe_id"] is None
     assert summary["dropped_by_universe"] == []
+    manifest = mf.load_manifest(world["lake"], "ohlcv_1m", summary["data_version"])
+    # 基准值由改动前代码（main @ 80c1a53）在同一 fixture 上跑出（检视 R5）
+    assert manifest["pairs"] == ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
+    assert manifest["rows"] == 18
+    assert manifest["skipped"] == []
+    assert manifest["value_digest"] == DEFAULT_PATH_GOLDEN_DIGEST
     all_days = range(1, 7)
     assert _cells(world["lake"], summary) == (
         _grid("BTC-USDT", *all_days) | _grid("ETH-USDT", *all_days) | _grid("SOL-USDT", *all_days)
