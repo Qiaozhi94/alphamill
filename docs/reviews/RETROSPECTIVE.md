@@ -1196,3 +1196,76 @@ report_type: code-review · feature: F011 · status: closed · rounds: 1（full-
 - **存活轮数**：全部首现即修（第 1 轮发现、第 1 轮修复），第 2 轮只做核对。
 - **裁决分布与建议命中率**：accepted 7 / partial 0 / rejected 0；修复方案与建议实质一致 7/7（R4 选择「按 pair_scoped 置空」而非改 spec，R5 选择 main 实跑基准而非手写期望值）。
 - **遗留**：F008 的 design.md / tasks.md 仍提及 `lake_pairs_map(admitted=…)`（F008 已 done 的历史文档），不再改写；以本循环 R6 为准。
+
+## 循环 25：F012 AlphaGen 后端接入挖掘 CLI 需求设计文档检视
+
+report_type: doc-review · feature: F012 · status: closed · rounds: 1（full-scan）→ 2（diff-only；design 升级全量重读）→ 3（diff-only，封顶）→ 4（仅核 D37–D44 定向修复） · 基线 `d702035` → 修复终态（本循环提交）
+
+- report_type: doc-review
+- 周期：2026-09-27（独立检视代理 4 次；修复方 = 作者会话）
+- 状态：闭环（Critical/High 清零，45 条全部 fixed；owner 裁决 7 项写入 spec §8 Q-001~Q-007）
+- 被检对象：`docs/features/0.2/F012-alphagen-mining-cli/{spec,design,tasks}.md`，逐条对照 `src/alphamill/factor_factory/` 真实代码
+- 门禁：每轮 docs worktree `tools/verify.py` exit=0；第 1 轮暴露 main CI 红（d702035，DAG 门禁在 doc-reviewing 起纳入 F012），main 0dce159 修复
+
+### 循环 25 完整 issue 表
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首现轮 | 修复轮 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F012-D01 | run.json 升 v2 后 `factor_store.load` 拒绝全部入册因子（要求 schema_version==FACTOR_SCHEMA_VERSION=1） | critical | correctness | root-cause | original-coding | fixed | load 按 run_schema 接受 {1,2}；factor_store 进影响面；AC-001 用 v2 运行覆盖 | factor_store.load 接受 run schema {1,2} | — | 1 | 2 | spec-vs-code-unverified |
+| F012-D02 | vendor token 名（`feature:close`）与湖列名（`ohlcv_1m.close@1h`）不一致，`build_factor` 必失败；`feature:vwap` 无通道 | high | correctness | root-cause | original-coding | fixed | 定义 token→通道改写规则（与 build_stock_data 槽位同源）并纳入 digest 身份；缺通道归拒绝码 | channel_binding：basename→湖通道名，与 build_stock_data 槽位同源 | — | 1 | 2 | spec-vs-code-unverified |
+| F012-D03 | 预筛 `position=sign(signal)`：cs_rank∈(0,1]、原始量恒正 ⇒ 常规截面因子全判零交易 | high | correctness | root-cause | original-coding | fixed | 为 cross_sectional 定义信号→仓位映射（待 owner 裁决）；补「常规因子能过预筛」AC | objective 增 position_rule=cs_median（Q-005） | — | 1 | 2 | — |
+| F012-D04 | `build_tensor(pairs=universe_at(cutoff))` 用终点成员筛整段历史，幸存者偏差 | high | correctness | root-cause | original-coding | fixed | pairs=None（build_tensor 已逐时点 PIT 掩码），pair_count 取 TensorPanel.pairs | pairs_during 窗口内宇宙成员并集 + 逐时点掩码 | — | 1 | 3 | — |
+| F012-D05 | 「预筛异常即 failed」会被退化表达式（全 NaN/inf）频繁触发 | high | correctness | root-cause | original-coding | fixed | 候选级数据退化归拒绝码；仅系统级异常判 failed；逐一列异常类型 | 候选级/系统级异常逐类划分（终稿见 D32/D41） | — | 1 | 3 | — |
+| F012-D06 | DR-002 预筛指标进 params ⇒ digest 随面板变、查重草稿 digest 与落盘不一致 | high | correctness | root-cause | original-coding | fixed | 预筛指标不进 params，写 run_dir 旁路文件或事件 | 预筛指标写 prefilter.jsonl，不进 params | — | 1 | 2 | — |
+| F012-D07 | 事件追加每条回读全文件 + fsync，万级事件 O(n²) 威胁夜槽产能 | high | quality | root-cause | original-coding | fixed | 运行内单写者、内存 seq、批量 fsync；万级事件耗时测试 | RunEventWriter 无缓冲单写者、批量 fsync、close 先于 finalize | — | 1 | 4 | — |
+| F012-D08 | 任务 DAG 门禁判红（T014 缺生产者前置），main CI 36293699987 失败 | high | quality | root-cause | process-gap | fixed | 加 `T012 -> T014` | main 0dce159 补 T012->T014 | — | 1 | 1 | gate-not-run-after-transition |
+| F012-D09 | GenerationResult 无 stop_reason/evaluations/budget；partial 的 termination/reason 未定义 | medium | correctness | root-cause | original-coding | fixed | 扩展 GenerationResult（默认值兼容 manual），写明 partial 取值 | GenerationResult/Request 增可选字段，partial 的 termination/reason 定义 | — | 1 | 2 | — |
+| F012-D10 | 允许 L1 违反 ADR-0001（L1 = 绕开 sb3/RL） | medium | correctness | root-cause | original-coding | fixed | alphagen 固定 L0，冒烟裁决非 L0 即拒绝 | alphagen 固定 L0，非 L0 → unknown_tier | — | 1 | 2 | — |
+| F012-D11 | SIGTERM 处理器安装范围未定义（排队 1800s 吞信号 / 训练前被默认杀不写 run.json） | medium | correctness | root-cause | original-coding | fixed | 明确安装点；排队与建张量阶段也检查；定义训练前中断终态 | 入口安装信号标志，检查点含等槽循环，取消写 cancelled 出队 | — | 1 | 3 | — |
+| F012-D12 | 协同池注册无设计（spec 说 completed 可注册，design/AC 皆无） | medium | test-coverage | root-cause | original-coding | fixed | 待 owner 裁决：F012 pool 恒 null，或经 build_pool 构建并补 AC | pool 恒 null，协同池另立项（Q-006） | — | 1 | 2 | — |
+| F012-D13 | 「manual 可观察等价」与 v2 升级矛盾，digest 基准检测力弱 | medium | test-coverage | root-cause | original-coding | fixed | 精确定义等价（factors 字节一致、config_digest 不变、run.json 除新字段逐项等） | manual 等价剔除易变字段后比较；alphagen 缺省不并入 manual config | — | 1 | 3 | — |
+| F012-D14 | 双 manifest 写者；写死点至少 10 处而非 6 处（含 objective） | medium | correctness | root-cause | original-coding | fixed | 统一 manifest 构建器，逐项列写死点 | 单一 manifest_builder + 写死点清单 | — | 1 | 2 | — |
+| F012-D15 | 建张量未传窗口起止，读全部历史，与 run.json 2 年 window 不符 | medium | correctness | root-cause | original-coding | fixed | 传 window.start/end；AC 断言面板跨度 | build_tensor 传窗口起止 | — | 1 | 2 | — |
+| F012-D16 | 声称承接 F003 AC-006 但口径不符（F003 委托的是「宇宙扩容→候选质量差异可观测」） | medium | test-coverage | root-cause | original-coding | fixed | 补「不同宇宙下计数与 pair_count 可区分」AC，或改 F003 注 | FR-008/AC-008 宇宙规模可区分 | — | 1 | 2 | — |
+| F012-D17 | NFR-003 ≤1s 无依据；AC-008 以 pytest 跑 8.5h 不现实；未达 50 的处置缺失 | medium | test-coverage | root-cause | original-coding | fixed | T002 实测预筛耗时；AC-008 改 CLI 实跑 + 取证；写明未达标处置（待 owner 裁决） | T002 执行机实测预筛；AC-009 CLI 实跑+取证文件；未达 50 登记发现（Q-007） | — | 1 | 2 | — |
+| F012-D18 | 编译器注册路径写错且形成循环导入（compiler_registry→adapter→factor_store→compiler_registry） | medium | correctness | root-cause | original-coding | fixed | 新增组装模块注册两类编译器 | default_compilers.full_registry 惰性组装 | — | 1 | 3 | — |
+| F012-D19 | `run_generation` 改造前后自相矛盾（移除 run_id vs 无回调时不变） | low | quality | root-cause | original-coding | fixed | 旧路径原样保留，回调模式为独立入口 | train_with_callbacks 独立入口，run_generation 代码不改 | — | 1 | 2 | — |
+| F012-D20 | 事件 payload 并非「沿用 F003」；事件版本号与 run schema 耦合 | low | quality | root-cause | original-coding | fixed | payload = 现有字段 + 可选 definition_digest；事件版本解耦 | payload 既有字段+可选 digest；EVENT_SCHEMA_VERSION 解耦 | — | 1 | 3 | — |
+| F012-D21 | 启动期失败映射与实际不符（零行抛 SchemaValidationError → invalid_config）；建张量在 Kronos 卸载之后 | low | correctness | root-cause | original-coding | fixed | 建张量移到卸载前，统一拒绝码 | 张量先于 Kronos 卸载；零行→invalid_binding | — | 1 | 2 | — |
+| F012-D22 | 行数「净增 ≤0」前提未写清，迁出后导入方改动未列 | low | quality | root-cause | original-coding | fixed | 写明迁出清单，tasks 补导入方改动 | run_schema 迁出并由 run_store 再导出真实名字全集 | — | 1 | 3 | — |
+| F012-D23 | `render_expression` 丢滚动窗口、Rank 错译，绝大多数候选被错判 lookahead（F003 既有缺陷，实跑复现） | high | correctness | root-cause | original-coding | fixed | 渲染器修正纳入 F012 并补逐算子往返测试 | render_expression 滚动/成对滚动算子 name:N、CSRank→cs_rank、Rank→ts_rank:N；新增 AC-010 | — | 2 | 4 | spec-vs-code-unverified |
+| F012-D24 | `pair_count` 取湖内 pair 而非宇宙成员；`pairs=None` 读全湖 | high | correctness | root-cause | fix-regression | fixed | pair_count = 窗口内曾在宇宙的 pair；pairs = 窗口内宇宙成员并集 | pair_count=窗口内曾在宇宙的 pair；pairs_during | — | 2 | 3 | — |
+| F012-D25 | `GpuSlot.acquire(cancel)` 取消不写队列终态，永久堵队头 | high | correctness | root-cause | fix-regression | fixed | 取消先写 cancelled 记录再抛 | acquire(cancel) 先写 cancelled 队列记录 | — | 2 | 3 | — |
+| F012-D26 | manual「逐字节/逐项相等」字面不可达（run_id/created_at/时间戳易变） | medium | test-coverage | root-cause | fix-regression | fixed | 剔除易变字段后比较 | 等价口径剔除 run_id/created_at/时间戳/hostname | — | 2 | 3 | — |
+| F012-D27 | alphagen config 合成未写清，缺省 tier=manual 会判 unknown_tier；IR-001 与 design 矛盾 | medium | correctness | root-cause | fix-regression | fixed | 写明合成顺序与 alphagen 缺省 L0 | config 合成顺序 + alphagen 缺省 L0 | — | 2 | 3 | partial-symmetric-fix |
+| F012-D28 | 该改缺省编译器的是 build_factor（write 无此参数）；CompilerNotRegisteredError 未归类 | medium | correctness | root-cause | fix-regression | fixed | §1-10 改 build_factor/load；异常归系统级 | build_factor/load 缺省编译器惰性组装；CompilerNotRegisteredError 归系统级 | — | 2 | 3 | — |
+| F012-D29 | run_schema 再导出清单名字错（UniverseInfo→UniverseSummary）、漏 RUN_SCHEMA_VERSION/RunStatus；事件信封版本未列 | medium | correctness | root-cause | fix-regression | fixed | 补齐真实名字，RUN_SCHEMA_VERSION=2，事件信封改 EVENT_SCHEMA_VERSION | 再导出清单按真实名字，RUN_SCHEMA_VERSION=2 | — | 2 | 3 | spec-vs-code-unverified |
+| F012-D30 | 事件写者 finalize 之后才 close，崩溃时 run.json completed 而事件丢失 | medium | correctness | root-cause | fix-regression | fixed | 无缓冲写入，close 先于 finalize/_finish_error | close 先于 finalize/_finish_error（D38 收尾） | — | 2 | 4 | — |
+| F012-D31 | 张量由谁构建前后矛盾；GenerationRequest 无 panel/stop | medium | correctness | root-cause | fix-regression | fixed | 统一 CLI 构建，Request 增 panel，stop 经构造器注入 | CLI 建张量，Request.panel，构造器注入 stop/writer/compilers | — | 2 | 3 | — |
+| F012-D32 | 候选级/系统级异常划分仍有缺口（畸形 token、close 缺失被伪装为候选退化） | medium | correctness | root-cause | original-coding | fixed | 畸形 token→unregistered_op；close 缺失视为未观测；面板结构类→failed | 畸形 token→unregistered_op；close 缺失视为未观测；结构类→failed | — | 2 | 3 | — |
+| F012-D33 | 伪代码与真实签名不符（check_expression 参数、仅限关键字、exhausted 判定） | low | quality | root-cause | fix-regression | fixed | 按真实签名重写，exhausted=not stopped | 按真实签名重写伪代码，stopped 标志 | — | 2 | 3 | spec-vs-code-unverified |
+| F012-D34 | 空宇宙时 build_tensor 不抛错；全部异常映射 invalid_binding 过宽 | low | correctness | root-cause | fix-regression | fixed | 建后检查 __in_universe__.any()；配置类→invalid_config | 空宇宙建后校验；配置类→invalid_config | — | 2 | 3 | — |
+| F012-D35 | 多数据集同名 basename 时通道绑定与 build_stock_data 是否同源不确定 | low | correctness | root-cause | original-coding | fixed | 启动期拒绝 | 同名 basename 启动期 invalid_config | — | 2 | 3 | — |
+| F012-D36 | AC-002「面板跨度 == 窗口」口径不清（right-closed 重采样） | low | test-coverage | root-cause | original-coding | fixed | 首尾时间戳 ∈ (start, end] | 首尾时间戳 ∈ (start, end] | — | 2 | 3 | — |
+| F012-D37 | Cov/Corr 实已登记且可编译，第 2 轮修复误写为未登记（修复方只读登记表部分行） | high | correctness | root-cause | fix-regression | fixed | 按 corr:N/cov:N 正常候选；AC-010 断言可编译 | 同建议；FIX-log 更正 Round 2 错误声明 | — | 3 | 4 | spec-vs-code-unverified |
+| F012-D38 | design §5 仍写 finally 关闭写者，与 close 先于 finalize 矛盾 | medium | correctness | root-cause | fix-regression | fixed | partial/异常路径先 close，finally 仅兜底 | 同建议 | — | 3 | 4 | partial-symmetric-fix |
+| F012-D39 | 「不改 run_generation」与渲染修正矛盾；T003 更正 F003 断言无对象 | low | quality | root-cause | fix-regression | fixed | 影响面改写；删无对象句 | 同建议 | — | 3 | 4 | — |
+| F012-D40 | EVENT_SCHEMA_VERSION 放 event_writer 有导入环风险 | low | quality | root-cause | fix-regression | fixed | 放叶子模块 run_schema | 同建议 | — | 3 | 4 | — |
+| F012-D41 | 退化检查先于 close 掩码，单候选可致运行 failed | low | correctness | root-cause | fix-regression | fixed | 先掩码再判退化，close≤0 同处理 | 同建议 | — | 3 | 4 | — |
+| F012-D42 | build_factor 先于 check_expression，lookahead 可能被记为 unregistered_op | low | correctness | root-cause | fix-regression | fixed | 先 seen=∅ 分类再编译查重 | 同建议 | — | 3 | 4 | — |
+| F012-D43 | FR-008 未限定生成器，与 manual 等价冲突 | low | correctness | root-cause | fix-regression | fixed | 限定 alphagen | spec FR-008 与 design §3 universe 汇总均限定 alphagen | — | 3 | 4 | partial-symmetric-fix |
+| F012-D44 | config 浅合并会整段覆盖 objective，position_rule 静默退回 sign | low | correctness | root-cause | fix-regression | fixed | objective 一层深合并 + AC 覆盖 | 同建议 | — | 3 | 4 | — |
+| F012-D45 | 退化/预筛被拒候选 digest 不进 seen，重复出现不判 duplicate | low | correctness | root-cause | original-coding | fixed | seen.add 提前到编译成功、查重之后 | 同建议 | — | 4 | 4 | — |
+
+### 裁决记录
+
+无 rejected / partial。owner 方法论裁决：Q-005 截面仓位 = 减当期截面中位数后取符号（D03）；Q-006 F012 不注册协同池（D12）；Q-007 入册不足 50 登记 M2 产能发现、不阻塞收口（D17）。
+
+### 模式教训
+
+- **「设计声明没对照真实代码」连续第二个 feature 成为主因**：第 1 轮 22 条中 1 Critical + 多数 High（`factor_store.load` 版本校验、token 与湖列名、预筛 `sign` 仓位、`pairs=universe_at(cutoff)`）都是读一遍代码即可发现；第 2 轮 D23（渲染器丢窗口）是 F003 既有缺陷，只有实跑 `render_expression` 才暴露。**教训**：设计引用他模块行为时，至少实跑一次该函数的代表输入；声称「现有代码是 X」必须带 file:line。
+- **修复方自己也会犯同类错误**：D37 是修复方在第 2 轮「只读了登记表 `:55-86` 段」就断言 `Cov/Corr` 未登记——与 F011 D12（检视方建议不准）同属「局部阅读后下全局结论」。**教训**：否定性声明（「不存在 / 未登记 / 无调用方」）必须用 grep 全文件或实跑确认，不能靠读片段。
+- **流转后必须重跑全量门禁**：`check_task_dag` 的作用域随状态变化（doc-reviewing 起纳入），流转后只跑了生命周期与一致性两项，导致 main CI 红（D08）。同 F011 收口时「零活跃 feature」假红：状态变化会改变门禁的检查集合。**教训**：任何 frontmatter 流转提交前跑 `tools/verify.py` 全量，而不是挑几个。
+- **`origin` 分布**：original-coding 26（第 1 轮 21 条 + D23/D32/D35/D36/D45）、fix-regression 18（D24–D31、D33、D34、D37–D44）、process-gap 1（D08）。fix-regression 占比高，印证「每轮修复自伤」——设计大改（design 两次整篇/大段重写）是主要来源。
+- **存活轮数**：D23、D30、D07 最长（3 轮），均为「方案方向对、细节与代码不符」的反复收敛；其余多为 1 轮。
+- **裁决分布与建议命中率**：accepted 45 / partial 0 / rejected 0；修复方案与建议实质一致 45/45（D17、D23 的修复比建议更具体：执行机实测前置、vendor 动作空间不改）。
