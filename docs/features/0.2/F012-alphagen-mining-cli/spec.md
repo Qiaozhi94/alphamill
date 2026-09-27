@@ -293,11 +293,12 @@ mine --generator alphagen
 - [x] **AC-009** (`NFR-001`, `NFR-003`, `SC-001`): 执行机 `qiaozhi-lt` CUDA 夜槽以 CLI 实跑 `mine --generator alphagen --quota 50`（真实湖显式绑定），取证文件 `reports/f012/capacity-evidence.json` 记录 run_id、status、stop_reason、registered、各级拒绝、耗时、显存峰值、预筛 p50/p95；取证校验用例断言字段齐全且与 run.json 一致；未达 50 时同时登记 M2 产能发现 — tests: `tests/integration/test_f012_capacity_evidence.py`
 - [x] **AC-010** (`FR-002`, `US-002`): vendor 默认动作空间内每个算子构造的表达式经修正后的渲染器渲染，滚动与成对滚动算子带窗口（`name:N`，含 `corr:N`/`cov:N`）且不再被判 `lookahead`、能被 `build_factor` 编译；`CSRank` 渲染为 `cs_rank`；时序 `Rank` 渲染为 `ts_rank:N` 并以 `unregistered_op` 拒绝 — tests: `tests/unit/test_f012_render.py`
 
-取证（2026-09-27，执行机 `qiaozhi-lt`，需求分支 `feat/F012-alphagen-mining-cli`）：F012 七个测试文件
-`test_f012_render.py`（25）、`test_f012_candidate_pipeline.py`（26）、`test_f012_stop_conditions.py`（5）、
-`test_f012_cli_contract.py`（13）、`test_f012_run_schema.py`（16）、`test_f012_alphagen_mining.py`（12，真实 PPO +
-scratch 湖经 CLI）、`test_f012_capacity_evidence.py`（4）共 101 passed；统一质量门 `tools/verify.py` exit=0
-（1734 passed / 32 skipped / 1 xfailed）。manual 等价基准取自改动前 `main@84ab505` 实跑（AC-006）。变异验证判红：
+取证（2026-09-28 代码检视闭环后刷新，执行机 `qiaozhi-lt`，需求分支 `feat/F012-alphagen-mining-cli`）：F012 十一个测试文件
+`test_f012_render.py`（47）、`test_f012_candidate_pipeline.py`（26）、`test_f012_stop_conditions.py`（5）、
+`test_f012_cli_contract.py`（13）、`test_f012_cli_failures.py`（12）、`test_f012_run_schema.py`（16）、
+`test_f012_pipeline_review.py`（1）、`test_f012_lake_window.py`（1）、`test_f012_layering.py`（1）、
+`test_f012_alphagen_mining.py`（12，真实 PPO + scratch 湖经 CLI）、`test_f012_capacity_evidence.py`（5）共 139 passed；
+统一质量门 `tools/verify.py` exit=0（1772 passed / 32 skipped / 1 xfailed）。manual 等价基准取自改动前 `main@84ab505` 实跑（AC-006）。变异验证判红：
 畸形 token 分支、槽释放、护栏外预热（去掉即 3 条 CLI 集成红）。AC-009 夜槽实跑（`reports/f012/capacity-evidence.json`）：
 run `alphagen-20260927T155941071187Z-56f90010`（代码检视 R2-1 左闭右标签新口径，2026-09-27 23:59 起）completed/quota_reached，
 入册 50/50，proposed 209（unregistered_op 34 / reachability 97 / duplicate 28），evaluations 188，235 s，显存峰值 0.24 GB，
