@@ -39,7 +39,7 @@ updated: 2026-09-27
 | 14 | `factor_factory/mine_config.py` | 新增独立常量 `DEFAULT_ALPHAGEN_CONFIG`（`tier_level="L0"`、`total_timesteps`、`pool_capacity`、`datasets=["ohlcv_1m"]`、`resample="1h"`、`objective{…, position_rule:"cs_median"}`），不并入 `DEFAULT_MINE_CONFIG` |
 | 15 | `factor_factory/cli.py` | 删去写死点，改调 `mine_dispatch`/`manifest_builder`/`StopController`；净增 ≤0 |
 | 16 | `generators/gpu_slot.py` | `acquire(..., cancel=None)`：等待循环每轮检查 `cancel()`；为真时**先追加队列终态记录 `cancelled`**（`QueueRecord.event` 增此值；`_waiting_head` 只认最新记录为 `queued` 者，故取消即出队）再抛 `AcquireCancelled`（检视 D11/D25） |
-| 17 | `generators/lake_tensor.py` | 新增 `pairs_during(validated, start, end) -> tuple[str, ...]`：窗口内任一时点属于宇宙的 pair 并集（由绑定的宇宙台账区间求交），作为 `build_tensor(pairs=...)` 的输入——仍逐时点 PIT 掩码，不以终点成员筛历史，且只读宇宙相关 pair（检视 D04/D24） |
+| 17 | `generators/lake_tensor.py` | 新增 `pairs_during(ledger: UniverseLedger, start, end) -> tuple[str, ...]`：窗口内任一时点属于宇宙的 pair 并集（由绑定的宇宙台账区间求交），作为 `build_tensor(pairs=...)` 的输入——仍逐时点 PIT 掩码，不以终点成员筛历史，且只读宇宙相关 pair（检视 D04/D24） |
 
 **写死点清单**（检视 D14，全部由 12/13 接管；另 `cli.py:163-168` universe 汇总由 13 按生成器取）：`cli.py:32`（`_MANUAL_CODE_DIGEST`）、`:62`（`choices=("manual",)`）、`:85`、`:99`（`generator`/`tier_level` 写死）、`:101-106`（`objective` 写死 0.0/30/{}）、`:132`（`run_id` 前缀）、`:159`（config `generator`）、`:176`（`tier_level=="manual"`）、`:221`（`GenerationRequest(generator="manual")`）、`:232`（`ManualGenerator()`）、`mine_config.py:16`（`tier_level="manual"`）。
 
@@ -51,7 +51,7 @@ updated: 2026-09-27
 cli.mine  ── with install_signal_flags():               # 入口即安装（检视 D11）
   dispatch = mine_dispatch.resolve(args.generator)
   validate_binding → capability
-  pairs = pairs_during(validated, window.start, window.end)             # D24：窗口内宇宙成员并集
+  pairs = pairs_during(validated.universe_ledger, window.start, window.end)           # D24：窗口内宇宙成员并集
   panel = build_tensor(validated, datasets=..., resample=...,
                        start=window.start, end=window.end, pairs=pairs)  # D04/D15/D21：先建张量
   panel 校验：__in_universe__.any() 否则 invalid_binding；同名 basename 否则 invalid_config（D34/D35）
@@ -110,7 +110,7 @@ AlphaGenGenerator.produce(request)
 | `bind_feature_tokens(tokens, feature_map)` | 新增 | 缺通道 → `MissingChannelError` |
 | `evaluate_objective(..., position_rule="sign")` | 扩展 | `cs_median` 见 §1 第 6 行 |
 | `GpuSlot.acquire(..., cancel=None)` | 扩展 | 等待循环每轮检查 `cancel()`，为真即先写 `cancelled` 队列记录再抛 `AcquireCancelled`（映射为 `partial/interrupted`） |
-| `lake_tensor.pairs_during(validated, start, end)` | 新增 | 窗口内宇宙成员并集 |
+| `lake_tensor.pairs_during(ledger, start, end)` | 新增 | 窗口内宇宙成员并集 |
 | `render_expression(expr)` | 修正 | 滚动与成对滚动算子 `name:N`、`CSRank→cs_rank`、`Rank→ts_rank:N`（见 §1 第 2b 行） |
 | `factor_store.load` | 修改 | run.json 版本 ∈ {1,2} 且 `completed` |
 | `run_schema.load_run` | 迁出 + 扩展 | v1/v2 双读 |
