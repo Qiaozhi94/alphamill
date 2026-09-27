@@ -60,7 +60,9 @@ def _aggregate(frame: pd.DataFrame, resample: str) -> pd.DataFrame:
     result = (
         frame.set_index("timestamp")
         .groupby("pair", sort=True)
-        .resample(resample, closed="right", label="right")
+        # `time` 是 1m K 线开盘时间（采集按 ts+60s 判收盘）：左闭右标签 ⇒ 标签 H 只含
+        # [H-1h, H) 开盘、在 H 前已收盘的 K 线；右闭会把 H 开盘的那根混入，前视 1 分钟（检视 R2-1）
+        .resample(resample, closed="left", label="right")
         .agg(aggregations)
     )
     result.index.names = ["pair", "timestamp"]
