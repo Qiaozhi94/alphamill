@@ -7,8 +7,9 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 |---|---|---|---|
 
 > **F011 已收口（2026-09-26，done）**：导出清单绑定当前宇宙版本（落选即移出）已在 main 上
-> （merge `1d830aa`），交付记录与已知限制见 `docs/features/releases/0.2.md`；生产两个导出单元是否开启
-> `--universe-filter` 属部署决策（spec `Q-002`，须同开同关），尚未开启。
+> （merge `1d830aa`），交付记录与已知限制见 `docs/features/releases/0.2.md`；生产两个导出单元已同时开启
+> `--universe-filter`（`8bbe681`，2026-09-26 部署），首轮 09-27 02:00 增量 / 04:00 全量均绑定
+> `sha256:6d85a249…`、`dropped_by_universe=[]`，`ohlcv_1m` 全量判 content-unchanged。
 
 > **F003 已收口（2026-09-26，done）**：AlphaGen vendor 与可插拔生成器平面已在 main 上，
 > 交付记录见 `docs/features/releases/0.2.md`；「AlphaGen 后端接入 CLI `--generator`」作为
