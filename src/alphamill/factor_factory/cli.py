@@ -18,7 +18,6 @@ from alphamill.factor_factory.generators.manual import (
 from alphamill.factor_factory.generators.mining_capability import require_mining_capabilities
 from alphamill.factor_factory.generators.stop_conditions import (
     PARTIAL_REASONS,
-    RunInterrupted,
     StopController,
     install_signal_flags,
 )
@@ -30,8 +29,7 @@ from alphamill.factor_factory.manifest_builder import (
     RunState,
     budget_for,
     build_manifest,
-    finish_error,
-    finish_partial,
+    finish_exception,
     partial_outcome,
     print_summary,
     reject,
@@ -97,6 +95,7 @@ def _generate(args, reports_root: Path, lake_root: Path | None, flags) -> int:
     slot: gpu_slot.GpuSlot | None = None
     kronos_offload_attempt: gpu_slot.KronosOffloadOutcome | None = None
     writer: RunEventWriter | None = None
+    running = False  # 进入生成器之后的异常一律 failed，不再归为配置错误（design §7，检视 R-A1）
     config: dict[str, canonical.JSONValue] = {}
     quota = args.quota if mining else base.DEFAULT_SEED_QUOTA
     binding_path: Path | None = args.binding
@@ -202,6 +201,7 @@ def _generate(args, reports_root: Path, lake_root: Path | None, flags) -> int:
             writer = (
                 RunEventWriter(state.run_dir, run_id=state.run_id) if spec.needs_panel else None
             )
+            running = True
             context = mine_dispatch.BuildContext(
                 run_id=state.run_id,
                 config=config,
@@ -233,21 +233,9 @@ def _generate(args, reports_root: Path, lake_root: Path | None, flags) -> int:
         print_summary(state, outcome[0], spec)
         return EXIT_OK
     except (errors.FactorFactoryError, OSError, RuntimeError, TypeError, ValueError) as exc:
-        match exc:
-            case RunInterrupted() | gpu_slot.AcquireCancelled():
-                return finish_partial(state, writer, quota, spec)
-            case gpu_slot.GpuQueueTimeoutError():
-                return reject(state, "queue_timeout", str(exc), writer)
-            case errors.MiningCapabilityError():
-                return reject(state, "capability_unavailable", str(exc), writer)
-            case errors.BindingValidationError():
-                return reject(state, "invalid_binding", str(exc), writer)
-            case errors.UnknownSchemaVersionError():
-                return reject(state, "unknown_schema_version", str(exc), writer)
-            case errors.SchemaValidationError() | TypeError() | ValueError() if mining:
-                return reject(state, "invalid_config", str(exc), writer)
-            case _:
-                return finish_error(state, ("failed", type(exc).__name__, str(exc)), writer)
+        return finish_exception(
+            state, exc, writer, quota, spec, config_phase=mining and not running
+        )
     finally:
         if writer is not None:
             writer.close()  # 幂等兜底

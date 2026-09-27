@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias
 
 from alphamill.factor_factory import canonical, errors
-from alphamill.factor_factory.generators import base, binding
+from alphamill.factor_factory.generators import base, binding, gpu_slot
+from alphamill.factor_factory.generators.stop_conditions import RunInterrupted
 from alphamill.factor_factory.registry import run_store
 
 EXIT_OK = 0
@@ -94,6 +95,28 @@ def finish_error(state: RunState, outcome: Outcome, writer: Any = None) -> int:
 
 def reject(state: RunState, termination: str, reason: str, writer: Any = None) -> int:
     return finish_error(state, ("rejected", termination, reason), writer)
+
+
+def finish_exception(state: RunState, exc: Exception, writer, quota: int, spec, *, config_phase):
+    """异常 → 终态（design §7）。
+
+    仅 `config_phase`（进入生成器之前）时配置类异常才记 invalid_config；训练期一律 failed。
+    """
+    match exc:
+        case RunInterrupted() | gpu_slot.AcquireCancelled():
+            return finish_partial(state, writer, quota, spec)
+        case gpu_slot.GpuQueueTimeoutError():
+            return reject(state, "queue_timeout", str(exc), writer)
+        case errors.MiningCapabilityError():
+            return reject(state, "capability_unavailable", str(exc), writer)
+        case errors.BindingValidationError():
+            return reject(state, "invalid_binding", str(exc), writer)
+        case errors.UnknownSchemaVersionError():
+            return reject(state, "unknown_schema_version", str(exc), writer)
+        case errors.SchemaValidationError() | TypeError() | ValueError() if config_phase:
+            return reject(state, "invalid_config", str(exc), writer)
+        case _:
+            return finish_error(state, ("failed", type(exc).__name__, str(exc)), writer)
 
 
 def partial_outcome(state: RunState, stop_reason: str, quota: int) -> Outcome:

@@ -99,6 +99,8 @@ def install_alphagen_runtime(monkeypatch):
 
         def produce(self, request: base.GenerationRequest) -> base.GenerationResult:
             assert request.panel is state["panel"]
+            if state.get("produce_error") is not None:  # 训练期异常注入（检视 R-A1/R-A2）
+                raise state["produce_error"]
             self._ctx.writer.rejected(("feature:close", "mean"), "lookahead", "no window")
             factor = factor_store.build_factor(
                 hypothesis=DEFAULT_CATALOG.require("mechanism_unknown"),
