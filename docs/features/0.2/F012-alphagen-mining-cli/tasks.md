@@ -47,7 +47,7 @@ updated: 2026-09-27
 ### Phase 3：AlphaGen 训练与生成器
 
 - [x] T013 (`FR-002`, `AC-002`): 新增 `generators/alphagen_training.py::train_with_callbacks`（SB3 回调步边界停止，返回 `stopped`/`evaluations`），`run_generation` 原样保留 — verify: `tests/integration/test_f012_alphagen_mining.py`（RED: 5d3f663 ModuleNotFoundError；GREEN: 5 passed——执行机 qiaozhi-lt CPU 小面板真实 PPO：每个被评估表达式以 token 进钩子、should_stop 叫停后 stopped=True 且不再推进训练步）
-- [ ] T014 (`FR-001`, `FR-002`, `FR-008`, `DR-003`, `AC-001`, `AC-002`, `AC-008`): 新增 `generators/alphagen_generator.py::AlphaGenGenerator`（构造器注入停止判定、写者、编译器；`produce` 消费 `request.panel`；`pool=None`、`tier_level=L0`、`pair_count` 取宇宙掩码）— verify: `tests/integration/test_f012_alphagen_mining.py`
+- [x] T014 (`FR-001`, `FR-002`, `FR-008`, `DR-003`, `AC-001`, `AC-002`, `AC-008`): 新增 `generators/alphagen_generator.py::AlphaGenGenerator`（构造器注入停止判定、写者、编译器；`produce` 消费 `request.panel`；`pool=None`、`tier_level=L0`、`pair_count` 取宇宙掩码）— verify: `tests/integration/test_f012_alphagen_mining.py`（RED: 788a4eb ModuleNotFoundError；GREEN: 8 passed——执行机 qiaozhi-lt CPU 真实 PPO：配额 2 达成即停且 v2 事实如实、计数与 events.jsonl 逐码守恒、训练中 SIGTERM → interrupted；unit+integration 全量 1643 passed / 32 skipped；`pair_count` 由 CLI 经 `universe_summary` 取宇宙掩码（T011/T012））
 
 ## 3. 验证与验收任务
 
