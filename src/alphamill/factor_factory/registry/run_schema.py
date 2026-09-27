@@ -14,7 +14,16 @@ import types
 from dataclasses import asdict, dataclass, fields, is_dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Final, Literal, TypeAlias, TypeVar, get_args, get_origin, get_type_hints
+from typing import (
+    Final,
+    Literal,
+    TypeAlias,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from alphamill.factor_factory import canonical, errors
 from alphamill.factor_factory.canonical import JSONValue
@@ -196,7 +205,8 @@ def _decode(value: JSONValue, annotation, field: str):
             key: _decode(item, arguments[1], f"{field}.{key}")
             for key, item in _mapping(value, field).items()
         }
-    if origin is types.UnionType:
+    # Python ≤3.13 下 `Literal[...] | None` 求值为 typing.Union，3.14 起才统一为 types.UnionType
+    if origin in (types.UnionType, Union):
         if {str, int, float, bool, type(None)}.issubset(arguments):
             return value
         if value is None and type(None) in arguments:
