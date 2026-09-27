@@ -73,25 +73,26 @@ def test_empty_universe_window_is_rejected_as_invalid_binding() -> None:
 
 
 def _training_panel(days: int = 240, pair_count: int = 6):
+    """vendor 六个 FeatureType 通道齐全，候选不会因缺通道被整批拒掉。"""
+    import numpy as np
+
     from alphamill.factor_factory.generators.lake_tensor import TensorPanel
 
     timestamps = pd.date_range("2026-01-01", periods=days, freq="h", tz="UTC")
     pairs = tuple(f"PAIR-{index}-USDT" for index in range(pair_count))
-    rows = [
-        (t, p, 10 + d + i + (d % 7) * i, 100 + d * (i + 1), 20 + d + i)
-        for d, t in enumerate(timestamps)
-        for i, p in enumerate(pairs)
-    ]
-    frame = pd.DataFrame(
-        rows,
-        columns=[
-            "timestamp",
-            "pair",
-            "ohlcv_1m.close@1h",
-            "ohlcv_1m.volume@1h",
-            "ohlcv_1m.high@1h",
-        ],
-    ).set_index(["timestamp", "pair"])
+    index = pd.MultiIndex.from_product([timestamps, pairs], names=["timestamp", "pair"])
+    rng = np.random.default_rng(7)
+    close = 100.0 * np.exp(np.cumsum(rng.normal(0, 0.01, (days, pair_count)), axis=0)).ravel()
+    names = ("open", "close", "high", "low", "volume", "vwap")
+    columns = {
+        "open": close * (1 + rng.normal(0, 0.002, close.size)),
+        "close": close,
+        "high": close * 1.004,
+        "low": close * 0.996,
+        "volume": rng.uniform(1e3, 1e4, close.size),
+        "vwap": close * (1 + rng.normal(0, 0.001, close.size)),
+    }
+    frame = pd.DataFrame({f"ohlcv_1m.{n}@1h": columns[n] for n in names}, index=index)
     frame["__in_universe__"] = True
     return TensorPanel(
         datasets=("ohlcv_1m",),
@@ -99,7 +100,7 @@ def _training_panel(days: int = 240, pair_count: int = 6):
         pairs=pairs,
         timestamps=timestamps,
         panel=frame,
-        feature_map={"ohlcv_1m.close@1h": 0, "ohlcv_1m.volume@1h": 1, "ohlcv_1m.high@1h": 2},
+        feature_map={f"ohlcv_1m.{n}@1h": i for i, n in enumerate(names)},
         feature_map_digest="sha256:test",
         universe_source="test",
     )
@@ -225,21 +226,22 @@ def _event_lines(path) -> list[dict]:
 
 
 def test_generator_stops_at_quota_and_reports_v2_facts(tmp_path) -> None:
-    result = _produce(tmp_path, quota=2, objective=_LENIENT)
+    result = _produce(tmp_path, quota=2, objective=_LENIENT, total_timesteps=2048)
 
     assert result.stop_reason == "quota_reached"
     assert len(result.factors) == result.counts.registered == 2
     assert result.pool is None and result.tier_level == "L0" and result.device == "cpu"
-    assert result.budget == {"quota": 2, "total_timesteps": 512, "pool_capacity": 5}
+    assert result.budget == {"quota": 2, "total_timesteps": 2048, "pool_capacity": 5}
     assert result.evaluations is not None and result.evaluations > 0
     for factor in result.factors:
-        assert factor.generator == "alphagen" and factor.run_id == "alphagen-test-run"
-        assert factor.expression[0].startswith("feature:ohlcv_1m.")
+        assert factor.generator == "alphagen" and factor.meta["run_id"] == "alphagen-test-run"
+        features = [s for s in factor.meta["expression"] if s.startswith("feature:")]
+        assert features and all(s.startswith("feature:ohlcv_1m.") for s in features), "通道已绑定"
 
 
 def test_generator_counts_are_conserved_against_the_event_files(tmp_path) -> None:
     strict = {"reachability_min_trades_90d": 10_000}  # 预筛全拒：跑满预算
-    result = _produce(tmp_path, quota=5, objective=strict, total_timesteps=256)
+    result = _produce(tmp_path, quota=5, objective=strict, total_timesteps=1024)
 
     rejected = _event_lines(tmp_path / "events.jsonl")
     counts = result.counts
