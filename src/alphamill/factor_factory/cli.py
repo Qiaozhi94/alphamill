@@ -135,8 +135,7 @@ def _generate(args, reports_root: Path, lake_root: Path | None, flags) -> int:
         )
         if mining and config.get("tier_level") != spec.tier_level:
             return reject(state, "unknown_tier", "tier_level is missing or unknown")
-        panel = None
-        stop: StopController | None = None
+        panel, stop = None, None
         if mining:
             slot_config = mine_dispatch.slot_config(config)
             require_mining_capabilities(require_cuda=not args.allow_cpu)
@@ -153,6 +152,7 @@ def _generate(args, reports_root: Path, lake_root: Path | None, flags) -> int:
                 panel = mine_dispatch.prepare_panel(validated, window, config, lake_root)
                 universe = mine_dispatch.universe_summary(spec, validated, panel)
                 state = replace(state, universe=universe)
+                mine_dispatch.warm_training_runtime()  # 导入期缓存目录须在写护栏外建好
                 stop.raise_if_interrupted()
             window_open = gpu_slot.in_training_window(
                 datetime.now(UTC),

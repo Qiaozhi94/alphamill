@@ -50,6 +50,7 @@ def train_with_callbacks(
     from alphagen.utils import reseed_everything
     from sb3_contrib import MaskablePPO
     from stable_baselines3.common.callbacks import BaseCallback
+    from stable_baselines3.common.logger import Logger
 
     from alphamill.factor_factory.generators.alphagen_runner import LakeTensorCalculator
 
@@ -88,11 +89,25 @@ def train_with_callbacks(
         device=device,
         verbose=0,
     )
+    # SB3 缺省日志器即使 verbose=0 也会在系统临时目录建 SB3-<时间> 目录（run 目录外，写护栏拒）
+    model.set_logger(Logger(folder=None, output_formats=[]))
     callback = _StopCallback()
     model.learn(total_timesteps=total_timesteps, callback=callback)
     return TrainingOutcome(
         evaluations=core.eval_cnt, stopped=callback.stopped, timesteps=model.num_timesteps
     )
+
+
+def warm_runtime() -> None:
+    """在写护栏安装之前完成训练依赖的导入期副作用。
+
+    `torch.optim.Optimizer` 首次构造时惰性导入 `torch._dynamo`，其模块级代码会
+    `os.makedirs(<inductor 缓存目录>)`；该目录在 run 目录之外，护栏内首次导入即被拒，
+    整次运行 failed。库的导入期缓存目录不是运行产物，故在护栏外预热，护栏内不放宽。
+    """
+    import sb3_contrib  # noqa: F401
+    import torch._dynamo  # noqa: F401
+    from alphagen.rl.env.core import AlphaEnvCore  # noqa: F401
 
 
 def _render(expression: object) -> tuple[str, ...]:

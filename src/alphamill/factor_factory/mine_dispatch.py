@@ -120,6 +120,13 @@ def _build_alphagen(ctx: BuildContext) -> base.Generator:
     return AlphaGenGenerator(ctx)
 
 
+def warm_training_runtime() -> None:
+    """护栏外预热训练依赖（见 `alphagen_training.warm_runtime`）；惰性导入以免拉起 torch。"""
+    from alphamill.factor_factory.generators.alphagen_training import warm_runtime
+
+    warm_runtime()
+
+
 def prepare_panel(
     validated: binding.ValidatedBinding,
     window: base.Window,

@@ -160,6 +160,7 @@ def alphagen_runtime(monkeypatch):
 
     monkeypatch.setattr(mine_dispatch, "build_tensor", fake_build_tensor)
     monkeypatch.setattr(mine_dispatch, "_build_alphagen", _StubGenerator)
+    monkeypatch.setattr(mine_dispatch, "warm_training_runtime", lambda: None)
     monkeypatch.setattr(cli_module, "resolve_kronos_offload", offload)
     monkeypatch.setattr(cli_module, "restore_kronos_if_needed", restore)
     return calls, state
