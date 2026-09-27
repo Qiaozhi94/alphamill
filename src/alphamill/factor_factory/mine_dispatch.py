@@ -14,6 +14,7 @@ import json
 import platform
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Final
 
@@ -40,6 +41,7 @@ _VENDOR_BASELINE: Final = (
     Path(__file__).parent / "generators/alphagen_vendor/_upstream_baseline.json"
 )
 ALPHAGEN_GENERATOR_VERSION: Final = "alphagen-f012-v1"
+_READER_EPSILON: Final = timedelta(microseconds=1)
 _LEGACY_MANUAL_OBJECTIVE: Final = run_store.ObjectiveInfo(  # manual 无预筛，沿用改动前取值
     turnover_penalty_lambda=0.0,
     reachability_min_trades_90d=30,
@@ -161,8 +163,10 @@ def prepare_panel(
             validated,
             datasets=datasets,
             resample=resample,
-            start=window.start,
-            end=window.end,
+            # reader 取 [start, end)，而 1h 重采样右闭右标签：各挪 1 µs 才得到 (start, end]
+            # ——恰在 start 的 bar 不再自成一根 start 标签的 bar，恰在 end 的 bar 不再被丢（R-B4）
+            start=window.start + _READER_EPSILON,
+            end=window.end + _READER_EPSILON,
             pairs=pairs_during(validated.universe_ledger, window.start, window.end),
             lake_root=lake_root,
         )
