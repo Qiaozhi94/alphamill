@@ -282,16 +282,26 @@ mine --generator alphagen
 
 ### 验收清单
 
-- [ ] **AC-001** (`FR-001`, `DR-001`, `DR-003`, `US-001`): 小面板 alphagen 运行（v2 run.json）入册的每个因子 `generator="alphagen"`、假设 `mechanism_unknown`、token 已绑定湖通道名，经 `factor_store.load` 反解后在同一面板上信号逐点一致；v1 manual 运行仍可 `load` — tests: `tests/integration/test_f012_alphagen_mining.py`
-- [ ] **AC-002** (`FR-002`, `IR-002`, `US-001`): `--quota 3` 时入册恰为 3、`stop_reason=quota_reached`；步数先耗尽时 `stop_reason=budget_exhausted` 且入册 < 配额；张量面板首尾时间戳落在 `(window.start, window.end]` — tests: `tests/integration/test_f012_alphagen_mining.py`
-- [ ] **AC-003** (`FR-003`, `DR-002`, `US-002`): 恒定信号以 `reachability` 拒绝；截面排名等恒正信号按截面中位数换算仓位后产生交易并按真实指标判定；低于最少交易笔数与成本后收益阈值者被拒；全 NaN / 非有限信号为候选拒绝而非运行失败；`objective` 含 `position_rule`；`prefilter.jsonl` 每候选一行且指标不进 FactorDef 身份 — tests: `tests/unit/test_f012_candidate_pipeline.py`
-- [ ] **AC-004** (`FR-004`, `NFR-005`, `US-002`): 重复表达式按 `definition_digest` 以 `duplicate_definition` 拒绝；缺湖通道 token 以 `unregistered_op`（`detail=missing_channel:*`）拒绝；畸形 token 以 `unregistered_op` 拒绝而非运行失败；events.jsonl 拒绝事件按原因码计数与 `counts.rejected` 逐项相等、`proposed == registered + Σrejected`；1 万条事件写出耗时近似线性 — tests: `tests/unit/test_f012_candidate_pipeline.py`
-- [ ] **AC-005** (`FR-005`, `US-003`): 夜槽结束、训练中 SIGTERM、排队等槽时 SIGTERM 三种停止均得 `status=partial`、对应 `stop_reason`/`termination`/`reason`、`pool=null`、已入册候选落盘且 `factor_store.load` 拒绝加载；GPU 槽释放、Kronos 恢复路径被调用；等槽时取消会写 `cancelled` 队列记录，随后另一运行可取到槽 — tests: `tests/unit/test_f012_stop_conditions.py`
-- [ ] **AC-006** (`FR-006`, `IR-001`, `IR-003`): CLI 接受 `--generator alphagen`；`--generator manual` 与改动前 main 基准按 `FR-006` 口径可观察等价；alphagen 缺省 config 合成后 `tier_level=L0`，用户只给部分 `objective` 键时 `position_rule` 仍为 `cs_median`；未知生成器被 argparse 拒绝；alphagen 给非 L0 层级以 `unknown_tier` 拒绝；零行张量与窗口内宇宙为空均在 Kronos 卸载前以 `invalid_binding` 拒绝；同名通道冲突以 `invalid_config` 拒绝 — tests: `tests/unit/test_f012_cli_contract.py`
-- [ ] **AC-007** (`FR-007`, `DR-001`): run.json v2 字段如实（`tier_level=L0`、`universe.source/pair_count`、`vram_limit_gb`、`kronos_offload`、`objective`、`budget`、`stop_reason`、`evaluations`，`code_digest != config_digest`）；v1 run.json 仍可 `load_run` — tests: `tests/unit/test_f012_run_schema.py`
-- [ ] **AC-008** (`FR-008`, `US-001`): 同一种子、数据版本相同而宇宙成员不同的两个显式绑定分别运行，两份 run.json 的 `universe.pair_count` 不同且等于各自窗口内曾在宇宙的 pair 数 — tests: `tests/integration/test_f012_alphagen_mining.py`
-- [ ] **AC-009** (`NFR-001`, `NFR-003`, `SC-001`): 执行机 `qiaozhi-lt` CUDA 夜槽以 CLI 实跑 `mine --generator alphagen --quota 50`（真实湖显式绑定），取证文件 `reports/f012/capacity-evidence.json` 记录 run_id、status、stop_reason、registered、各级拒绝、耗时、显存峰值、预筛 p50/p95；取证校验用例断言字段齐全且与 run.json 一致；未达 50 时同时登记 M2 产能发现 — tests: `tests/integration/test_f012_capacity_evidence.py`
-- [ ] **AC-010** (`FR-002`, `US-002`): vendor 默认动作空间内每个算子构造的表达式经修正后的渲染器渲染，滚动与成对滚动算子带窗口（`name:N`，含 `corr:N`/`cov:N`）且不再被判 `lookahead`、能被 `build_factor` 编译；`CSRank` 渲染为 `cs_rank`；时序 `Rank` 渲染为 `ts_rank:N` 并以 `unregistered_op` 拒绝 — tests: `tests/unit/test_f012_render.py`
+- [x] **AC-001** (`FR-001`, `DR-001`, `DR-003`, `US-001`): 小面板 alphagen 运行（v2 run.json）入册的每个因子 `generator="alphagen"`、假设 `mechanism_unknown`、token 已绑定湖通道名，经 `factor_store.load` 反解后在同一面板上信号逐点一致；v1 manual 运行仍可 `load` — tests: `tests/integration/test_f012_alphagen_mining.py`
+- [x] **AC-002** (`FR-002`, `IR-002`, `US-001`): `--quota 3` 时入册恰为 3、`stop_reason=quota_reached`；步数先耗尽时 `stop_reason=budget_exhausted` 且入册 < 配额；张量面板首尾时间戳落在 `(window.start, window.end]` — tests: `tests/integration/test_f012_alphagen_mining.py`
+- [x] **AC-003** (`FR-003`, `DR-002`, `US-002`): 恒定信号以 `reachability` 拒绝；截面排名等恒正信号按截面中位数换算仓位后产生交易并按真实指标判定；低于最少交易笔数与成本后收益阈值者被拒；全 NaN / 非有限信号为候选拒绝而非运行失败；`objective` 含 `position_rule`；`prefilter.jsonl` 每候选一行且指标不进 FactorDef 身份 — tests: `tests/unit/test_f012_candidate_pipeline.py`
+- [x] **AC-004** (`FR-004`, `NFR-005`, `US-002`): 重复表达式按 `definition_digest` 以 `duplicate_definition` 拒绝；缺湖通道 token 以 `unregistered_op`（`detail=missing_channel:*`）拒绝；畸形 token 以 `unregistered_op` 拒绝而非运行失败；events.jsonl 拒绝事件按原因码计数与 `counts.rejected` 逐项相等、`proposed == registered + Σrejected`；1 万条事件写出耗时近似线性 — tests: `tests/unit/test_f012_candidate_pipeline.py`
+- [x] **AC-005** (`FR-005`, `US-003`): 夜槽结束、训练中 SIGTERM、排队等槽时 SIGTERM 三种停止均得 `status=partial`、对应 `stop_reason`/`termination`/`reason`、`pool=null`、已入册候选落盘且 `factor_store.load` 拒绝加载；GPU 槽释放、Kronos 恢复路径被调用；等槽时取消会写 `cancelled` 队列记录，随后另一运行可取到槽 — tests: `tests/unit/test_f012_stop_conditions.py`
+- [x] **AC-006** (`FR-006`, `IR-001`, `IR-003`): CLI 接受 `--generator alphagen`；`--generator manual` 与改动前 main 基准按 `FR-006` 口径可观察等价；alphagen 缺省 config 合成后 `tier_level=L0`，用户只给部分 `objective` 键时 `position_rule` 仍为 `cs_median`；未知生成器被 argparse 拒绝；alphagen 给非 L0 层级以 `unknown_tier` 拒绝；零行张量与窗口内宇宙为空均在 Kronos 卸载前以 `invalid_binding` 拒绝；同名通道冲突以 `invalid_config` 拒绝 — tests: `tests/unit/test_f012_cli_contract.py`
+- [x] **AC-007** (`FR-007`, `DR-001`): run.json v2 字段如实（`tier_level=L0`、`universe.source/pair_count`、`vram_limit_gb`、`kronos_offload`、`objective`、`budget`、`stop_reason`、`evaluations`，`code_digest != config_digest`）；v1 run.json 仍可 `load_run` — tests: `tests/unit/test_f012_run_schema.py`
+- [x] **AC-008** (`FR-008`, `US-001`): 同一种子、数据版本相同而宇宙成员不同的两个显式绑定分别运行，两份 run.json 的 `universe.pair_count` 不同且等于各自窗口内曾在宇宙的 pair 数 — tests: `tests/integration/test_f012_alphagen_mining.py`
+- [x] **AC-009** (`NFR-001`, `NFR-003`, `SC-001`): 执行机 `qiaozhi-lt` CUDA 夜槽以 CLI 实跑 `mine --generator alphagen --quota 50`（真实湖显式绑定），取证文件 `reports/f012/capacity-evidence.json` 记录 run_id、status、stop_reason、registered、各级拒绝、耗时、显存峰值、预筛 p50/p95；取证校验用例断言字段齐全且与 run.json 一致；未达 50 时同时登记 M2 产能发现 — tests: `tests/integration/test_f012_capacity_evidence.py`
+- [x] **AC-010** (`FR-002`, `US-002`): vendor 默认动作空间内每个算子构造的表达式经修正后的渲染器渲染，滚动与成对滚动算子带窗口（`name:N`，含 `corr:N`/`cov:N`）且不再被判 `lookahead`、能被 `build_factor` 编译；`CSRank` 渲染为 `cs_rank`；时序 `Rank` 渲染为 `ts_rank:N` 并以 `unregistered_op` 拒绝 — tests: `tests/unit/test_f012_render.py`
+
+取证（2026-09-27，执行机 `qiaozhi-lt`，需求分支 `feat/F012-alphagen-mining-cli`）：F012 七个测试文件
+`test_f012_render.py`（25）、`test_f012_candidate_pipeline.py`（26）、`test_f012_stop_conditions.py`（5）、
+`test_f012_cli_contract.py`（13）、`test_f012_run_schema.py`（16）、`test_f012_alphagen_mining.py`（12，真实 PPO +
+scratch 湖经 CLI）、`test_f012_capacity_evidence.py`（4）共 101 passed；统一质量门 `tools/verify.py` exit=0
+（1734 passed / 32 skipped / 1 xfailed）。manual 等价基准取自改动前 `main@84ab505` 实跑（AC-006）。变异验证判红：
+畸形 token 分支、槽释放、护栏外预热（去掉即 3 条 CLI 集成红）。AC-009 夜槽实跑（`reports/f012/capacity-evidence.json`）：
+run `alphagen-20260927T140500683819Z-67053132` completed/quota_reached，入册 50/50，proposed 325（unregistered_op 48 /
+reachability 163 / duplicate 64），638 s，显存峰值 0.24 GB，Kronos 卸载并恢复。已知发现：预筛 p95 1563 ms（n=213）超
+T002 的 1 s 阈值（p50 318 ms），尾部来自成对滚动算子，交代码检视裁决。
 
 ## 7. 测试、依赖与决策
 
