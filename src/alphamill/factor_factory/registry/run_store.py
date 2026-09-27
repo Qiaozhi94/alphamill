@@ -18,8 +18,8 @@ from uuid import uuid4
 from alphamill.factor_factory import canonical, errors
 from alphamill.factor_factory.canonical import JSONValue
 from alphamill.factor_factory.generators import base, binding
+from alphamill.factor_factory.registry.run_schema import EVENT_SCHEMA_VERSION, RUN_SCHEMA_VERSION
 
-RUN_SCHEMA_VERSION = 1
 RunStatus: TypeAlias = Literal["completed", "rejected", "failed", "partial"]
 TierLevel: TypeAlias = Literal["L0", "L1", "L2", "manual"]
 _R = frozenset(
@@ -140,7 +140,7 @@ def append_candidate_rejected(
     return _append_event(
         run_dir,
         GenerationEvent(
-            schema_version=RUN_SCHEMA_VERSION,
+            schema_version=EVENT_SCHEMA_VERSION,
             event_seq=0,
             event_type="generation.candidate_rejected",
             ts=_utc(ts if ts is not None else datetime.now(UTC), "ts"),
@@ -163,7 +163,7 @@ def finalize_run(run_dir: Path, run: GenerationRun) -> Path:
         _append_event(
             run_dir,
             GenerationEvent(
-                schema_version=RUN_SCHEMA_VERSION,
+                schema_version=EVENT_SCHEMA_VERSION,
                 event_seq=0,
                 event_type="generation.run_completed",
                 ts=_utc(run.finished_at, "finished_at"),
