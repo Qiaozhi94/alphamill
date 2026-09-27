@@ -5,7 +5,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 
 | Feature | 版本 | 状态 | 链接 |
 |---|---|---|---|
-| F012-alphagen-mining-cli | 0.2 | doc-reviewing | [spec](docs/features/0.2/F012-alphagen-mining-cli/spec.md) |
+| F012-alphagen-mining-cli | 0.2 | ready-for-development | [spec](docs/features/0.2/F012-alphagen-mining-cli/spec.md) |
 
 > **F011 已收口（2026-09-26，done）**：导出清单绑定当前宇宙版本（落选即移出）已在 main 上
 > （merge `1d830aa`），交付记录与已知限制见 `docs/features/releases/0.2.md`；生产两个导出单元已同时开启

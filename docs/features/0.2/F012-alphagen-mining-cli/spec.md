@@ -2,7 +2,7 @@
 kind: feature
 id: F012
 version: "0.2"
-status: doc-reviewing
+status: ready-for-development
 branch: docs/F012-alphagen-mining-cli
 gate_version: 1
 related_features: [F003, F007, F013]
