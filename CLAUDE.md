@@ -48,4 +48,4 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 
 ## 当前活跃 Feature
 
-- 无（F011 已于 2026-09-26 收口；新 Feature 立项后在此登记）
+- F012 AlphaGen 后端接入挖掘 CLI（v0.2）→ `docs/features/0.2/F012-alphagen-mining-cli/`
