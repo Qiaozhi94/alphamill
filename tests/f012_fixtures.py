@@ -1,4 +1,5 @@
-"""F012 集成用 scratch 湖：ohlcv_1m 小时级合成行情 + 符号映射 + manifest + 显式绑定。
+"""F012 集成夹具：scratch 湖（ohlcv_1m 小时级合成行情 + 符号映射 + manifest + 显式绑定）
+与训练/生成器/CLI 驱动。
 
 走 data_bridge 真实写路径（`write_partition` / `publish_manifest`），CLI 由此经 F002 reader
 与绑定校验读数——与执行机真实湖同一条取数链，只是规模小。同一份数据可按不同宇宙成员
@@ -7,11 +8,14 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+import pytest
 
 from alphamill.data_bridge import manifest, partitions, symbol_map
 from alphamill.data_bridge import paths as lake_paths
@@ -179,3 +183,164 @@ def _write_binding(
         )
     )
     return binding_path
+
+
+# ------------------------------------------------------------------ 训练/生成器/CLI 驱动
+
+
+def _training_panel(days: int = 240, pair_count: int = 6):
+    """vendor 六个 FeatureType 通道齐全，候选不会因缺通道被整批拒掉。"""
+    from alphamill.factor_factory.generators.lake_tensor import TensorPanel
+
+    timestamps = pd.date_range("2026-01-01", periods=days, freq="h", tz="UTC")
+    pairs = tuple(f"PAIR-{index}-USDT" for index in range(pair_count))
+    index = pd.MultiIndex.from_product([timestamps, pairs], names=["timestamp", "pair"])
+    rng = np.random.default_rng(7)
+    close = 100.0 * np.exp(np.cumsum(rng.normal(0, 0.01, (days, pair_count)), axis=0)).ravel()
+    names = ("open", "close", "high", "low", "volume", "vwap")
+    columns = {
+        "open": close * (1 + rng.normal(0, 0.002, close.size)),
+        "close": close,
+        "high": close * 1.004,
+        "low": close * 0.996,
+        "volume": rng.uniform(1e3, 1e4, close.size),
+        "vwap": close * (1 + rng.normal(0, 0.001, close.size)),
+    }
+    frame = pd.DataFrame({f"ohlcv_1m.{n}@1h": columns[n] for n in names}, index=index)
+    frame["__in_universe__"] = True
+    return TensorPanel(
+        datasets=("ohlcv_1m",),
+        resample="1h",
+        pairs=pairs,
+        timestamps=timestamps,
+        panel=frame,
+        feature_map={f"ohlcv_1m.{n}@1h": i for i, n in enumerate(names)},
+        feature_map_digest="sha256:test",
+        universe_source="test",
+    )
+
+
+_WINDOW = ("2026-01-01T00:00:00+00:00", "2026-01-11T00:00:00+00:00")
+
+
+_LENIENT = {  # 预筛放宽到几乎全收：只验证编排与配额，不验证目标函数本身
+    "reachability_min_trades_90d": 0,
+    "min_after_cost_return": -1.0e9,
+    "turnover_penalty_lambda": 0.0,
+}
+
+
+def _produce(tmp_path, *, quota: int, objective: dict, check=None, total_timesteps=512):
+    pytest.importorskip("torch")
+    pytest.importorskip("sb3_contrib")
+    from alphamill.factor_factory import mine_dispatch
+    from alphamill.factor_factory.generators.base import GenerationRequest, Window
+    from alphamill.factor_factory.generators.stop_conditions import (
+        StopController,
+        install_signal_flags,
+    )
+    from alphamill.factor_factory.registry.default_compilers import full_registry
+    from alphamill.factor_factory.registry.event_writer import RunEventWriter
+
+    spec = mine_dispatch.resolve("alphagen")
+    config = mine_dispatch.compose_config(
+        spec,
+        {"objective": objective, "total_timesteps": total_timesteps, "pool_capacity": 5},
+        mining=True,
+        quota=quota,
+        window=list(_WINDOW),
+    )
+    run_id = "alphagen-test-run"
+    with install_signal_flags() as flags:
+        stop = StopController(
+            flags=flags,
+            window_start="22:00",
+            window_end="06:30",
+            window_tz="Asia/Shanghai",
+            ignore_window=True,
+        )
+        if check is not None:
+            stop.check = check(stop)
+        writer = RunEventWriter(tmp_path, run_id=run_id)
+        context = mine_dispatch.BuildContext(
+            run_id=run_id, config=config, stop=stop, writer=writer, compilers=full_registry()
+        )
+        request = GenerationRequest(
+            generator="alphagen",
+            binding=object(),
+            seed=11,
+            window=Window(
+                start=datetime.fromisoformat(_WINDOW[0]),
+                end=datetime.fromisoformat(_WINDOW[1]),
+                resample="1h",
+            ),
+            config=config,
+            quota=quota,
+            panel=_training_panel(),
+        )
+        result = mine_dispatch.build_generator(spec, context).produce(request)
+        writer.close()
+    return result
+
+
+def _event_lines(path) -> list[dict]:
+    import json
+
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+FULL = [
+    {"lake_pair": f"{base}-USDT", "valid_from": "2026-01-01T00:00:00Z", "valid_to": None}
+    for base in ("AAA", "BBB", "CCC", "DDD", "EEE", "FFF")
+]
+
+
+PARTIAL_UNIVERSE = [
+    {"lake_pair": "AAA-USDT", "valid_from": "2026-01-01T00:00:00Z", "valid_to": None},
+    {"lake_pair": "BBB-USDT", "valid_from": "2026-01-01T00:00:00Z", "valid_to": None},
+    # 窗口内中途退出者仍计入「曾在宇宙」
+    {
+        "lake_pair": "CCC-USDT",
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_to": "2026-09-05T00:00:00Z",
+    },
+]
+
+
+def _cli_mine(lake, binding: str, tmp_path, *, quota: int, total_timesteps: int, objective=None):
+    import json
+
+    pytest.importorskip("torch")
+    pytest.importorskip("sb3_contrib")
+    from alphamill.factor_factory import mine_dispatch
+    from alphamill.factor_factory.cli import main
+
+    panels = []
+    original = mine_dispatch.build_tensor
+
+    def recording(*args, **kwargs):
+        panels.append(original(*args, **kwargs))
+        return panels[-1]
+
+    config = tmp_path / f"config-{binding}.json"
+    body = {"total_timesteps": total_timesteps, "pool_capacity": 5}
+    if objective is not None:
+        body["objective"] = objective
+    config.write_text(json.dumps(body), encoding="utf-8")
+    argv = ["mine", "--generator", "alphagen", "--binding", str(lake.bindings[binding])]
+    argv += ["--seed", "11", "--quota", str(quota), "--config", str(config)]
+    argv += ["--allow-cpu", "--allow-offhours"]
+    mp = pytest.MonkeyPatch()
+    mp.setattr(mine_dispatch, "build_tensor", recording)
+    # 训练中 torch 惰性导入 torch._inductor.test_operators，名字命中 pytest 的断言改写钩子，
+    # 钩子用 os.makedirs 写 pyc 缓存而被进程级写护栏拦下；生产进程无此钩子（importlib 走 posix）。
+    mp.setattr(sys, "dont_write_bytecode", True)
+    try:
+        code = main(argv, reports_root=lake.reports_root, lake_root=lake.lake_root)
+    finally:
+        mp.undo()
+    runs = sorted((lake.reports_root / "generation").glob("*/run.json"))
+    run_path = max(runs, key=lambda p: p.stat().st_mtime_ns)
+    return code, run_path, json.loads(run_path.read_text(encoding="utf-8")), panels[-1]
