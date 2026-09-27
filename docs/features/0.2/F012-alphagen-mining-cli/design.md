@@ -93,7 +93,7 @@ AlphaGenGenerator.produce(request)
 
 **prefilter.jsonl**（DR-002）：每个进入预筛的候选一行 `{definition_digest, outcome, turnover, trades_90d, after_cost_return, elapsed_ms}`，经 `RunEventWriter` 同一写者写出；预筛指标不写入 FactorDef `params`——`params` 整体参与 `definition_digest`（`factor_dto.py:27-29,81-86`），写入会使同一表达式随面板变 id（检视 D06）。
 
-**universe 汇总**（检视 D24）：`pair_count` = 面板中 `__in_universe__` 在窗口内至少一次为真的 pair 数（不是湖内 pair 数）；`source` 取绑定的宇宙来源（显式绑定为 `explicit`）。
+**universe 汇总**（检视 D24/D43）：alphagen 运行的 `pair_count` = 面板中 `__in_universe__` 在窗口内至少一次为真的 pair 数（不是湖内 pair 数）；manual 运行沿用现状（`cli.py:163-168` 取 `universe_at(cutoff_time)`）以保持 `FR-006` 等价；`source` 取绑定的宇宙来源（显式绑定为 `explicit`）。
 
 **FactorDef 身份**：alphagen 表达式 token 在入册前已绑定为湖通道名（`feature:ohlcv_1m.close@1h`），因此 `definition_digest` 天然包含数据集与重采样身份（与 `feature_map_digest` 一致）；查重在绑定之后按该 digest 进行。
 
@@ -135,12 +135,13 @@ CandidatePipeline.offer(tokens):
             # 拒: unregistered_op | lookahead；畸形 token 抛 SchemaValidationError → Rejected(unregistered_op)
   draft = build_factor(..., params={}, compilers=registry)   # FactorCompilationError/FeatureMapIntegrityError → Rejected(unregistered_op)
   if draft.definition_digest in seen → Rejected(duplicate_definition)
+  seen.add(draft.definition_digest)                     # 编译成功即入 seen：退化/预筛被拒者再次出现也判 duplicate（检视 D45）
   signal = draft.compute(panel)
   signal = signal.where(close 可得 且 close > 0)         # close 缺失或非正的 bar 视为未观测（先掩码，检视 D41），计入 masked_bars
   若在宇宙内已无任何非 NaN 信号，或含非有限值 → Rejected(reachability, degenerate_signal)
   result = evaluate_objective(signal_panel, params=objective_params, position_rule="cs_median")
            # 此时 SchemaValidationError 只剩面板/列结构类 ⇒ 系统级，运行 failed（不伪装成候选拒绝）
-  seen.add(draft.definition_digest); prefilter_log.append(...)
+  prefilter_log.append(...)
   result.accepted ? Registered : Rejected(reachability, result.detail)
   registered == quota ⇒ stopped = True；StopController.mark_quota()
 
