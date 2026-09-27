@@ -56,6 +56,14 @@ def build_scratch_lake(
     spec = require_dataset(DATASET)
     rng = np.random.default_rng(20260911)
     entries = []
+    # 窗口边界探针（检视 R-C1/R2-1），`time` 是 1m K 线开盘时间：window.start 前 1 分钟开盘的
+    # 须排除；cutoff 前 1 分钟开盘（cutoff 收盘，close=2.0）的归入 cutoff 标签；cutoff 开盘的
+    # （close=99.0）cutoff 之后才收盘，须排除——否则即前视
+    minute = timedelta(minutes=1)
+    probes: dict[str, list[list[object]]] = {}
+    for ts, value in ((WINDOW_START - minute, 1.0), (CUTOFF - minute, 2.0), (CUTOFF, 99.0)):
+        row = [ts, EXCHANGE, f"{BASES[0]}/USDT", value, value, value, value, 1.0]
+        probes.setdefault(ts.date().isoformat(), []).append(row)
     for index, base in enumerate(BASES):
         close = 10.0 * (index + 1) * np.exp(np.cumsum(rng.normal(0.0, 0.01, HOURS)))
         by_day: dict[str, list[list[object]]] = {}
@@ -66,6 +74,9 @@ def build_scratch_lake(
             row = [ts, EXCHANGE, f"{base}/USDT", o, max(o, c) * 1.002, min(o, c) * 0.998, c]
             row.append(float(rng.uniform(1e3, 1e4)))
             by_day.setdefault(ts.date().isoformat(), []).append(row)
+        if index == 0:
+            for day, rows in probes.items():
+                by_day.setdefault(day, []).extend(rows)
         for day, rows in by_day.items():
             key = {"exchange": EXCHANGE, "pair": lake_pair(base), "date": day}
             entries.append(
@@ -73,19 +84,6 @@ def build_scratch_lake(
                     lake_root, spec, {**key, "db_symbol": f"{base}/USDT"}, rows
                 )
             )
-
-    # 窗口边界探针 bar（检视 R-C1/R-B4）：恰在 window.start（开区间，须排除）、恰在 window.end
-    # （闭区间，须保留）、window.end 之后（须排除）
-    base = BASES[0]
-    probes: dict[str, list[list[object]]] = {}
-    for ts in (WINDOW_START, CUTOFF, CUTOFF + timedelta(hours=1)):
-        row = [ts, EXCHANGE, f"{base}/USDT", 1.0, 1.0, 1.0, 1.0, 1.0]
-        probes.setdefault(ts.date().isoformat(), []).append(row)
-    for day, rows in probes.items():
-        key = {"exchange": EXCHANGE, "pair": lake_pair(base), "date": day}
-        entries.append(
-            partitions.write_partition(lake_root, spec, {**key, "db_symbol": f"{base}/USDT"}, rows)
-        )
 
     mapping = symbol_map.build_symbol_map(
         [symbol_map.SymbolRow(EXCHANGE, "spot", f"{base}/USDT") for base in BASES]
