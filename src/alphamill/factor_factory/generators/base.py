@@ -13,6 +13,7 @@ from alphamill.factor_factory.factor import FactorDef
 
 if TYPE_CHECKING:
     from alphamill.factor_factory.generators.binding import SnapshotBinding
+    from alphamill.factor_factory.generators.lake_tensor import TensorPanel
 
 Expression: TypeAlias = tuple[str, ...]
 RejectionReason: TypeAlias = Literal[
@@ -113,6 +114,8 @@ class GenerationRequest:
     window: Window
     config: Mapping[str, JSONValue]
     quota: int
+    # F012：CLI 在卸载 Kronos、取 GPU 槽之前建好的张量；manual 不需要（检视 D31）
+    panel: TensorPanel | None = None
 
     def __post_init__(self) -> None:
         if self.quota < 1:
@@ -127,6 +130,10 @@ class GenerationResult:
     counts: GenerationCounts
     device: str
     tier_level: str
+    # F012 v2 运行记录字段；manual 保持缺省（检视 D09）
+    stop_reason: str | None = None
+    evaluations: int | None = None
+    budget: Mapping[str, int | None] | None = None
 
     def __post_init__(self) -> None:
         for index, factor in enumerate(self.factors):

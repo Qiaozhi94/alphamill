@@ -20,6 +20,7 @@ from alphamill.factor_factory.generators.base import reject_conclusion_fields
 from alphamill.factor_factory.generators.expression_compiler import referenced_features
 from alphamill.factor_factory.hypotheses.catalog import DEFAULT_CATALOG, HypothesisCatalog
 from alphamill.factor_factory.hypotheses.schema import HypothesisDef
+from alphamill.factor_factory.registry import run_schema
 from alphamill.factor_factory.registry.compiler_registry import (
     DEFAULT_COMPILERS,
     CompileContext,
@@ -183,8 +184,9 @@ def load(
         if not manifest.is_file():
             raise FactorStoreError(f"completed run manifest is missing: {manifest}")
         run = _read_json(manifest)
-        if run.get("schema_version") != FACTOR_SCHEMA_VERSION or run.get("status") != "completed":
-            raise FactorStoreError("run.json must have schema_version=1 and status='completed'")
+        version = run.get("schema_version")
+        if version not in run_schema.RUN_SCHEMA_VERSIONS or run.get("status") != "completed":
+            raise FactorStoreError("run.json must be a completed run of a known schema_version")
     dto = read(path)
     feature_path = run_dir / "feature_maps" / f"{_digest_hex(dto.feature_map_digest)}.json"
     feature_map = _parse_feature_map(_read_json(feature_path))
