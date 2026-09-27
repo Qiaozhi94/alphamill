@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import signal
 from datetime import UTC, datetime
 from pathlib import Path
@@ -59,7 +60,10 @@ def test_manual_mine_is_observably_equivalent_to_pre_f012_baseline(tmp_path, mon
     volatile = {"run_id", "started_at", "finished_at", "hostname", "schema_version", *V2_FIELDS}
     stable = json.loads(json.dumps(_strip(run, volatile)).replace(str(tmp_path), "<TMP>"))
     stable["objective"] = _strip(stable["objective"], {"position_rule"})
-    assert stable == BASELINE["run"]
+    expected = json.loads(json.dumps(BASELINE["run"]))
+    # 基准在 3.14 上取得；engine.dependencies.python 记录的是运行时解释器版本，改动前后同样随环境变
+    expected["engine"]["dependencies"]["python"] = platform.python_version()
+    assert stable == expected
     assert run["schema_version"] == 2
     assert run["budget"] == {"quota": 5, "total_timesteps": None, "pool_capacity": None}
     assert (run["stop_reason"], run["evaluations"]) == (None, None)
