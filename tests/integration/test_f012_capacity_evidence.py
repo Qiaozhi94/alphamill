@@ -73,3 +73,15 @@ def test_shortfall_below_fifty_is_registered_as_an_m2_finding(evidence) -> None:
         assert body["m2_capacity_finding"], "未达 50 必须同时登记 M2 产能发现"
     else:
         assert body["m2_capacity_finding"] is None
+
+
+def test_evidence_matches_the_run_stdout_summary(evidence) -> None:
+    """检视 R-C11：显存峰值与预筛分位数须与运行时 stdout 摘要对得上（不是事后另算的数）。"""
+    body, _, _ = evidence
+    lines = (EVIDENCE_DIR / "capacity-run.stdout").read_text(encoding="utf-8").splitlines()
+    summary = json.loads(next(line for line in reversed(lines) if line.startswith("{")))
+    assert summary["run_id"] == body["run_id"]
+    assert summary["vram_peak_gb"] == body["vram_peak_gb"]
+    assert summary["counts"] == body["counts"]
+    for key in ("prefilter_ms_p50", "prefilter_ms_p95"):
+        assert abs(summary[key] - body[key]) < 0.1, key
