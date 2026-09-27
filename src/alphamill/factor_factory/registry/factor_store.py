@@ -22,7 +22,6 @@ from alphamill.factor_factory.hypotheses.catalog import DEFAULT_CATALOG, Hypothe
 from alphamill.factor_factory.hypotheses.schema import HypothesisDef
 from alphamill.factor_factory.registry import run_schema
 from alphamill.factor_factory.registry.compiler_registry import (
-    DEFAULT_COMPILERS,
     CompileContext,
     CompilerRegistry,
     FactorCompiler,
@@ -71,10 +70,11 @@ def build_factor(
     feature_map: Mapping[str, int],
     run_id: str,
     created_at: datetime,
-    compilers: CompilerRegistry = DEFAULT_COMPILERS,
+    compilers: CompilerRegistry | None = None,
     resolver: FactorResolver | None = None,
 ) -> FactorDef:
     """Compile an expression and construct its content-addressed executable factor."""
+    compilers = compilers if compilers is not None else _default_compilers()
     tokens = tuple(expression)
     if any(not isinstance(token, str) for token in tokens):
         raise FactorCompilationError("expression tokens must be strings")
@@ -172,12 +172,13 @@ def read(path: Path) -> FactorDefDTO:
 def load(
     path: Path,
     *,
-    compilers: CompilerRegistry = DEFAULT_COMPILERS,
+    compilers: CompilerRegistry | None = None,
     catalog: HypothesisCatalog = DEFAULT_CATALOG,
     resolver: FactorResolver | None = None,
     require_completed: bool = True,
 ) -> FactorDef:
     """Verify persisted dependencies and restore an executable factor."""
+    compilers = compilers if compilers is not None else _default_compilers()
     run_dir = path.parent.parent
     if require_completed:
         manifest = run_dir / "run.json"
@@ -267,3 +268,10 @@ def _read_json(path: Path) -> dict[str, JSONValue]:
     if not isinstance(payload, dict):
         raise SchemaValidationError(f"JSON artifact must be an object: {path}")
     return payload
+
+
+def _default_compilers() -> CompilerRegistry:
+    """缺省 = manual + alphagen（惰性导入，避免与 alphagen_adapter 成环；F012 检视 D18/D28）。"""
+    from alphamill.factor_factory.registry.default_compilers import full_registry
+
+    return full_registry()
