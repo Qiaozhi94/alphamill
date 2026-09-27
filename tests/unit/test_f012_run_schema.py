@@ -82,7 +82,7 @@ def _run(**overrides) -> GenerationRun:
 
 def test_current_write_version_is_two_and_run_store_reexports_schema_names() -> None:
     assert run_schema.RUN_SCHEMA_VERSION == 2
-    assert run_schema.RUN_SCHEMA_VERSIONS == frozenset({1, 2})
+    assert set(run_schema.RUN_SCHEMA_VERSIONS) == {1, 2}
     for name in ("RUN_SCHEMA_VERSION", "RunStatus", "TierLevel", "GenerationRun", "EngineInfo"):
         assert getattr(run_store, name) is getattr(run_schema, name)
     assert run_store.UniverseSummary is run_schema.UniverseSummary
@@ -205,3 +205,57 @@ def test_request_and_result_gain_optional_fields_with_defaults() -> None:
     assert fields_request["panel"].default is None
     for name in ("stop_reason", "evaluations", "budget"):
         assert fields_result[name].default is None
+
+
+# ------------------------------------------------------------------ 编译器组装（T010）
+
+
+def _alphagen_factor(run_dir: Path, **kwargs) -> Path:
+    factor = factor_store.build_factor(
+        hypothesis=DEFAULT_CATALOG.require("mechanism_unknown"),
+        name="alphagen",
+        generator="alphagen",
+        generator_version="vendor-test",
+        scope="time_series",
+        expression=("feature:ohlcv_1m.close@1h", "mean:5"),
+        params={},
+        feature_map={"ohlcv_1m.close@1h": 0},
+        run_id="alphagen-run",
+        created_at=STARTED,
+        **kwargs,
+    )
+    return factor_store.write(run_dir, factor)
+
+
+def test_full_registry_compiles_manual_and_alphagen() -> None:
+    from alphamill.factor_factory.registry.default_compilers import full_registry
+
+    registry = full_registry()
+
+    assert registry.require("manual") is not None
+    assert registry.require("alphagen") is not None
+
+
+def test_alphagen_factor_builds_and_loads_with_default_compilers(tmp_path: Path) -> None:
+    """检视 D18/D28：缺省编译器只有 manual 时，alphagen 因子 build/load 都会报未注册。"""
+    path = _alphagen_factor(tmp_path)
+    run_store.finalize_run(tmp_path, _run())
+
+    loaded = factor_store.load(path)
+
+    assert loaded.generator == "alphagen"
+
+
+def test_importing_factor_store_does_not_pull_in_the_alphagen_adapter() -> None:
+    """惰性组装：factor_store 顶层不导入 adapter（否则三者成环）。"""
+    import subprocess
+    import sys
+
+    probe = (
+        "import sys; import alphamill.factor_factory.registry.factor_store; "
+        "print('alphamill.factor_factory.generators.alphagen_adapter' in sys.modules)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "False"
