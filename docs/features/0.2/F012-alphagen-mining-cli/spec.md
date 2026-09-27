@@ -2,7 +2,7 @@
 kind: feature
 id: F012
 version: "0.2"
-status: developing
+status: code-reviewing
 status_evidence: G1 计划批准（owner 2026-09-27，按 tasks.md T001-T020 连续开发）
 branch: feat/F012-alphagen-mining-cli
 gate_version: 1
