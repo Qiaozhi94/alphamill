@@ -31,9 +31,9 @@ updated: 2026-09-27
 ### Phase 1：渲染与候选流水线（纯 Python 最小切片）
 
 - [x] T003 (`FR-002`, `AC-010`): 修正 `alphagen_runner.render_expression` / `_operator_token`：滚动与成对滚动算子 `name:N`（含 `corr:N`/`cov:N`，正常候选）、`CSRank→cs_rank`、`Rank→ts_rank:N`；提交说明注明 `run_generation` 的 token 输出随之变化 — verify: `tests/unit/test_f012_render.py`（RED: 渲染往返 17 failed；GREEN: 25 passed；F003 回归 88 passed；执行机 CUDA `ALPHAMILL_INTEGRATION=1 test_f003_generation_run.py` 单独跑 13 passed（含 ≥50 产能）。另见：F003 两个集成文件同进程跑时确定性开关泄漏致 `Med` CUDA 报错，为既有测试隔离问题，收口登记）
-- [ ] T004 (`FR-001`, `FR-004`, `AC-004`): 新增 `generators/channel_binding.py`：`feature:<basename>` → 湖通道名，缺通道抛 `MissingChannelError`，同名 basename 冲突检测 — verify: `tests/unit/test_f012_candidate_pipeline.py`
-- [ ] T005 (`FR-003`, `AC-003`): `objective.evaluate_objective` 增 `position_rule`（`sign` 缺省 / `cs_median`，只统计 observed 行），F003 既有用例零修改 — verify: `tests/unit/test_f012_candidate_pipeline.py`
-- [ ] T006 (`FR-004`, `DR-002`, `NFR-005`, `AC-004`): 新增 `registry/event_writer.py`（无缓冲单写者、批量 fsync、事件版本解耦；`run_store` 两处事件信封改用 `EVENT_SCHEMA_VERSION`）与 `prefilter.jsonl` 写出 — verify: `tests/unit/test_f012_candidate_pipeline.py`
+- [x] T004 (`FR-001`, `FR-004`, `AC-004`): 新增 `generators/channel_binding.py`：`feature:<basename>` → 湖通道名，缺通道抛 `MissingChannelError`，同名 basename 冲突检测 — verify: `tests/unit/test_f012_candidate_pipeline.py`（RED: 076308b 收集期 ImportError；GREEN: 通道绑定 3 passed）
+- [x] T005 (`FR-003`, `AC-003`): `objective.evaluate_objective` 增 `position_rule`（`sign` 缺省 / `cs_median`，只统计 observed 行），F003 既有用例零修改 — verify: `tests/unit/test_f012_candidate_pipeline.py`（RED: 同 076308b；GREEN: cs_median 2 passed——恒正排名 sign 下 trades_90d=0、cs_median 下 >0；F003 objective 回归零修改通过）
+- [x] T006 (`FR-004`, `DR-002`, `NFR-005`, `AC-004`): 新增 `registry/event_writer.py`（无缓冲单写者、批量 fsync、事件版本解耦；`run_store` 两处事件信封改用 `EVENT_SCHEMA_VERSION`）与 `prefilter.jsonl` 写出 — verify: `tests/unit/test_f012_candidate_pipeline.py`（RED: 同 076308b；GREEN: 写者 4 passed——序号续接、信封 EVENT_SCHEMA_VERSION、1 万条线性；run_store 仍 350 行，F003 run_store 回归通过）
 - [ ] T007 (`FR-002`, `FR-003`, `FR-004`, `AC-003`, `AC-004`): 新增 `generators/candidate_pipeline.py`：绑定 → `build_factor` → `check_expression(seen, digest)` → 预筛（close 缺失视为未观测）→ 入册/拒绝，候选级与系统级异常按 design §7 分类，配额达成后不计数 — verify: `tests/unit/test_f012_candidate_pipeline.py`
 - [ ] T008 (`FR-005`, `AC-005`): 新增 `generators/stop_conditions.py`（配额/夜槽/信号标志）；`GpuSlot.acquire(cancel=...)` 取消时先写 `cancelled` 队列记录再抛 `AcquireCancelled` — verify: `tests/unit/test_f012_stop_conditions.py`
 
