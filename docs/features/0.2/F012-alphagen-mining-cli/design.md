@@ -13,61 +13,79 @@ updated: 2026-09-27
 
 ## 0. 输入与约束
 
-- **行为契约**：`spec.md`（`FR-001`~`FR-007`、`AC-001`~`AC-008`）
-- **PRD / Architecture**：PRD FR2.1–FR2.4、FR2.6；架构 §7.1（夜槽、GPU 单槽、Kronos 卸载）
-- **ADR / 上游 Contract**：ADR-0001、ADR-0003、ADR-0006、ADR-0008；F003 `DR-003`（alphagen 因子假设 `mechanism_unknown`）、`TR-002`（`generation.candidate_rejected` 事件）、run_store/factor_store 不变量
-- **实现约束**：`src/**/*.py` ≤350 行——`factor_factory/cli.py` 现 343 行、`registry/run_store.py` 现 350 行，本 feature 的新增逻辑一律放新模块，两文件净增 ≤0；唯一门禁入口 `tools/verify.py`；无 torch 环境（含 CI）必须可收集（沿用 F003 惰性导入约定）
+- **行为契约**：`spec.md`（`FR-001`~`FR-008`、`AC-001`~`AC-009`；§8 `Q-001`~`Q-007` 已裁决）
+- **PRD / Architecture**：PRD FR2.1–FR2.4、FR2.6；架构 §7.1（夜槽、GPU 单槽、Kronos 卸载）；数据红线（研究只读 PIT 湖、不引入幸存者偏差）
+- **ADR / 上游 Contract**：ADR-0001（alphagen = L0）、ADR-0003（必需计算失败不得静默放行）、ADR-0006、ADR-0008；F003 `DR-003`、`TR-002`、run_store/factor_store 不变量
+- **实现约束**：`src/**/*.py` ≤350 行——`factor_factory/cli.py` 现 343、`registry/run_store.py` 现 350、`registry/factor_store.py` 现 267，新增逻辑进新模块，前两者净增 ≤0；无 torch 环境（含 CI）必须可收集（F003 惰性导入约定）；本设计对现有代码的每条声明均以文档检视第 1 轮（22 条）核对过的行号为准
 
 ## 1. 技术概要与影响面
 
 | # | 文件 | 变更 |
 |---|---|---|
-| 1 | `factor_factory/generators/candidate_pipeline.py`（**新增**） | `CandidatePipeline`：单表达式的 渲染 → 自检 → 查重 → 预筛 → 入册/拒绝；持有计数与拒绝事件写出器；纯 Python，无 torch |
-| 2 | `factor_factory/generators/alphagen_generator.py`（**新增**） | `AlphaGenGenerator(Generator)`：`produce()` 编排 `build_tensor → build_stock_data → run_generation`，注入 run_id、流水线与停止判定；产出 `GenerationResult` |
-| 3 | `factor_factory/generators/alphagen_generation.py` | `run_generation` 增 `on_expression`（每次评估回调）与 `should_stop`（停止判定）参数，经 SB3 `BaseCallback` 在步边界停止；移除内部 run_id 生成与事后统一自检；保留旧签名路径供冒烟用例（无回调时行为不变） |
-| 4 | `factor_factory/generators/stop_conditions.py`（**新增**） | `StopController`：配额、夜槽时段、SIGTERM/SIGINT 标志 → `stop_reason` |
-| 5 | `factor_factory/registry/run_schema.py`（**新增**） | 从 `run_store.py` 迁出 `GenerationRun` 字段定义与 `load_run` 校验，支持 v1/v2；`run_store.py` 只保留写入与事件，腾出行数 |
-| 6 | `factor_factory/mine_dispatch.py`（**新增**） | 生成器分发表 `{manual, alphagen}` → 构造器、`run_id` 前缀、默认 config 段、层级校验、manifest 字段；`cli.py` 只调用它（净增 ≤0） |
-| 7 | `factor_factory/mine_config.py` | 新增 `alphagen` 段缺省：`total_timesteps`、`pool_capacity`、`datasets=["ohlcv_1m"]`、`resample="1h"`、`objective{...}`、`tier_level="L0"` |
-| 8 | `factor_factory/compiler_registry.py` | `DEFAULT_COMPILERS` 注册 alphagen 编译器（调用既有 `register_alphagen_compiler`） |
+| 1 | `generators/candidate_pipeline.py`（**新增**） | `CandidatePipeline.offer(tokens)`：通道绑定 → 自检 → 查重 → 预筛 → 入册/拒绝；计数守恒；候选级异常分类（§7）；纯 Python |
+| 2 | `generators/alphagen_training.py`（**新增**） | `train_with_callbacks(stock_data, target, device, seed, total_timesteps, on_expression, should_stop) -> TrainingOutcome{evaluations, exhausted}`：回调式训练独立入口；**`alphagen_generation.run_generation` 原样保留**（F003 冒烟/容量用例不改，检视 D19） |
+| 3 | `generators/alphagen_generator.py`（**新增**） | `AlphaGenGenerator.produce(request)`：张量 → stock_data → 训练 → 流水线 → `GenerationResult` |
+| 4 | `generators/channel_binding.py`（**新增**） | `bind_feature_tokens(tokens, feature_map) -> tokens`：`feature:<basename>` → `feature:<dataset>.<column>@<resample>`，映射规则与 `alphagen_runner.build_stock_data:162-166` 的 FeatureType 槽位同源（取 `name.split('.')[-1].split('@')[0].lower()`）；无对应通道 → `MissingChannelError(name)`（检视 D02） |
+| 5 | `generators/stop_conditions.py`（**新增**） | `StopController`：配额、夜槽（复用纯函数 `gpu_slot.in_training_window`）、信号标志 → `stop_reason`；`install_signal_flags()` 上下文管理器 |
+| 6 | `generators/objective.py` | `evaluate_objective(..., position_rule="sign")` 新增关键字 `position_rule ∈ {"sign","cs_median"}`；`cs_median` = 每个时点在宇宙内 pair 上 `signal − median(signal)` 后取符号（owner 裁决 Q-005，检视 D03）；缺省 `sign` 保持 F003 用例不变 |
+| 7 | `generators/base.py` | `GenerationResult` 增可选字段 `stop_reason=None`、`evaluations=None`、`budget=None`（默认值使 `ManualGenerator` 不改，检视 D09） |
+| 8 | `registry/run_schema.py`（**新增**） | 自 `run_store.py` 迁出：`RUN_SCHEMA_VERSIONS={1,2}`、`GenerationRun`、`EngineInfo`、`UniverseInfo`、`ObjectiveInfo`（增 `position_rule`，v1 缺省 `"sign"`）、`load_run`、`_validate_terminal`；`run_store.py` 以 `from .run_schema import …` 再导出这些名字，导入方（`objective.py`、`cli.py`、`alphagen_generation.py`、F003 测试）零改动（检视 D22） |
+| 9 | `registry/event_writer.py`（**新增**） | `RunEventWriter`：运行内单写者，打开时读一次现有行数得 seq，此后只追加、不回读，每 256 条或关闭时 fsync（检视 D07）；事件 schema 版本常量 `EVENT_SCHEMA_VERSION=1` 与 run schema 解耦（检视 D20） |
+| 10 | `registry/factor_store.py` | `load` 的 run.json 校验改为 `schema_version ∈ run_schema.RUN_SCHEMA_VERSIONS` 且 `status=="completed"`（原比较 `FACTOR_SCHEMA_VERSION`，检视 D01）；`load/write` 的 `compilers` 缺省改为函数内惰性取 `default_compilers.full_registry()` |
+| 11 | `registry/default_compilers.py`（**新增**） | `full_registry()`：`{manual: compile_postfix, alphagen: …}`，在函数内导入 `alphagen_adapter`，打破 `compiler_registry→adapter→factor_store→compiler_registry` 环（检视 D18）；`compiler_registry.DEFAULT_COMPILERS` 不动 |
+| 12 | `factor_factory/manifest_builder.py`（**新增**） | 唯一 run.json 构建器：自 `cli.py` 迁出 `_SeedState`、`_manifest`，按生成器取字段（检视 D14）；alphagen 路径不再调用 `write_generation_manifest`（该函数仅留给 F003 冒烟用例） |
+| 13 | `factor_factory/mine_dispatch.py`（**新增**） | 生成器分发表 `{manual, alphagen}` → 构造器、`run_id` 前缀、默认 config 段、层级规则；manual 的默认 config **不含** alphagen 段（`config_digest` 不变，检视 D13） |
+| 14 | `factor_factory/mine_config.py` | 新增独立常量 `DEFAULT_ALPHAGEN_CONFIG`（`total_timesteps`、`pool_capacity`、`datasets=["ohlcv_1m"]`、`resample="1h"`、`objective{…, position_rule:"cs_median"}`），不并入 `DEFAULT_MINE_CONFIG` |
+| 15 | `factor_factory/cli.py` | 删去写死点，改调 `mine_dispatch`/`manifest_builder`/`StopController`；净增 ≤0 |
 
-影响面：CLI 契约（`--generator` 增 `alphagen`）、run.json schema（v2，v1 只读兼容）、生成事件（alphagen 路径开始写拒绝事件）。**不改**：manual 后端行为、FactorDef schema、factor_store 落盘结构、冒烟闸门、F007 任何代码。
+**写死点清单**（检视 D14，全部由 12/13 接管）：`cli.py:32`（`_MANUAL_CODE_DIGEST`）、`:62`（`choices=("manual",)`）、`:85`、`:99`（`generator`/`tier_level` 写死）、`:101-106`（`objective` 写死 0.0/30/{}）、`:132`（`run_id` 前缀）、`:159`（config `generator`）、`:176`（`tier_level=="manual"`）、`:221`（`GenerationRequest(generator="manual")`）、`:232`（`ManualGenerator()`）、`mine_config.py:16`（`tier_level="manual"`）。
+
+影响面：CLI 契约、run.json schema（v2，v1 双读）、`factor_store.load` 版本判定、预筛函数新增关键字参数、生成事件（alphagen 路径开始写拒绝事件）、新增 `prefilter.jsonl`。**不改**：manual 后端行为、FactorDef schema 与 digest 规则、`run_generation` 旧路径、冒烟闸门、F007 任何代码。
 
 ## 2. 架构与模块边界
 
 ```
-cli.mine
-  └─ mine_dispatch.resolve(generator) → Spec{build, run_prefix, tier_rule, manifest_fields}
-       ├─ 既有护栏链：validate_binding → capability → 时段 → Kronos 卸载 → GpuSlot → egress/写路径护栏
-       └─ AlphaGenGenerator.produce(request)
-            ├─ lake_tensor.build_tensor(validated, datasets, resample, pairs=universe_at(cutoff))
-            ├─ alphagen_runner.build_stock_data(panel, feature_map)
-            ├─ StopController(quota, window, signals)
-            ├─ CandidatePipeline(panel, objective_params, feature_map, run_id, events_writer)
-            └─ alphagen_generation.run_generation(..., on_expression=pipeline.offer,
-                                                   should_stop=stop.check)
-                 → GenerationResult(factors=pipeline.registered, counts=pipeline.counts, …)
-  factor_store.write × N → run_store.write_config → run_store.finalize_run(v2 字段)
+cli.mine  ── with install_signal_flags():               # 入口即安装（检视 D11）
+  dispatch = mine_dispatch.resolve(args.generator)
+  validate_binding → capability
+  panel = build_tensor(validated, datasets, resample,
+                       start=window.start, end=window.end, pairs=None)   # D04/D15/D21：先建张量
+  training window → Kronos 卸载 → GpuSlot.acquire(cancel=flags.is_set)   # 排队可被中断
+  护栏内: result = dispatch.generator.produce(request(panel=panel, stop=StopController(...)))
+  factor_store.write × N ; manifest_builder.build(result, …) → run_store.finalize_run
+  finally: 释放槽位 / 恢复 Kronos / writer.close()
+
+AlphaGenGenerator.produce
+  stock_data, target, pairs = build_stock_data(panel, feature_map)
+  pipeline = CandidatePipeline(panel, feature_map, objective, run_id, writer, prefilter_log)
+  outcome = train_with_callbacks(..., on_expression=pipeline.offer, should_stop=stop.check)
+  → GenerationResult(factors=pipeline.registered, counts=pipeline.counts, pool=None,
+                     stop_reason=stop.reason or "budget_exhausted", evaluations=outcome.evaluations,
+                     budget={quota, total_timesteps, pool_capacity}, tier_level="L0", device=…)
 ```
 
-- `CandidatePipeline` 不知道 AlphaGen：输入是渲染后的 token 序列，输出是 FactorDef 或拒绝；可用纯 Python 桩驱动单测；
-- `run_generation` 只负责训练与回调时机，不做入册判断；
-- `StopController` 是唯一停止判定点，`stop_reason` 只在这里产生；
-- 预筛信号计算复用 FactorDef 的编译闭包（同一 `feature_map`、同一面板），保证「入册时算的」与「反解后算的」是同一函数（AC-001）。
+- `CandidatePipeline` 不依赖 AlphaGen，输入是 vendor 渲染出的 token；可用纯 Python 桩单测；
+- `train_with_callbacks` 只管训练与回调时机；`StopController` 是唯一停止判定点；
+- 预筛信号用候选 FactorDef 的编译闭包在同一 `panel` 上计算，与 `factor_store.load` 反解走同一编译器（AC-001 逐点一致）。
 
 ## 3. 数据模型与 Migration
 
-无数据库迁移。`run.json` v2 = v1 全部字段 +：
+无数据库迁移。
+
+**run.json v2** = v1 全部字段 +：
 
 | 字段 | 类型 | 语义 |
 |---|---|---|
 | `budget` | `{quota:int, total_timesteps:int\|null, pool_capacity:int\|null}` | manual 只填 `quota` |
 | `stop_reason` | `quota_reached\|budget_exhausted\|window_closed\|interrupted\|null` | manual 为 `null` |
-| `evaluations` | `int\|null` | AlphaGen 环境评估次数（`core.eval_cnt`）；manual 为 `null` |
+| `evaluations` | `int\|null` | AlphaGen 环境评估次数；manual 为 `null` |
+| `objective.position_rule` | `"sign"\|"cs_median"` | v1 回读缺省 `"sign"`；alphagen 为 `"cs_median"` |
 
-规则：`completed ⇔ stop_reason ∈ {quota_reached, budget_exhausted}`（alphagen）；`partial ⇔ stop_reason ∈ {window_closed, interrupted}`；`rejected/failed` 时 `stop_reason=null`。`load_run` 按 `schema_version ∈ {1,2}` 分派字段集校验，v1 缺省三字段视为 `null`。
+规则：alphagen `completed ⇔ stop_reason ∈ {quota_reached, budget_exhausted}`；`partial ⇔ stop_reason ∈ {window_closed, interrupted}`，此时 `termination = stop_reason`、`reason = "已入册 {k}/{quota}：{stop_reason}"`；`rejected/failed` 时 `stop_reason=null`；`pool` 恒为 `null`（Q-006）。
 
-入册 FactorDef `params` 增 `prefilter{turnover, trades_90d, after_cost_return}`（DR-002），参与 `definition_digest` 之外（与 `run_id` 同属排除字段）——**注意**：若 `params` 进入 digest，则同一表达式因面板不同而 digest 不同，破坏跨运行同一 id；实现须核对 `factor_store` digest 排除集，必要时把 `prefilter` 放入排除集（T002 核对）。
+**prefilter.jsonl**（DR-002）：每个进入预筛的候选一行 `{definition_digest, outcome, turnover, trades_90d, after_cost_return, elapsed_ms}`，经 `RunEventWriter` 同一写者写出；预筛指标不写入 FactorDef `params`——`params` 整体参与 `definition_digest`（`factor_dto.py:27-29,81-86`），写入会使同一表达式随面板变 id（检视 D06）。
+
+**FactorDef 身份**：alphagen 表达式 token 在入册前已绑定为湖通道名（`feature:ohlcv_1m.close@1h`），因此 `definition_digest` 天然包含数据集与重采样身份（与 `feature_map_digest` 一致）；查重在绑定之后按该 digest 进行。
 
 ## 4. 接口、Contract 与 Event
 
@@ -75,76 +93,91 @@ cli.mine
 
 | 接口 | 变更 | 说明 |
 |---|---|---|
-| `alphamill-generate mine --generator {manual,alphagen}` | 扩展 | 其余参数不变；`--quota` 对 alphagen 为入册上限 |
-| `AlphaGenGenerator.produce(request) -> GenerationResult` | 新增 | `request.config` 取 alphagen 段；`result.tier_level` 取 config（默认 L0，仅允许 L0/L1） |
-| `run_generation(..., on_expression=None, should_stop=None)` | 扩展 | 两者为 None 时行为与现状一致（冒烟用例不改） |
-| `CandidatePipeline.offer(tokens) -> Outcome` | 新增 | `Outcome = Registered(factor) \| Rejected(reason_code)` |
-| `StopController.check() -> str \| None` | 新增 | 返回首个触发的 `stop_reason` |
-| `run_schema.load_run(path)` | 迁出 + 扩展 | v1/v2 双读 |
+| `alphamill-generate mine --generator {manual,alphagen}` | 扩展 | `--quota` 对 alphagen 为入册上限 |
+| `AlphaGenGenerator.produce(request) -> GenerationResult` | 新增 | `tier_level` 固定 `"L0"`；config 声明其他层级 → CLI 以 `unknown_tier` 拒绝（检视 D10） |
+| `train_with_callbacks(...)` | 新增 | SB3 `BaseCallback._on_step` 返回 `should_stop() is None`；`learn()` 正常返回即 `exhausted=True` |
+| `CandidatePipeline.offer(tokens) -> Outcome` | 新增 | `Registered(factor) \| Rejected(code, detail)`；`stopped` 后调用直接忽略、不计数 |
+| `bind_feature_tokens(tokens, feature_map)` | 新增 | 缺通道 → `MissingChannelError` |
+| `evaluate_objective(..., position_rule="sign")` | 扩展 | `cs_median` 见 §1 第 6 行 |
+| `GpuSlot.acquire(..., cancel=None)` | 扩展 | 等待循环每轮检查 `cancel()`，为真即抛 `AcquireCancelled`（映射为 `partial/interrupted`） |
+| `factor_store.load` | 修改 | run.json 版本 ∈ {1,2} 且 `completed` |
+| `run_schema.load_run` | 迁出 + 扩展 | v1/v2 双读 |
+| `RunEventWriter.append(event_type, payload)` | 新增 | 线性写出，`close()` 时 fsync |
 
-退出码不变（0/1/2）；`partial` 退出码 0，stdout 摘要含 `status` 与 `stop_reason`（IR-003）。
+退出码不变（0/1/2）；`partial` 退出码 0，stdout JSON 摘要含 `status`、`stop_reason`、`counts`、`budget`、预筛 p50/p95。
 
 ### Event / Trace Contract
 
-沿用 F003 事件格式（`event_type` + `payload`）：每个拒绝写一条 `generation.candidate_rejected{reason_code, expression, definition_digest}`；`completed` 时写唯一的 `generation.run_completed`。**不**为适配 F007 改事件格式——格式适配归 F013（IR-004）。
+`generation.candidate_rejected` payload = 既有 `{expression, reason_code, detail}` + 可选 `definition_digest`（`unregistered_op` 可能无 digest）；`completed` 时照旧写唯一 `generation.run_completed`（沿用 `run_store._append_event` 的唯一性检查，只一次，不在热路径）。事件 envelope 的 `schema_version` 取 `EVENT_SCHEMA_VERSION=1`，不随 run.json 升 v2（检视 D20）。**不**为 F007 改事件格式——适配归 F013。
 
 ## 5. Runtime、Workflow 与并发
 
 ```text
-run_generation(on_expression, should_stop):
-  env._evaluate 钩子: tokens = render(tree) → on_expression(tokens)   # 立即走流水线
-  SB3 BaseCallback._on_step: return should_stop() is None             # False ⇒ learn() 在步边界返回
-  learn(total_timesteps) 正常返回且 should_stop() 为 None ⇒ budget_exhausted
-
 CandidatePipeline.offer(tokens):
-  if stopped: 忽略（不计 proposed）
+  if stopped: return None                               # 配额达成后同一步的剩余表达式不计 proposed
   proposed += 1
-  check_expression(tokens, scope="cross_sectional")          → 拒: unregistered_op | lookahead
-  digest = definition_digest(build_factor 草稿)               → 重复: duplicate_definition
-  signal = compiled(panel); evaluate_objective(signal)       → 拒: reachability
-  入册: registered.append(factor)；registered == quota ⇒ 通知 StopController
+  tokens = bind_feature_tokens(tokens, feature_map)     # MissingChannelError → Rejected(unregistered_op, missing_channel:*)
+  verdict = check_expression(tokens, scope="cross_sectional")  → Rejected(unregistered_op | lookahead)
+  draft = build_factor(..., params={})                  # FactorCompilationError/FeatureMapIntegrityError → Rejected(unregistered_op)
+  if draft.definition_digest in seen → Rejected(duplicate_definition)
+  signal = draft.compute(panel)                         # 全 NaN / 非有限 → Rejected(reachability, degenerate_signal)
+  result = evaluate_objective(signal_panel, params, position_rule="cs_median")
+           # SchemaValidationError（信号退化类）→ Rejected(reachability, degenerate_signal)
+  prefilter_log.append(...)
+  result.accepted ? Registered : Rejected(reachability, result.detail)
+  registered == quota ⇒ stopped = True；StopController.mark_quota()
+
+train_with_callbacks: 钩子 _evaluate → render → on_expression；_on_step → should_stop()
+StopController.check(): 优先级 interrupted > window_closed > quota_reached
 ```
 
-- 停止粒度：步边界。回调里一旦 `registered == quota`，流水线进入 `stopped`，同一步内后续表达式不计入 `proposed`，保证守恒；
-- SIGTERM/SIGINT：注册信号处理器只置标志，不在处理器里做 IO；`finally` 中照常落盘已入册候选、释放 GPU 槽、恢复 Kronos；
-- 并发：仍由 GpuSlot 保证单机单跑；不引入新锁。
+- 停止粒度：步边界；单 env 下每步至多一次 `_evaluate`（vendor `core.py:67-76`），配额达成后不再处理新候选；
+- 信号：`install_signal_flags()` 在 `mine` 入口安装 SIGTERM/SIGINT 处理器，只置标志；检查点 = 绑定校验后、张量构建后、`GpuSlot.acquire` 等待循环每轮、训练每步；任一检查点见标志即走 `partial/interrupted`，`finally` 照常释放槽位、恢复 Kronos、关闭写者（检视 D11）；
+- 事件写出：整个运行一个 `RunEventWriter`，GPU 单槽已保证单写者，不再每条加锁回读；
+- 并发：仍由 GpuSlot 保证单机单跑。
 
 ## 6. UI 与可观测性
 
-无 UI。日志：每 N 次评估一条 `INFO`（proposed/registered/各拒绝计数）；停止时一条 `INFO`（`stop_reason`、耗时、显存峰值）；运行结束 stdout 输出 JSON 摘要（`run_id/status/stop_reason/counts/budget`）。
+无 UI。日志：每 500 次评估一条 `INFO`（proposed/registered/各拒绝计数/预筛 p95）；停止时一条 `INFO`（`stop_reason`、耗时、显存峰值）；运行结束 stdout JSON 摘要（见 §4）。
 
 ## 7. 失败、恢复、安全与兼容
 
-- **fail-closed**：张量构建零行、宇宙为空、alphagen 编译器未注册 ⇒ 启动期 `rejected`，不产空运行；
-- **不降级**：预筛计算抛异常 ⇒ 整个运行 `failed`（ADR-0003：必需计算失败不得静默放行），不把异常候选当作拒绝吞掉；
-- **兼容**：manual 路径产物不变（AC-006 基准对照）；既有 v1 run.json 可读；
-- **安全**：沿用 egress 与写路径护栏，AlphaGen 训练与预筛都在护栏内；
-- **恢复**：`partial` 不可续跑（新运行重新训练）；已入册候选只供排障查看。
+- **启动期拒绝**（run.json `rejected`，不卸载 Kronos、不取槽）：绑定非法 / 张量零行或宇宙为空（`build_tensor` 抛 `SchemaValidationError` 时由 CLI 显式映射为 `termination=invalid_binding`，不再落入 `invalid_config`，检视 D21）/ alphagen 层级非 L0（`unknown_tier`）/ 能力不足；
+- **候选级拒绝**（不影响运行）：`MissingChannelError`、`FactorCompilationError`、`FeatureMapIntegrityError` → `unregistered_op`；信号全 NaN、含非有限值、`evaluate_objective` 抛 `SchemaValidationError` → `reachability`（`detail=degenerate_signal:<原因>`）；
+- **运行级失败**（`failed`，ADR-0003）：`OSError`、`RunStoreError`、`MemoryError`、`torch.cuda` 错误、其他未列出的异常——不把系统故障吞成候选拒绝（检视 D05）；
+- **兼容**：manual 可观察等价（`factors/` 逐字节、`config_digest` 不变、run.json 除 `schema_version` 与 v2 新字段外逐项相等）；基准由改动前 main 在临时 detached worktree 上以同一绑定/种子实跑取得并固化为测试夹具（检视 D13）；v1 run.json 与 v1 下的因子仍可读；
+- **安全**：训练、预筛、写出都在 egress 与写路径护栏内；`prefilter.jsonl` 位于 `run_dir`，写路径护栏允许；
+- **恢复**：`partial` 不续跑；已入册候选只供排障查看。
 
 ## 8. 测试策略与验收映射
 
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
-| `AC-001` | integration | `tests/integration/test_f012_alphagen_mining.py`：小面板真实训练 | 入册因子 `generator=alphagen`、`mechanism_unknown`；反解后信号逐点一致 |
-| `AC-002` | integration | 同上：`--quota 3` / 极小步数 | 入册数与 `stop_reason` |
-| `AC-003` | unit | `tests/unit/test_f012_candidate_pipeline.py`：恒定信号、低可达性、低成本后收益 | 以 `reachability` 拒绝；`objective` 写入 |
-| `AC-004` | unit | 同上：重复 token、事件计数 | `duplicate_definition`；事件计数 == `counts.rejected`；守恒 |
-| `AC-005` | unit | `tests/unit/test_f012_stop_conditions.py`：时段结束、SIGTERM 标志 | `partial`、`stop_reason`、`pool=null`、load 拒绝 |
-| `AC-006` | unit | `tests/unit/test_f012_cli_contract.py`：manual 基准（main 基线跑出的 digest 集）+ alphagen 分发 + 未知生成器 | 基准一致；argparse 拒绝 |
+| `AC-001` | integration | `tests/integration/test_f012_alphagen_mining.py`：scratch 湖小面板真实训练 | 入册因子通道已绑定、`mechanism_unknown`；v2 下 `factor_store.load` 反解逐点一致；v1 manual 仍可 load |
+| `AC-002` | integration | 同上：`--quota 3` / 极小步数；窗口跨度 | 入册数与 `stop_reason`；面板时间跨度 == 窗口 |
+| `AC-003` | unit | `tests/unit/test_f012_candidate_pipeline.py`：恒定信号、截面排名因子、阈值边界、全 NaN/inf | `reachability`；`cs_median` 下有交易；退化为候选拒绝；`prefilter.jsonl` 行数与身份 |
+| `AC-004` | unit | 同上：重复 token、缺通道 token、事件计数、1 万条写出计时 | `duplicate_definition`；`missing_channel`；事件 == `counts.rejected`；守恒；线性 |
+| `AC-005` | unit | `tests/unit/test_f012_stop_conditions.py`：夜槽结束、训练中 SIGTERM、等槽时 SIGTERM（桩 GpuSlot） | `partial` + `stop_reason/termination/reason`；`pool=null`；load 拒绝；释放/恢复被调用 |
+| `AC-006` | unit | `tests/unit/test_f012_cli_contract.py`：manual 基准夹具对照、alphagen 分发、未知生成器、非 L0、零行张量 | 逐项等价；argparse 拒绝；`unknown_tier`；`invalid_binding` 且 Kronos 卸载未被调用 |
 | `AC-007` | unit | `tests/unit/test_f012_run_schema.py`：v2 字段、v1 回读 | 字段如实；`code_digest != config_digest` |
-| `AC-008` | integration（执行机） | 同 AC-001 文件的 CUDA 用例，`ALPHAMILL_INTEGRATION=1` | `completed`、入册 50、耗时/显存/预筛耗时留痕 |
+| `AC-008` | integration | `tests/integration/test_f012_alphagen_mining.py`：两个成员集合不同的绑定 | `pair_count` 不同且 == 面板 pair 数 |
+| `AC-009` | integration（执行机取证） | CLI 实跑 + `tests/integration/test_f012_capacity_evidence.py` 校验 `reports/f012/capacity-evidence.json` | 字段齐全、与 run.json 一致；未达 50 时产能发现已登记 |
 
 ## 9. 已确认决策与残余风险
 
 | 决策 / 风险 | 结论或缓解 | 理由 | 替代方案 / 后续 |
 |---|---|---|---|
-| 自检放在评估回调内 | 边训练边自检，步边界停止 | 配额停止与夜槽保留工作的唯一可行点 | 事后统一自检（现状）无法按配额停 |
-| 停止实现 | SB3 `BaseCallback._on_step` 返回 False | 官方停止机制，不抛异常打断训练状态 | — |
-| 预筛异常 | 运行 `failed`，不吞为拒绝 | ADR-0003 | — |
-| 行数约束 | 新逻辑进新模块；`cli.py`/`run_store.py` 净增 ≤0 | SOP 350 行硬上限 | — |
-| 事件格式 | 沿用 F003，不为 F007 改格式 | 适配是 F013 的消费侧职责，避免双向耦合 | F013 |
+| 回调式训练独立入口 | 新增 `train_with_callbacks`，`run_generation` 原样保留 | F003 用例依赖旧路径的 `run_id` 与 manifest（检视 D19） | — |
+| 停止实现 | SB3 `BaseCallback._on_step` 返回 False | 官方停止机制 | — |
+| 截面仓位规则 | `cs_median`（Q-005） | 与 F007 多空分位口径一致 | — |
+| 取数范围 | 窗口起止 + `pairs=None`，靠 `build_tensor` 逐时点 PIT 掩码 | 不以终点成员筛历史（数据红线，检视 D04） | — |
+| 预筛指标去向 | `prefilter.jsonl` 旁路文件 | `params` 进 digest（检视 D06） | — |
+| 事件写出 | 运行内单写者、批量 fsync | 原每条回读全文件 O(n²)（检视 D07） | — |
+| 编译器组装 | `default_compilers.full_registry()` 惰性导入 | 打破导入环（检视 D18） | — |
+| 行数 | 迁出 `run_schema`/`manifest_builder`/`mine_dispatch`，再导出保持导入方不变 | SOP 350 行 | — |
 | 残余风险：CUDA 非确定性 | NFR-002 只对 CPU 严格；CUDA 记录来源 | cuDNN/原子操作 | — |
-| 残余风险：夜槽 8.5h 内能否入册 50 | AC-008 实测；不达标即为 M2 出口的产能发现，不降低门槛 | ADR-0003/0008 | 调整预算或宇宙（宇宙口径 v2） |
+| 残余风险：夜槽入册不足 50 | 如实登记 M2 产能发现（Q-007） | ADR-0008 | owner 裁决预算/宇宙 |
+| 残余风险：预筛 p95 超 1 s | T002 执行机先测，超限先回写加速方案并裁决 | 不得静默跳过/抽样 | — |
 
 ## 10. 待确认设计问题
 
