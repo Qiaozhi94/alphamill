@@ -139,7 +139,7 @@ def test_manual_mine_interrupted_before_generation_is_partial(tmp_path, monkeypa
 def test_summary_failure_after_publish_does_not_flip_the_exit_code(
     tmp_path, alphagen_runtime, monkeypatch, capsys
 ) -> None:
-    """R-A5：run.json 已发布为 completed 后，摘要打印失败不能再走异常收尾（二次 finalize、exit≠0）。"""
+    """R-A5：run.json 已发布为 completed 后，摘要失败不能再走异常收尾（二次 finalize、exit≠0）。"""
     from alphamill.factor_factory import manifest_builder
     from alphamill.factor_factory.cli import EXIT_OK
 

@@ -71,6 +71,13 @@ class ObjectiveResult:
     detail: str
 
 
+def funding_feature_columns(columns, *, resample: str) -> tuple[str, ...]:
+    """资金费通道识别（`evaluate_objective` 与调用方共用同一口径）。"""
+    return _feature_columns(
+        tuple(columns), base_names=("funding", "funding_rate"), resample=resample
+    )
+
+
 def _feature_columns(
     columns: tuple[str, ...],
     *,
@@ -117,11 +124,7 @@ def _prepare_panel(
         raise SchemaValidationError(
             "objective signal requires one close or *.close@<resample> column"
         )
-    funding_columns = _feature_columns(
-        string_columns,
-        base_names=("funding", "funding_rate"),
-        resample=resample,
-    )
+    funding_columns = funding_feature_columns(string_columns, resample=resample)
     if len(funding_columns) > 1:
         raise SchemaValidationError("objective signal has ambiguous funding columns")
 

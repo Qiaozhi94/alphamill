@@ -28,7 +28,11 @@ from alphamill.factor_factory.factor import FactorDef
 from alphamill.factor_factory.generators.base import GenerationCounts, RejectionCounts
 from alphamill.factor_factory.generators.channel_binding import bind_feature_tokens, channel_index
 from alphamill.factor_factory.generators.lake_tensor import TensorPanel
-from alphamill.factor_factory.generators.objective import ObjectiveParams, evaluate_objective
+from alphamill.factor_factory.generators.objective import (
+    ObjectiveParams,
+    evaluate_objective,
+    funding_feature_columns,
+)
 from alphamill.factor_factory.generators.purity import check_expression
 from alphamill.factor_factory.hypotheses.catalog import DEFAULT_CATALOG, MECHANISM_UNKNOWN_ID
 from alphamill.factor_factory.registry import factor_store
@@ -72,6 +76,8 @@ class CandidatePipeline:
         self._panel = panel
         self._channels = channel_index(panel.feature_map)
         self._close = _close_column(panel)
+        # 预筛须带上资金费通道，否则 funding_8h_bps 被静默忽略（检视 R-B3）
+        self._funding = funding_feature_columns(panel.feature_map, resample=panel.resample)
         self._params = objective_params
         self._run_id = run_id
         self._writer = writer
@@ -152,6 +158,8 @@ class CandidatePipeline:
             self._log(record, "rejected", started)
             return self._reject(bound, "reachability", detail, digest=digest)
         work = pd.DataFrame({self._close: close, _UNIVERSE: frame[_UNIVERSE], "signal": signal})
+        for column in self._funding:
+            work[column] = frame[column]
         result = evaluate_objective(
             work, params=self._params, resample=self._panel.resample, position_rule=POSITION_RULE
         )
