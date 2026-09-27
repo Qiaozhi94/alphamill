@@ -6,6 +6,7 @@ import fcntl
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -63,7 +64,7 @@ def in_training_window(
 class QueueRecord:
     queue_seq: int
     run_id: str
-    event: Literal["queued", "acquired", "released", "timeout"]
+    event: Literal["queued", "acquired", "released", "timeout", "cancelled"]
     ts: datetime
     vram_free_gb: float | None
 
@@ -76,6 +77,16 @@ class GpuQueueTimeoutError(FactorFactoryError):
         super().__init__(f"GPU queue timed out for run {record.run_id}")
 
 
+class AcquireCancelled(FactorFactoryError):
+    """排队等槽时收到中断（F012 检视 D25）：已写 `cancelled` 终态出队，调用方记 partial。"""
+
+    termination: Literal["interrupted"] = "interrupted"
+
+    def __init__(self, *, record: QueueRecord) -> None:
+        self.record = record
+        super().__init__(f"GPU queue wait cancelled for run {record.run_id}")
+
+
 class GpuSlot:
     def __init__(self, *, locks_dir: Path, config: GpuSlotConfig) -> None:
         locks_dir.mkdir(parents=True, exist_ok=True)
@@ -85,7 +96,12 @@ class GpuSlot:
         self._held: dict[str, int] = {}
 
     def acquire(
-        self, run_id: str, *, now: datetime | None = None, ignore_window: bool = False
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+        ignore_window: bool = False,
+        cancel: Callable[[], bool] | None = None,
     ) -> QueueRecord:
         """Wait FIFO; insufficient **or unreadable** VRAM rejoins the tail.
 
@@ -102,6 +118,9 @@ class GpuSlot:
         self._append(run_id, "queued", None, now)
         started = time.monotonic()
         while True:
+            if cancel is not None and cancel():
+                # 先写终态再抛：_waiting_head 只认最新记录为 queued 的 run，写了才算出队
+                raise AcquireCancelled(record=self._append(run_id, "cancelled", None, now))
             current = now if now is not None else datetime.now(UTC)
             window_open = ignore_window or in_training_window(
                 current,
@@ -158,7 +177,7 @@ class GpuSlot:
     def _append(
         self,
         run_id: str,
-        event: Literal["queued", "acquired", "released", "timeout"],
+        event: Literal["queued", "acquired", "released", "timeout", "cancelled"],
         free: float | None,
         now: datetime | None,
     ) -> QueueRecord:
@@ -198,6 +217,7 @@ class GpuSlot:
 
 
 __all__ = (
+    "AcquireCancelled",
     "CLIENT_DEADLINE_MARGIN_S",
     "DEFAULT_WINDOW_TZ",
     "GpuQueueTimeoutError",

@@ -31,6 +31,31 @@ DEFAULT_MINE_CONFIG: Final[Mapping[str, canonical.JSONValue]] = MappingProxyType
 )
 
 
+# F012：alphagen 专属缺省段，独立于 DEFAULT_MINE_CONFIG（并入会改 manual 的 config_digest，D13）。
+# 合成顺序见 mine_dispatch.compose_config：MINE 公共段 + 本段 + 用户 --config（objective 深合并）。
+DEFAULT_ALPHAGEN_CONFIG: Final[Mapping[str, canonical.JSONValue]] = MappingProxyType(
+    {
+        "tier_level": "L0",  # ADR-0001：alphagen 只可能是 L0（L1 为绕开 sb3/RL 的实现）
+        "total_timesteps": 100_000,
+        "pool_capacity": 10,
+        "datasets": ["ohlcv_1m"],
+        "resample": "1h",
+        "objective": {
+            "turnover_penalty_lambda": 0.05,
+            "reachability_min_trades_90d": 30,
+            "cost_model": {
+                "taker_fee_bps": 5.0,
+                "maker_fee_bps": 2.0,
+                "slippage_bps": 2.0,
+                "funding_8h_bps": 0.0,
+            },
+            "min_after_cost_return": 0.0,
+            "position_rule": "cs_median",
+        },
+    }
+)
+
+
 def load_config(path: Path | None) -> dict[str, canonical.JSONValue]:
     """读取 --config 指向的 JSON 对象；不可读或非对象即判红。"""
     if path is None:

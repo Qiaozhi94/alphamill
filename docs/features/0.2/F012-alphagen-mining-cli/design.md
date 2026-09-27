@@ -23,9 +23,9 @@ updated: 2026-09-27
 | # | 文件 | 变更 |
 |---|---|---|
 | 1 | `generators/candidate_pipeline.py`（**新增**） | `CandidatePipeline.offer(tokens)`：通道绑定 → 自检 → 查重 → 预筛 → 入册/拒绝；计数守恒；候选级异常分类（§7）；纯 Python |
-| 2 | `generators/alphagen_training.py`（**新增**） | `train_with_callbacks(*, stock_data, target, device, seed, total_timesteps, on_expression, should_stop) -> TrainingOutcome{evaluations, stopped}`：回调式训练独立入口；SB3 回调停止时 `learn()` 同样正常返回，故以 `stopped` 标志区分而非「正常返回即耗尽」（检视 D33）；**`alphagen_generation.run_generation` 原样保留**（检视 D19） |
+| 2 | `generators/alphagen_training.py`（**新增**） | `train_with_callbacks(*, stock_data, target, device, seed, total_timesteps, on_expression, should_stop, pool_capacity=10) -> TrainingOutcome{evaluations, stopped, timesteps}`：回调式训练独立入口；SB3 日志器显式设为无输出（缺省日志器即使 `verbose=0` 也在系统临时目录建目录，被写护栏拒）；`warm_runtime()` 供 CLI 在写护栏安装前预热导入期副作用（`torch._dynamo` 首次导入建 inductor 缓存目录）；SB3 回调停止时 `learn()` 同样正常返回，故以 `stopped` 标志区分而非「正常返回即耗尽」（检视 D33）；**`alphagen_generation.run_generation` 原样保留**（检视 D19） |
 | 2b | `generators/alphagen_runner.py` | **修正 `render_expression` / `_operator_token`（F003 既有缺陷，检视 D23）**：滚动算子（`Ref/Mean/Sum/Std/Var/Max/Min/Med/Mad/Delta/WMA/EMA`）以末位 `DeltaTime` 渲染为 `name:N`，窗口不再丢失；成对滚动算子 `Cov/Corr`（非 RollingOperator 子类，现渲染为 `…,'delta:N','corr'`）改为以末位 `DeltaTime` 渲染为 `corr:N`/`cov:N`——二者已登记（`operator_registry.py:41,48`，arity 2 见 `:163`）且可编译，按正常候选处理（检视 D37）；`CSRank` → `cs_rank`；时序 `Rank(x,N)` → `ts_rank:N`（未登记 ⇒ `unregistered_op`，不再错译为 `cs_rank`）。vendor 默认动作空间（`alphagen/config.py` `OPERATORS`，不含 `Rank`/`CSRank`）保持不改（vendor 零修改）。`run_generation` 代码不改，但因调用 `render_expression`（`alphagen_generation.py:107`）其 token 输出随修正而变；仓内无测试钉住旧渲染结果（检视 D39） |
-| 3 | `generators/alphagen_generator.py`（**新增**） | `AlphaGenGenerator(stop, writer, compilers).produce(request)`：以 `request.panel`（CLI 已建好的张量）→ stock_data → 训练 → 流水线 → `GenerationResult`；停止判定、事件写者与编译器注册表经构造器注入（检视 D31） |
+| 3 | `generators/alphagen_generator.py`（**新增**） | `AlphaGenGenerator(ctx: BuildContext).produce(request)`：以 `request.panel`（CLI 已建好的张量）→ stock_data → 训练 → 流水线 → `GenerationResult`；停止判定、事件写者、编译器注册表与 `device` 经 `BuildContext` 注入（检视 D31）；`BuildContext`、`objective_params`、`ALPHAGEN_GENERATOR_VERSION` 定义在 `generators/alphagen_context.py`（生成器不反向导入 CLI 层，代码检视 R-C6）；配额恰在最后一步达成而训练未被叫停时仍记 `quota_reached` |
 | 4 | `generators/channel_binding.py`（**新增**） | `bind_feature_tokens(tokens, feature_map) -> tokens`：`feature:<basename>` → `feature:<dataset>.<column>@<resample>`，映射规则与 `alphagen_runner.build_stock_data:162-166` 的 FeatureType 槽位同源（取 `name.split('.')[-1].split('@')[0].lower()`）；无对应通道 → `MissingChannelError(name)`（检视 D02）；多个数据集出现同名 basename（会被 `build_stock_data` 后写者覆盖）⇒ 启动期以 `invalid_config` 拒绝（检视 D35） |
 | 5 | `generators/stop_conditions.py`（**新增**） | `StopController`：配额、夜槽（复用纯函数 `gpu_slot.in_training_window`）、信号标志 → `stop_reason`；`install_signal_flags()` 上下文管理器 |
 | 6 | `generators/objective.py` | `evaluate_objective(..., position_rule="sign")` 新增关键字 `position_rule ∈ {"sign","cs_median"}`；`cs_median` = 每个时点在宇宙内 pair 上 `signal − median(signal)` 后取符号（owner 裁决 Q-005，检视 D03）；缺省 `sign` 保持 F003 用例不变 |
@@ -39,7 +39,15 @@ updated: 2026-09-27
 | 14 | `factor_factory/mine_config.py` | 新增独立常量 `DEFAULT_ALPHAGEN_CONFIG`（`tier_level="L0"`、`total_timesteps`、`pool_capacity`、`datasets=["ohlcv_1m"]`、`resample="1h"`、`objective{…, position_rule:"cs_median"}`），不并入 `DEFAULT_MINE_CONFIG` |
 | 15 | `factor_factory/cli.py` | 删去写死点，改调 `mine_dispatch`/`manifest_builder`/`StopController`；净增 ≤0 |
 | 16 | `generators/gpu_slot.py` | `acquire(..., cancel=None)`：等待循环每轮检查 `cancel()`；为真时**先追加队列终态记录 `cancelled`**（`QueueRecord.event` 增此值；`_waiting_head` 只认最新记录为 `queued` 者，故取消即出队）再抛 `AcquireCancelled`（检视 D11/D25） |
-| 17 | `generators/lake_tensor.py` | 新增 `pairs_during(validated, start, end) -> tuple[str, ...]`：窗口内任一时点属于宇宙的 pair 并集（由绑定的宇宙台账区间求交），作为 `build_tensor(pairs=...)` 的输入——仍逐时点 PIT 掩码，不以终点成员筛历史，且只读宇宙相关 pair（检视 D04/D24） |
+| 17 | `generators/lake_tensor.py` | 新增 `pairs_during(ledger: UniverseLedger, start, end) -> tuple[str, ...]`：窗口内任一时点属于宇宙的 pair 并集（由绑定的宇宙台账区间求交），作为 `build_tensor(pairs=...)` 的输入——仍逐时点 PIT 掩码，不以终点成员筛历史，且只读宇宙相关 pair（检视 D04/D24） |
+
+**代码检视回写**（循环 26 第 1 轮，2026-09-27）：
+- 取数窗口与重采样（R-B4 → R2-1）：`ohlcv_1m.time` 是 K 线开盘时间。`lake_tensor._aggregate` 由右闭右标签改为**左闭右标签**（原口径让标签 H 含 H 开盘、H+1m 才收盘的那根，前视 1 分钟；F003 既有），`prepare_panel` 按原窗口调 reader `[start, end)`，标签 ∈ `(start, end]` 且最后一根在 cutoff 收盘、不越绑定截止；第 1 轮曾以 ±1µs 偏移对齐右闭口径，第 2 轮查出其把 cutoff 开盘的 K 线拉进 cutoff 标签而撤销；T019 夜槽证据按新口径重取（owner 2026-09-27）；
+- 启动期（卸载 Kronos 前）校验：`compose_config` 后立即解析 `objective_params`，缺键/错型 → `invalid_config`（R-A2）；`objective.position_rule` 只接受 `cs_median`（预筛只实现该规则，Q-005，R-A3）；
+- 异常归属：`manifest_builder.finish_exception` 以 `config_phase`（进入生成器之前）区分——仅该阶段的 Schema/Type/ValueError 记 `invalid_config`，生成器内一律 `failed`；未列出的异常同样收尾为 `failed` 并写 run.json（R-A1/R-A2，兑现 §7）；
+- 信号：仅 `mine` 安装 `install_signal_flags`，生成前再加一个中断检查点（manual 同样经过，R-A4）；
+- 配了 `funding_8h_bps > 0` 而面板无资金费通道 → 启动期（`prepare_panel` 内、卸载 Kronos 前）`invalid_config`，不再静默按 0 扣（R2-3）；
+- 预筛带上面板中唯一的 funding 通道（`objective.funding_feature_columns` 同一口径），`funding_8h_bps` 生效（R-B3）；`CandidatePipeline.prefilter_ms` 供每 500 次评估的进度日志算 p95；生成器在 CLI 未配置 logging 时自挂 stderr handler。
 
 **写死点清单**（检视 D14，全部由 12/13 接管；另 `cli.py:163-168` universe 汇总由 13 按生成器取）：`cli.py:32`（`_MANUAL_CODE_DIGEST`）、`:62`（`choices=("manual",)`）、`:85`、`:99`（`generator`/`tier_level` 写死）、`:101-106`（`objective` 写死 0.0/30/{}）、`:132`（`run_id` 前缀）、`:159`（config `generator`）、`:176`（`tier_level=="manual"`）、`:221`（`GenerationRequest(generator="manual")`）、`:232`（`ManualGenerator()`）、`mine_config.py:16`（`tier_level="manual"`）。
 
@@ -51,7 +59,7 @@ updated: 2026-09-27
 cli.mine  ── with install_signal_flags():               # 入口即安装（检视 D11）
   dispatch = mine_dispatch.resolve(args.generator)
   validate_binding → capability
-  pairs = pairs_during(validated, window.start, window.end)             # D24：窗口内宇宙成员并集
+  pairs = pairs_during(validated.universe_ledger, window.start, window.end)           # D24：窗口内宇宙成员并集
   panel = build_tensor(validated, datasets=..., resample=...,
                        start=window.start, end=window.end, pairs=pairs)  # D04/D15/D21：先建张量
   panel 校验：__in_universe__.any() 否则 invalid_binding；同名 basename 否则 invalid_config（D34/D35）
@@ -110,13 +118,13 @@ AlphaGenGenerator.produce(request)
 | `bind_feature_tokens(tokens, feature_map)` | 新增 | 缺通道 → `MissingChannelError` |
 | `evaluate_objective(..., position_rule="sign")` | 扩展 | `cs_median` 见 §1 第 6 行 |
 | `GpuSlot.acquire(..., cancel=None)` | 扩展 | 等待循环每轮检查 `cancel()`，为真即先写 `cancelled` 队列记录再抛 `AcquireCancelled`（映射为 `partial/interrupted`） |
-| `lake_tensor.pairs_during(validated, start, end)` | 新增 | 窗口内宇宙成员并集 |
+| `lake_tensor.pairs_during(ledger, start, end)` | 新增 | 窗口内宇宙成员并集 |
 | `render_expression(expr)` | 修正 | 滚动与成对滚动算子 `name:N`、`CSRank→cs_rank`、`Rank→ts_rank:N`（见 §1 第 2b 行） |
 | `factor_store.load` | 修改 | run.json 版本 ∈ {1,2} 且 `completed` |
 | `run_schema.load_run` | 迁出 + 扩展 | v1/v2 双读 |
-| `RunEventWriter.append(event_type, payload)` | 新增 | 无缓冲线性写出，批量与 `close()` 时 fsync；`close()` 先于 finalize |
+| `RunEventWriter.rejected(expression, reason_code, detail, *, definition_digest=None)` / `.prefilter(record)` | 新增 | 无缓冲线性写出（events.jsonl / prefilter.jsonl），批量与 `close()` 时 fsync；`close()` 先于 finalize |
 
-退出码不变（0/1/2）；`partial` 退出码 0，stdout JSON 摘要含 `status`、`stop_reason`、`counts`、`budget`、预筛 p50/p95。
+退出码不变（0/1/2）；`partial` 退出码 0，stdout JSON 摘要含 `run_id`、`generator`、`status`、`stop_reason`、`counts`、`budget`、预筛 p50/p95、`vram_peak_gb`（CUDA 时为 `torch.cuda.max_memory_allocated`，否则 null）；摘要在 run.json 发布后打印，失败只告警、不改退出码（代码检视 R-A5）。`prefilter.jsonl` 每条进入预筛的候选一行：`definition_digest`、`masked_bars`、`outcome`、`elapsed_ms`，走到目标函数的另含 `turnover`/`trades_90d`/`after_cost_return`（退化候选无这三项）。
 
 ### Event / Trace Contract
 
@@ -172,7 +180,7 @@ StopController.check(): 优先级 interrupted > window_closed > quota_reached
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
 | `AC-001` | integration | `tests/integration/test_f012_alphagen_mining.py`：scratch 湖小面板真实训练 | 入册因子通道已绑定、`mechanism_unknown`；v2 下 `factor_store.load` 反解逐点一致；v1 manual 仍可 load |
-| `AC-002` | integration | 同上：`--quota 3` / 极小步数；窗口跨度 | 入册数与 `stop_reason`；面板首尾时间戳 ∈ `(window.start, window.end]`（1h 重采样 `closed/label="right"`，检视 D36） |
+| `AC-002` | integration | 同上：`--quota 3` / 极小步数；窗口跨度 | 入册数与 `stop_reason`；面板首尾时间戳 ∈ `(window.start, window.end]`（`time` 为 1m K 线开盘时间：reader `[start, end)` + 1h 重采样 `closed="left", label="right"`，标签 H 只含 H 前已收盘的 K 线；检视 D36，代码检视 R2-1 由右闭改左闭以消除 1 分钟前视） |
 | `AC-003` | unit | `tests/unit/test_f012_candidate_pipeline.py`：恒定信号、截面排名因子、阈值边界、全 NaN/inf | `reachability`；`cs_median` 下有交易；退化为候选拒绝；`prefilter.jsonl` 行数与身份 |
 | `AC-004` | unit | 同上：重复 token、缺通道 token、畸形 token、事件计数、1 万条写出计时、`close` 先于 finalize | `duplicate_definition`；`missing_channel`；畸形 → `unregistered_op`；事件 == `counts.rejected`；守恒；线性 |
 | `AC-010` | unit | `tests/unit/test_f012_render.py`：vendor `OPERATORS` 逐算子构造表达式渲染后过 `check_expression` | 滚动算子带窗口不再判 lookahead；`Cov/Corr` 渲染为 `corr:N`/`cov:N`、通过 `check_expression` 并能被 `build_factor` 编译；`CSRank→cs_rank`；`Rank→ts_rank:N` 以 `unregistered_op` 拒绝 |
@@ -186,6 +194,8 @@ StopController.check(): 优先级 interrupted > window_closed > quota_reached
 
 | 决策 / 风险 | 结论或缓解 | 理由 | 替代方案 / 后续 |
 |---|---|---|---|
+| 残余风险：`resample="1m"`（代码检视 R3-1） | 1m 路径不经聚合、标签即开盘时间，面板窗口为 `[start, end)`，与本设计 `(start, end]` 口径不一致；缺省与唯一经取证的路径为 1h | 面板内收益为相对计算，不构成前视 | 需要 1m 挖掘时再立项统一口径或启动期拒绝 |
+| 残余风险：资金费按小时摊扣（代码检视 R3-2，F003 `evaluate_objective` 既有） | 资金费通道稀疏（约 1/8 行有值）而每行按 1h/8h 扣，配置资金费时可能低估约 8 倍；整点结算被左闭口径标到下一小时（保守延后，非前视）；缺省 `funding_8h_bps=0` 不受影响 | 与 F012 生成侧无关的预筛成本建模问题 | 已登记 BACKLOG「F012 后续：vendor 慢算子向量化加速」同条附注，随预筛改造一并处理 |
 | 回调式训练独立入口 | 新增 `train_with_callbacks`，`run_generation` 原样保留 | F003 用例依赖旧路径的 `run_id` 与 manifest（检视 D19） | — |
 | 停止实现 | SB3 `BaseCallback._on_step` 返回 False | 官方停止机制 | — |
 | 截面仓位规则 | `cs_median`（Q-005） | 与 F007 多空分位口径一致 | — |

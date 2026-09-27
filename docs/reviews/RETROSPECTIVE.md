@@ -1269,3 +1269,63 @@ report_type: doc-review · feature: F012 · status: closed · readiness: PASS ·
 - **`origin` 分布**：original-coding 26（第 1 轮 21 条 + D23/D32/D35/D36/D45）、fix-regression 18（D24–D31、D33、D34、D37–D44）、process-gap 1（D08）。fix-regression 占比高，印证「每轮修复自伤」——设计大改（design 两次整篇/大段重写）是主要来源。
 - **存活轮数**：D23、D30、D07 最长（3 轮），均为「方案方向对、细节与代码不符」的反复收敛；其余多为 1 轮。
 - **裁决分布与建议命中率**：accepted 45 / partial 0 / rejected 0；修复方案与建议实质一致 45/45（D17、D23 的修复比建议更具体：执行机实测前置、vendor 动作空间不改）。
+
+## 循环 26：F012 AlphaGen 后端接入挖掘 CLI 实现代码检视
+
+report_type: code-review · feature: F012 · status: closed · rounds: 1（full-scan，三路并行）→ 2（diff-only）→ 3（diff-only，封顶） · 基线 `4bca112` → 修复终态 `44a451f`
+
+- report_type: code-review
+- 周期：2026-09-27（第 1 轮三个独立检视代理分通道全量扫描：CLI/运行记录、生成与预筛、质量与测试覆盖；第 2、3 轮各一个独立代理 diff-only 复核并逐条变异核对修复声明）
+- 状态：闭环（stop_condition_met: true；Critical/High/Medium 全部到达终态；R-C7、R3-1 两条 Low open 并已登记）
+- 基线：`feat/F012-alphagen-mining-cli` @ `4bca112`（developing → code-reviewing 流转点）→ `44a451f`
+- 被检对象：`diff 84ab505..4bca112 -- src tools tests`（21 个源文件 +1784/−326）
+- 门禁：`tools/verify.py`（执行机 qiaozhi-lt，mining extra 真跑）exit=0，1772 passed / 32 skipped / 1 xfailed（4291fcd）
+- owner 裁决 2 项：R-B1 预筛加速另立后续需求（BACKLOG）；R2-1 前视修掉并按新口径重跑 T019 夜槽取证
+
+### 循环 26 完整 issue 表
+
+| ID | 标题 | 严重度 | 分类 | 根因/症状 | 来源 | 状态 | 修复建议 | 修复方案 | 回归测试 | 首次出现轮次 | 修复轮次 | 模式标签 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| R-A1 | 训练期 Schema/Value/TypeError 被映射成 invalid_config（design §7 应为 failed） | high | correctness | root-cause | original-coding | fixed | invalid_config 仅用于 produce 之前 | finish_exception 以 config_phase（进入生成器前）分阶段映射 | tests/unit/test_f012_cli_failures.py::test_errors_raised_during_training_fail_the_run_not_the_config | 1 | 1 | exception-phase-leak |
+| R-A2 | 部分 cost_model 致 KeyError 在卸载 Kronos 后以 traceback 退出、无 run.json | medium | correctness | root-cause | original-coding | fixed | compose 后即校验 objective_params；Exception→failed 兜底 | compose_config 解析 objective_params 失败→SchemaValidationError；cli except Exception | test_f012_cli_failures.py::test_incomplete_cost_model_is_rejected_before_kronos_offload / ::test_unlisted_exception_still_publishes_a_failed_run | 1 | 1 | exception-phase-leak |
+| R-A3 | position_rule 记用户值而预筛写死 cs_median；非法值 completed 后 load 失败 | medium | correctness | root-cause | original-coding | fixed | 启动期校验 ==cs_median | compose_config 拒绝非 cs_median | test_f012_cli_failures.py::test_position_rule_other_than_cs_median_is_rejected | 1 | 1 | — |
+| R-A4 | 信号标志包住 seed 与 manual mine，SIGTERM 被吞 | low | correctness | root-cause | original-coding | fixed | 仅 mine 安装；生成前检查点 | seed 传未安装的 SignalFlags；生成前 raise_if_interrupted | test_f012_cli_failures.py::test_seed_leaves_signal_handling_alone / ::test_manual_mine_interrupted_before_generation_is_partial | 1 | 1 | — |
+| R-A5 | 发布后摘要失败导致二次 finalize、exit≠0；finish_partial finalize 无保护 | low | correctness | root-cause | original-coding | partial(见裁决记录#2) | summary 移出 try；partial finalize 捕获 | print_summary 内部捕获只告警（R2-2 补全为 Exception） | test_f012_cli_failures.py::test_summary_failure_after_publish_does_not_flip_the_exit_code | 1 | 2 | — |
+| R-B1 | ema/wma/med/mad/corr 逐窗 Python 调用，预筛 p95 1.56s>1s | medium | quality | root-cause | original-coding | tracked(BACKLOG「F012 后续：vendor 慢算子向量化加速」，owner 2026-09-27 裁决) | sliding_window_view 向量化 | — | — | 1 | — | — |
+| R-B2 | 每候选重复计算与候选无关的掩码/排序 | low | quality | root-cause | original-coding | tracked(同 R-B1 BACKLOG 条目) | __init__ 缓存 | — | — | 1 | — | — |
+| R-B3 | 预筛丢 funding 列，funding_8h_bps 被静默忽略 | low | correctness | root-cause | original-coding | fixed | 有唯一 funding 列时带入 work | objective.funding_feature_columns 共用口径，work 带 funding 列 | tests/unit/test_f012_pipeline_review.py::test_funding_channel_reaches_the_prefilter_cost | 1 | 1 | — |
+| R-B4 | 取数窗口 [start,end) 与右闭重采样错位（R-C1 探针暴露） | medium | correctness | root-cause | original-coding | fixed | 对齐为 (start, end] | 第 1 轮 ±1µs（R2-1 查出越 cutoff 撤销）→ 第 2 轮左闭右标签 + reader [start,end) | tests/integration/test_f012_alphagen_mining.py::test_quota_run_registers_loadable_factors_with_pointwise_equal_signals | 1 | 2 | vacuous-assertion |
+| R-C1 | AC-002 窗口首尾断言空转（数据全在窗口内） | medium | test-coverage | root-cause | original-coding | fixed | 加窗口外探针 bar | scratch 湖加 start 前/ cutoff 前/ cutoff 开盘三根探针 | 同 R-B4 | 1 | 1 | vacuous-assertion |
+| R-C2 | AC-001 逐点一致用同一 DTO 重建对比，近乎自证 | medium | test-coverage | root-cause | original-coding | fixed | 对比运行内入册 FactorDef | recording_write 捕获运行内 FactorDef 与 load 结果逐点比对 | 同 R-B4 所列集成用例 | 1 | 1 | test-simulates-itself |
+| R-C3 | 排队取消替身忽略 cancel，删掉 cancel=flags.is_set 仍绿 | medium | test-coverage | root-cause | original-coding | fixed | 替身先 SIGTERM 再调 cancel() | 替身发 SIGTERM 后断言 cancel() 为真 | tests/unit/test_f012_cli_contract.py::test_interrupt_while_queueing_is_partial_and_restores_kronos | 1 | 1 | test-simulates-itself |
+| R-C4 | AC-010 声称可 build_factor 编译但只调 check_expression | medium | test-coverage | root-cause | original-coding | fixed | 逐算子过 build_factor | 22 算子绑定通道→build_factor→面板计算 | tests/unit/test_f012_render.py::test_every_vendor_operator_compiles_and_computes_via_build_factor | 1 | 1 | vacuous-assertion |
+| R-C5 | CI 只装 dev extra，mining 用例静默 skip | medium | test-coverage | root-cause | original-coding | rejected(见裁决记录#1) | 执行机 skip 判红 | — | — | 1 | 1 | — |
+| R-C6 | generators 反向导入 mine_dispatch；BuildContext 字段全 Any | medium | quality | root-cause | original-coding | fixed | 下沉并加类型 | BuildContext/objective_params/版本常量下沉 generators/alphagen_context | tests/unit/test_f012_layering.py::test_generators_do_not_import_the_cli_layer | 1 | 1 | layering-inversion |
+| R-C7 | 分位数/显存峰值统计三处重复 | low | quality | root-cause | original-coding | open | 收敛 helper | — | — | 1 | — | — |
+| R-C8 | design 未回写实现漂移 | medium | quality | root-cause | spec-drift | fixed | 逐条回写 | design §1/§4/代码检视回写段更新 | tools/check_doc_consistency.py（文档门禁） | 1 | 1 | — |
+| R-C9 | 参数化 detail="" 恒真；事件比对漏 reachability | low | test-coverage | root-cause | original-coding | fixed | 补具体 detail 与完整 by_code | detail 改为具体字面量；by_code 全量比对 | tests/unit/test_f012_candidate_pipeline.py::test_rejection_paths_map_to_funnel_reason_codes | 1 | 1 | vacuous-assertion |
+| R-C10 | 集成驱动按 mtime 取 run | low | test-coverage | root-cause | original-coding | fixed | 按差集取 run | 前后目录差集 | 同 R-B4 所列集成用例 | 1 | 1 | — |
+| R-C11 | 取证校验未与 stdout 摘要对账 | low | test-coverage | root-cause | original-coding | fixed | 补对账 | 显存峰值/counts/p50/p95 对账 | tests/integration/test_f012_capacity_evidence.py::test_evidence_matches_the_run_stdout_summary | 1 | 1 | — |
+| R2-1 | 1m K 线 time 为开盘时间，右闭重采样前视 1 分钟；R-B4 的 +1µs 延伸到 cutoff 之后 | medium | correctness | root-cause | fix-regression | fixed | 左闭右标签、撤 ε | lake_tensor 改 closed=left；撤 ±1µs；F003 聚合测试改口径（owner 批准）；T019 按新口径重取 | tests/unit/test_f012_lake_window.py::test_hour_label_contains_only_candles_closed_by_the_label_time | 2 | 2 | timestamp-semantics |
+| R2-2 | R-A5 残留：摘要仅捕获 6 类异常 | low | correctness | root-cause | fix-regression | fixed | except Exception | print_summary 捕获 Exception 只告警 | test_f012_cli_failures.py::test_summary_failure_after_publish_does_not_flip_the_exit_code[AssertionError] | 2 | 2 | partial-symmetric-fix |
+| R2-3 | funding_8h_bps>0 而无 funding 通道时静默按 0 | low | correctness | root-cause | original-coding | fixed | 启动期拒绝 | prepare_panel 判 invalid_config | test_f012_cli_failures.py::test_funding_cost_without_a_funding_channel_is_rejected | 2 | 2 | — |
+| R3-1 | resample=1m 路径窗口口径不一致 | low | correctness | root-cause | original-coding | open | 注明或拒绝 1m | 登记 design §9 残余风险 | — | 3 | — | — |
+| R3-2 | 资金费按小时摊扣可能低估约 8 倍（F003 既有） | low | correctness | root-cause | original-coding | tracked(BACKLOG 同条附注) | 另开项 | — | — | 3 | — | — |
+| R3-3 | design 未写 R2-3 拒绝条件；pairs_during docstring 过时 | low | quality | root-cause | spec-drift | fixed | 补说明 | design 回写段与 docstring 更新 | tools/check_doc_consistency.py | 3 | 3 | — |
+
+### 裁决记录
+
+#1 · R-C5 · rejected · CI 不是集成证据载体（CLAUDE.md 机器边界：集成与 GPU 证据一律在执行机取）；T017/T018 证据行与第 2 轮复跑均为 qiaozhi-lt 真跑无 skip；「执行机上 skip 判红」属跨 feature 的 verify harness 改进 · 第 2 轮
+#2 · R-A5 · partial · 「finish_partial 的 finalize 无保护」部分不成立：异常由 `cli.main` 捕获返回 EXIT_FAILED；接纳部分 97823f6，残留 R2-2 fixed · 第 2 轮
+
+### 模式教训
+
+- **空转断言藏着真缺陷，而且修真缺陷时又踩了语义坑**（R-C1 → R-B4 → R2-1）：AC-002 的窗口首尾断言在「数据全在窗口内」时恒真；加边界探针后暴露 reader `[start,end)` 与右闭重采样错位（R-B4）。第 1 轮按「让标签落在 (start,end]」的测试期望加了 ±1µs 偏移，第 2 轮查出 `ohlcv_1m.time` 是 **K 线开盘时间**——右闭口径本身就前视 1 分钟，偏移又把 cutoff 开盘的那根拉进 cutoff 标签，等于把越界锁成了契约。**教训：时间边界修复必须先查数据的时间戳语义（开盘/收盘/事件/可得时刻），再定区间开闭；不能从测试期望反推。**
+- **异常按类型映射而不分阶段**（exception-phase-leak ×2，R-A1/R-A2）：同一个 `SchemaValidationError` 在启动期是配置错误、在训练期是系统故障；只按类型映射会把后者伪装成前者。修法是显式的阶段标志 + 未列出异常兜底为 failed。
+- **测试替身绕过被测逻辑**（test-simulates-itself ×2，R-C2/R-C3）：取消替身无条件抛出、逐点一致用同一 DTO 重建——两者都在删掉被测代码后仍绿。每条替身至少做一次「删被测行 → 必须红」的变异。
+- **进程级护栏要在真实路径上跑**：本循环前的 T017 已暴露写护栏拦截 torch 导入期缓存与 SB3 缺省日志目录（T013/T014 未经护栏故未发现）；本循环第 3 轮核对确认 CLI 导入不拉起 torch、分层测试锁住 generators 不反向导入 CLI 层（R-C6）。
+- **`origin` 分布**：original-coding 22 / spec-drift 2（R-C8、R3-3）/ fix-regression 2（R2-1 源于 R-B4 的 ε 修复、R2-2 源于 R-A5 修复不全）——第 2 轮 diff 复核抓到的两条 fix-regression 都在第 1 轮物理上不存在，再次印证最低 2 轮。
+- **存活轮数**：R-B4、R-A5 最长（第 1 轮发现、第 2 轮才真正闭合），其余首现即修。
+- **裁决分布与建议命中率**：fixed 19 / tracked 3（R-B1、R-B2、R3-2 → BACKLOG）/ rejected 1 / partial 1 / open 2（Low）；修复方案与建议实质一致约 24/26（R-B4 建议「对齐为 (start,end]」本身方向对，但首个修法 ±1µs 错误；R-A5 部分拒绝）。
+- **遗留**：R-B1/R-B2/R3-2 见 BACKLOG「F012 后续：vendor 慢算子向量化加速（预筛 p95）」；R3-1（resample=1m 口径）与 R-C7（统计 helper 重复）为 Low，登记于 design §9 / 本表。
+

@@ -253,25 +253,29 @@ def test_tensor_matches_reader_and_applies_pit_mask(fake_lake: _FakeLake) -> Non
     assert tensor.universe_source.endswith(f"@{fake_lake.binding.resolved.universe.digest}")
 
 
-def test_right_closed_hourly_ohlcv_aggregation(fake_lake: _FakeLake) -> None:
-    """FR-003/AC-003：1m→1h 使用右闭右标 OHLCV 聚合。"""
+def test_left_closed_hourly_ohlcv_aggregation(fake_lake: _FakeLake) -> None:
+    """FR-003/AC-003：1m→1h 左闭右标 OHLCV 聚合（`time` 是 K 线开盘时间，F012 检视 R2-1）。
+
+    标签 H 只含 [H-1h, H) 开盘、在 H 前已收盘的 K 线；原右闭口径把 H 开盘的那根混入，前视 1 分钟。
+    """
     make_tensor = partial(build_tensor, fake_lake.binding, lake_root=fake_lake.root)
     minute = make_tensor(datasets=("ohlcv_1m", "signals_log"), resample="1m")
     tensor = make_tensor(
         datasets=("ohlcv_1m",),
         resample="1h",
-        start=_START + timedelta(minutes=1),
-        end=_START + timedelta(hours=2, minutes=1),
+        start=_START,
+        end=_START + timedelta(hours=2),
     )
     reversed_order = make_tensor(datasets=("signals_log", "ohlcv_1m"), resample="1m")
     first = tensor.panel.loc[(_START + timedelta(hours=1), "BTC-USDT")]
 
     assert len(tensor.timestamps) == 2
+    # 夹具 1m K 线从第 1 分钟起：标签 +1h 聚合第 1..59 分钟开盘的 59 根（第 60 分钟那根归 +2h）
     assert first["ohlcv_1m.open@1h"] == pytest.approx(101.0)
-    assert first["ohlcv_1m.high@1h"] == pytest.approx(162.0)
+    assert first["ohlcv_1m.high@1h"] == pytest.approx(161.0)
     assert first["ohlcv_1m.low@1h"] == pytest.approx(100.0)
-    assert first["ohlcv_1m.close@1h"] == pytest.approx(161.0)
-    assert first["ohlcv_1m.volume@1h"] == pytest.approx(1830.0)
+    assert first["ohlcv_1m.close@1h"] == pytest.approx(160.0)
+    assert first["ohlcv_1m.volume@1h"] == pytest.approx(1770.0)
     assert list(minute.feature_map.values()) == list(range(len(minute.feature_map)))
     assert minute.feature_map_digest == feature_map_digest(minute.feature_map)
     assert minute.feature_map_digest != tensor.feature_map_digest

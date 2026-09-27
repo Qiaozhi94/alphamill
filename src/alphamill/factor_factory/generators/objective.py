@@ -71,6 +71,13 @@ class ObjectiveResult:
     detail: str
 
 
+def funding_feature_columns(columns, *, resample: str) -> tuple[str, ...]:
+    """资金费通道识别（`evaluate_objective` 与调用方共用同一口径）。"""
+    return _feature_columns(
+        tuple(columns), base_names=("funding", "funding_rate"), resample=resample
+    )
+
+
 def _feature_columns(
     columns: tuple[str, ...],
     *,
@@ -88,6 +95,7 @@ def _prepare_panel(
     signal: pd.DataFrame,
     *,
     resample: str,
+    position_rule: str = "sign",
 ) -> tuple[pd.DataFrame, pd.Timedelta, str | None]:
     if not isinstance(signal.index, pd.MultiIndex):
         raise SchemaValidationError("objective signal index must be a MultiIndex")
@@ -116,11 +124,7 @@ def _prepare_panel(
         raise SchemaValidationError(
             "objective signal requires one close or *.close@<resample> column"
         )
-    funding_columns = _feature_columns(
-        string_columns,
-        base_names=("funding", "funding_rate"),
-        resample=resample,
-    )
+    funding_columns = funding_feature_columns(string_columns, resample=resample)
     if len(funding_columns) > 1:
         raise SchemaValidationError("objective signal has ambiguous funding columns")
 
@@ -157,7 +161,7 @@ def _prepare_panel(
         {
             "timestamp": timestamps,
             "pair": signal.index.get_level_values("pair"),
-            "position": (signal_values > 0.0).astype(float) - (signal_values < 0.0).astype(float),
+            "position": _positions(signal_values, observed, position_rule),
             "close": close_values,
             "in_universe": in_universe,
             "observed": observed,
@@ -169,14 +173,30 @@ def _prepare_panel(
     return work.sort_values(["pair", "timestamp"], kind="stable"), interval, funding_column
 
 
+def _positions(signal: pd.Series, observed: pd.Series, position_rule: str) -> pd.Series:
+    """信号 → 仓位。`sign` 直接取符号；`cs_median` 先减去同一时点在宇宙内观测值的截面中位数
+    （F012 Q-005：截面排名等恒正信号在 `sign` 下永远满仓做多、零交易）。"""
+    if position_rule == "sign":
+        source = signal
+    elif position_rule == "cs_median":
+        values = signal.where(observed)
+        source = values - values.groupby(level="timestamp").transform("median")
+    else:
+        raise SchemaValidationError(f"unknown objective position_rule: {position_rule!r}")
+    return (source > 0.0).astype(float) - (source < 0.0).astype(float)
+
+
 def evaluate_objective(
     signal: pd.DataFrame,
     *,
     params: ObjectiveParams,
     resample: str = "1h",
+    position_rule: str = "sign",
 ) -> ObjectiveResult:
     """Calculate deterministic objective pre-filter metrics for one signal panel."""
-    work, interval, funding_column = _prepare_panel(signal, resample=resample)
+    work, interval, funding_column = _prepare_panel(
+        signal, resample=resample, position_rule=position_rule
+    )
     grouped = work.groupby("pair", sort=False)
 
     previous_position = grouped["position"].shift(1)

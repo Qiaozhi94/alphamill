@@ -320,7 +320,7 @@ def test_build_factor_rejects_unknown_generator() -> None:
         build_factor(
             hypothesis=DEFAULT_CATALOG.require("mechanism_unknown"),
             name="unknown-generator",
-            generator="alphagen",
+            generator="gp",  # F012 起 alphagen 已进缺省编译器（检视 D28）
             generator_version="1",
             scope="time_series",
             expression=("feature:close",),

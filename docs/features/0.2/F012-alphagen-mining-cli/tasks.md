@@ -19,47 +19,47 @@ updated: 2026-09-27
 - 每项任务只描述一个可验证动作，并引用合法的 US/需求/AC ID。
 - 完成并验证后立即把 `[ ]` 改为 `[x]`，不得最后统一补勾；勾选时附 `RED:` / `GREEN:` 证据。
 - 实现中若任务顺序或契约失效，先修订三件套，再继续编码。
-- 统一格式：`- [ ] T001 (`US-001`, `FR-001`, `AC-001`): <可验证动作> — verify: `path/to/test.py``
+- 统一格式：`- [x] T001 (`US-001`, `FR-001`, `AC-001`): <可验证动作> — verify: `path/to/test.py``（GREEN: spec §8 Q-001~Q-007 均 [x]，design §10「无」，2026-09-27 核对）（GREEN: spec §8 Q-001~Q-007 均为 [x] 且带 owner 决策，design §10「无」，文档检视循环 25 readiness PASS；核对随 bf685c0 完成但当时漏勾本行，收口前补勾）
 
 ## 1. 前置条件
 
-- [ ] T001 (`DQ-001`): 关闭所有阻塞性 spec/design 问题（`Q-001`~`Q-007` 已关闭，design §10 无开放问题）— verify: `spec.md`、`design.md`
-- [ ] T002 (`FR-001`, `FR-003`, `NFR-003`): 核对 design §1 所列真实签名与行号，并在执行机 `qiaozhi-lt` 按真实面板实测单候选预筛耗时 p50/p95（`cs_median` 规则）；p95 > 1 s 时先回写 design 加速方案并交 owner 裁决 — verify: `src/alphamill/factor_factory/generators/objective.py`
+- [x] T001 (`DQ-001`): 关闭所有阻塞性 spec/design 问题（`Q-001`~`Q-007` 已关闭，design §10 无开放问题）— verify: `spec.md`、`design.md`
+- [x] T002 (`FR-001`, `FR-003`, `NFR-003`): 核对 design §1 所列真实签名与行号，并在执行机 `qiaozhi-lt` 按真实面板实测单候选预筛耗时 p50/p95（`cs_median` 规则）；p95 > 1 s 时先回写 design 加速方案并交 owner 裁决 — verify: `src/alphamill/factor_factory/generators/objective.py`（GREEN: 签名与行号经文档检视 4 轮逐条核对；执行机 qiaozhi-lt 实测预筛 p50 355 ms / p95 403 ms < 1 s，面板 601,520 行、湖内 35 对 / 窗口内在宇宙 26 对，建张量 78.6 s；取证 `reports/f012/prefilter-timing.json`）
 
 ## 2. 实现任务
 
 ### Phase 1：渲染与候选流水线（纯 Python 最小切片）
 
-- [ ] T003 (`FR-002`, `AC-010`): 修正 `alphagen_runner.render_expression` / `_operator_token`：滚动与成对滚动算子 `name:N`（含 `corr:N`/`cov:N`，正常候选）、`CSRank→cs_rank`、`Rank→ts_rank:N`；提交说明注明 `run_generation` 的 token 输出随之变化 — verify: `tests/unit/test_f012_render.py`
-- [ ] T004 (`FR-001`, `FR-004`, `AC-004`): 新增 `generators/channel_binding.py`：`feature:<basename>` → 湖通道名，缺通道抛 `MissingChannelError`，同名 basename 冲突检测 — verify: `tests/unit/test_f012_candidate_pipeline.py`
-- [ ] T005 (`FR-003`, `AC-003`): `objective.evaluate_objective` 增 `position_rule`（`sign` 缺省 / `cs_median`，只统计 observed 行），F003 既有用例零修改 — verify: `tests/unit/test_f012_candidate_pipeline.py`
-- [ ] T006 (`FR-004`, `DR-002`, `NFR-005`, `AC-004`): 新增 `registry/event_writer.py`（无缓冲单写者、批量 fsync、事件版本解耦；`run_store` 两处事件信封改用 `EVENT_SCHEMA_VERSION`）与 `prefilter.jsonl` 写出 — verify: `tests/unit/test_f012_candidate_pipeline.py`
-- [ ] T007 (`FR-002`, `FR-003`, `FR-004`, `AC-003`, `AC-004`): 新增 `generators/candidate_pipeline.py`：绑定 → `build_factor` → `check_expression(seen, digest)` → 预筛（close 缺失视为未观测）→ 入册/拒绝，候选级与系统级异常按 design §7 分类，配额达成后不计数 — verify: `tests/unit/test_f012_candidate_pipeline.py`
-- [ ] T008 (`FR-005`, `AC-005`): 新增 `generators/stop_conditions.py`（配额/夜槽/信号标志）；`GpuSlot.acquire(cancel=...)` 取消时先写 `cancelled` 队列记录再抛 `AcquireCancelled` — verify: `tests/unit/test_f012_stop_conditions.py`
+- [x] T003 (`FR-002`, `AC-010`): 修正 `alphagen_runner.render_expression` / `_operator_token`：滚动与成对滚动算子 `name:N`（含 `corr:N`/`cov:N`，正常候选）、`CSRank→cs_rank`、`Rank→ts_rank:N`；提交说明注明 `run_generation` 的 token 输出随之变化 — verify: `tests/unit/test_f012_render.py`（RED: 渲染往返 17 failed；GREEN: 25 passed；F003 回归 88 passed；执行机 CUDA `ALPHAMILL_INTEGRATION=1 test_f003_generation_run.py` 单独跑 13 passed（含 ≥50 产能）。另见：F003 两个集成文件同进程跑时确定性开关泄漏致 `Med` CUDA 报错，为既有测试隔离问题，收口登记）
+- [x] T004 (`FR-001`, `FR-004`, `AC-004`): 新增 `generators/channel_binding.py`：`feature:<basename>` → 湖通道名，缺通道抛 `MissingChannelError`，同名 basename 冲突检测 — verify: `tests/unit/test_f012_candidate_pipeline.py`（RED: 076308b 收集期 ImportError；GREEN: 通道绑定 3 passed）
+- [x] T005 (`FR-003`, `AC-003`): `objective.evaluate_objective` 增 `position_rule`（`sign` 缺省 / `cs_median`，只统计 observed 行），F003 既有用例零修改 — verify: `tests/unit/test_f012_candidate_pipeline.py`（RED: 同 076308b；GREEN: cs_median 2 passed——恒正排名 sign 下 trades_90d=0、cs_median 下 >0；F003 objective 回归零修改通过）
+- [x] T006 (`FR-004`, `DR-002`, `NFR-005`, `AC-004`): 新增 `registry/event_writer.py`（无缓冲单写者、批量 fsync、事件版本解耦；`run_store` 两处事件信封改用 `EVENT_SCHEMA_VERSION`）与 `prefilter.jsonl` 写出 — verify: `tests/unit/test_f012_candidate_pipeline.py`（RED: 同 076308b；GREEN: 写者 4 passed——序号续接、信封 EVENT_SCHEMA_VERSION、1 万条线性；run_store 仍 350 行，F003 run_store 回归通过）
+- [x] T007 (`FR-002`, `FR-003`, `FR-004`, `AC-003`, `AC-004`): 新增 `generators/candidate_pipeline.py`：绑定 → `build_factor` → `check_expression(seen, digest)` → 预筛（close 缺失视为未观测）→ 入册/拒绝，候选级与系统级异常按 design §7 分类，配额达成后不计数 — verify: `tests/unit/test_f012_candidate_pipeline.py`（RED: 20797c3 ModuleNotFoundError；GREEN: 流水线 11 passed——五类拒绝码、digest 查重、退化再现判 duplicate、计数守恒与事件对账、配额停止、缺价掩码）
+- [x] T008 (`FR-005`, `AC-005`): 新增 `generators/stop_conditions.py`（配额/夜槽/信号标志）；`GpuSlot.acquire(cancel=...)` 取消时先写 `cancelled` 队列记录再抛 `AcquireCancelled` — verify: `tests/unit/test_f012_stop_conditions.py`（RED: 18f02c8 ImportError；GREEN: 5 passed——配额、夜槽、SIGTERM 优先与处理器恢复、sticky、取消写 cancelled 后下一 run 取得槽；F003 gpu_slot 回归 35 passed）
 
 ### Phase 2：运行记录、编译器组装、取数与 CLI 分发
 
-- [ ] T009 (`FR-007`, `DR-001`, `AC-007`): 新增 `registry/run_schema.py`（迁出并由 `run_store` 再导出 design §1 第 8 行全部名字，`RUN_SCHEMA_VERSION=2`），v1/v2 双读；`factor_store.load` 接受 {1,2}；`GenerationRequest`/`GenerationResult` 增可选字段 — verify: `tests/unit/test_f012_run_schema.py`
-- [ ] T010 (`FR-001`, `AC-001`): 新增 `registry/default_compilers.py`（惰性组装 manual + alphagen），`build_factor`/`load` 缺省改用它，无导入环 — verify: `tests/unit/test_f012_run_schema.py`
-- [ ] T011 (`FR-008`, `AC-008`): `lake_tensor.pairs_during(validated, start, end)`：窗口内宇宙成员并集；建后校验 `__in_universe__.any()` — verify: `tests/integration/test_f012_alphagen_mining.py`
-- [ ] T012 (`FR-006`, `IR-001`, `IR-002`, `IR-003`, `AC-006`): 新增 `mine_dispatch.py`（含 config 合成顺序与 universe 汇总）、`manifest_builder.py`、`DEFAULT_ALPHAGEN_CONFIG`；`cli.py` 去掉 design §1 所列全部写死点、先建张量后卸载 Kronos、入口安装信号标志、`writer.close()` 先于 finalize；`cli.py`/`run_store.py` 净增 ≤0 — verify: `tests/unit/test_f012_cli_contract.py`
+- [x] T009 (`FR-007`, `DR-001`, `AC-007`): 新增 `registry/run_schema.py`（迁出并由 `run_store` 再导出 design §1 第 8 行全部名字，`RUN_SCHEMA_VERSION=2`），v1/v2 双读；`factor_store.load` 接受 {1,2}；`GenerationRequest`/`GenerationResult` 增可选字段 — verify: `tests/unit/test_f012_run_schema.py`（RED: 978675d ImportError BudgetInfo；GREEN: schema 15 passed + F003 run_store/factor_store/cli_contract 回归通过；run_store 350→217 行）
+- [x] T010 (`FR-001`, `AC-001`): 新增 `registry/default_compilers.py`（惰性组装 manual + alphagen），`build_factor`/`load` 缺省改用它，无导入环 — verify: `tests/unit/test_f012_run_schema.py`（RED: 2 failed——缺省编译器无 alphagen；GREEN: 3 passed + F003 因子存储/协同池/适配器/种子/CLI 回归通过；F003 `test_build_factor_rejects_unknown_generator` 示例生成器由 alphagen 改为 gp，意图不变）
+- [x] T011 (`FR-008`, `AC-008`): `lake_tensor.pairs_during(validated, start, end)`：窗口内宇宙成员并集；建后校验 `__in_universe__.any()` — verify: `tests/integration/test_f012_alphagen_mining.py`（RED: 6125601 ImportError；GREEN: 3 passed——期间退出者仍在并集、pair_count 按掩码、空宇宙拒绝；F003 lake_tensor 回归通过。签名取 `UniverseLedger`（调用方传 `validated.universe_ledger`），design §1 第 17 行随 T012 回写）
+- [x] T012 (`FR-006`, `IR-001`, `IR-002`, `IR-003`, `AC-006`): 新增 `mine_dispatch.py`（含 config 合成顺序与 universe 汇总）、`manifest_builder.py`、`DEFAULT_ALPHAGEN_CONFIG`；`cli.py` 去掉 design §1 所列全部写死点、先建张量后卸载 Kronos、入口安装信号标志、`writer.close()` 先于 finalize；`cli.py`/`run_store.py` 净增 ≤0 — verify: `tests/unit/test_f012_cli_contract.py`（RED: 9837fb2 ImportError；GREEN: a2a7ba4 11 passed——manual 与 main@84ab505 基准等价、alphagen 分发/v2 如实/objective 深合并/非 L0 拒绝/坏张量先于卸载/partial；单测全量 1338 passed；cli.py 342 行（原 343），run_store.py 217 行；design §1 第 17 行 pairs_during 签名已回写）
 
 ### Phase 3：AlphaGen 训练与生成器
 
-- [ ] T013 (`FR-002`, `AC-002`): 新增 `generators/alphagen_training.py::train_with_callbacks`（SB3 回调步边界停止，返回 `stopped`/`evaluations`），`run_generation` 原样保留 — verify: `tests/integration/test_f012_alphagen_mining.py`
-- [ ] T014 (`FR-001`, `FR-002`, `FR-008`, `DR-003`, `AC-001`, `AC-002`, `AC-008`): 新增 `generators/alphagen_generator.py::AlphaGenGenerator`（构造器注入停止判定、写者、编译器；`produce` 消费 `request.panel`；`pool=None`、`tier_level=L0`、`pair_count` 取宇宙掩码）— verify: `tests/integration/test_f012_alphagen_mining.py`
+- [x] T013 (`FR-002`, `AC-002`): 新增 `generators/alphagen_training.py::train_with_callbacks`（SB3 回调步边界停止，返回 `stopped`/`evaluations`），`run_generation` 原样保留 — verify: `tests/integration/test_f012_alphagen_mining.py`（RED: 5d3f663 ModuleNotFoundError；GREEN: 5 passed——执行机 qiaozhi-lt CPU 小面板真实 PPO：每个被评估表达式以 token 进钩子、should_stop 叫停后 stopped=True 且不再推进训练步）
+- [x] T014 (`FR-001`, `FR-002`, `FR-008`, `DR-003`, `AC-001`, `AC-002`, `AC-008`): 新增 `generators/alphagen_generator.py::AlphaGenGenerator`（构造器注入停止判定、写者、编译器；`produce` 消费 `request.panel`；`pool=None`、`tier_level=L0`、`pair_count` 取宇宙掩码）— verify: `tests/integration/test_f012_alphagen_mining.py`（RED: 788a4eb ModuleNotFoundError；GREEN: 8 passed——执行机 qiaozhi-lt CPU 真实 PPO：配额 2 达成即停且 v2 事实如实、计数与 events.jsonl 逐码守恒、训练中 SIGTERM → interrupted；unit+integration 全量 1643 passed / 32 skipped；`pair_count` 由 CLI 经 `universe_summary` 取宇宙掩码（T011/T012））
 
 ## 3. 验证与验收任务
 
-- [ ] T015 (`AC-003`, `AC-004`, `AC-005`, `AC-010`): 单元套件：渲染逐算子往返、流水线拒绝路径、截面仓位、退化信号、事件线性写出与计数守恒、停止条件、信号处理与取消出队 — verify: `tests/unit/test_f012_render.py`、`tests/unit/test_f012_candidate_pipeline.py`、`tests/unit/test_f012_stop_conditions.py`
-- [ ] T016 (`AC-006`, `AC-007`): CLI 与 schema 套件：manual 基准夹具（改动前 main 在临时 detached worktree 实跑取得）按 `FR-006` 口径等价、alphagen config 合成、非 L0、零行/空宇宙、同名通道、v1/v2 双读 — verify: `tests/unit/test_f012_cli_contract.py`、`tests/unit/test_f012_run_schema.py`
-- [ ] T017 (`AC-001`, `AC-002`, `AC-008`): 集成套件（`mining` extra，scratch 湖小面板真实训练）全绿；无 torch 环境按约定 skip — verify: `tests/integration/test_f012_alphagen_mining.py`
-- [ ] T018 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-010`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
+- [x] T015 (`AC-003`, `AC-004`, `AC-005`, `AC-010`): 单元套件：渲染逐算子往返、流水线拒绝路径、截面仓位、退化信号、事件线性写出与计数守恒、停止条件、信号处理与取消出队 — verify: `tests/unit/test_f012_render.py`、`tests/unit/test_f012_candidate_pipeline.py`、`tests/unit/test_f012_stop_conditions.py`（RED: T004–T008 各 RED 提交；3ffc28a 补足畸形 token、全 NaN、交易笔数/成本后阈值、指标不进因子身份、GPU 路径训练中停止 partial——新用例对变异「畸形分支改捕获 KeyError / 去掉槽释放」转红 4 条；GREEN: 四个 F012 单元文件 69 passed）
+- [x] T016 (`AC-006`, `AC-007`): CLI 与 schema 套件：manual 基准夹具（改动前 main 在临时 detached worktree 实跑取得）按 `FR-006` 口径等价、alphagen config 合成、非 L0、零行/空宇宙、同名通道、v1/v2 双读 — verify: `tests/unit/test_f012_cli_contract.py`、`tests/unit/test_f012_run_schema.py`（RED: 978675d run.json v2/v1、9837fb2 CLI 契约；GREEN: a2a7ba4 起全绿，35c0b55 补断 v2 如实字段后 cli_contract+run_schema 29 passed；manual 基准取自 main@84ab505 detached worktree 实跑，路径归一为 <TMP>）
+- [x] T017 (`AC-001`, `AC-002`, `AC-008`): 集成套件（`mining` extra，scratch 湖小面板真实训练）全绿；无 torch 环境按约定 skip — verify: `tests/integration/test_f012_alphagen_mining.py`（RED: 3b0613e 护栏内首构 Optimizer 惰性导入 torch._dynamo 建 /tmp/torchinductor_*、SB3 缺省日志器建 /tmp/SB3-* 被写护栏拒 → 运行 failed；GREEN: e98b2dc 护栏外预热 + SB3 无输出日志器，12 passed——scratch 湖（`tests/f012_fixtures.py`，data_bridge 真实写路径）经 CLI：--quota 3 恰入册 3/quota_reached 且 load 反解逐点一致、面板首尾 ∈ (start, end]、极小预算 budget_exhausted、宇宙不同 pair_count 6≠3、v1 manual 仍可 load；变异「去掉预热」3 条转红；执行机 qiaozhi-lt CUDA 训练在写/出网护栏内冒烟通过）
+- [x] T018 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-010`): 运行项目统一质量门 — verify: `python3 tools/verify.py`（GREEN: 044fd1a 上 `python3 tools/verify.py` 全绿——文档/DAG/一致性/pin/密钥门禁 + pytest 1730 passed / 32 skipped / 1 xfailed + ruff check/format；执行机 qiaozhi-lt（torch 2.10+cu128）上 mining 集成用例真跑未 skip；F012 新增/改动文件均 ≤350 行）
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
-- [ ] T019 [TEST] (`AC-009`, `AC-001`, `AC-002`): 层 2 旅程验收：执行机 `qiaozhi-lt` CUDA 夜槽以 CLI 实跑 `mine --generator alphagen --quota 50`（真实湖显式绑定），写 `reports/f012/capacity-evidence.json` 并由取证校验用例核对；未达 50 时同步登记 M2 产能发现 — verify: `tests/integration/test_f012_capacity_evidence.py`
-- [ ] T020 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`, `AC-010`): 收口回写：spec 验收证据与 AC 勾选、`BACKLOG.md` 状态、`docs/features/releases/0.2.md` 交付记录、frontmatter 流转 — verify: `python3 tools/validate_spec_lifecycle.py`
+- [x] T019 [TEST] (`AC-009`, `AC-001`, `AC-002`): 层 2 旅程验收：执行机 `qiaozhi-lt` CUDA 夜槽以 CLI 实跑 `mine --generator alphagen --quota 50`（真实湖显式绑定），写 `reports/f012/capacity-evidence.json` 并由取证校验用例核对；未达 50 时同步登记 M2 产能发现 — verify: `tests/integration/test_f012_capacity_evidence.py`（RED: bfdaf4d 证据未入库 4 errors；GREEN: 执行机 qiaozhi-lt CUDA 夜槽 CLI 实跑两次——首跑 9ea6a05（run `…140500683819Z-67053132`，50/50，638 s）因代码检视 R2-1（右闭重采样 1 分钟前视）作废；按左闭右标签新口径重跑（owner 裁决）run `alphagen-20260927T155941071187Z-56f90010`：completed/quota_reached，入册 50/50，proposed 209（unregistered_op 34 / reachability 97 / duplicate 28），evaluations 188，耗时 235 s，显存峰值 0.24 GB，Kronos 卸载 vram_released 并恢复；取证校验 5 passed（含与 stdout 摘要对账）；达 50，无需登记 M2 产能发现。**发现**：预筛 p95 1347 ms（n=147）超 T002 的 1 s 阈值（p50 282 ms），owner 裁决另立后续需求（BACKLOG，代码检视 R-B1））
+- [x] T020 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`, `AC-010`): 收口回写：spec 验收证据与 AC 勾选、`BACKLOG.md` 状态、`docs/features/releases/0.2.md` 交付记录、frontmatter 流转 — verify: `python3 tools/validate_spec_lifecycle.py`（GREEN: 本次回写 spec AC-001~010 勾选 + §6 取证行；`BACKLOG.md` 与 frontmatter 随 developing → code-reviewing 同步；`docs/features/releases/0.2.md` 交付记录与 done 流转按 SOP 在代码检视闭环后的收口提交中落 main（F011 先例 `839b8ed`/`8f6d2ca`））
 
 ## 4. 依赖与并行关系
 

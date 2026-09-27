@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Final, assert_never
 
@@ -11,12 +12,13 @@ import pandas as pd
 from pandas.tseries.frequencies import to_offset
 
 from alphamill.data_bridge import reader, registry, symbol_map
-from alphamill.factor_factory.errors import SchemaValidationError
+from alphamill.factor_factory.errors import BindingValidationError, SchemaValidationError
 from alphamill.factor_factory.generators.binding import (
     ExplicitSnapshotBinding,
     SnapshotRefBinding,
     ValidatedBinding,
 )
+from alphamill.factor_factory.generators.universe import UniverseLedger
 from alphamill.factor_factory.registry.factor_store import (
     feature_map_digest as digest_feature_map,
 )
@@ -58,7 +60,9 @@ def _aggregate(frame: pd.DataFrame, resample: str) -> pd.DataFrame:
     result = (
         frame.set_index("timestamp")
         .groupby("pair", sort=True)
-        .resample(resample, closed="right", label="right")
+        # `time` 是 1m K 线开盘时间（采集按 ts+60s 判收盘）：左闭右标签 ⇒ 标签 H 只含
+        # [H-1h, H) 开盘、在 H 前已收盘的 K 线；右闭会把 H 开盘的那根混入，前视 1 分钟（检视 R2-1）
+        .resample(resample, closed="left", label="right")
         .agg(aggregations)
     )
     result.index.names = ["pair", "timestamp"]
@@ -207,3 +211,33 @@ def build_tensor(
         feature_map_digest=digest_feature_map(feature_map),
         universe_source=universe_source,
     )
+
+
+def pairs_during(ledger: UniverseLedger, start: datetime, end: datetime) -> tuple[str, ...]:
+    """窗口内任一时点属于宇宙的 lake pair 并集（F012 检视 D04/D24）。
+
+    作为 `build_tensor(pairs=...)` 的输入：只读宇宙相关 pair，且不以窗口终点成员筛整段历史
+    ——期间退出的 pair 仍在其内，逐时点 PIT 掩码照旧由 `build_tensor` 完成。1h 重采样为
+    左闭右标签（标签落在 `(start, end]`），故窗口按 `[start, end]` 两端都算、宁宽勿漏。
+    """
+    return tuple(
+        sorted(
+            {
+                member.lake_pair
+                for member in ledger.memberships
+                if member.valid_from <= end and (member.valid_to is None or member.valid_to > start)
+            }
+        )
+    )
+
+
+def universe_pair_count(frame: pd.DataFrame) -> int:
+    """窗口内至少一个时点在宇宙中的 pair 数（run.json `universe.pair_count`，F012 FR-008）。"""
+    in_universe = frame["__in_universe__"].astype(bool)
+    return int(in_universe.groupby(level="pair").any().sum())
+
+
+def require_universe_members(frame: pd.DataFrame) -> None:
+    """窗口内宇宙为空时 `build_tensor` 不抛错（掩码全假），须建后显式拒绝（F012 检视 D34）。"""
+    if not frame["__in_universe__"].astype(bool).any():
+        raise BindingValidationError("window has no universe members (empty in-universe mask)")

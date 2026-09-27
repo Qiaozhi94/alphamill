@@ -1,0 +1,191 @@
+{
+ "captured_from": "main@84ab505 (pre-F012 code)",
+ "config_digest": "sha256:7ca6e6f9c30d2e4754a4d1ac1bed388d814482585d7a9fc3757b4ed1e9a8ffb8",
+ "event_types": [
+  "generation.run_completed"
+ ],
+ "factors": {
+  "manual_57bd56a1aa26.json": {
+   "data_columns": [
+    "close"
+   ],
+   "definition_digest": "57bd56a1aa262961c83309ddaf128c3ac437c5c120006995c937df35e5a4d4b9",
+   "expression": [
+    "feature:close",
+    "return:168",
+    "cs_rank"
+   ],
+   "factor_id": "manual_57bd56a1aa26",
+   "feature_map_digest": "sha256:f0775b3fd87b531629233619f512316394117b787b0475af9eefc3b07965c502",
+   "generator": "manual",
+   "generator_version": "manual-v1",
+   "hypothesis_id": "cross_sectional_momentum",
+   "name": "cross_sectional_momentum",
+   "params": {},
+   "schema_version": 1,
+   "scope": "cross_sectional"
+  },
+  "manual_6edb1a42e569.json": {
+   "data_columns": [
+    "open_interest"
+   ],
+   "definition_digest": "6edb1a42e569a0c0d2c92c9b3e9b6ea30b8dd94a45632dac5d5d0abc071efaa4",
+   "expression": [
+    "feature:open_interest",
+    "pct_change:24"
+   ],
+   "factor_id": "manual_6edb1a42e569",
+   "feature_map_digest": "sha256:f0775b3fd87b531629233619f512316394117b787b0475af9eefc3b07965c502",
+   "generator": "manual",
+   "generator_version": "manual-v1",
+   "hypothesis_id": "open_interest_change",
+   "name": "open_interest_change",
+   "params": {},
+   "schema_version": 1,
+   "scope": "time_series"
+  },
+  "manual_7a5ad5adef42.json": {
+   "data_columns": [
+    "funding_rate"
+   ],
+   "definition_digest": "7a5ad5adef42f16f53f49335692bc16e8867386e8b1d4e50419a4a1cc629e1fc",
+   "expression": [
+    "feature:funding_rate",
+    "neg"
+   ],
+   "factor_id": "manual_7a5ad5adef42",
+   "feature_map_digest": "sha256:f0775b3fd87b531629233619f512316394117b787b0475af9eefc3b07965c502",
+   "generator": "manual",
+   "generator_version": "manual-v1",
+   "hypothesis_id": "funding_carry",
+   "name": "funding_carry",
+   "params": {},
+   "schema_version": 1,
+   "scope": "time_series"
+  },
+  "manual_9338663424ad.json": {
+   "data_columns": [
+    "basis_pct"
+   ],
+   "definition_digest": "9338663424ad53f3ca68df1d68118b299515b4fd1778b2eff3bc6d2b89a9336d",
+   "expression": [
+    "feature:basis_pct",
+    "neg"
+   ],
+   "factor_id": "manual_9338663424ad",
+   "feature_map_digest": "sha256:f0775b3fd87b531629233619f512316394117b787b0475af9eefc3b07965c502",
+   "generator": "manual",
+   "generator_version": "manual-v1",
+   "hypothesis_id": "basis_reversion",
+   "name": "basis_reversion",
+   "params": {},
+   "schema_version": 1,
+   "scope": "time_series"
+  },
+  "manual_fe55059708a4.json": {
+   "data_columns": [
+    "close"
+   ],
+   "definition_digest": "fe55059708a4e399d277cbd5f3d59befa50a21f3ac38b00afab8c52a50b121cb",
+   "expression": [
+    "feature:close",
+    "return:1",
+    "rolling_std:168",
+    "neg"
+   ],
+   "factor_id": "manual_fe55059708a4",
+   "feature_map_digest": "sha256:f0775b3fd87b531629233619f512316394117b787b0475af9eefc3b07965c502",
+   "generator": "manual",
+   "generator_version": "manual-v1",
+   "hypothesis_id": "realized_volatility",
+   "name": "realized_volatility",
+   "params": {},
+   "schema_version": 1,
+   "scope": "time_series"
+  }
+ },
+ "run": {
+  "binding": {
+   "calendar": {
+    "digest": "sha256:61eb2ad2d59771cf710788077ce69a433fef1145c212d340aaf7da509acf0d53",
+    "path": "<TMP>/artifacts/calendar/sha256:61eb2ad2d59771cf710788077ce69a433fef1145c212d340aaf7da509acf0d53.json",
+    "schema_version": 1
+   },
+   "cutoff_time": "2026-09-12T00:00:00Z",
+   "members": {
+    "signals_log": {
+     "as_of_fidelity": "bitemporal",
+     "data_version": "v2026.09.11",
+     "event_time_max": "2026-09-11T09:00:00Z",
+     "event_time_min": "2026-09-11T09:00:00Z",
+     "value_digest": "sha256:224e1ec24ecece6d6530f6d4f988268324d1870a166b35982993d480750f0d64"
+    }
+   },
+   "mode": "explicit_tuples",
+   "provenance": {
+    "artifact_path": "<TMP>/artifacts/bindings/sha256:af66d05743ac20c6904898963088e4e4c174872b1cb26ffd44321c610d744277.json",
+    "calendar_path": "<TMP>/artifacts/calendar/sha256:61eb2ad2d59771cf710788077ce69a433fef1145c212d340aaf7da509acf0d53.json",
+    "created_at": "2026-09-12T01:00:00Z",
+    "member_manifest_paths": {
+     "signals_log": "<TMP>/lake/_manifests/signals_log/v2026.09.11.json"
+    },
+    "symbol_map_path": "<TMP>/lake/_metadata/symbol_maps/sha256:f97769f7d1b6889af85d1720392ad9a7d79d8bc5bbd368bfdf572689c5d42876.csv",
+    "universe_path": "<TMP>/artifacts/universe/sha256:5399d0afd55e05d3212cdce15069c98f3ae3f82f312cd2730677d95854006715.json"
+   },
+   "schema_version": 1,
+   "symbol_map_digest": "sha256:f97769f7d1b6889af85d1720392ad9a7d79d8bc5bbd368bfdf572689c5d42876",
+   "universe": {
+    "digest": "sha256:5399d0afd55e05d3212cdce15069c98f3ae3f82f312cd2730677d95854006715",
+    "path": "<TMP>/artifacts/universe/sha256:5399d0afd55e05d3212cdce15069c98f3ae3f82f312cd2730677d95854006715.json",
+    "schema_version": 1
+   },
+   "universe_calendar_digest": "sha256:af66d05743ac20c6904898963088e4e4c174872b1cb26ffd44321c610d744277"
+  },
+  "config_digest": "sha256:7ca6e6f9c30d2e4754a4d1ac1bed388d814482585d7a9fc3757b4ed1e9a8ffb8",
+  "counts": {
+   "proposed": 5,
+   "registered": 5,
+   "rejected": {
+    "duplicate_definition": 0,
+    "lookahead": 0,
+    "reachability": 0,
+    "unregistered_op": 0
+   }
+  },
+  "device": "cpu",
+  "engine": {
+   "code_digest": "sha256:07f75302b5cb0a9d1e72a644c9af2f9045275d0371f65dbc0db5f70cece78abf",
+   "dependencies": {
+    "alphamill": "0.1.0",
+    "python": "3.14.4"
+   },
+   "vendor_commit": null
+  },
+  "generator": "manual",
+  "kronos_offload": null,
+  "objective": {
+   "cost_model": {},
+   "min_after_cost_return": 0.0,
+   "reachability_min_trades_90d": 30,
+   "turnover_penalty_lambda": 0.0
+  },
+  "pool": null,
+  "reason": null,
+  "seed": 17,
+  "status": "completed",
+  "termination": "normal",
+  "tier_level": "manual",
+  "universe": {
+   "pair_count": 1,
+   "source": "explicit_tuples",
+   "symbol_map_digest": "sha256:f97769f7d1b6889af85d1720392ad9a7d79d8bc5bbd368bfdf572689c5d42876",
+   "universe_digest": "sha256:5399d0afd55e05d3212cdce15069c98f3ae3f82f312cd2730677d95854006715"
+  },
+  "vram_limit_gb": null,
+  "window": {
+   "end": "2026-09-12T00:00:00Z",
+   "resample": "1h",
+   "start": "2024-09-12T00:00:00Z"
+  }
+ }
+}

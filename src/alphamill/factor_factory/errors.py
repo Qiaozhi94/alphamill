@@ -43,6 +43,14 @@ class FactorDependencyError(FactorCompilationError):
     """编译所需依赖不可得，如 pool 缺少成员解析器。"""
 
 
+class MissingChannelError(FactorCompilationError):
+    """AlphaGen 特征 token 在湖面板上没有对应通道（如 `feature:vwap`），候选级拒绝。"""
+
+
+class ChannelConflictError(SchemaValidationError):
+    """多个数据集出现同名 basename，vendor 槽位映射会后写者覆盖，启动期拒绝。"""
+
+
 class FeatureMapIntegrityError(FactorFactoryError):
     """feature_map 缺失、digest 不符或通道编号非法。"""
 
