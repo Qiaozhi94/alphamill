@@ -2,7 +2,8 @@
 kind: feature
 id: F012
 version: "0.2"
-status: draft
+status: doc-reviewing
+branch: docs/F012-alphagen-mining-cli
 gate_version: 1
 related_features: [F003, F007, F013]
 topics: [factor-factory, alphagen, generation, cli, funnel]
