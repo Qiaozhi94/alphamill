@@ -19,12 +19,12 @@ updated: 2026-09-27
 - 每项任务只描述一个可验证动作，并引用合法的 US/需求/AC ID。
 - 完成并验证后立即把 `[ ]` 改为 `[x]`，不得最后统一补勾；勾选时附 `RED:` / `GREEN:` 证据。
 - 实现中若任务顺序或契约失效，先修订三件套，再继续编码。
-- 统一格式：`- [ ] T001 (`US-001`, `FR-001`, `AC-001`): <可验证动作> — verify: `path/to/test.py``
+- 统一格式：`- [x] T001 (`US-001`, `FR-001`, `AC-001`): <可验证动作> — verify: `path/to/test.py``（GREEN: spec §8 Q-001~Q-007 均 [x]，design §10「无」，2026-09-27 核对）
 
 ## 1. 前置条件
 
 - [ ] T001 (`DQ-001`): 关闭所有阻塞性 spec/design 问题（`Q-001`~`Q-007` 已关闭，design §10 无开放问题）— verify: `spec.md`、`design.md`
-- [ ] T002 (`FR-001`, `FR-003`, `NFR-003`): 核对 design §1 所列真实签名与行号，并在执行机 `qiaozhi-lt` 按真实面板实测单候选预筛耗时 p50/p95（`cs_median` 规则）；p95 > 1 s 时先回写 design 加速方案并交 owner 裁决 — verify: `src/alphamill/factor_factory/generators/objective.py`
+- [x] T002 (`FR-001`, `FR-003`, `NFR-003`): 核对 design §1 所列真实签名与行号，并在执行机 `qiaozhi-lt` 按真实面板实测单候选预筛耗时 p50/p95（`cs_median` 规则）；p95 > 1 s 时先回写 design 加速方案并交 owner 裁决 — verify: `src/alphamill/factor_factory/generators/objective.py`（GREEN: 签名与行号经文档检视 4 轮逐条核对；执行机 qiaozhi-lt 实测预筛 p50 355 ms / p95 403 ms < 1 s，面板 601,520 行、湖内 35 对 / 窗口内在宇宙 26 对，建张量 78.6 s；取证 `reports/f012/prefilter-timing.json`）
 
 ## 2. 实现任务
 

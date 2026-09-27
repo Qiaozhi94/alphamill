@@ -1,0 +1,67 @@
+{
+ "host": "qiaozhi-lt",
+ "rows": 601520,
+ "pairs": 35,
+ "in_universe_pairs": 26,
+ "build_tensor_s": 78.59,
+ "prefilter_ms_p50": 354.8,
+ "prefilter_ms_p95": 403.2,
+ "n_samples": 24,
+ "outcomes": {
+  "ret_1": [
+   false,
+   "reachability",
+   29173,
+   -17.4891
+  ],
+  "ret_5": [
+   false,
+   "reachability",
+   13102,
+   -7.9581
+  ],
+  "ret_20": [
+   false,
+   "reachability",
+   6660,
+   -3.8188
+  ],
+  "mom_40": [
+   false,
+   "reachability",
+   5009,
+   -2.8101
+  ],
+  "vol_mean_10": [
+   false,
+   "reachability",
+   498,
+   -0.5915
+  ],
+  "close_std_20": [
+   true,
+   null,
+   280,
+   0.0034
+  ],
+  "neg_ret_10": [
+   false,
+   "reachability",
+   9416,
+   -4.8448
+  ],
+  "vol_ratio": [
+   false,
+   "reachability",
+   19184,
+   -10.1486
+  ]
+ },
+ "task": "F012 T002",
+ "measured_at": "2026-09-27",
+ "binding": "reports/f003/t035/bindings/sha256:3529a2a5848c879a7c45686e39e99491d2342c8a938b0209689a8a2d05417166.json",
+ "window": "cutoff 2026-09-10 往前 730 天，1h 重采样",
+ "method": "8 个代表信号 × 3 次；cs_median 以「减当期截面中位数后 sign」等价模拟（T005 实现前）",
+ "threshold_ms_p95": 1000,
+ "verdict": "PASS"
+}
