@@ -30,7 +30,7 @@ updated: 2026-09-27
 
 ### Phase 1：渲染与候选流水线（纯 Python 最小切片）
 
-- [ ] T003 (`FR-002`, `AC-010`): 修正 `alphagen_runner.render_expression` / `_operator_token`：滚动算子 `name:N`、`Cov/Corr` 如实渲染、`CSRank→cs_rank`、`Rank→ts_rank:N`；更正 F003 中钉住旧错误渲染的断言并在提交说明列出 — verify: `tests/unit/test_f012_render.py`
+- [ ] T003 (`FR-002`, `AC-010`): 修正 `alphagen_runner.render_expression` / `_operator_token`：滚动与成对滚动算子 `name:N`（含 `corr:N`/`cov:N`，正常候选）、`CSRank→cs_rank`、`Rank→ts_rank:N`；提交说明注明 `run_generation` 的 token 输出随之变化 — verify: `tests/unit/test_f012_render.py`
 - [ ] T004 (`FR-001`, `FR-004`, `AC-004`): 新增 `generators/channel_binding.py`：`feature:<basename>` → 湖通道名，缺通道抛 `MissingChannelError`，同名 basename 冲突检测 — verify: `tests/unit/test_f012_candidate_pipeline.py`
 - [ ] T005 (`FR-003`, `AC-003`): `objective.evaluate_objective` 增 `position_rule`（`sign` 缺省 / `cs_median`，只统计 observed 行），F003 既有用例零修改 — verify: `tests/unit/test_f012_candidate_pipeline.py`
 - [ ] T006 (`FR-004`, `DR-002`, `NFR-005`, `AC-004`): 新增 `registry/event_writer.py`（无缓冲单写者、批量 fsync、事件版本解耦；`run_store` 两处事件信封改用 `EVENT_SCHEMA_VERSION`）与 `prefilter.jsonl` 写出 — verify: `tests/unit/test_f012_candidate_pipeline.py`
