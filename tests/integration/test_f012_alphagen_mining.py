@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import signal
+import sys
 from datetime import UTC, datetime
 
 import pandas as pd
@@ -270,3 +271,166 @@ def test_interrupted_training_reports_interrupted(tmp_path) -> None:
     result = _produce(tmp_path, quota=5, objective=_LENIENT, check=interrupt_after_five)
 
     assert result.stop_reason == "interrupted"
+
+
+# ------------------------------------------------------------------ CLI × scratch 湖（T017）
+
+FULL = [
+    {"lake_pair": f"{base}-USDT", "valid_from": "2026-01-01T00:00:00Z", "valid_to": None}
+    for base in ("AAA", "BBB", "CCC", "DDD", "EEE", "FFF")
+]
+PARTIAL_UNIVERSE = [
+    {"lake_pair": "AAA-USDT", "valid_from": "2026-01-01T00:00:00Z", "valid_to": None},
+    {"lake_pair": "BBB-USDT", "valid_from": "2026-01-01T00:00:00Z", "valid_to": None},
+    # 窗口内中途退出者仍计入「曾在宇宙」
+    {
+        "lake_pair": "CCC-USDT",
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_to": "2026-09-05T00:00:00Z",
+    },
+]
+
+
+def _cli_mine(lake, binding: str, tmp_path, *, quota: int, total_timesteps: int, objective=None):
+    import json
+
+    pytest.importorskip("torch")
+    pytest.importorskip("sb3_contrib")
+    from alphamill.factor_factory import mine_dispatch
+    from alphamill.factor_factory.cli import main
+
+    panels = []
+    original = mine_dispatch.build_tensor
+
+    def recording(*args, **kwargs):
+        panels.append(original(*args, **kwargs))
+        return panels[-1]
+
+    config = tmp_path / f"config-{binding}.json"
+    body = {"total_timesteps": total_timesteps, "pool_capacity": 5}
+    if objective is not None:
+        body["objective"] = objective
+    config.write_text(json.dumps(body), encoding="utf-8")
+    argv = ["mine", "--generator", "alphagen", "--binding", str(lake.bindings[binding])]
+    argv += ["--seed", "11", "--quota", str(quota), "--config", str(config)]
+    argv += ["--allow-cpu", "--allow-offhours"]
+    mp = pytest.MonkeyPatch()
+    mp.setattr(mine_dispatch, "build_tensor", recording)
+    # 训练中 torch 惰性导入 torch._inductor.test_operators，名字命中 pytest 的断言改写钩子，
+    # 钩子用 os.makedirs 写 pyc 缓存而被进程级写护栏拦下；生产进程无此钩子（importlib 走 posix）。
+    mp.setattr(sys, "dont_write_bytecode", True)
+    try:
+        code = main(argv, reports_root=lake.reports_root, lake_root=lake.lake_root)
+    finally:
+        mp.undo()
+    runs = sorted((lake.reports_root / "generation").glob("*/run.json"))
+    run_path = max(runs, key=lambda p: p.stat().st_mtime_ns)
+    return code, run_path, json.loads(run_path.read_text(encoding="utf-8")), panels[-1]
+
+
+@pytest.fixture(scope="module")
+def scratch(tmp_path_factory):
+    from tests.f012_fixtures import build_scratch_lake
+
+    root = tmp_path_factory.mktemp("f012-lake")
+    return build_scratch_lake(root, {"full": FULL, "partial": PARTIAL_UNIVERSE}), root
+
+
+def test_quota_run_registers_loadable_factors_with_pointwise_equal_signals(scratch) -> None:
+    """AC-001/AC-002：--quota 3 恰入册 3；因子通道已绑定；load 反解后在同一面板逐点一致。"""
+    from alphamill.factor_factory.registry import factor_store
+
+    lake, root = scratch
+    code, run_path, run, panel = _cli_mine(
+        lake, "full", root, quota=3, total_timesteps=4096, objective=_LENIENT
+    )
+
+    assert code == 0, run
+    assert (run["schema_version"], run["status"], run["stop_reason"]) == (
+        2,
+        "completed",
+        "quota_reached",
+    )
+    assert run["counts"]["registered"] == 3 and run["tier_level"] == "L0"
+    window_start = datetime.fromisoformat(run["window"]["start"].replace("Z", "+00:00"))
+    window_end = datetime.fromisoformat(run["window"]["end"].replace("Z", "+00:00"))
+    assert window_start < panel.timestamps[0] and panel.timestamps[-1] <= window_end
+    paths = sorted((run_path.parent / "factors").glob("*.json"))
+    assert len(paths) == 3
+    for path in paths:
+        dto = factor_store.read(path)
+        factor = factor_store.load(path)
+        assert factor.generator == "alphagen" and factor.hypothesis_id == "mechanism_unknown"
+        features = [t for t in dto.expression if t.startswith("feature:")]
+        assert features and all(t.startswith("feature:ohlcv_1m.") for t in features)
+        rebuilt = factor_store.build_factor(
+            hypothesis=__import__(
+                "alphamill.factor_factory.hypotheses.catalog", fromlist=["DEFAULT_CATALOG"]
+            ).DEFAULT_CATALOG.require("mechanism_unknown"),
+            name=dto.name,
+            generator=dto.generator,
+            generator_version=dto.generator_version,
+            scope=dto.scope,
+            expression=dto.expression,
+            params=dict(dto.params),
+            feature_map=panel.feature_map,
+            run_id=dto.run_id,
+            created_at=dto.created_at,
+        )
+        pd.testing.assert_series_equal(
+            factor.compute(panel.panel), rebuilt.compute(panel.panel), check_names=False
+        )
+
+
+def test_tiny_budget_ends_with_budget_exhausted_below_quota(scratch) -> None:
+    lake, root = scratch
+    code, _, run, _ = _cli_mine(lake, "full", root, quota=50, total_timesteps=64)
+
+    assert code == 0, run
+    assert run["status"] == "completed" and run["stop_reason"] == "budget_exhausted"
+    assert run["counts"]["registered"] < 50
+    assert run["budget"] == {"quota": 50, "total_timesteps": 64, "pool_capacity": 5}
+
+
+def test_pair_count_follows_the_bound_universe_not_the_lake(scratch) -> None:
+    """AC-008：同数据版本、宇宙不同的两个显式绑定 → pair_count 不同且等于窗口内曾在宇宙数。"""
+    from alphamill.factor_factory.generators.lake_tensor import universe_pair_count
+
+    lake, root = scratch
+    _, _, full, full_panel = _cli_mine(lake, "full", root, quota=50, total_timesteps=64)
+    _, _, part, part_panel = _cli_mine(lake, "partial", root, quota=50, total_timesteps=64)
+
+    assert full["universe"]["pair_count"] == 6 == universe_pair_count(full_panel.panel)
+    assert part["universe"]["pair_count"] == 3 == universe_pair_count(part_panel.panel)
+    assert full["binding"]["members"] == part["binding"]["members"], "数据版本相同"
+
+
+def test_factors_of_a_v1_manual_run_still_load(tmp_path) -> None:
+    """AC-001：v2 落地后，改动前写下的 v1 manual 运行的因子仍可 load。"""
+    import json
+
+    from alphamill.factor_factory.hypotheses.catalog import DEFAULT_CATALOG
+    from alphamill.factor_factory.registry import factor_store, run_store
+    from tests.unit.test_f012_run_schema import _run
+
+    factor = factor_store.build_factor(
+        hypothesis=DEFAULT_CATALOG.require("mechanism_unknown"),
+        name="legacy",
+        generator="manual",
+        generator_version="1",
+        scope="time_series",
+        expression=("feature:close", "neg"),
+        params={},
+        feature_map={"close": 0},
+        run_id="run-v1",
+        created_at=datetime(2026, 9, 1, tzinfo=UTC),
+    )
+    path = factor_store.write(tmp_path, factor)
+    payload = run_store._payload(_run(generator="manual", tier_level="manual"))
+    for key in ("budget", "stop_reason", "evaluations"):
+        payload.pop(key)
+    payload["objective"].pop("position_rule")
+    payload["schema_version"] = 1
+    (tmp_path / "run.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert factor_store.load(path).generator == "manual"
