@@ -376,7 +376,9 @@ def test_training_stop_on_gpu_path_is_partial_releases_slot_and_restores_kronos(
         stop_reason,
     )
     assert run["reason"].startswith("已入册 1/") and run["pool"] is None
-    assert run["device"] == "cuda"
+    assert run["device"] == "cuda" and run["vram_limit_gb"] is not None
+    assert run["kronos_offload"]["action"] == "stopped"
+    assert run["universe"]["source"] and run["universe"]["pair_count"] == 2
     [factor_path] = sorted((run_path.parent / "factors").glob("*.json"))
     with pytest.raises(FactorStoreError):
         factor_store.load(factor_path)
