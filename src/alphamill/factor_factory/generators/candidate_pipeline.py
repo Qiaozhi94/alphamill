@@ -85,6 +85,7 @@ class CandidatePipeline:
         self._proposed = 0
         self._rejected = {code: 0 for code in RejectionCounts.__dataclass_fields__}
         self.registered: list[FactorDef] = []
+        self.prefilter_ms: list[float] = []  # 运维日志的预筛 p95（design §6）
         self.stopped = False
 
     def offer(self, tokens: Sequence[str]) -> Registered | Rejected | None:
@@ -172,6 +173,7 @@ class CandidatePipeline:
 
     def _log(self, record: dict, outcome: str, started: float) -> None:
         elapsed = round((time.perf_counter() - started) * 1000.0, 3)
+        self.prefilter_ms.append(elapsed)
         self._writer.prefilter(record | {"outcome": outcome, "elapsed_ms": elapsed})
 
     def _reject(self, tokens, code: str, detail: str, *, digest: str | None = None) -> Rejected:

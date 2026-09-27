@@ -208,6 +208,7 @@ def _generate(args, reports_root: Path, lake_root: Path | None, flags) -> int:
                 stop=stop,
                 writer=writer,
                 compilers=full_registry(),
+                device=state.device,
             )
             result = mine_dispatch.build_generator(spec, context).produce(request)
             state = replace(

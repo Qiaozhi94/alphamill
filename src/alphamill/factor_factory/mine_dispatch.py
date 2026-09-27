@@ -54,6 +54,7 @@ class BuildContext:
     stop: Any
     writer: Any
     compilers: Any
+    device: str = "cpu"
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import signal
 from datetime import UTC, datetime
 
 import pandas as pd
@@ -150,3 +151,120 @@ def test_should_stop_ends_training_at_a_step_boundary_and_reports_stopped() -> N
     assert outcome.stopped is True
     assert outcome.timesteps < 4096
     assert steps["n"] == 10, "叫停后不再推进训练步"
+
+
+# ------------------------------------------------------------------ 生成器编排（T014）
+
+_WINDOW = ("2026-01-01T00:00:00+00:00", "2026-01-11T00:00:00+00:00")
+_LENIENT = {  # 预筛放宽到几乎全收：只验证编排与配额，不验证目标函数本身
+    "reachability_min_trades_90d": 0,
+    "min_after_cost_return": -1.0e9,
+    "turnover_penalty_lambda": 0.0,
+}
+
+
+def _produce(tmp_path, *, quota: int, objective: dict, check=None, total_timesteps=512):
+    pytest.importorskip("torch")
+    pytest.importorskip("sb3_contrib")
+    from alphamill.factor_factory import mine_dispatch
+    from alphamill.factor_factory.generators.base import GenerationRequest, Window
+    from alphamill.factor_factory.generators.stop_conditions import (
+        StopController,
+        install_signal_flags,
+    )
+    from alphamill.factor_factory.registry.default_compilers import full_registry
+    from alphamill.factor_factory.registry.event_writer import RunEventWriter
+
+    spec = mine_dispatch.resolve("alphagen")
+    config = mine_dispatch.compose_config(
+        spec,
+        {"objective": objective, "total_timesteps": total_timesteps, "pool_capacity": 5},
+        mining=True,
+        quota=quota,
+        window=list(_WINDOW),
+    )
+    run_id = "alphagen-test-run"
+    with install_signal_flags() as flags:
+        stop = StopController(
+            flags=flags,
+            window_start="22:00",
+            window_end="06:30",
+            window_tz="Asia/Shanghai",
+            ignore_window=True,
+        )
+        if check is not None:
+            stop.check = check(stop)
+        writer = RunEventWriter(tmp_path, run_id=run_id)
+        context = mine_dispatch.BuildContext(
+            run_id=run_id, config=config, stop=stop, writer=writer, compilers=full_registry()
+        )
+        request = GenerationRequest(
+            generator="alphagen",
+            binding=object(),
+            seed=11,
+            window=Window(
+                start=datetime.fromisoformat(_WINDOW[0]),
+                end=datetime.fromisoformat(_WINDOW[1]),
+                resample="1h",
+            ),
+            config=config,
+            quota=quota,
+            panel=_training_panel(),
+        )
+        result = mine_dispatch.build_generator(spec, context).produce(request)
+        writer.close()
+    return result
+
+
+def _event_lines(path) -> list[dict]:
+    import json
+
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def test_generator_stops_at_quota_and_reports_v2_facts(tmp_path) -> None:
+    result = _produce(tmp_path, quota=2, objective=_LENIENT)
+
+    assert result.stop_reason == "quota_reached"
+    assert len(result.factors) == result.counts.registered == 2
+    assert result.pool is None and result.tier_level == "L0" and result.device == "cpu"
+    assert result.budget == {"quota": 2, "total_timesteps": 512, "pool_capacity": 5}
+    assert result.evaluations is not None and result.evaluations > 0
+    for factor in result.factors:
+        assert factor.generator == "alphagen" and factor.run_id == "alphagen-test-run"
+        assert factor.expression[0].startswith("feature:ohlcv_1m.")
+
+
+def test_generator_counts_are_conserved_against_the_event_files(tmp_path) -> None:
+    strict = {"reachability_min_trades_90d": 10_000}  # 预筛全拒：跑满预算
+    result = _produce(tmp_path, quota=5, objective=strict, total_timesteps=256)
+
+    rejected = _event_lines(tmp_path / "events.jsonl")
+    counts = result.counts
+    assert result.stop_reason == "budget_exhausted"
+    assert counts.registered == 0
+    assert counts.proposed == len(rejected) > 0
+    by_code: dict[str, int] = {}
+    for event in rejected:
+        code = event["payload"]["reason_code"]
+        by_code[code] = by_code.get(code, 0) + 1
+    assert by_code == {k: v for k, v in vars(counts.rejected).items() if v}
+
+
+def test_interrupted_training_reports_interrupted(tmp_path) -> None:
+    def interrupt_after_five(stop):
+        original, calls = stop.check, {"n": 0}
+
+        def check():
+            calls["n"] += 1
+            if calls["n"] == 5:  # 第 5 个训练步收到 SIGTERM
+                stop._flags.set(signal.SIGTERM, None)
+            return original()
+
+        return check
+
+    result = _produce(tmp_path, quota=5, objective=_LENIENT, check=interrupt_after_five)
+
+    assert result.stop_reason == "interrupted"
