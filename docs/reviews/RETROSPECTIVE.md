@@ -1199,7 +1199,7 @@ report_type: code-review · feature: F011 · status: closed · rounds: 1（full-
 
 ## 循环 25：F012 AlphaGen 后端接入挖掘 CLI 需求设计文档检视
 
-report_type: doc-review · feature: F012 · status: closed · rounds: 1（full-scan）→ 2（diff-only；design 升级全量重读）→ 3（diff-only，封顶）→ 4（仅核 D37–D44 定向修复） · 基线 `d702035` → 修复终态（本循环提交）
+report_type: doc-review · feature: F012 · status: closed · readiness: PASS · rounds: 1（full-scan）→ 2（diff-only；design 升级全量重读）→ 3（diff-only，封顶）→ 4（仅核 D37–D44 定向修复） · 基线 `d702035` → 修复终态（本循环提交）
 
 - report_type: doc-review
 - 周期：2026-09-27（独立检视代理 4 次；修复方 = 作者会话）
