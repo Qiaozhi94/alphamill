@@ -266,7 +266,14 @@ def run_ppo_epoch(
 def render_expression(expr: Expression) -> tuple[str, ...]:
     """Render one vendor expression as compiler-compatible postfix tokens."""
     _add_vendor_root()
-    from alphagen.data.expression import Constant, DeltaTime, Feature, Operator, RollingOperator
+    from alphagen.data.expression import (
+        Constant,
+        DeltaTime,
+        Feature,
+        Operator,
+        PairRollingOperator,
+        RollingOperator,
+    )
 
     if isinstance(expr, Feature):
         return (f"feature:{expr._feature.name.lower()}",)
@@ -278,11 +285,16 @@ def render_expression(expr: Expression) -> tuple[str, ...]:
         tokens: list[str] = []
         operands = expr.operands
         render_operands = operands
-        if isinstance(expr, RollingOperator) and operands and isinstance(operands[-1], DeltaTime):
+        windowed = isinstance(expr, (RollingOperator, PairRollingOperator))
+        if windowed and operands and isinstance(operands[-1], DeltaTime):
             render_operands = operands[:-1]
         for operand in render_operands:
             tokens.extend(render_expression(operand))
-        return (*tokens, _operator_token(type(expr).__name__, operands))
+        token = _operator_token(type(expr).__name__, operands)
+        if windowed and ":" not in token:
+            # 窗口是滚动算子的一部分；丢掉它会让纯度门把表达式判成 lookahead（F012 检视 D23）
+            token = f"{token}:{expr._delta_time}"
+        return (*tokens, token)
     return (str(expr),)
 
 
@@ -298,11 +310,14 @@ def _add_vendor_root() -> None:
 
 def _operator_token(name: str, operands: tuple[Expression, ...]) -> str:
     snake = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-    if snake in {"rank", "cs_rank", "cross_sectional_rank"}:
+    if name == "CSRank" or snake in {"cs_rank", "cross_sectional_rank"}:
         return "cs_rank"
+    if name == "Rank":
+        # vendor 的 Rank 是时序滚动排名，不是截面排名；登记表无 ts_rank，由纯度门如实拒绝
+        return "ts_rank"
     if operands and name.lower() in {"return", "pctchange", "pct_change", "rollingstd"}:
         last = operands[-1]
         if hasattr(last, "_delta_time"):
             operator = snake.replace("pctchange", "pct_change").replace("rollingstd", "rolling_std")
             return f"{operator}:{last._delta_time}"
-    return snake
+    return name.lower()
