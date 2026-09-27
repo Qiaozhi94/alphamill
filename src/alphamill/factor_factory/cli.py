@@ -18,6 +18,7 @@ from alphamill.factor_factory.generators.manual import (
 from alphamill.factor_factory.generators.mining_capability import require_mining_capabilities
 from alphamill.factor_factory.generators.stop_conditions import (
     PARTIAL_REASONS,
+    SignalFlags,
     StopController,
     install_signal_flags,
 )
@@ -74,6 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Path | None) -> int:
+    if args.command != "mine":  # seed 无检查点：接管信号只会把 SIGTERM 吞掉（检视 R-A4）
+        return _generate(args, reports_root, lake_root, SignalFlags())
     with install_signal_flags() as flags:
         return _generate(args, reports_root, lake_root, flags)
 
@@ -194,6 +197,8 @@ def _generate(args, reports_root: Path, lake_root: Path | None, flags) -> int:
             quota=quota,
             panel=panel,
         )
+        if stop is not None:
+            stop.raise_if_interrupted()  # 生成前最后一个检查点（manual 也经过这里，R-A4）
         with (
             install_egress_guard(),
             install_write_path_guard(state.run_dir, reports_root=reports_root),

@@ -80,3 +80,57 @@ def test_position_rule_other_than_cs_median_is_rejected(tmp_path, alphagen_runti
 
     _, run, _ = _read_mine_run(reports_root)
     assert code == EXIT_REJECTED and run["termination"] == "invalid_config", run
+
+
+def test_seed_leaves_signal_handling_alone(tmp_path, monkeypatch) -> None:
+    """R-A4：seed 无检查点；接管 SIGTERM 只会把信号吞掉。"""
+    import signal
+
+    from test_f003_cli_contract import _build_cli_fixture
+
+    from alphamill.factor_factory.cli import EXIT_OK, main
+    from alphamill.factor_factory.generators.manual import seeds
+
+    seen = []
+    original = seeds.ManualGenerator.produce
+
+    def spy(self, request):
+        seen.append(signal.getsignal(signal.SIGTERM))
+        return original(self, request)
+
+    monkeypatch.setattr(seeds.ManualGenerator, "produce", spy)
+    lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
+    before = signal.getsignal(signal.SIGTERM)
+
+    code = main(
+        ["seed", "--generator", "manual", "--binding", str(binding_path), "--seed", "3"],
+        reports_root=reports_root,
+        lake_root=lake_root,
+    )
+
+    assert code == EXIT_OK and seen == [before]
+
+
+def test_manual_mine_interrupted_before_generation_is_partial(tmp_path, monkeypatch) -> None:
+    """R-A4：manual mine 在生成前收到 SIGTERM → partial/interrupted，而不是照常 completed。"""
+    import os
+    import signal
+
+    from test_f003_cli_contract import _prepare_mine_runtime
+
+    from alphamill.factor_factory import cli as cli_module
+    from alphamill.factor_factory.cli import EXIT_OK
+
+    _prepare_mine_runtime(monkeypatch)
+
+    def window_then_sigterm(*_args, **_kwargs) -> bool:
+        os.kill(os.getpid(), signal.SIGTERM)
+        return True
+
+    monkeypatch.setattr(cli_module.gpu_slot, "in_training_window", window_then_sigterm)
+
+    code, reports_root = _mine(tmp_path, generator="manual")
+
+    _, run, _ = _read_mine_run(reports_root)
+    assert code == EXIT_OK
+    assert (run["status"], run["stop_reason"]) == ("partial", "interrupted")
