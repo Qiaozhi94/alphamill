@@ -2,8 +2,9 @@
 kind: feature
 id: F012
 version: "0.2"
-status: ready-for-development
-branch: docs/F012-alphagen-mining-cli
+status: developing
+status_evidence: G1 计划批准（owner 2026-09-27，按 tasks.md T001-T020 连续开发）
+branch: feat/F012-alphagen-mining-cli
 gate_version: 1
 related_features: [F003, F007, F013]
 topics: [factor-factory, alphagen, generation, cli, funnel]
