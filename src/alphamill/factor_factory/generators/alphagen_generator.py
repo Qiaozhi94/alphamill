@@ -15,8 +15,12 @@ import time
 from datetime import UTC, datetime
 from typing import Final
 
-from alphamill.factor_factory import mine_dispatch
 from alphamill.factor_factory.errors import SchemaValidationError
+from alphamill.factor_factory.generators.alphagen_context import (
+    ALPHAGEN_GENERATOR_VERSION,
+    BuildContext,
+    objective_params,
+)
 from alphamill.factor_factory.generators.alphagen_runner import build_stock_data
 from alphamill.factor_factory.generators.alphagen_training import train_with_callbacks
 from alphamill.factor_factory.generators.base import GenerationRequest, GenerationResult
@@ -30,7 +34,7 @@ _LOG_EVERY: Final = 500  # 每 500 次评估一条进度日志（design §6）
 class AlphaGenGenerator:
     name = "alphagen"
 
-    def __init__(self, ctx: mine_dispatch.BuildContext) -> None:
+    def __init__(self, ctx: BuildContext) -> None:
         self._ctx = ctx
 
     def produce(self, request: GenerationRequest) -> GenerationResult:
@@ -44,12 +48,12 @@ class AlphaGenGenerator:
         stock_data, target, _ = build_stock_data(panel, feature_map=panel.feature_map)
         pipeline = CandidatePipeline(
             panel=panel,
-            objective_params=mine_dispatch.objective_params(ctx.config),
+            objective_params=objective_params(ctx.config),
             run_id=ctx.run_id,
             writer=ctx.writer,
             compilers=ctx.compilers,
             quota=request.quota,
-            generator_version=mine_dispatch.ALPHAGEN_GENERATOR_VERSION,
+            generator_version=ALPHAGEN_GENERATOR_VERSION,
             created_at=datetime.now(UTC),
             on_quota=ctx.stop.mark_quota,
         )

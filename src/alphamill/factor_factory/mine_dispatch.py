@@ -16,13 +16,18 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
 from pandas.tseries.frequencies import to_offset
 
 from alphamill.factor_factory import canonical, errors
 from alphamill.factor_factory.canonical import JSONValue
 from alphamill.factor_factory.generators import base, binding, gpu_slot
+from alphamill.factor_factory.generators.alphagen_context import (
+    ALPHAGEN_GENERATOR_VERSION,
+    BuildContext,
+    objective_params,
+)
 from alphamill.factor_factory.generators.candidate_pipeline import POSITION_RULE
 from alphamill.factor_factory.generators.channel_binding import channel_index
 from alphamill.factor_factory.generators.lake_tensor import (
@@ -33,14 +38,12 @@ from alphamill.factor_factory.generators.lake_tensor import (
     universe_pair_count,
 )
 from alphamill.factor_factory.generators.manual import seeds as manual_seeds
-from alphamill.factor_factory.generators.objective import CostModel, ObjectiveParams
 from alphamill.factor_factory.mine_config import DEFAULT_ALPHAGEN_CONFIG, DEFAULT_MINE_CONFIG
 from alphamill.factor_factory.registry import run_store
 
 _VENDOR_BASELINE: Final = (
     Path(__file__).parent / "generators/alphagen_vendor/_upstream_baseline.json"
 )
-ALPHAGEN_GENERATOR_VERSION: Final = "alphagen-f012-v1"
 _READER_EPSILON: Final = timedelta(microseconds=1)
 _LEGACY_MANUAL_OBJECTIVE: Final = run_store.ObjectiveInfo(  # manual 无预筛，沿用改动前取值
     turnover_penalty_lambda=0.0,
@@ -48,16 +51,6 @@ _LEGACY_MANUAL_OBJECTIVE: Final = run_store.ObjectiveInfo(  # manual 无预筛�
     cost_model={},
     min_after_cost_return=0.0,
 )
-
-
-@dataclass(frozen=True, kw_only=True)
-class BuildContext:
-    run_id: str
-    config: Mapping[str, JSONValue]
-    stop: Any
-    writer: Any
-    compilers: Any
-    device: str = "cpu"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -232,22 +225,6 @@ def slot_config(config: Mapping[str, JSONValue]) -> gpu_slot.GpuSlotConfig:
         window_end=str(config["training_window_end"]),
         window_tz=str(config["training_window_tz"]),
         queue_timeout_s=int(config["queue_timeout_s"]),
-    )
-
-
-def objective_params(config: Mapping[str, JSONValue]) -> ObjectiveParams:
-    objective = _mapping(config["objective"])
-    cost = _mapping(objective["cost_model"])
-    return ObjectiveParams(
-        turnover_penalty_lambda=float(objective["turnover_penalty_lambda"]),
-        reachability_min_trades_90d=int(objective["reachability_min_trades_90d"]),
-        cost_model=CostModel(
-            taker_fee_bps=float(cost["taker_fee_bps"]),
-            maker_fee_bps=float(cost["maker_fee_bps"]),
-            slippage_bps=float(cost["slippage_bps"]),
-            funding_8h_bps=float(cost.get("funding_8h_bps", 0.0)),
-        ),
-        min_after_cost_return=float(objective["min_after_cost_return"]),
     )
 
 
