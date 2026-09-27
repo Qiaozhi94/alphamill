@@ -43,8 +43,17 @@ def _mine(tmp_path: Path, *extra: str, generator: str = "alphagen", allow_cpu: b
     lake_root, reports_root, binding_path = _build_cli_fixture(tmp_path)
     argv = ["mine", "--generator", generator, "--binding", str(binding_path), "--seed", "17"]
     argv += ["--allow-cpu"] if allow_cpu else []
+    if generator == "alphagen" and "--config" not in extra:
+        # F003 夹具的绑定只含 signals_log；张量本身由替身提供
+        extra = (*extra, "--config", str(_config(tmp_path, {})))
     code = main([*argv, *extra], reports_root=reports_root, lake_root=lake_root)
     return code, reports_root
+
+
+def _config(tmp_path: Path, body: dict) -> Path:
+    path = tmp_path / "alphagen-config.json"
+    path.write_text(json.dumps({"datasets": ["signals_log"], **body}), encoding="utf-8")
+    return path
 
 
 def _panel(*, masks: dict[str, bool] | None = None, extra_close: bool = False) -> TensorPanel:
@@ -177,7 +186,7 @@ def test_manual_mine_is_observably_equivalent_to_pre_f012_baseline(tmp_path, mon
     assert factors == BASELINE["factors"]
     assert run["config_digest"] == BASELINE["config_digest"]
     volatile = {"run_id", "started_at", "finished_at", "hostname", "schema_version", *V2_FIELDS}
-    stable = _strip(run, volatile)
+    stable = json.loads(json.dumps(_strip(run, volatile)).replace(str(tmp_path), "<TMP>"))
     stable["objective"] = _strip(stable["objective"], {"position_rule"})
     assert stable == BASELINE["run"]
     assert run["schema_version"] == 2
@@ -224,8 +233,7 @@ def test_alphagen_mine_writes_truthful_v2_manifest(tmp_path, alphagen_runtime, c
 
 def test_partial_objective_config_is_deep_merged(tmp_path, alphagen_runtime) -> None:
     """检视 D44：用户只给部分 objective 键时 position_rule 仍为 cs_median。"""
-    config = tmp_path / "cfg.json"
-    config.write_text(json.dumps({"objective": {"reachability_min_trades_90d": 10}}))
+    config = _config(tmp_path, {"objective": {"reachability_min_trades_90d": 10}})
 
     code, reports_root = _mine(tmp_path, "--config", str(config))
 
@@ -238,8 +246,7 @@ def test_partial_objective_config_is_deep_merged(tmp_path, alphagen_runtime) -> 
 
 
 def test_alphagen_rejects_a_non_l0_tier(tmp_path, alphagen_runtime) -> None:
-    config = tmp_path / "cfg.json"
-    config.write_text(json.dumps({"tier_level": "L1"}))
+    config = _config(tmp_path, {"tier_level": "L1"})
 
     code, reports_root = _mine(tmp_path, "--config", str(config))
 

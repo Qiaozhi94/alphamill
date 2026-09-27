@@ -108,7 +108,7 @@
   "binding": {
    "calendar": {
     "digest": "sha256:61eb2ad2d59771cf710788077ce69a433fef1145c212d340aaf7da509acf0d53",
-    "path": "/tmp/pytest-of-georg/pytest-744/test_capture0/artifacts/calendar/sha256:61eb2ad2d59771cf710788077ce69a433fef1145c212d340aaf7da509acf0d53.json",
+    "path": "<TMP>/artifacts/calendar/sha256:61eb2ad2d59771cf710788077ce69a433fef1145c212d340aaf7da509acf0d53.json",
     "schema_version": 1
    },
    "cutoff_time": "2026-09-12T00:00:00Z",
@@ -123,20 +123,20 @@
    },
    "mode": "explicit_tuples",
    "provenance": {
-    "artifact_path": "/tmp/pytest-of-georg/pytest-744/test_capture0/artifacts/bindings/sha256:af66d05743ac20c6904898963088e4e4c174872b1cb26ffd44321c610d744277.json",
-    "calendar_path": "/tmp/pytest-of-georg/pytest-744/test_capture0/artifacts/calendar/sha256:61eb2ad2d59771cf710788077ce69a433fef1145c212d340aaf7da509acf0d53.json",
+    "artifact_path": "<TMP>/artifacts/bindings/sha256:af66d05743ac20c6904898963088e4e4c174872b1cb26ffd44321c610d744277.json",
+    "calendar_path": "<TMP>/artifacts/calendar/sha256:61eb2ad2d59771cf710788077ce69a433fef1145c212d340aaf7da509acf0d53.json",
     "created_at": "2026-09-12T01:00:00Z",
     "member_manifest_paths": {
-     "signals_log": "/tmp/pytest-of-georg/pytest-744/test_capture0/lake/_manifests/signals_log/v2026.09.11.json"
+     "signals_log": "<TMP>/lake/_manifests/signals_log/v2026.09.11.json"
     },
-    "symbol_map_path": "/tmp/pytest-of-georg/pytest-744/test_capture0/lake/_metadata/symbol_maps/sha256:f97769f7d1b6889af85d1720392ad9a7d79d8bc5bbd368bfdf572689c5d42876.csv",
-    "universe_path": "/tmp/pytest-of-georg/pytest-744/test_capture0/artifacts/universe/sha256:5399d0afd55e05d3212cdce15069c98f3ae3f82f312cd2730677d95854006715.json"
+    "symbol_map_path": "<TMP>/lake/_metadata/symbol_maps/sha256:f97769f7d1b6889af85d1720392ad9a7d79d8bc5bbd368bfdf572689c5d42876.csv",
+    "universe_path": "<TMP>/artifacts/universe/sha256:5399d0afd55e05d3212cdce15069c98f3ae3f82f312cd2730677d95854006715.json"
    },
    "schema_version": 1,
    "symbol_map_digest": "sha256:f97769f7d1b6889af85d1720392ad9a7d79d8bc5bbd368bfdf572689c5d42876",
    "universe": {
     "digest": "sha256:5399d0afd55e05d3212cdce15069c98f3ae3f82f312cd2730677d95854006715",
-    "path": "/tmp/pytest-of-georg/pytest-744/test_capture0/artifacts/universe/sha256:5399d0afd55e05d3212cdce15069c98f3ae3f82f312cd2730677d95854006715.json",
+    "path": "<TMP>/artifacts/universe/sha256:5399d0afd55e05d3212cdce15069c98f3ae3f82f312cd2730677d95854006715.json",
     "schema_version": 1
    },
    "universe_calendar_digest": "sha256:af66d05743ac20c6904898963088e4e4c174872b1cb26ffd44321c610d744277"

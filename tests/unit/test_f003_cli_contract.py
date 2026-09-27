@@ -823,7 +823,12 @@ def test_mine_queue_timeout_writes_rejected_terminal_run(
     _patch_offload(monkeypatch, "not_needed", "cpu_instance")
 
     def timeout(
-        _slot, run_id: str, *, now: datetime | None = None, ignore_window: bool = False
+        _slot,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+        ignore_window: bool = False,
+        cancel=None,  # F012 检视 D25：acquire 契约新增可取消出队
     ) -> None:
         raise cli_module.gpu_slot.GpuQueueTimeoutError(
             record=QueueRecord(

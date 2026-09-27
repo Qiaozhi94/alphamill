@@ -2,55 +2,52 @@ from __future__ import annotations
 
 import argparse
 import json
-import platform
-import socket
 import sys
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final, Literal, TypeAlias
+from typing import Final
 
-from alphamill.factor_factory import canonical, errors
+from alphamill.factor_factory import canonical, errors, mine_dispatch
 from alphamill.factor_factory.generators import base, binding, gpu_slot
 from alphamill.factor_factory.generators.egress_guard import install_egress_guard
-from alphamill.factor_factory.generators.manual import seeds as manual_seeds
+from alphamill.factor_factory.generators.manual import (
+    seeds as manual_seeds,  # noqa: F401 测试打桩入口
+)
 from alphamill.factor_factory.generators.mining_capability import require_mining_capabilities
+from alphamill.factor_factory.generators.stop_conditions import (
+    PARTIAL_REASONS,
+    RunInterrupted,
+    StopController,
+    install_signal_flags,
+)
 from alphamill.factor_factory.generators.write_guard import install_write_path_guard
+from alphamill.factor_factory.manifest_builder import (
+    EXIT_FAILED,
+    EXIT_OK,
+    EXIT_REJECTED,
+    RunState,
+    budget_for,
+    build_manifest,
+    finish_error,
+    finish_partial,
+    partial_outcome,
+    print_summary,
+    reject,
+)
 from alphamill.factor_factory.mine_config import (
-    DEFAULT_MINE_CONFIG,
+    DEFAULT_ALPHAGEN_CONFIG,
     load_config,
     resolve_kronos_offload,
     restore_kronos_if_needed,
 )
 from alphamill.factor_factory.registry import factor_store, run_store
+from alphamill.factor_factory.registry.default_compilers import full_registry
+from alphamill.factor_factory.registry.event_writer import RunEventWriter
 
-EXIT_OK: Final = 0
-EXIT_FAILED: Final = 1
-EXIT_REJECTED: Final = 2
-_EMPTY_CONFIG_DIGEST: Final = canonical.sha256_prefixed_bytes(canonical.canonical_json_bytes({}))
-_MANUAL_CODE_DIGEST: Final = canonical.sha256_prefixed_bytes(
-    canonical.canonical_json_bytes(
-        {"generator": "manual", "version": manual_seeds.MANUAL_GENERATOR_VERSION}
-    )
-)
-_Outcome: TypeAlias = tuple[Literal["completed", "rejected", "failed"], str, str | None]
-
-
-@dataclass(frozen=True, slots=True)
-class _SeedState:
-    run_id: str
-    run_dir: Path
-    started_at: datetime
-    seed: int
-    binding: binding.SnapshotBinding | None = None
-    config_digest: str = _EMPTY_CONFIG_DIGEST
-    window: base.Window | None = None
-    universe: run_store.UniverseSummary | None = None
-    counts: base.GenerationCounts = base.GenerationCounts(0, base.RejectionCounts(), 0)
-    device: Literal["cpu", "cuda"] = "cpu"
-    vram_limit_gb: float | None = None
-    kronos_offload: dict[str, canonical.JSONValue] | None = None
+__all__ = ("EXIT_FAILED", "EXIT_OK", "EXIT_REJECTED", "build_parser", "main")
+_GENERATORS: Final = tuple(mine_dispatch.SPECS)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,7 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("seed", "mine"):
         command = commands.add_parser(name)
-        command.add_argument("--generator", choices=("manual",), required=True)
+        choices = _GENERATORS if name == "mine" else ("manual",)
+        command.add_argument("--generator", choices=choices, required=True)
         command.add_argument("--binding", type=Path)
         command.add_argument("--seed", type=int, required=True)
         command.add_argument(
@@ -77,67 +75,33 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _manifest(state: _SeedState, outcome: _Outcome) -> run_store.GenerationRun:
-    status, termination, reason = outcome
-    return run_store.GenerationRun(
-        schema_version=run_store.RUN_SCHEMA_VERSION,
-        run_id=state.run_id,
-        generator="manual",
-        engine=run_store.EngineInfo(
-            vendor_commit=None,
-            code_digest=_MANUAL_CODE_DIGEST,
-            dependencies={"alphamill": "0.1.0", "python": platform.python_version()},
-        ),
-        binding=state.binding,
-        seed=state.seed,
-        config_digest=state.config_digest,
-        device=state.device,
-        hostname=socket.gethostname(),
-        vram_limit_gb=state.vram_limit_gb,
-        kronos_offload=state.kronos_offload,
-        universe=state.universe,
-        tier_level="manual",
-        window=state.window,
-        objective=run_store.ObjectiveInfo(
-            turnover_penalty_lambda=0.0,
-            reachability_min_trades_90d=30,
-            cost_model={},
-            min_after_cost_return=0.0,
-        ),
-        counts=state.counts,
-        pool=None,
-        started_at=state.started_at,
-        finished_at=datetime.now(UTC),
-        status=status,
-        termination=termination,
-        reason=reason,
-    )
-
-
-def _finish_error(state: _SeedState, outcome: _Outcome) -> int:
-    try:
-        run_store.finalize_run(state.run_dir, _manifest(state, outcome))
-    except (errors.FactorFactoryError, OSError) as exc:
-        print(f"cannot publish terminal run: {exc}", file=sys.stderr)
-    print(outcome[2], file=sys.stderr)
-    return EXIT_REJECTED if outcome[0] == "rejected" else EXIT_FAILED
-
-
-def _reject(state: _SeedState, termination: str, reason: str) -> int:
-    return _finish_error(state, ("rejected", termination, reason))
-
-
 def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Path | None) -> int:
+    with install_signal_flags() as flags:
+        return _generate(args, reports_root, lake_root, flags)
+
+
+def _generate(args, reports_root: Path, lake_root: Path | None, flags) -> int:
+    spec = mine_dispatch.resolve(args.generator)
     mining = args.command == "mine"
-    run_id = run_store.new_run_id("manual")
-    run_dir = run_store.generation_run_dir(run_id, reports_root=reports_root)
-    state = _SeedState(run_id, run_dir, datetime.now(UTC), args.seed)
+    run_id = run_store.new_run_id(spec.name)
+    state = RunState(
+        run_id=run_id,
+        run_dir=run_store.generation_run_dir(run_id, reports_root=reports_root),
+        started_at=datetime.now(UTC),
+        seed=args.seed,
+        generator=spec.name,
+        tier_level=spec.tier_level,
+        engine=mine_dispatch.engine_info(spec),
+        objective=mine_dispatch.objective_info(spec, DEFAULT_ALPHAGEN_CONFIG),
+    )
     slot: gpu_slot.GpuSlot | None = None
     kronos_offload_attempt: gpu_slot.KronosOffloadOutcome | None = None
+    writer: RunEventWriter | None = None
     config: dict[str, canonical.JSONValue] = {}
+    quota = args.quota if mining else base.DEFAULT_SEED_QUOTA
     binding_path: Path | None = args.binding
     if binding_path is None:
-        return _reject(state, "missing_binding", "--binding is required")
+        return reject(state, "missing_binding", "--binding is required")
     try:
         validated = binding.validate_binding(
             binding.load_binding_file(binding_path), lake_root=lake_root
@@ -150,107 +114,142 @@ def _run_generation(args: argparse.Namespace, reports_root: Path, lake_root: Pat
             "resample": window.resample,
         }
         supplied_config = load_config(args.config)
-        if mining and args.config is not None and "tier_level" not in supplied_config:
-            return _reject(state, "unknown_tier", "tier_level is required in --config")
-        quota = args.quota if mining else base.DEFAULT_SEED_QUOTA
-        config = {
-            **(DEFAULT_MINE_CONFIG if mining else {}),
-            **supplied_config,
-            "generator": "manual",
-            "quota": quota,
-            "window": window_config,
-        }
-        universe = run_store.UniverseSummary(
-            pair_count=len(validated.universe_ledger.universe_at(validated.resolved.cutoff_time)),
-            symbol_map_digest=validated.resolved.symbol_map_digest,
-            universe_digest=validated.resolved.universe.digest,
-            source=validated.source.mode,
+        if (
+            mining
+            and spec.tier_required_in_config
+            and args.config is not None
+            and "tier_level" not in supplied_config
+        ):
+            return reject(state, "unknown_tier", "tier_level is required in --config")
+        config = mine_dispatch.compose_config(
+            spec, supplied_config, mining=mining, quota=quota, window=window_config
         )
         state = replace(
             state,
             binding=validated.source,
             config_digest=canonical.sha256_prefixed_bytes(canonical.canonical_json_bytes(config)),
             window=window,
-            universe=universe,
+            universe=mine_dispatch.universe_summary(spec, validated, None),
+            objective=mine_dispatch.objective_info(spec, config),
+            budget=budget_for(spec, config, quota) if mining else None,
         )
-        if mining and config.get("tier_level") != "manual":
-            return _reject(state, "unknown_tier", "tier_level is missing or unknown")
+        if mining and config.get("tier_level") != spec.tier_level:
+            return reject(state, "unknown_tier", "tier_level is missing or unknown")
+        panel = None
+        stop: StopController | None = None
         if mining:
-            slot_config = gpu_slot.GpuSlotConfig(
-                vram_limit_gb=float(config["vram_limit_gb"]),
-                window_start=str(config["training_window_start"]),
-                window_end=str(config["training_window_end"]),
-                window_tz=str(config["training_window_tz"]),
-                queue_timeout_s=int(config["queue_timeout_s"]),
-            )
+            slot_config = mine_dispatch.slot_config(config)
             require_mining_capabilities(require_cuda=not args.allow_cpu)
-            now = datetime.now(UTC)
+            stop = StopController(
+                flags=flags,
+                window_start=slot_config.window_start,
+                window_end=slot_config.window_end,
+                window_tz=slot_config.window_tz,
+                ignore_window=args.allow_offhours,
+                clock=None,
+            )
+            stop.raise_if_interrupted()
+            if spec.needs_panel:  # 先建张量：坏张量不白卸载 Kronos（检视 D21）
+                panel = mine_dispatch.prepare_panel(validated, window, config, lake_root)
+                universe = mine_dispatch.universe_summary(spec, validated, panel)
+                state = replace(state, universe=universe)
+                stop.raise_if_interrupted()
             window_open = gpu_slot.in_training_window(
-                now,
+                datetime.now(UTC),
                 window_start=slot_config.window_start,
                 window_end=slot_config.window_end,
                 window_tz=slot_config.window_tz,
             )
             if not window_open and not args.allow_offhours:
-                return _reject(
+                return reject(
                     state, "outside_training_window", "outside configured training window"
                 )
             if not args.allow_cpu:
                 # 先卸载 Kronos 再量显存：白天 Kronos 常驻 ≤3GB，8GB 卡上剩余不足夜槽
-                # 需要的 ≤6GB 独占——这正是卸载要解决的主场景，量在卸载之前等于永远
-                # 救不了它（架构 §7.1 时段表）。
+                # 需要的 ≤6GB 独占——这正是卸载要解决的主场景（架构 §7.1 时段表）。
                 offload = resolve_kronos_offload(config)
                 kronos_offload_attempt = offload
                 state = replace(state, kronos_offload=asdict(offload))
                 if offload.action == "fail_closed":
-                    return _reject(state, "kronos_offload_failed", offload.reason)
+                    return reject(state, "kronos_offload_failed", offload.reason)
                 reading = gpu_slot.query_vram()
                 if not gpu_slot.vram_is_sufficient(reading, limit_gb=slot_config.vram_limit_gb):
-                    return _reject(
+                    return reject(
                         state, "cuda_unavailable", "CUDA VRAM is unavailable or insufficient"
                     )
-                # device 只在确认显存可用后才写成 cuda——被拒的运行不该在 manifest 里
-                # 自称跑在 GPU 上。
+                # device 只在确认显存可用后才写成 cuda——被拒的运行不该自称跑在 GPU 上。
                 state = replace(state, device="cuda", vram_limit_gb=slot_config.vram_limit_gb)
                 candidate_slot = gpu_slot.GpuSlot(
                     locks_dir=reports_root / ".locks", config=slot_config
                 )
-                candidate_slot.acquire(state.run_id, ignore_window=args.allow_offhours)
+                candidate_slot.acquire(
+                    state.run_id, ignore_window=args.allow_offhours, cancel=flags.is_set
+                )
                 slot = candidate_slot
         request = base.GenerationRequest(
-            generator="manual",
+            generator=spec.name,
             binding=validated.source,
             seed=state.seed,
             window=window,
             config=config,
             quota=quota,
+            panel=panel,
         )
         with (
             install_egress_guard(),
             install_write_path_guard(state.run_dir, reports_root=reports_root),
         ):
-            result = manual_seeds.ManualGenerator(run_id=state.run_id).produce(request)
-            state = replace(state, counts=result.counts)
+            writer = (
+                RunEventWriter(state.run_dir, run_id=state.run_id) if spec.needs_panel else None
+            )
+            context = mine_dispatch.BuildContext(
+                run_id=state.run_id,
+                config=config,
+                stop=stop,
+                writer=writer,
+                compilers=full_registry(),
+            )
+            result = mine_dispatch.build_generator(spec, context).produce(request)
+            state = replace(
+                state,
+                counts=result.counts,
+                stop_reason=result.stop_reason,
+                evaluations=result.evaluations,
+                budget=run_store.BudgetInfo(**result.budget) if result.budget else state.budget,
+            )
             for factor in result.factors:
                 factor_store.write(state.run_dir, factor)
+            if writer is not None:
+                writer.close()  # 先于 finalize：run.json 发布时事件已落盘（检视 D30）
             state = replace(state, config_digest=run_store.write_config(state.run_dir, config))
-            run_store.finalize_run(state.run_dir, _manifest(state, ("completed", "normal", None)))
+            partial = result.stop_reason in PARTIAL_REASONS
+            outcome = (
+                partial_outcome(state, str(result.stop_reason), quota)
+                if partial
+                else ("completed", "normal", None)
+            )
+            run_store.finalize_run(state.run_dir, build_manifest(state, outcome))
+        print_summary(state, outcome[0], spec)
         return EXIT_OK
     except (errors.FactorFactoryError, OSError, RuntimeError, TypeError, ValueError) as exc:
         match exc:
+            case RunInterrupted() | gpu_slot.AcquireCancelled():
+                return finish_partial(state, writer, quota, spec)
             case gpu_slot.GpuQueueTimeoutError():
-                return _reject(state, "queue_timeout", str(exc))
+                return reject(state, "queue_timeout", str(exc), writer)
             case errors.MiningCapabilityError():
-                return _reject(state, "capability_unavailable", str(exc))
+                return reject(state, "capability_unavailable", str(exc), writer)
             case errors.BindingValidationError():
-                return _reject(state, "invalid_binding", str(exc))
+                return reject(state, "invalid_binding", str(exc), writer)
             case errors.UnknownSchemaVersionError():
-                return _reject(state, "unknown_schema_version", str(exc))
+                return reject(state, "unknown_schema_version", str(exc), writer)
             case errors.SchemaValidationError() | TypeError() | ValueError() if mining:
-                return _reject(state, "invalid_config", str(exc))
+                return reject(state, "invalid_config", str(exc), writer)
             case _:
-                return _finish_error(state, ("failed", type(exc).__name__, str(exc)))
+                return finish_error(state, ("failed", type(exc).__name__, str(exc)), writer)
     finally:
+        if writer is not None:
+            writer.close()  # 幂等兜底
         if slot is not None:
             slot.release(state.run_id)
         if (
