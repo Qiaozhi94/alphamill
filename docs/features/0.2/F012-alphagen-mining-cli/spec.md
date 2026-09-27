@@ -299,9 +299,10 @@ mine --generator alphagen
 scratch 湖经 CLI）、`test_f012_capacity_evidence.py`（4）共 101 passed；统一质量门 `tools/verify.py` exit=0
 （1734 passed / 32 skipped / 1 xfailed）。manual 等价基准取自改动前 `main@84ab505` 实跑（AC-006）。变异验证判红：
 畸形 token 分支、槽释放、护栏外预热（去掉即 3 条 CLI 集成红）。AC-009 夜槽实跑（`reports/f012/capacity-evidence.json`）：
-run `alphagen-20260927T140500683819Z-67053132` completed/quota_reached，入册 50/50，proposed 325（unregistered_op 48 /
-reachability 163 / duplicate 64），638 s，显存峰值 0.24 GB，Kronos 卸载并恢复。已知发现：预筛 p95 1563 ms（n=213）超
-T002 的 1 s 阈值（p50 318 ms），尾部来自成对滚动算子，交代码检视裁决。
+run `alphagen-20260927T155941071187Z-56f90010`（代码检视 R2-1 左闭右标签新口径，2026-09-27 23:59 起）completed/quota_reached，
+入册 50/50，proposed 209（unregistered_op 34 / reachability 97 / duplicate 28），evaluations 188，235 s，显存峰值 0.24 GB，
+Kronos 卸载并恢复；首跑（旧右闭口径，`…140500683819Z-67053132`，638 s，50/50）已被取代。已知发现：预筛 p95 1347 ms（n=147）
+超 T002 的 1 s 阈值（p50 282 ms），尾部来自慢算子——owner 裁决另立后续需求（BACKLOG，代码检视 R-B1）。
 
 ## 7. 测试、依赖与决策
 
