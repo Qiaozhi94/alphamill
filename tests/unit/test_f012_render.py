@@ -89,3 +89,51 @@ def test_time_series_rank_is_rendered_honestly_and_rejected_as_unregistered() ->
     verdict = _check(tokens)
     assert not verdict.accepted
     assert verdict.reason_code == "unregistered_op"
+
+
+@pytest.mark.parametrize("operator", OPERATORS, ids=lambda op: op.__name__)
+def test_every_vendor_operator_compiles_and_computes_via_build_factor(operator) -> None:
+    """AC-010「能被 build_factor 编译」（R-C4）：绑湖通道 → alphagen 编译 → 面板上算出信号。"""
+    from datetime import UTC, datetime
+
+    import numpy as np
+    import pandas as pd
+
+    from alphamill.factor_factory.generators.channel_binding import (
+        bind_feature_tokens,
+        channel_index,
+    )
+    from alphamill.factor_factory.hypotheses.catalog import DEFAULT_CATALOG
+    from alphamill.factor_factory.registry import factor_store
+    from alphamill.factor_factory.registry.default_compilers import full_registry
+
+    feature_map = {"ohlcv_1m.close@1h": 0, "ohlcv_1m.volume@1h": 1}
+    tokens = bind_feature_tokens(render_expression(_build(operator)), channel_index(feature_map))
+    factor = factor_store.build_factor(
+        hypothesis=DEFAULT_CATALOG.require("mechanism_unknown"),
+        name="render-roundtrip",
+        generator="alphagen",
+        generator_version="test",
+        scope="cross_sectional",
+        expression=tokens,
+        params={},
+        feature_map=feature_map,
+        run_id="render-test",
+        created_at=datetime(2026, 9, 27, tzinfo=UTC),
+        compilers=full_registry(),
+    )
+    timestamps = pd.date_range("2026-01-01", periods=60, freq="1h", tz=UTC)
+    index = pd.MultiIndex.from_product([timestamps, ["AAA", "BBB"]], names=["timestamp", "pair"])
+    rng = np.random.default_rng(5)
+    frame = pd.DataFrame(
+        {
+            "ohlcv_1m.close@1h": 100 + rng.standard_normal(len(index)).cumsum(),
+            "ohlcv_1m.volume@1h": rng.uniform(1, 2, len(index)),
+            "__in_universe__": True,
+        },
+        index=index,
+    )
+
+    signal = factor.compute(frame)
+
+    assert len(signal) == len(frame) and signal.notna().any(), tokens
