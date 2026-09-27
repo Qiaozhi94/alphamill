@@ -134,3 +134,22 @@ def test_manual_mine_interrupted_before_generation_is_partial(tmp_path, monkeypa
     _, run, _ = _read_mine_run(reports_root)
     assert code == EXIT_OK
     assert (run["status"], run["stop_reason"]) == ("partial", "interrupted")
+
+
+def test_summary_failure_after_publish_does_not_flip_the_exit_code(
+    tmp_path, alphagen_runtime, monkeypatch, capsys
+) -> None:
+    """R-A5：run.json 已发布为 completed 后，摘要打印失败不能再走异常收尾（二次 finalize、exit≠0）。"""
+    from alphamill.factor_factory import manifest_builder
+    from alphamill.factor_factory.cli import EXIT_OK
+
+    def broken(_path):
+        raise ValueError("prefilter.jsonl corrupt line")
+
+    monkeypatch.setattr(manifest_builder, "_prefilter_elapsed", broken)
+
+    code, reports_root = _mine(tmp_path)
+
+    _, run, _ = _read_mine_run(reports_root)
+    assert code == EXIT_OK and run["status"] == "completed"
+    assert "summary" in capsys.readouterr().err

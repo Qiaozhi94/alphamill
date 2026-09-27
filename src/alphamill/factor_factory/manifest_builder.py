@@ -147,9 +147,19 @@ def finish_partial(state: RunState, writer, quota: int, spec) -> int:
 
 
 def print_summary(state: RunState, status: str, spec) -> None:
-    """运维可见的单行摘要（IR-003）；只对 alphagen 打印，manual 输出保持与改动前一致。"""
+    """运维可见的单行摘要（IR-003）；只对 alphagen 打印，manual 输出保持与改动前一致。
+
+    run.json 已发布后才调用：摘要失败只告警，不改退出码、不再走异常收尾（检视 R-A5）。
+    """
     if not spec.needs_panel:
         return
+    try:
+        _print_summary(state, status)
+    except (OSError, ValueError, KeyError, TypeError, ImportError, RuntimeError) as exc:
+        print(f"WARNING: run {state.run_id} summary unavailable: {exc}", file=sys.stderr)
+
+
+def _print_summary(state: RunState, status: str) -> None:
     elapsed = _prefilter_elapsed(state.run_dir / "prefilter.jsonl")
     quantiles = statistics.quantiles(elapsed, n=20) if len(elapsed) >= 2 else elapsed * 19
     summary = {
