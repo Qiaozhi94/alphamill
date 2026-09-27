@@ -65,3 +65,18 @@ def test_unlisted_exception_still_publishes_a_failed_run(tmp_path, alphagen_runt
 
     _, run, _ = _read_mine_run(reports_root)
     assert code == EXIT_FAILED and (run["status"], run["termination"]) == ("failed", "KeyError")
+
+
+@pytest.mark.parametrize("rule", ["sign", "foo"])
+def test_position_rule_other_than_cs_median_is_rejected(tmp_path, alphagen_runtime, rule) -> None:
+    """R-A3：预筛固定按 cs_median（Q-005）；run.json 不能记一个没被使用的规则。"""
+    from _f012_cli_support import _config
+
+    from alphamill.factor_factory.cli import EXIT_REJECTED
+
+    config = _config(tmp_path, {"objective": {"position_rule": rule}})
+
+    code, reports_root = _mine(tmp_path, "--config", str(config))
+
+    _, run, _ = _read_mine_run(reports_root)
+    assert code == EXIT_REJECTED and run["termination"] == "invalid_config", run

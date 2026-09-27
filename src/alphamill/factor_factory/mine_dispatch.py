@@ -22,6 +22,7 @@ from pandas.tseries.frequencies import to_offset
 from alphamill.factor_factory import canonical, errors
 from alphamill.factor_factory.canonical import JSONValue
 from alphamill.factor_factory.generators import base, binding, gpu_slot
+from alphamill.factor_factory.generators.candidate_pipeline import POSITION_RULE
 from alphamill.factor_factory.generators.channel_binding import channel_index
 from alphamill.factor_factory.generators.lake_tensor import (
     TensorPanel,
@@ -110,6 +111,8 @@ def compose_config(
         objective_params(composed)
     except (KeyError, TypeError, ValueError) as exc:
         raise errors.SchemaValidationError(f"alphagen objective config invalid: {exc!r}") from exc
+    if objective.get("position_rule") != POSITION_RULE:  # 预筛只实现 cs_median（Q-005，R-A3）
+        raise errors.SchemaValidationError(f"position_rule must be {POSITION_RULE!r}")
     return composed
 
 
