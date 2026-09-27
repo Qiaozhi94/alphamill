@@ -58,7 +58,7 @@ updated: 2026-09-27
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
 
-- [ ] T019 [TEST] (`AC-009`, `AC-001`, `AC-002`): 层 2 旅程验收：执行机 `qiaozhi-lt` CUDA 夜槽以 CLI 实跑 `mine --generator alphagen --quota 50`（真实湖显式绑定），写 `reports/f012/capacity-evidence.json` 并由取证校验用例核对；未达 50 时同步登记 M2 产能发现 — verify: `tests/integration/test_f012_capacity_evidence.py`
+- [x] T019 [TEST] (`AC-009`, `AC-001`, `AC-002`): 层 2 旅程验收：执行机 `qiaozhi-lt` CUDA 夜槽以 CLI 实跑 `mine --generator alphagen --quota 50`（真实湖显式绑定），写 `reports/f012/capacity-evidence.json` 并由取证校验用例核对；未达 50 时同步登记 M2 产能发现 — verify: `tests/integration/test_f012_capacity_evidence.py`（RED: bfdaf4d 证据未入库 4 errors；GREEN: 9ea6a05 4 passed——执行机 qiaozhi-lt CUDA 夜槽 22:05 起 CLI 实跑 run `alphagen-20260927T140500683819Z-67053132`：completed/quota_reached，入册 50/50，proposed 325（unregistered_op 48 / reachability 163 / duplicate 64），evaluations 309，耗时 638 s，显存峰值 0.24 GB，Kronos 卸载并恢复；达 50，无需登记 M2 产能发现。**发现**：预筛 p95 1563 ms（n=213）超 T002 设定的 1 s 阈值（p50 318 ms 与 T002 一致；尾部来自成对滚动 corr/cov 等慢算子），交代码检视阶段由 owner 裁决是否需加速）
 - [ ] T020 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-009`, `AC-010`): 收口回写：spec 验收证据与 AC 勾选、`BACKLOG.md` 状态、`docs/features/releases/0.2.md` 交付记录、frontmatter 流转 — verify: `python3 tools/validate_spec_lifecycle.py`
 
 ## 4. 依赖与并行关系
