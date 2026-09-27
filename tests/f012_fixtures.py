@@ -34,6 +34,7 @@ DATA_START = datetime(2026, 9, 1, tzinfo=UTC)
 HOURS = 240
 DATA_END = DATA_START + timedelta(hours=HOURS - 1)
 CUTOFF = DATA_START + timedelta(hours=HOURS)
+WINDOW_START = CUTOFF - timedelta(days=730)  # default_1h_2y 预设
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,19 @@ def build_scratch_lake(
                 )
             )
 
+    # 窗口边界探针 bar（检视 R-C1/R-B4）：恰在 window.start（开区间，须排除）、恰在 window.end
+    # （闭区间，须保留）、window.end 之后（须排除）
+    base = BASES[0]
+    probes: dict[str, list[list[object]]] = {}
+    for ts in (WINDOW_START, CUTOFF, CUTOFF + timedelta(hours=1)):
+        row = [ts, EXCHANGE, f"{base}/USDT", 1.0, 1.0, 1.0, 1.0, 1.0]
+        probes.setdefault(ts.date().isoformat(), []).append(row)
+    for day, rows in probes.items():
+        key = {"exchange": EXCHANGE, "pair": lake_pair(base), "date": day}
+        entries.append(
+            partitions.write_partition(lake_root, spec, {**key, "db_symbol": f"{base}/USDT"}, rows)
+        )
+
     mapping = symbol_map.build_symbol_map(
         [symbol_map.SymbolRow(EXCHANGE, "spot", f"{base}/USDT") for base in BASES]
     )
@@ -90,7 +104,7 @@ def build_scratch_lake(
             "source": manifest.SOURCE_TAG,
             "data_version": DATA_VERSION,
             "status": "valid",
-            "rows": HOURS * len(BASES),
+            "rows": sum(entry["rows"] for entry in entries),
             "value_digest": value_digest,
             "symbol_map_digest": symbol_digest,
             "partitions": entries,

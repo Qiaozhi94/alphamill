@@ -208,7 +208,8 @@ def test_quota_run_registers_loadable_factors_with_pointwise_equal_signals(scrat
     assert run["counts"]["registered"] == 3 and run["tier_level"] == "L0"
     window_start = datetime.fromisoformat(run["window"]["start"].replace("Z", "+00:00"))
     window_end = datetime.fromisoformat(run["window"]["end"].replace("Z", "+00:00"))
-    assert window_start < panel.timestamps[0] and panel.timestamps[-1] <= window_end
+    assert window_start < panel.timestamps[0], "恰在 window.start 的探针 bar 须排除（开区间）"
+    assert panel.timestamps[-1] == window_end, "恰在 window.end 的探针 bar 须保留、其后的须排除"
     in_run = {factor.factor_id: factor for factor in written}  # 预筛所用的那一份 FactorDef
     paths = sorted((run_path.parent / "factors").glob("*.json"))
     assert len(paths) == 3 and {path.stem for path in paths} == set(in_run)
