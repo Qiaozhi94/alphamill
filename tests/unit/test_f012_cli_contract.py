@@ -184,6 +184,10 @@ def test_interrupt_while_queueing_is_partial_and_restores_kronos(
     )
 
     def cancelled(self, run_id, **kwargs):
+        # 排队中收到 SIGTERM；只有 CLI 把信号标志作为 cancel 传进来，等待循环才会出队（检视 R-C3）
+        os.kill(os.getpid(), signal.SIGTERM)
+        cancel = kwargs.get("cancel")
+        assert cancel is not None and cancel(), "cancel 须反映信号标志"
         record = QueueRecord(
             queue_seq=1, run_id=run_id, event="cancelled", ts=datetime.now(UTC), vram_free_gb=None
         )
