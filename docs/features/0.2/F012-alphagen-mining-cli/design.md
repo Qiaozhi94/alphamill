@@ -46,6 +46,7 @@ updated: 2026-09-27
 - 启动期（卸载 Kronos 前）校验：`compose_config` 后立即解析 `objective_params`，缺键/错型 → `invalid_config`（R-A2）；`objective.position_rule` 只接受 `cs_median`（预筛只实现该规则，Q-005，R-A3）；
 - 异常归属：`manifest_builder.finish_exception` 以 `config_phase`（进入生成器之前）区分——仅该阶段的 Schema/Type/ValueError 记 `invalid_config`，生成器内一律 `failed`；未列出的异常同样收尾为 `failed` 并写 run.json（R-A1/R-A2，兑现 §7）；
 - 信号：仅 `mine` 安装 `install_signal_flags`，生成前再加一个中断检查点（manual 同样经过，R-A4）；
+- 配了 `funding_8h_bps > 0` 而面板无资金费通道 → 启动期（`prepare_panel` 内、卸载 Kronos 前）`invalid_config`，不再静默按 0 扣（R2-3）；
 - 预筛带上面板中唯一的 funding 通道（`objective.funding_feature_columns` 同一口径），`funding_8h_bps` 生效（R-B3）；`CandidatePipeline.prefilter_ms` 供每 500 次评估的进度日志算 p95；生成器在 CLI 未配置 logging 时自挂 stderr handler。
 
 **写死点清单**（检视 D14，全部由 12/13 接管；另 `cli.py:163-168` universe 汇总由 13 按生成器取）：`cli.py:32`（`_MANUAL_CODE_DIGEST`）、`:62`（`choices=("manual",)`）、`:85`、`:99`（`generator`/`tier_level` 写死）、`:101-106`（`objective` 写死 0.0/30/{}）、`:132`（`run_id` 前缀）、`:159`（config `generator`）、`:176`（`tier_level=="manual"`）、`:221`（`GenerationRequest(generator="manual")`）、`:232`（`ManualGenerator()`）、`mine_config.py:16`（`tier_level="manual"`）。
@@ -193,6 +194,8 @@ StopController.check(): 优先级 interrupted > window_closed > quota_reached
 
 | 决策 / 风险 | 结论或缓解 | 理由 | 替代方案 / 后续 |
 |---|---|---|---|
+| 残余风险：`resample="1m"`（代码检视 R3-1） | 1m 路径不经聚合、标签即开盘时间，面板窗口为 `[start, end)`，与本设计 `(start, end]` 口径不一致；缺省与唯一经取证的路径为 1h | 面板内收益为相对计算，不构成前视 | 需要 1m 挖掘时再立项统一口径或启动期拒绝 |
+| 残余风险：资金费按小时摊扣（代码检视 R3-2，F003 `evaluate_objective` 既有） | 资金费通道稀疏（约 1/8 行有值）而每行按 1h/8h 扣，配置资金费时可能低估约 8 倍；整点结算被左闭口径标到下一小时（保守延后，非前视）；缺省 `funding_8h_bps=0` 不受影响 | 与 F012 生成侧无关的预筛成本建模问题 | 已登记 BACKLOG「F012 后续：vendor 慢算子向量化加速」同条附注，随预筛改造一并处理 |
 | 回调式训练独立入口 | 新增 `train_with_callbacks`，`run_generation` 原样保留 | F003 用例依赖旧路径的 `run_id` 与 manifest（检视 D19） | — |
 | 停止实现 | SB3 `BaseCallback._on_step` 返回 False | 官方停止机制 | — |
 | 截面仓位规则 | `cs_median`（Q-005） | 与 F007 多空分位口径一致 | — |

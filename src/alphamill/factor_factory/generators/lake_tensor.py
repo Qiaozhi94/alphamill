@@ -217,8 +217,8 @@ def pairs_during(ledger: UniverseLedger, start: datetime, end: datetime) -> tupl
     """窗口内任一时点属于宇宙的 lake pair 并集（F012 检视 D04/D24）。
 
     作为 `build_tensor(pairs=...)` 的输入：只读宇宙相关 pair，且不以窗口终点成员筛整段历史
-    ——期间退出的 pair 仍在其内，逐时点 PIT 掩码照旧由 `build_tensor` 完成。1h 重采样的
-    时间戳右闭，故窗口按 `[start, end]` 两端都算。
+    ——期间退出的 pair 仍在其内，逐时点 PIT 掩码照旧由 `build_tensor` 完成。1h 重采样为
+    左闭右标签（标签落在 `(start, end]`），故窗口按 `[start, end]` 两端都算、宁宽勿漏。
     """
     return tuple(
         sorted(
