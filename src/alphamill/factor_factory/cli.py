@@ -232,7 +232,7 @@ def _generate(args, reports_root: Path, lake_root: Path | None, flags) -> int:
             run_store.finalize_run(state.run_dir, build_manifest(state, outcome))
         print_summary(state, outcome[0], spec)
         return EXIT_OK
-    except (errors.FactorFactoryError, OSError, RuntimeError, TypeError, ValueError) as exc:
+    except Exception as exc:  # noqa: BLE001 — design §7：未列出的异常同样收尾为 failed（R-A2）
         return finish_exception(
             state, exc, writer, quota, spec, config_phase=mining and not running
         )

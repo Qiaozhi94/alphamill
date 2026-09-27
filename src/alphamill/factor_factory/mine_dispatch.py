@@ -97,7 +97,7 @@ def compose_config(
         }
     objective = {**_mapping(DEFAULT_ALPHAGEN_CONFIG["objective"])}
     objective.update(_mapping(supplied.get("objective", {})))
-    return {
+    composed: dict[str, JSONValue] = {
         **DEFAULT_MINE_CONFIG,
         **DEFAULT_ALPHAGEN_CONFIG,
         **supplied,
@@ -106,6 +106,11 @@ def compose_config(
         "quota": quota,
         "window": window,
     }
+    try:  # 启动期（卸载 Kronos 之前）就把 objective 缺键/错型判成 invalid_config（检视 R-A2）
+        objective_params(composed)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise errors.SchemaValidationError(f"alphagen objective config invalid: {exc!r}") from exc
+    return composed
 
 
 def build_generator(spec: GeneratorSpec, ctx: BuildContext) -> base.Generator:
