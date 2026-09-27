@@ -154,3 +154,18 @@ def test_summary_failure_after_publish_does_not_flip_the_exit_code(
     _, run, _ = _read_mine_run(reports_root)
     assert code == EXIT_OK and run["status"] == "completed"
     assert "summary" in capsys.readouterr().err
+
+
+def test_funding_cost_without_a_funding_channel_is_rejected(tmp_path, alphagen_runtime) -> None:
+    """R2-3：配了 funding_8h_bps>0 但面板无资金费通道时，启动期 invalid_config，不静默按 0 扣。"""
+    from _f012_cli_support import _config
+
+    from alphamill.factor_factory.cli import EXIT_REJECTED
+
+    cost = {"taker_fee_bps": 5, "maker_fee_bps": 2, "slippage_bps": 2, "funding_8h_bps": 5}
+    config = _config(tmp_path, {"objective": {"cost_model": cost}})
+
+    code, reports_root = _mine(tmp_path, "--config", str(config))
+
+    _, run, _ = _read_mine_run(reports_root)
+    assert code == EXIT_REJECTED and run["termination"] == "invalid_config", run

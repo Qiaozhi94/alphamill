@@ -37,6 +37,7 @@ from alphamill.factor_factory.generators.lake_tensor import (
     universe_pair_count,
 )
 from alphamill.factor_factory.generators.manual import seeds as manual_seeds
+from alphamill.factor_factory.generators.objective import funding_feature_columns
 from alphamill.factor_factory.mine_config import DEFAULT_ALPHAGEN_CONFIG, DEFAULT_MINE_CONFIG
 from alphamill.factor_factory.registry import run_store
 
@@ -165,6 +166,12 @@ def prepare_panel(
         raise errors.BindingValidationError(f"tensor build failed: {exc}") from exc
     require_universe_members(panel.panel)
     channel_index(panel.feature_map)  # ChannelConflictError → invalid_config
+    funding_bps = objective_params(config).cost_model.funding_8h_bps
+    if funding_bps > 0 and not funding_feature_columns(panel.feature_map, resample=resample):
+        # 否则资金费被静默按 0 扣（检视 R2-3）
+        raise errors.SchemaValidationError(
+            "funding_8h_bps > 0 but the panel has no funding channel"
+        )
     return panel
 
 
