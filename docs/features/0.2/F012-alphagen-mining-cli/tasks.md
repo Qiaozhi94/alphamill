@@ -53,7 +53,7 @@ updated: 2026-09-27
 
 - [x] T015 (`AC-003`, `AC-004`, `AC-005`, `AC-010`): 单元套件：渲染逐算子往返、流水线拒绝路径、截面仓位、退化信号、事件线性写出与计数守恒、停止条件、信号处理与取消出队 — verify: `tests/unit/test_f012_render.py`、`tests/unit/test_f012_candidate_pipeline.py`、`tests/unit/test_f012_stop_conditions.py`（RED: T004–T008 各 RED 提交；3ffc28a 补足畸形 token、全 NaN、交易笔数/成本后阈值、指标不进因子身份、GPU 路径训练中停止 partial——新用例对变异「畸形分支改捕获 KeyError / 去掉槽释放」转红 4 条；GREEN: 四个 F012 单元文件 69 passed）
 - [x] T016 (`AC-006`, `AC-007`): CLI 与 schema 套件：manual 基准夹具（改动前 main 在临时 detached worktree 实跑取得）按 `FR-006` 口径等价、alphagen config 合成、非 L0、零行/空宇宙、同名通道、v1/v2 双读 — verify: `tests/unit/test_f012_cli_contract.py`、`tests/unit/test_f012_run_schema.py`（RED: 978675d run.json v2/v1、9837fb2 CLI 契约；GREEN: a2a7ba4 起全绿，35c0b55 补断 v2 如实字段后 cli_contract+run_schema 29 passed；manual 基准取自 main@84ab505 detached worktree 实跑，路径归一为 <TMP>）
-- [ ] T017 (`AC-001`, `AC-002`, `AC-008`): 集成套件（`mining` extra，scratch 湖小面板真实训练）全绿；无 torch 环境按约定 skip — verify: `tests/integration/test_f012_alphagen_mining.py`
+- [x] T017 (`AC-001`, `AC-002`, `AC-008`): 集成套件（`mining` extra，scratch 湖小面板真实训练）全绿；无 torch 环境按约定 skip — verify: `tests/integration/test_f012_alphagen_mining.py`（RED: 3b0613e 护栏内首构 Optimizer 惰性导入 torch._dynamo 建 /tmp/torchinductor_*、SB3 缺省日志器建 /tmp/SB3-* 被写护栏拒 → 运行 failed；GREEN: e98b2dc 护栏外预热 + SB3 无输出日志器，12 passed——scratch 湖（`tests/f012_fixtures.py`，data_bridge 真实写路径）经 CLI：--quota 3 恰入册 3/quota_reached 且 load 反解逐点一致、面板首尾 ∈ (start, end]、极小预算 budget_exhausted、宇宙不同 pair_count 6≠3、v1 manual 仍可 load；变异「去掉预热」3 条转红；执行机 qiaozhi-lt CUDA 训练在写/出网护栏内冒烟通过）
 - [ ] T018 (`AC-001`, `AC-002`, `AC-003`, `AC-004`, `AC-005`, `AC-006`, `AC-007`, `AC-008`, `AC-010`): 运行项目统一质量门 — verify: `python3 tools/verify.py`
 
 ### [TEST] 组：层 2 旅程验收轨（必填）
