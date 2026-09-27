@@ -42,7 +42,7 @@ updated: 2026-09-27
 | 17 | `generators/lake_tensor.py` | 新增 `pairs_during(ledger: UniverseLedger, start, end) -> tuple[str, ...]`：窗口内任一时点属于宇宙的 pair 并集（由绑定的宇宙台账区间求交），作为 `build_tensor(pairs=...)` 的输入——仍逐时点 PIT 掩码，不以终点成员筛历史，且只读宇宙相关 pair（检视 D04/D24） |
 
 **代码检视回写**（循环 26 第 1 轮，2026-09-27）：
-- 取数窗口：`prepare_panel` 调 `build_tensor(start=window.start+1µs, end=window.end+1µs)`，使 reader 的 `[start, end)` 与 1h 右闭右标签重采样对齐为 `(start, end]`（R-B4，兑现 D36）；
+- 取数窗口与重采样（R-B4 → R2-1）：`ohlcv_1m.time` 是 K 线开盘时间。`lake_tensor._aggregate` 由右闭右标签改为**左闭右标签**（原口径让标签 H 含 H 开盘、H+1m 才收盘的那根，前视 1 分钟；F003 既有），`prepare_panel` 按原窗口调 reader `[start, end)`，标签 ∈ `(start, end]` 且最后一根在 cutoff 收盘、不越绑定截止；第 1 轮曾以 ±1µs 偏移对齐右闭口径，第 2 轮查出其把 cutoff 开盘的 K 线拉进 cutoff 标签而撤销；T019 夜槽证据按新口径重取（owner 2026-09-27）；
 - 启动期（卸载 Kronos 前）校验：`compose_config` 后立即解析 `objective_params`，缺键/错型 → `invalid_config`（R-A2）；`objective.position_rule` 只接受 `cs_median`（预筛只实现该规则，Q-005，R-A3）；
 - 异常归属：`manifest_builder.finish_exception` 以 `config_phase`（进入生成器之前）区分——仅该阶段的 Schema/Type/ValueError 记 `invalid_config`，生成器内一律 `failed`；未列出的异常同样收尾为 `failed` 并写 run.json（R-A1/R-A2，兑现 §7）；
 - 信号：仅 `mine` 安装 `install_signal_flags`，生成前再加一个中断检查点（manual 同样经过，R-A4）；
@@ -179,7 +179,7 @@ StopController.check(): 优先级 interrupted > window_closed > quota_reached
 | 验收项 | 测试层级 | 计划文件 / 场景 | 关键断言 |
 |---|---|---|---|
 | `AC-001` | integration | `tests/integration/test_f012_alphagen_mining.py`：scratch 湖小面板真实训练 | 入册因子通道已绑定、`mechanism_unknown`；v2 下 `factor_store.load` 反解逐点一致；v1 manual 仍可 load |
-| `AC-002` | integration | 同上：`--quota 3` / 极小步数；窗口跨度 | 入册数与 `stop_reason`；面板首尾时间戳 ∈ `(window.start, window.end]`（1h 重采样 `closed/label="right"`，检视 D36） |
+| `AC-002` | integration | 同上：`--quota 3` / 极小步数；窗口跨度 | 入册数与 `stop_reason`；面板首尾时间戳 ∈ `(window.start, window.end]`（`time` 为 1m K 线开盘时间：reader `[start, end)` + 1h 重采样 `closed="left", label="right"`，标签 H 只含 H 前已收盘的 K 线；检视 D36，代码检视 R2-1 由右闭改左闭以消除 1 分钟前视） |
 | `AC-003` | unit | `tests/unit/test_f012_candidate_pipeline.py`：恒定信号、截面排名因子、阈值边界、全 NaN/inf | `reachability`；`cs_median` 下有交易；退化为候选拒绝；`prefilter.jsonl` 行数与身份 |
 | `AC-004` | unit | 同上：重复 token、缺通道 token、畸形 token、事件计数、1 万条写出计时、`close` 先于 finalize | `duplicate_definition`；`missing_channel`；畸形 → `unregistered_op`；事件 == `counts.rejected`；守恒；线性 |
 | `AC-010` | unit | `tests/unit/test_f012_render.py`：vendor `OPERATORS` 逐算子构造表达式渲染后过 `check_expression` | 滚动算子带窗口不再判 lookahead；`Cov/Corr` 渲染为 `corr:N`/`cov:N`、通过 `check_expression` 并能被 `build_factor` 编译；`CSRank→cs_rank`；`Rank→ts_rank:N` 以 `unregistered_op` 拒绝 |
