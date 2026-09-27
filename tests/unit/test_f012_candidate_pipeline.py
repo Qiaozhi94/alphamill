@@ -176,9 +176,9 @@ def test_tradable_expression_is_registered_as_alphagen_factor(pipeline_factory) 
     ("tokens", "code", "detail"),
     [
         (("feature:vwap", "mean:10"), "unregistered_op", "missing_channel:vwap"),
-        (("feature:close", "mean"), "lookahead", ""),
-        (("feature:close", "ts_rank:20"), "unregistered_op", ""),
-        (("feature:close", "constant:0", "mul"), "reachability", ""),
+        (("feature:close", "mean"), "lookahead", "requires a strictly positive integer window"),
+        (("feature:close", "ts_rank:20"), "unregistered_op", "not registered: 'ts_rank'"),
+        (("feature:close", "constant:0", "mul"), "reachability", "trades_90d=0"),
         (("feature:close", "constant:0", "div"), "reachability", "degenerate_signal"),
     ],
 )
@@ -233,9 +233,9 @@ def test_counts_are_conserved_and_match_rejection_events(pipeline_factory) -> No
     for event in events:
         code = event["payload"]["reason_code"]
         by_code[code] = by_code.get(code, 0) + 1
-    assert by_code.get("unregistered_op", 0) == rejected.unregistered_op
-    assert by_code.get("lookahead", 0) == rejected.lookahead
-    assert by_code.get("duplicate_definition", 0) == rejected.duplicate_definition
+    assert by_code == {
+        code: n for code, n in vars(rejected).items() if n
+    }  # 含 reachability（R-C9）
     prefilter = _lines(pipeline_factory.tmp_path / "prefilter.jsonl")
     assert {row["outcome"] for row in prefilter} <= {"registered", "rejected"}
     assert len(prefilter) == counts.registered + rejected.reachability
