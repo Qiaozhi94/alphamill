@@ -100,6 +100,7 @@ def test_alphagen_mine_writes_truthful_v2_manifest(tmp_path, alphagen_runtime, c
     assert kwargs["start"] < kwargs["end"] and kwargs["resample"] == "1h"
     summary = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert summary["status"] == "completed" and summary["stop_reason"] == "quota_reached"
+    assert summary["counts"] == run["counts"] and summary["vram_peak_gb"] is None  # cpu
 
 
 def test_partial_objective_config_is_deep_merged(tmp_path, alphagen_runtime) -> None:

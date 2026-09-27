@@ -35,6 +35,7 @@ class AlphaGenGenerator:
 
     def produce(self, request: GenerationRequest) -> GenerationResult:
         ctx = self._ctx
+        _ensure_log_handler()
         panel = request.panel
         if panel is None:
             raise SchemaValidationError("alphagen needs the tensor panel built by the CLI")
@@ -100,6 +101,16 @@ def _stop_reason(stopped: bool, decided: str | None, quota_hit: bool) -> str:
     if stopped and decided is not None:
         return decided
     return "quota_reached" if quota_hit else "budget_exhausted"
+
+
+def _ensure_log_handler() -> None:
+    """CLI 进程未配置 logging 时，进度/停止日志仍须到 stderr（design §6，运维可见）。"""
+    if LOGGER.handlers or logging.getLogger().handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    LOGGER.addHandler(handler)
+    LOGGER.setLevel(logging.INFO)
 
 
 def _log_progress(pipeline: CandidatePipeline) -> None:

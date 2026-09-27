@@ -134,11 +134,11 @@ def print_summary(state: RunState, status: str, spec) -> None:
         "generator": state.generator,
         "status": status,
         "stop_reason": state.stop_reason,
-        "proposed": state.counts.proposed,
-        "registered": state.counts.registered,
+        "counts": asdict(state.counts),
         "budget": asdict(state.budget) if state.budget else None,
         "prefilter_ms_p50": statistics.median(elapsed) if elapsed else None,
         "prefilter_ms_p95": quantiles[18] if quantiles else None,
+        "vram_peak_gb": _vram_peak_gb(state.device),  # 产能取证（AC-009）
     }
     print(json.dumps(summary, ensure_ascii=False))
 
@@ -148,3 +148,11 @@ def _prefilter_elapsed(path: Path) -> list[float]:
         return []
     lines = path.read_text(encoding="utf-8").splitlines()
     return [float(json.loads(line)["elapsed_ms"]) for line in lines if line.strip()]
+
+
+def _vram_peak_gb(device: str) -> float | None:
+    if device != "cuda":
+        return None
+    import torch
+
+    return round(torch.cuda.max_memory_allocated() / 2**30, 3)
