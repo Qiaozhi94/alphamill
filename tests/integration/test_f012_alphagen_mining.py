@@ -195,7 +195,7 @@ def test_quota_run_registers_loadable_factors_with_pointwise_equal_signals(scrat
     from alphamill.factor_factory.registry import factor_store
 
     lake, root = scratch
-    code, run_path, run, panel = _cli_mine(
+    code, run_path, run, panel, written = _cli_mine(
         lake, "full", root, quota=3, total_timesteps=4096, objective=_LENIENT
     )
 
@@ -209,36 +209,25 @@ def test_quota_run_registers_loadable_factors_with_pointwise_equal_signals(scrat
     window_start = datetime.fromisoformat(run["window"]["start"].replace("Z", "+00:00"))
     window_end = datetime.fromisoformat(run["window"]["end"].replace("Z", "+00:00"))
     assert window_start < panel.timestamps[0] and panel.timestamps[-1] <= window_end
+    in_run = {factor.factor_id: factor for factor in written}  # 预筛所用的那一份 FactorDef
     paths = sorted((run_path.parent / "factors").glob("*.json"))
-    assert len(paths) == 3
+    assert len(paths) == 3 and {path.stem for path in paths} == set(in_run)
     for path in paths:
         dto = factor_store.read(path)
-        factor = factor_store.load(path)
-        assert factor.generator == "alphagen" and factor.hypothesis_id == "mechanism_unknown"
+        loaded = factor_store.load(path)
+        assert loaded.generator == "alphagen" and loaded.hypothesis_id == "mechanism_unknown"
         features = [t for t in dto.expression if t.startswith("feature:")]
         assert features and all(t.startswith("feature:ohlcv_1m.") for t in features)
-        rebuilt = factor_store.build_factor(
-            hypothesis=__import__(
-                "alphamill.factor_factory.hypotheses.catalog", fromlist=["DEFAULT_CATALOG"]
-            ).DEFAULT_CATALOG.require("mechanism_unknown"),
-            name=dto.name,
-            generator=dto.generator,
-            generator_version=dto.generator_version,
-            scope=dto.scope,
-            expression=dto.expression,
-            params=dict(dto.params),
-            feature_map=panel.feature_map,
-            run_id=dto.run_id,
-            created_at=dto.created_at,
-        )
         pd.testing.assert_series_equal(
-            factor.compute(panel.panel), rebuilt.compute(panel.panel), check_names=False
+            loaded.compute(panel.panel),
+            in_run[path.stem].compute(panel.panel),
+            check_names=False,
         )
 
 
 def test_tiny_budget_ends_with_budget_exhausted_below_quota(scratch) -> None:
     lake, root = scratch
-    code, _, run, _ = _cli_mine(lake, "full", root, quota=50, total_timesteps=64)
+    code, _, run, _, _ = _cli_mine(lake, "full", root, quota=50, total_timesteps=64)
 
     assert code == 0, run
     assert run["status"] == "completed" and run["stop_reason"] == "budget_exhausted"
@@ -251,8 +240,8 @@ def test_pair_count_follows_the_bound_universe_not_the_lake(scratch) -> None:
     from alphamill.factor_factory.generators.lake_tensor import universe_pair_count
 
     lake, root = scratch
-    _, _, full, full_panel = _cli_mine(lake, "full", root, quota=50, total_timesteps=64)
-    _, _, part, part_panel = _cli_mine(lake, "partial", root, quota=50, total_timesteps=64)
+    _, _, full, full_panel, _ = _cli_mine(lake, "full", root, quota=50, total_timesteps=64)
+    _, _, part, part_panel, _ = _cli_mine(lake, "partial", root, quota=50, total_timesteps=64)
 
     assert full["universe"]["pair_count"] == 6 == universe_pair_count(full_panel.panel)
     assert part["universe"]["pair_count"] == 3 == universe_pair_count(part_panel.panel)

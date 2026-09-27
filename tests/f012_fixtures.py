@@ -316,6 +316,7 @@ def _cli_mine(lake, binding: str, tmp_path, *, quota: int, total_timesteps: int,
     pytest.importorskip("sb3_contrib")
     from alphamill.factor_factory import mine_dispatch
     from alphamill.factor_factory.cli import main
+    from alphamill.factor_factory.registry import factor_store
 
     panels = []
     original = mine_dispatch.build_tensor
@@ -332,8 +333,17 @@ def _cli_mine(lake, binding: str, tmp_path, *, quota: int, total_timesteps: int,
     argv = ["mine", "--generator", "alphagen", "--binding", str(lake.bindings[binding])]
     argv += ["--seed", "11", "--quota", str(quota), "--config", str(config)]
     argv += ["--allow-cpu", "--allow-offhours"]
+    written = []  # 运行内入册的 FactorDef（即预筛所用的那一份，检视 R-C2）
+    original_write = factor_store.write
+
+    def recording_write(run_dir, factor):
+        written.append(factor)
+        return original_write(run_dir, factor)
+
+    before = set((lake.reports_root / "generation").glob("*/run.json"))
     mp = pytest.MonkeyPatch()
     mp.setattr(mine_dispatch, "build_tensor", recording)
+    mp.setattr(factor_store, "write", recording_write)
     # 训练中 torch 惰性导入 torch._inductor.test_operators，名字命中 pytest 的断言改写钩子，
     # 钩子用 os.makedirs 写 pyc 缓存而被进程级写护栏拦下；生产进程无此钩子（importlib 走 posix）。
     mp.setattr(sys, "dont_write_bytecode", True)
@@ -341,6 +351,7 @@ def _cli_mine(lake, binding: str, tmp_path, *, quota: int, total_timesteps: int,
         code = main(argv, reports_root=lake.reports_root, lake_root=lake.lake_root)
     finally:
         mp.undo()
-    runs = sorted((lake.reports_root / "generation").glob("*/run.json"))
-    run_path = max(runs, key=lambda p: p.stat().st_mtime_ns)
-    return code, run_path, json.loads(run_path.read_text(encoding="utf-8")), panels[-1]
+    # 本次新增的那一个 run（不按 mtime 猜，检视 R-C10）
+    [run_path] = set((lake.reports_root / "generation").glob("*/run.json")) - before
+    run = json.loads(run_path.read_text(encoding="utf-8"))
+    return code, run_path, run, panels[-1], written
