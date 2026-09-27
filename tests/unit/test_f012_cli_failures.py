@@ -136,15 +136,16 @@ def test_manual_mine_interrupted_before_generation_is_partial(tmp_path, monkeypa
     assert (run["status"], run["stop_reason"]) == ("partial", "interrupted")
 
 
+@pytest.mark.parametrize("error", [ValueError("corrupt line"), AssertionError("cuda init")])
 def test_summary_failure_after_publish_does_not_flip_the_exit_code(
-    tmp_path, alphagen_runtime, monkeypatch, capsys
+    tmp_path, alphagen_runtime, monkeypatch, capsys, error
 ) -> None:
     """R-A5：run.json 已发布为 completed 后，摘要失败不能再走异常收尾（二次 finalize、exit≠0）。"""
     from alphamill.factor_factory import manifest_builder
     from alphamill.factor_factory.cli import EXIT_OK
 
     def broken(_path):
-        raise ValueError("prefilter.jsonl corrupt line")
+        raise error  # R2-2：torch CUDA 初始化会抛 AssertionError，不在原 6 类里
 
     monkeypatch.setattr(manifest_builder, "_prefilter_elapsed", broken)
 

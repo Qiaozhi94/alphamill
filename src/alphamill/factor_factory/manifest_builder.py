@@ -155,7 +155,7 @@ def print_summary(state: RunState, status: str, spec) -> None:
         return
     try:
         _print_summary(state, status)
-    except (OSError, ValueError, KeyError, TypeError, ImportError, RuntimeError) as exc:
+    except Exception as exc:  # noqa: BLE001 — run.json 已发布，任何摘要失败都只告警（R2-2）
         print(f"WARNING: run {state.run_id} summary unavailable: {exc}", file=sys.stderr)
 
 
