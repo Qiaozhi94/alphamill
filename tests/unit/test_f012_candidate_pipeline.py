@@ -9,15 +9,15 @@ from datetime import UTC, datetime
 import numpy as np
 import pandas as pd
 import pytest
-from alphamill.factor_factory.generators.candidate_pipeline import (
-    CandidatePipeline,
-    Registered,
-    Rejected,
-)
 
 from alphamill.factor_factory.errors import ChannelConflictError, MissingChannelError
 from alphamill.factor_factory.generators.alphagen_adapter import (
     register_alphagen_compiler,
+)
+from alphamill.factor_factory.generators.candidate_pipeline import (
+    CandidatePipeline,
+    Registered,
+    Rejected,
 )
 from alphamill.factor_factory.generators.channel_binding import bind_feature_tokens, channel_index
 from alphamill.factor_factory.generators.expression_compiler import compile_postfix
@@ -216,11 +216,11 @@ def _registry() -> CompilerRegistry:
 def pipeline_factory(tmp_path):
     made = {}
 
-    def make(*, quota: int = 50, panel: TensorPanel | None = None, on_quota=None):
+    def make(*, quota: int = 50, panel: TensorPanel | None = None, on_quota=None, params=PARAMS):
         writer = RunEventWriter(tmp_path, run_id="alphagen_test")
         pipeline = CandidatePipeline(
             panel=panel or _tensor(),
-            objective_params=PARAMS,
+            objective_params=params,
             run_id="alphagen_test",
             writer=writer,
             compilers=_registry(),
@@ -342,3 +342,76 @@ def test_missing_close_bars_are_masked_not_fatal(pipeline_factory) -> None:
     assert isinstance(outcome, (Registered, Rejected))
     rows = _lines(pipeline_factory.tmp_path / "prefilter.jsonl")
     assert rows and rows[-1]["masked_bars"] > 0
+
+
+# ------------------------------------------------------------------ AC-003 / AC-004 补足（T015）
+
+
+@pytest.mark.parametrize(
+    "tokens", [("feature:close", "constant:x", "add"), ("unrenderable:TypeError",)]
+)
+def test_malformed_token_is_a_candidate_rejection_not_a_run_failure(
+    pipeline_factory, tokens
+) -> None:
+    pipeline = pipeline_factory()
+
+    outcome = pipeline.offer(tokens)
+
+    assert isinstance(outcome, Rejected) and outcome.reason_code == "unregistered_op"
+    assert outcome.detail.startswith("malformed:")
+    assert isinstance(pipeline.offer(GOOD), Registered), "拒绝后运行继续"
+
+
+def test_all_nan_signal_is_rejected_as_degenerate(pipeline_factory) -> None:
+    panel = _tensor()
+    panel.panel[VOLUME] = np.nan
+    pipeline = pipeline_factory(panel=panel)
+
+    outcome = pipeline.offer(("feature:volume", "delta:5"))
+
+    assert isinstance(outcome, Rejected) and outcome.reason_code == "reachability"
+    assert outcome.detail == "degenerate_signal:no_observation"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"reachability_min_trades_90d": 10**6}, {"min_after_cost_return": 1.0e9}],
+    ids=["too_few_trades", "after_cost_below_threshold"],
+)
+def test_candidates_below_the_prefilter_thresholds_are_rejected(
+    pipeline_factory, overrides
+) -> None:
+    params = ObjectiveParams(**{**vars(PARAMS), **overrides})
+    pipeline = pipeline_factory(params=params)
+
+    outcome = pipeline.offer(GOOD)
+
+    assert isinstance(outcome, Rejected) and outcome.reason_code == "reachability"
+    [row] = _lines(pipeline_factory.tmp_path / "prefilter.jsonl")
+    assert row["outcome"] == "rejected" and row["trades_90d"] > 0
+
+
+def test_prefilter_metrics_stay_out_of_factor_identity(tmp_path, pipeline_factory) -> None:
+    """预筛指标只进 prefilter.jsonl：换一套阈值，同一表达式的 definition_digest 不变。"""
+    from alphamill.factor_factory.registry import factor_store
+
+    first = pipeline_factory().offer(GOOD)
+    lenient = ObjectiveParams(**{**vars(PARAMS), "min_after_cost_return": -5.0})
+    writer = RunEventWriter(tmp_path / "other", run_id="alphagen_test")
+    second = CandidatePipeline(
+        panel=_tensor(),
+        objective_params=lenient,
+        run_id="alphagen_test",
+        writer=writer,
+        compilers=_registry(),
+        quota=5,
+        generator_version="vendor-test",
+        created_at=datetime(2026, 9, 27, tzinfo=UTC),
+    ).offer(GOOD)
+    writer.close()
+
+    dto = factor_store.factor_to_dto(first.factor)
+    assert dto.definition_digest == factor_store.factor_to_dto(second.factor).definition_digest
+    body = factor_store.write(tmp_path / "written", first.factor).read_text(encoding="utf-8")
+    for metric in ("turnover", "trades_90d", "after_cost_return", "masked_bars"):
+        assert metric not in body

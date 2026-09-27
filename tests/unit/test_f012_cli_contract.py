@@ -339,3 +339,46 @@ def test_sigterm_before_training_is_partial(tmp_path, alphagen_runtime) -> None:
     assert code == EXIT_OK
     assert run["status"] == "partial" and run["stop_reason"] == "interrupted"
     assert signal.getsignal(signal.SIGTERM) == previous
+
+
+@pytest.mark.parametrize("stop_reason", ["window_closed", "interrupted"])
+def test_training_stop_on_gpu_path_is_partial_releases_slot_and_restores_kronos(
+    tmp_path, alphagen_runtime, monkeypatch, stop_reason
+) -> None:
+    """AC-005：训练中夜槽结束 / SIGTERM → partial；已入册落盘但不可加载；槽释放、Kronos 恢复。"""
+    calls, state = alphagen_runtime
+    state["stop_reason"] = stop_reason
+    monkeypatch.setattr(
+        cli_module.gpu_slot, "query_vram", lambda: type("V", (), {"free_gb": 8.0})()
+    )
+    slot_events: list[str] = []
+
+    def acquire(self, run_id, **kwargs):
+        slot_events.append("acquire")
+        return QueueRecord(
+            queue_seq=1, run_id=run_id, event="acquired", ts=datetime.now(UTC), vram_free_gb=8.0
+        )
+
+    monkeypatch.setattr(cli_module.gpu_slot.GpuSlot, "acquire", acquire)
+    monkeypatch.setattr(
+        cli_module.gpu_slot.GpuSlot,
+        "release",
+        lambda self, run_id, **kw: slot_events.append("release"),
+    )
+
+    code, reports_root = _mine(tmp_path, allow_cpu=False)
+
+    run_path, run, _ = _read_mine_run(reports_root)
+    assert code == EXIT_OK
+    assert (run["status"], run["stop_reason"], run["termination"]) == (
+        "partial",
+        stop_reason,
+        stop_reason,
+    )
+    assert run["reason"].startswith("已入册 1/") and run["pool"] is None
+    assert run["device"] == "cuda"
+    [factor_path] = sorted((run_path.parent / "factors").glob("*.json"))
+    with pytest.raises(FactorStoreError):
+        factor_store.load(factor_path)
+    assert slot_events == ["acquire", "release"]
+    assert calls.offload == 1 and calls.restore == 1
