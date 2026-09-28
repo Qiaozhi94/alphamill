@@ -2,8 +2,8 @@
 kind: feature
 id: F012
 version: "0.2"
-status: code-reviewing
-status_evidence: G1 计划批准（owner 2026-09-27，按 tasks.md T001-T020 连续开发）
+status: done
+status_evidence: merge 2710723 + CI 36411197094 绿（py3.11/3.13/3.14）
 branch: feat/F012-alphagen-mining-cli
 gate_version: 1
 related_features: [F003, F007, F013]

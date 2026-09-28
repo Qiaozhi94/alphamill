@@ -5,7 +5,11 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 
 | Feature | 版本 | 状态 | 链接 |
 |---|---|---|---|
-| F012-alphagen-mining-cli | 0.2 | code-reviewing | [spec](docs/features/0.2/F012-alphagen-mining-cli/spec.md) |
+
+> **F012 已收口（2026-09-28，done）**：AlphaGen 后端接入挖掘 CLI（生成侧）已在 main 上（merge `4e1455e`
+> + CI 修复 merge `2710723`，CI 36411197094 py3.11/3.13/3.14 绿）；执行机夜槽实跑入册 50/50（235 s），
+> 交付记录与已知限制见 `docs/features/releases/0.2.md`。后续：F013 批量评测编排（执行顺序 1 的评测侧）；
+> 预筛加速见下表「F012 后续：vendor 慢算子向量化加速」。
 
 > **F011 已收口（2026-09-26，done）**：导出清单绑定当前宇宙版本（落选即移出）已在 main 上
 > （merge `1d830aa`），交付记录与已知限制见 `docs/features/releases/0.2.md`；生产两个导出单元已同时开启
