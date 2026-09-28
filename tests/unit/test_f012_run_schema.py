@@ -259,3 +259,16 @@ def test_importing_factor_store_does_not_pull_in_the_alphagen_adapter() -> None:
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
     )
     assert result.stdout.strip() == "False"
+
+
+def test_optional_literal_decodes_on_every_supported_python() -> None:
+    """main CI 红（py3.11/3.13）：`Literal[...] | None` 在 ≤3.13 求值为 typing.Union。
+
+    旧 _decode 只认 types.UnionType（3.14 起两者统一），本地 3.14 测不出。
+    """
+    from typing import Optional
+
+    from alphamill.factor_factory.registry.run_schema import StopReason, _decode
+
+    assert _decode("quota_reached", Optional[StopReason], "run.stop_reason") == "quota_reached"  # noqa: UP045
+    assert _decode(None, Optional[StopReason], "run.stop_reason") is None  # noqa: UP045

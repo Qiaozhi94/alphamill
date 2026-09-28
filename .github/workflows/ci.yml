@@ -23,8 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 下限锁 requires-python；上限跟随，用于尽早发现新版本行为差异。
-        python-version: ["3.11", "3.13"]
+        # 下限锁 requires-python；3.14 = 开发机与执行机本地解释器（本地 verify 与 CI 至少一格同版本）；
+        # 中间版本保留——F012 曾出现仅 ≤3.13 才暴露的类型求值差异（typing.Union vs types.UnionType）。
+        python-version: ["3.11", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
