@@ -6,7 +6,7 @@ frontmatter `status` 的派生索引（由门禁脚本双向校验，不是独�
 | Feature | 版本 | 状态 | 链接 |
 |---|---|---|---|
 | F013-batch-evaluation | 0.2 | draft | [spec](docs/features/0.2/F013-batch-evaluation/spec.md) |
-| F014-selection-tail-preset | 0.2 | draft | [spec](docs/features/0.2/F014-selection-tail-preset/spec.md) |
+| F014-selection-tail-preset | 0.2 | doc-reviewing | [spec](docs/features/0.2/F014-selection-tail-preset/spec.md) |
 
 > **F012 已收口（2026-09-28，done）**：AlphaGen 后端接入挖掘 CLI（生成侧）已在 main 上（merge `4e1455e`
 > + CI 修复 merge `2710723`，CI 36411197094 py3.11/3.13/3.14 绿）；执行机夜槽实跑入册 50/50（235 s），
