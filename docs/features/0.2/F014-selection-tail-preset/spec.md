@@ -2,7 +2,7 @@
 kind: feature
 id: F014
 version: "0.2"
-status: doc-reviewing
+status: ready-for-development
 branch: docs/F014-selection-tail-preset
 gate_version: 1
 related_features: [F002, F003, F007, F012, F013]
