@@ -2,8 +2,8 @@
 kind: feature
 id: F014
 version: "0.2"
-status: ready-for-development
-branch: docs/F014-selection-tail-preset
+status: developing
+branch: feat/F014-selection-tail-preset
 gate_version: 1
 related_features: [F002, F003, F007, F012, F013]
 topics: [factor-factory, generation, window, holdout, cli]
