@@ -48,4 +48,5 @@ AI 原生的加密量化研究与交易管线：以 AI 因子工厂为核心，�
 
 ## 当前活跃 Feature
 
-- 无（F012 已于 2026-09-28 收口；新 Feature 立项后在此登记）
+- F013：[工厂批量闭环·评测侧](docs/features/0.2/F013-batch-evaluation/spec.md)；状态以 spec frontmatter 为准。
+- F014：[F012 选择尾窗 preset 增量](docs/features/0.2/F014-selection-tail-preset/spec.md)（F013 前置依赖）；状态以 spec frontmatter 为准。
