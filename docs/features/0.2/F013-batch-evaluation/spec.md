@@ -2,7 +2,8 @@
 kind: feature
 id: F013
 version: "0.2"
-status: draft
+status: doc-reviewing
+branch: docs/F013-batch-evaluation
 gate_version: 1
 related_features: [F002, F003, F005, F007, F008, F012]
 topics: [evaluation, batch, cohort, snapshot, funnel]
